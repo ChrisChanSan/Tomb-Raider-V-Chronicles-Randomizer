@@ -339,6 +339,18 @@ inline int HDMarblePlanesCap(int planes)
 		HD_MARBLE_PLANES_MOST : planes;
 }
 
+/* The switch (the options' Reflections row, HDRenderMarbleSet): what the
+ * level's build state becomes when the setting turns to `want` while a
+ * level with `faces` mirror faces is built `built`. A level built with the
+ * mirror keeps its build until the next load - its polished clear floors
+ * are drawn solid over no copy of the room - and only its draw follows the
+ * setting at once; a level without mirror faces takes the setting at once,
+ * as nothing of it was built either way. */
+inline bool HDMarbleBuildAfterSwitch(bool built, bool want, int faces)
+{
+	return built && faces > 0 ? true : want;
+}
+
 /* A leaning floor of the mirror's pages: a triangle facing up whose
  * normal leans further than the flat face's (HD_MARBLE_FLAT,
  * hd_splash_math.h) and its height is still over HD_MARBLE_LEAN of its

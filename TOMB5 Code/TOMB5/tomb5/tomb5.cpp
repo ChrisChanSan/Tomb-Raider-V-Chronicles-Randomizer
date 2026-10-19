@@ -266,7 +266,9 @@ void init_tomb5_stuff()
 		REG_WriteLong(buf, tomb5.hd_vis);
 
 		// The marble floors on, every plane a frame shows (see the read
-		// below).
+		// below); the options' Reflections row writes hd_marble after this.
+		sprintf(buf, "hd_marble");
+		REG_WriteLong(buf, 1);
 		HDRenderMarbleSet(1, 64);
 
 		sprintf(buf, "hd_threads");
@@ -532,7 +534,7 @@ void init_tomb5_stuff()
 		if (tomb5.hd_vis > 1)
 			tomb5.hd_vis = 0;
 
-		/* The marble floors' mirror (the registry's hd_marble) and the
+		/* The marble floors' mirror (the options' Reflections row) and the
 		 * most planes a frame mirrors, a ceiling over what a frame shows
 		 * (specific\hd\hd_render.cpp, "the marble floors"; 64 is
 		 * hd_marble_math.h's HD_MARBLE_PLANES_MOST), handed to the renderer

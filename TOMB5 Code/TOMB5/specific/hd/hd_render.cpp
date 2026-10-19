@@ -4128,11 +4128,14 @@ namespace
 	bool g_gloss_max = false;
 
 	/* The marble floors (see "the marble floors"): whether the level is
-	 * built and drawn with them (the registry's hd_marble,
-	 * HDRenderMarbleSet), and the most planes a frame mirrors
-	 * (hd_marble_ceiling, hd_marble_math.h's HDMarblePlanesCap: a ceiling
-	 * over the planes a frame shows). */
+	 * built with them, whether they are wanted (the registry's hd_marble,
+	 * the options' Reflections row; HDRenderMarbleSet), and the most
+	 * planes a frame mirrors (hd_marble_ceiling, hd_marble_math.h's
+	 * HDMarblePlanesCap: a ceiling over the planes a frame shows). A level
+	 * built with them keeps its build until the next load
+	 * (HDMarbleBuildAfterSwitch); the draw follows the wish at once. */
 	bool g_marble_on = false;
+	bool g_marble_want = false;
 	// HD_MARBLE_PLANES_MOST until HDRenderMarbleSet says otherwise.
 	int g_marble_cap = 64;
 	/* The least share of the screen a plane shows to be mirrored
@@ -20709,8 +20712,8 @@ namespace
 	void marble_note(int kind, int id, const D3DMATRIX* world,
 		const HDRoomLighting* lighting, unsigned int passes, int window)
 	{
-		if (!g_marble_on || g_marble_replay || !g_marble_faces ||
-			g_marble_draws.size() >= 4096)
+		if (!g_marble_on || !g_marble_want || g_marble_replay ||
+			!g_marble_faces || g_marble_draws.size() >= 4096)
 			return;
 
 		MarbleDraw d;
@@ -21109,8 +21112,9 @@ double HDRenderMarbleWarmUp(double* ms, int max)
 		if (!g_groups[g].pass[0].empty())
 			range = &g_groups[g].pass[0][0];
 
-	if (!g_marble_on || !g_marble_faces || !g_device || !range || !g_vb ||
-		!g_ib || !g_vs || !g_ps || !g_decl || !g_card_vs || !g_marble_ps)
+	if (!g_marble_on || !g_marble_want || !g_marble_faces || !g_device ||
+		!range || !g_vb || !g_ib || !g_vs || !g_ps || !g_decl ||
+		!g_card_vs || !g_marble_ps)
 		return -1.0;
 
 	const double start = warm_now_ms();
@@ -21297,17 +21301,30 @@ double HDRenderMarbleWarmUp(double* ms, int max)
 	return warm_now_ms() - start;
 }
 
+/* The setting, at the game's start and from the options' Reflections row:
+ * the draw follows `on` at once; the build follows it at once where the
+ * level holds no mirror face, else at the next load (HDRenderMarbleOn,
+ * hd_marble_math.h's HDMarbleBuildAfterSwitch). `planes` 0 or less keeps
+ * the ceiling as it stands (the row knows none). */
 void HDRenderMarbleSet(int on, int planes)
 {
-	g_marble_on = on != 0;
-	g_marble_cap = HDMarblePlanesCap(planes);
+	g_marble_want = on != 0;
+	g_marble_on = HDMarbleBuildAfterSwitch(g_marble_on, g_marble_want,
+		g_marble_faces);
+
+	if (planes > 0)
+		g_marble_cap = HDMarblePlanesCap(planes);
 
 	if ((int)g_marble_slots.size() != g_marble_cap)
 		g_marble_slots.assign((size_t)g_marble_cap, { INT_MIN, 0.0f });
 }
 
+/* The setting the coming level is built with. The load asks it for the
+ * level's key before the build (hd_level.cpp), so a switch made while the
+ * last level ran reaches this build here. */
 int HDRenderMarbleOn()
 {
+	g_marble_on = g_marble_want;
 	return g_marble_on ? 1 : 0;
 }
 
@@ -21537,8 +21554,9 @@ void HDRenderMarbleDraw(HDWetModelDraw draw, const void* projection,
 	g_marble_stats = HDRenderMarbleStats();
 	g_marble_rows_list.clear();
 
-	if (!g_marble_on || !g_device || !g_in_frame || !g_card_vs ||
-		!g_marble_ps || g_marble_draws.empty() || !g_marble_faces)
+	if (!g_marble_on || !g_marble_want || !g_device || !g_in_frame ||
+		!g_card_vs || !g_marble_ps || g_marble_draws.empty() ||
+		!g_marble_faces)
 		return;
 
 	IDirect3DSurface9* target = 0;

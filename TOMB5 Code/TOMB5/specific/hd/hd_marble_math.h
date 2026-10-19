@@ -93,10 +93,11 @@ inline float HDMarbleFadeStep(double ms, double whole, double longest)
  * showing a sliver - the edge of a floor beside a door, a step's bevel seen
  * across a hall - each cost a whole mirrored draw of the rooms for a few
  * pixels of a faint reflection. HD_MARBLE_LEAST is a thousandth of the
- * screen: in RICH2's lobby and gallery, where a view shows up to 21
- * planes, it leaves 7 to 8 of them, takes the mirrored draw calls from
- * 2,414 to 879, and changes 3,643 to 6,351 of 3,686,400 pixels by more
- * than 8 of 255 (RoomProbe -marbleleast at 2,560 x 1,440). */
+ * screen: where a view shows some twenty planes, it leaves 7 to 8 of
+ * them, takes the mirrored draw calls from 2,414 to 879, and changes
+ * 3,643 to 6,351 of 3,686,400 pixels by more than 8 of 255 (RoomProbe
+ * -marbleleast at 2,560 x 1,440; the measured views are in the record,
+ * TOMB5 Code/MODIFICATIONS.md). */
 #define HD_MARBLE_LEAST	0.004f
 
 inline float HDMarbleShown(float score, float least)
@@ -458,8 +459,8 @@ inline bool HDMarbleBoxOut(const float* h, const float* clip,
  * floor height (marble_build: corners within the mirror clip's offset).
  * A slope tessellated into faces of slightly different lean (a ramp's
  * rounded corner, a pool's sloped surround) so shares one plane where its
- * faces lie within the offset of it, where the normals' rule
- * (HDMarbleTiltSame) made a plane of nearly every face. */
+ * faces lie within the offset of it; by the normals' rule alone
+ * (HDMarbleTiltSame) such a slope would split into a plane per face. */
 inline bool HDMarbleTiltFits(const float* t, const float* p, float ox,
 	float oz, float within)
 {

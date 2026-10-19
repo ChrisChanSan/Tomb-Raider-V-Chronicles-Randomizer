@@ -4136,12 +4136,18 @@ namespace
 	 * (HDMarbleBuildAfterSwitch); the draw follows the wish at once. */
 	bool g_marble_on = false;
 	bool g_marble_want = false;
+	/* The two start values are hd_marble_math.h's HD_MARBLE_PLANES_MOST and
+	 * HD_MARBLE_LEAST; that header comes later in this file, so they are
+	 * written here and held equal to it by a static_assert where it is
+	 * included. */
+	constexpr int kMarbleCapFirst = 64;
+	constexpr float kMarbleLeastFirst = 0.004f;
 	// HD_MARBLE_PLANES_MOST until HDRenderMarbleSet says otherwise.
-	int g_marble_cap = 64;
+	int g_marble_cap = kMarbleCapFirst;
 	/* The least share of the screen a plane shows to be mirrored
 	 * (hd_marble_math.h, HDMarbleShown): HD_MARBLE_LEAST, or RoomProbe's
 	 * -marbleleast. */
-	float g_marble_least = 0.004f;
+	float g_marble_least = kMarbleLeastFirst;
 	// RoomProbe's -marblecopies 1: the copies kept (HDRenderMarbleKeepCopies).
 	bool g_marble_keep_copies = false;
 
@@ -19315,6 +19321,12 @@ bool HDRenderWaterProbeStand(float x, float z, float height, float offX,
 
 #include "hd_marble_math.h"		// the mirror's places
 
+// The marble globals' start values match the header's (see there).
+static_assert(kMarbleCapFirst == HD_MARBLE_PLANES_MOST,
+	"g_marble_cap starts at HD_MARBLE_PLANES_MOST");
+static_assert(kMarbleLeastFirst == HD_MARBLE_LEAST,
+	"g_marble_least starts at HD_MARBLE_LEAST");
+
 /* The marble floors. A polished floor mirrors the room over it: the room
  * art, the statics and the models are drawn once more through the floor's
  * plane, into a target of their own, and laid over the floor with the wet
@@ -20294,11 +20306,11 @@ namespace
 	/* The leaning floors of the mirror's pages (hd_marble_math.h,
 	 * HDMarbleLeanFace): a group's triangles of its opaque pass or of its
 	 * clear floors, as the triangle loop takes a mirror face, that face up
-	 * and lean past the flat face - the ramps and the corridors going up
-	 * (ANDREA1 rooms 172, 173 and 176 at 26.6 degrees), a pool's sloped
-	 * surround - and are no copy (marble_copies' flags). Taken with the
-	 * group's fill, on the pool's threads, into g_marble_store under its
-	 * lock; marble_build lays them into planes of their own. */
+	 * and lean past the flat face - the ramps and the corridors going up,
+	 * a pool's sloped surround - and are no copy (marble_copies' flags).
+	 * Taken with the group's fill, on the pool's threads, into
+	 * g_marble_store under its lock; marble_build lays them into planes of
+	 * their own. */
 	void marble_lean(const trf::remaster::Trg& trg,
 		const trf::remaster::TrgGroup& source, int g,
 		const std::vector<std::vector<unsigned char> >& copies)

@@ -539,9 +539,10 @@ void init_tomb5_stuff()
 		 * (specific\hd\hd_render.cpp, "the marble floors"; 64 is
 		 * hd_marble_math.h's HD_MARBLE_PLANES_MOST), handed to the renderer
 		 * before any level is built. Absent - every older registry - reads
-		 * as on and 64. The ceiling has a key of its own: hd_marble_planes,
-		 * the cap of two it replaces, stands written as 2 in every registry
-		 * a build with that cap read, and is no longer read. */
+		 * as on and 64. The ceiling has a key of its own, not
+		 * hd_marble_planes: REG_ReadLong writes its default where a key is
+		 * absent, so existing registries hold hd_marble_planes as 2, a
+		 * value that would hold the mirror to two planes. */
 		{
 			ulong marble = 1, planes = 64;
 

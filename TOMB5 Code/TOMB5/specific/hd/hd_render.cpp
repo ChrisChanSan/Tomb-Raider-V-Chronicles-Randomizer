@@ -15212,6 +15212,19 @@ namespace
 	int g_wsea_part = -1;
 	float g_wsea_y = 0.0f;
 	float g_wsea_box[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+	/* The level's water rooms' box in world x0, x1, z0, z1 and the lowest
+	 * floor of their squares (world y), which the sheet reaches past
+	 * (HDWaterSheetBox, HDWaterSheetMargin); the stand-in's surface the
+	 * sheet's own way is counted from (HDWaterSheetDepth), this frame's;
+	 * and whether the extinction counts up to the sheet's plane (the knob
+	 * HD_LOOK_SEA_PLANE, HDWaterUnderSeaDepth). */
+	float g_wsea_water[4] = { 0.0f, -1.0f, 0.0f, -1.0f };
+	float g_wsea_floor = 0.0f;
+	float g_wsea_stand = 0.0f;
+	bool g_wsea_plane = true;
+	/* The sheet's box the look's last sheet was drawn over (x0, x1, z0,
+	 * z1; x1 < x0 before one), for RoomProbe (HDRenderWaterSheetReach). */
+	float g_wsea_sheet[4] = { 0.0f, -1.0f, 0.0f, -1.0f };
 	std::vector<float> g_wsea_base;
 	// This frame: the art gives way, at that weight.
 	bool g_wsea_given = false;
@@ -15350,9 +15363,17 @@ namespace
 		 * it) the whole way to it was water, exp(-0.000419 x 18,800) =
 		 * 0.0004 of it was left and it went black, while from room 123
 		 * under the basin of room 7 it showed (RoomProbe -underwater, the
-		 * frame drawn with and without room 19). */
-		const float depth = HDWaterUnderDepth(fallback ? 1 : 0,
-			g_wdeep_on ? 1 : 0, f->underEyeY, surface, kUnderNoSurface);
+		 * frame drawn with and without room 19). With the sea's sheet found
+		 * such a room under the basin counts up to the sheet's plane instead
+		 * (HDWaterUnderSeaDepth): the sheet takes the art's place, its own
+		 * way counted from the basin (g_wsea_stand, HDWaterSheetDepth), and
+		 * what stands over the basin keeps the water's colour seen from
+		 * the dive; an eye over the basin keeps the whole way. */
+		const float depth = HDWaterUnderSeaDepth(fallback ? 1 : 0,
+			g_wdeep_on ? 1 : 0, f->underEyeY, surface, kUnderNoSurface,
+			g_wsea_group >= 0 && g_wsea_plane ? 1 : 0, g_wsea_y);
+
+		g_wsea_stand = surface;
 
 		/* The deep look's light: its deep colour, dimmed with the eye's
 		 * depth under the water's top (kDeepDim). */
@@ -16659,6 +16680,11 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 		g_wsea_group = -1;
 		g_wsea_part = -1;
 		g_wsea_base.clear();
+		g_wsea_water[0] = g_wsea_water[2] = 0.0f;
+		g_wsea_water[1] = g_wsea_water[3] = -1.0f;
+		g_wsea_floor = -1.0e9f;
+		g_wsea_sheet[0] = g_wsea_sheet[2] = 0.0f;
+		g_wsea_sheet[1] = g_wsea_sheet[3] = -1.0f;
 		g_wsea_given = false;
 		g_wsea_set = -1.0f;
 		g_wsea_drawn = false;
@@ -16686,6 +16712,35 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 				for (const HDRange& r : sg.pass[2])
 					if (r.ripplePart == g_wsea_part)
 						g_wsea_base.push_back(r.addWeight);
+
+				/* The water rooms' box and their squares' lowest floor,
+				 * which the sheet reaches past (HDWaterSheetBox). */
+				for (int r = 0; r < count; r++)
+				{
+					const HDWaterRoom& rm = rooms[r];
+					const float x0 = (float)rm.originX;
+					const float x1 = x0 + 1024.0f * (float)rm.sizeX;
+					const float z0 = (float)rm.originZ;
+					const float z1 = z0 + 1024.0f * (float)rm.sizeZ;
+					const bool first = g_wsea_water[1] < g_wsea_water[0];
+
+					if (!(rm.flags & HD_WATER_ROOM_UNDERWATER))
+						continue;
+
+					g_wsea_water[0] = first || x0 < g_wsea_water[0] ? x0 :
+						g_wsea_water[0];
+					g_wsea_water[1] = first || x1 > g_wsea_water[1] ? x1 :
+						g_wsea_water[1];
+					g_wsea_water[2] = first || z0 < g_wsea_water[2] ? z0 :
+						g_wsea_water[2];
+					g_wsea_water[3] = first || z1 > g_wsea_water[3] ? z1 :
+						g_wsea_water[3];
+
+					for (int i = 0; rm.floor && i < rm.sizeX * rm.sizeZ; i++)
+						if (rm.floor[i] != -127 &&
+							rm.floor[i] * 256.0f > g_wsea_floor)
+							g_wsea_floor = rm.floor[i] * 256.0f;
+				}
 			}
 		}
 	}
@@ -19415,7 +19470,10 @@ void HDRenderWaterWetRoomCopy(bool force)
 
 namespace
 {
-	/* The look's eighteen constants (hd_water_look.hlsl, c200 - c217):
+	// The look's constant registers, c200 - c218 (hd_water_look.hlsl).
+	const int kLookRegs = 19;
+
+	/* The look's nineteen constants (hd_water_look.hlsl, c200 - c218):
 	 * the view's axes, the projection, the eye and its surface's depth,
 	 * the light's direction (the look's highlight direction, gWaterSun) and
 	 * its colour (the hue of `light`, its brightest channel 1), the gains
@@ -19423,11 +19481,14 @@ namespace
 	 * (`sigma`, the frame's c134), the shafts' numbers, the waves' fade
 	 * and the window rim's width; and the sea's sheet (see "the sea's
 	 * sheet") where `sea` is given - the eye's depth under the art's
-	 * plane and the extinction's (`sea[0]`, `sea[1]`), the art's box, the
-	 * sheet's strength, ripple, clear zone, edge and patches, and the
-	 * disc's, the shafts' and the underside's strengths there in place of
-	 * the others; all 0 without it. `knobs` in the order of
-	 * HDWaterLookKnobs. */
+	 * plane and the depth its own way is counted from (`sea[0]`,
+	 * `sea[1]`, HDWaterSheetDepth), its box (the art's and the water
+	 * rooms', the margin past them: HDWaterSheetBox), the sheet's
+	 * strength, ripple, clear zone, ragged edge's way, patches and fog,
+	 * and the disc's power and the disc's, the shafts' and the underside's
+	 * strengths there in place of the others, and the ripple's cells
+	 * broken (the shafts' cells, the turn and the height share); all 0
+	 * without it. `knobs` in the order of HDWaterLookKnobs. */
 	void water_look_constants(const WaterLook& look, const float* view,
 		float persp, float centreX, float centreY, float eyeX, float eyeZ,
 		float depth, const float* sigma, const float* light,
@@ -19437,7 +19498,7 @@ namespace
 		const float top = high[0] > high[1] ? (high[0] > high[2] ?
 			high[0] : high[2]) : (high[1] > high[2] ? high[1] : high[2]);
 
-		std::memset(c, 0, 18 * 4 * sizeof(float));
+		std::memset(c, 0, kLookRegs * 4 * sizeof(float));
 
 		for (int i = 0; i < 3; i++)
 			for (int k = 0; k < 3; k++)
@@ -19478,21 +19539,29 @@ namespace
 		if (!sea)
 			return;
 
+		c[23] = knobs[HD_LOOK_SEA_POWER];
 		c[24] = knobs[HD_LOOK_SEA_DISC];
 		c[25] = knobs[HD_LOOK_SEA_SHAFTS];
 		c[26] = knobs[HD_LOOK_SEA_UNDERSIDE];
 		c[58] = sea[0];
 		c[59] = sea[1];
 
-		for (int k = 0; k < 4; k++)
-			c[60 + k] = g_wsea_box[k];
-
+		HDWaterSheetBox(g_wsea_box, g_wsea_water, knobs[HD_LOOK_SEA_MARGIN] *
+			HDWaterSheetMargin(g_wsea_floor, g_wsea_y, sigma[3] *
+			knobs[HD_LOOK_SEA_FOG]), c + 60);
+		std::memcpy(g_wsea_sheet, c + 60, sizeof(g_wsea_sheet));
 		c[64] = knobs[HD_LOOK_SHEET];
 		c[65] = knobs[HD_LOOK_RIPPLE];
 		c[66] = kUnderClear;
 		c[67] = HDWaterRippleScale(look.rows);
-		c[68] = kHDWaterSheetEdge;
+		c[68] = knobs[HD_LOOK_SEA_RAGGED] > 0.0f ?
+			knobs[HD_LOOK_SEA_RAGGED] : kHDWaterSheetEdge;
 		c[69] = knobs[HD_LOOK_PATCHES];
+		c[70] = knobs[HD_LOOK_SEA_FOG];
+		c[72] = knobs[HD_LOOK_CELL] > 0.0f ? 1.0f / knobs[HD_LOOK_CELL] :
+			0.0f;
+		c[73] = knobs[HD_LOOK_SEA_TURN];
+		c[74] = knobs[HD_LOOK_SEA_SWELL];
 	}
 
 	/* The look's draws of the whole picture, added to it, the shaders and
@@ -19520,7 +19589,7 @@ namespace
 		const float more[4] = { c[56], c[57], 0.0f, c[59] };
 
 		c[25] = 0.0f;
-		g_device->SetPixelShaderConstantF(200, c, 18);
+		g_device->SetPixelShaderConstantF(200, c, kLookRegs);
 		g_device->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);
 		g_device->SetRenderState(D3DRS_ZFUNC, D3DCMP_LESS);
 		g_device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
@@ -19679,7 +19748,7 @@ bool HDRenderWaterProbeLook(const float* view, float persp, float centreX,
 		return false;
 	}
 
-	float c[18 * 4];
+	float c[kLookRegs * 4];
 
 	water_look_constants(*look, view, persp, centreX, centreY, eyeX, eyeZ,
 		g_under_now[11], g_under_now, look->pixel + 16, knobs, 0, c);
@@ -19696,6 +19765,33 @@ bool HDRenderWaterProbeLook(const float* view, float persp, float centreX,
 	ps->Release();
 	vs->Release();
 	return drawn;
+}
+
+/* RoomProbe's -underlookknobs and -sea before its one frame's bracket: the
+ * weight the art keeps and the plane the extinction counts up to, which the
+ * game takes from HDRenderWaterLook's knobs in the sky's bracket for the
+ * rooms' bracket after it, and the probe draws both in one bracket. */
+void HDRenderWaterSeaKnobs(const float* knobs)
+{
+	if (!knobs)
+		return;
+
+	g_wsea_art = knobs[HD_LOOK_ART];
+	g_wsea_plane = knobs[HD_LOOK_SEA_PLANE] > 0.5f;
+}
+
+/* RoomProbe's -underlook: the lowest floor of the level's water rooms'
+ * squares (world y) the sheet's margin is measured from, and the box the
+ * look's last sheet was drawn over (x0, x1, z0, z1); `out` five numbers. */
+void HDRenderWaterSheetReach(float* out)
+{
+	if (!out)
+		return;
+
+	out[0] = g_wsea_floor;
+
+	for (int k = 0; k < 4; k++)
+		out[1 + k] = g_wsea_sheet[k];
 }
 
 /* The sea seen from below on the game's path: the look of the study above
@@ -19741,8 +19837,10 @@ bool HDRenderWaterLook(const HDFrameLighting* under, const float* view,
 		knobs = own;
 	}
 
-	// The weight the art keeps under the sheet (see "the sea's sheet").
+	/* The weight the art keeps under the sheet, and the plane the
+	 * extinction counts up to (see "the sea's sheet"). */
 	g_wsea_art = knobs[HD_LOOK_ART];
+	g_wsea_plane = knobs[HD_LOOK_SEA_PLANE] > 0.5f;
 
 	if (!water_under_constants(under, u) || !water_look_shaders())
 		return false;
@@ -19770,8 +19868,9 @@ bool HDRenderWaterLook(const HDFrameLighting* under, const float* view,
 	g_device->GetVertexDeclaration(&decl);
 	g_device->GetStreamSource(0, &stream, &offset, &stride);
 
-	float c[18 * 4];
-	const float sea[2] = { under->underEyeY - g_wsea_y, u[11] };
+	float c[kLookRegs * 4];
+	const float sea[2] = { under->underEyeY - g_wsea_y,
+		HDWaterSheetDepth(under->underEyeY, g_wsea_stand) };
 
 	water_look_constants(g_wlook_deep, view, persp, centreX, centreY, eyeX,
 		eyeZ, HDWaterLookDepth(under->underEyeY, g_wdeep_top), u, u + 4,

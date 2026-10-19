@@ -343,24 +343,34 @@
  *                     through the surface, its lit underside and the
  *                     shafts - right after the sky and before the rooms,
  *                     at HDWaterLookKnobs' numbers, its GPU time printed
+ *                     and its line ending in `reach`: the water rooms'
+ *                     lowest floor and the last sheet's box
  *     -underlookknobs <disc shafts underside reach power cell floor deep len
  *                     waves rim seadisc seashafts seaunderside sheet ripple
- *                     patches art>
- *                     the same with these eighteen numbers in place of the
- *                     engine's (strengths, the surface light's reach, the
- *                     disc's power, the shafts' cell size, the noise's
+ *                     patches art seapower seaturn seaswell seamargin
+ *                     searagged seafog seaplane>
+ *                     the same with these twenty-five numbers in place of
+ *                     the engine's (strengths, the surface light's reach,
+ *                     the disc's power, the shafts' cell size, the noise's
  *                     floor, their reach under the surface, the march's
  *                     length, the way the waves' slope is kept whole over,
  *                     the window rim's width in cosine; then where the eye
  *                     has the sea's surface over it the three strengths,
  *                     the sheet's, its ripple's contrast, the share the
  *                     shafts' noise lights it by and the weight the art
- *                     keeps)
+ *                     keeps, the disc's power there, the turn and the
+ *                     height share each cell breaks the ripple by, the
+ *                     share of the margin the sheet reaches past the
+ *                     level's water, the way its ragged edge comes in
+ *                     over, the share of the fog along it, and 1 for the
+ *                     extinction counted up to the sheet's plane, 0 up to
+ *                     the stand-in's surface)
  *     -sea art|look|sheet
  *                     the same at the engine's numbers but for one part:
  *                     art the art of the sea's surface at its own weight
- *                     and no sheet (the look's three strengths the first
- *                     three); look the look without the sheet or the art;
+ *                     and no sheet (the look's three strengths and power
+ *                     the first ones, the extinction up to the stand-in's
+ *                     surface); look the look without the sheet or the art;
  *                     sheet the sheet alone, the art out and the look's
  *                     three strengths 0
  *     -underlookset <disc shafts underside reach power cell floor deep len>
@@ -2827,6 +2837,10 @@ static bool g_under_game_knobs = false;
 static float g_under_knobs[HD_LOOK_KNOBS] = { 3.0f, 3.0f, 0.25f,
 	40000.0f, 600.0f, 700.0f, 0.55f, 6000.0f, 8000.0f, 0.0f, 0.0f };
 static float g_under_game_set[HD_LOOK_KNOBS] = {};
+// hd_render.cpp: the art's weight and the extinction's plane set early.
+void HDRenderWaterSeaKnobs(const float* knobs);
+// hd_render.cpp: the water's lowest floor and the sheet's last box.
+void HDRenderWaterSheetReach(float* out);
 /* -surfaceroom: the room whose art is the sea's surface, printed;
  * -surfacealways: that room drawn as the game draws it at every frame of a
  * level that takes the deep look - added to the -with list where the
@@ -2889,6 +2903,8 @@ static bool UnderArg(int argc, char** argv, int* at)
 			k[HD_LOOK_SEA_UNDERSIDE] = k[HD_LOOK_UNDERSIDE];
 			k[HD_LOOK_SHEET] = 0.0f;
 			k[HD_LOOK_ART] = 1.0f;
+			k[HD_LOOK_SEA_POWER] = k[HD_LOOK_POWER];
+			k[HD_LOOK_SEA_PLANE] = 0.0f;
 		}
 		else if (!strcmp(part, "look"))
 			k[HD_LOOK_SHEET] = 0.0f;
@@ -21384,6 +21400,12 @@ static int ProbeMain(int argc, char** argv)
 	QueryPerformanceCounter(&frameStart);
 	CallTraceInstall();
 	g_device->BeginScene();
+
+	/* The look's knobs that the game's rooms take a bracket later, here
+	 * before the one bracket (the art's weight, the extinction's plane). */
+	if (g_under_game && g_under_game_knobs)
+		HDRenderWaterSeaKnobs(g_under_game_set);
+
 	HDRenderFrameBegin((const D3DMATRIX*)view, &projection, &frame);
 	g_call_trace_live = g_call_trace_real != 0;
 
@@ -21434,21 +21456,29 @@ static int ProbeMain(int argc, char** argv)
 			(float)cx + g_seed_origin[0], (float)cz + g_seed_origin[1],
 			g_under_game_knobs ? g_under_game_set : 0, &gpu);
 		float k[HD_LOOK_KNOBS];
+		float reach[5];
 
 		if (g_under_game_knobs)
 			memcpy(k, g_under_game_set, sizeof(k));
 		else
 			HDWaterLookKnobs(k);
 
+		HDRenderWaterSheetReach(reach);
+
 		printf("-underlook: %s, GPU %.4f ms (timestamps round the pass) at "
 			"%ldx%ld, knobs %.2f %.2f %.2f %.0f %.0f %.0f %.2f %.0f %.0f "
-			"%.0f %.2f, sea %.2f %.2f %.2f %.3f %.2f %.2f %.2f\n", drawn ?
+			"%.0f %.2f, sea %.2f %.2f %.2f %.3f %.2f %.2f %.2f, power "
+			"%.2f, break %.3f %.2f, edge %.2f %.0f %.2f %.0f, reach %.0f "
+			"%.0f %.0f %.0f %.0f\n", drawn ?
 			"drawn" : skyDrew ? "NOT drawn (no deep "
 			"look, no -hdwater 1 or no frame under the water)" :
 			"NOT drawn (no sky)",
 			gpu, width, height, k[0], k[1], k[2], k[3], k[4], k[5], k[6],
 			k[7], k[8], k[9], k[10], k[11], k[12], k[13], k[14], k[15],
-			k[16], k[17]);
+			k[16], k[17], k[HD_LOOK_SEA_POWER], k[HD_LOOK_SEA_TURN],
+			k[HD_LOOK_SEA_SWELL], k[HD_LOOK_SEA_MARGIN],
+			k[HD_LOOK_SEA_RAGGED], k[HD_LOOK_SEA_FOG], k[HD_LOOK_SEA_PLANE],
+			reach[0], reach[1], reach[2], reach[3], reach[4]);
 	}
 
 	/* The scene: one room, or a room and the neighbours -with names, drawn

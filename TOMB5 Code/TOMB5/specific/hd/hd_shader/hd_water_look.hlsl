@@ -57,15 +57,24 @@
  *                          whole (0 always whole), y the window rim's
  *                          width in cosine (0 the study's 0.08), z the
  *                          eye's depth under the art of the sea's
- *                          surface (0: no sheet), w the extinction's
- *                          depth (the frame's c136.w)
- * c215        gLookBox    the art's box, world x0, x1, z0, z1
+ *                          surface (0: no sheet), w the depth the
+ *                          sheet's own way is counted from (the eye's
+ *                          under the stand-in's surface, HDWaterSheetDepth)
+ * c215        gLookBox    the sheet's box, world x0, x1, z0, z1: the
+ *                          art's and the level's water rooms', the margin
+ *                          past them (HDWaterSheetBox, hd_water_under.h)
  * c216        gLookSea    the sheet's strength, its ripple's contrast,
  *                          the clear zone (the frame's c145.x) and one
  *                          over the two longest rows' heights
  * c217        gLookEdge   x the way in from the box's edge over which
- *                          the sheet comes in, in units, y the share the
- *                          shafts' own noise lights the sheet by */
+ *                          the sheet's ragged edge comes in, in units, y
+ *                          the share the shafts' own noise lights the
+ *                          sheet by, z the share of the fog along the
+ *                          sheet (HDWaterSheetFog)
+ * c218        gLookBreak  the sheet's ripple broken per cell (SeaRipple):
+ *                          x one over the cells' size, y the largest turn
+ *                          of a cell's rows in radians, z the largest share
+ *                          of their height a cell loses */
 float4 gLookAxis[3] : register(c200);
 float4 gLookPix : register(c203);
 float4 gLookEye : register(c204);
@@ -79,6 +88,7 @@ float4 gLookMore : register(c214);
 float4 gLookBox : register(c215);
 float4 gLookSea : register(c216);
 float4 gLookEdge : register(c217);
+float4 gLookBreak : register(c218);
 
 struct LOOK_OUT
 {
@@ -111,6 +121,58 @@ float LookShaft(float2 xz, float t)
 	const float above = saturate((v - gLookShaft.y) / (1.0f - gLookShaft.y));
 
 	return above * above;
+}
+
+/* A value noise of the cells' hash (CellHash) at `c`, in cells: the four
+ * corners' numbers blended by the smoothstep of the place, 0 to 1. */
+float CellNoise(float2 c)
+{
+	const float2 i = floor(c);
+	const float2 f = c - i;
+	const float2 s = f * f * (3.0f - 2.0f * f);
+	float4 second;
+	const float4 h = CellHash(float4(i.x, i.x + 1.0f, i.x, i.x + 1.0f),
+		float4(i.y, i.y, i.y + 1.0f, i.y + 1.0f), second);
+
+	return lerp(lerp(h.x, h.y, s.x), lerp(h.z, h.w, s.x), s.y);
+}
+
+/* The sheet's ripple: the body's two longest rows, broken per cell so that
+ * its crests neither run straight nor repeat. Each cell of the shafts'
+ * grid (1 / gLookBreak.x wide) turns both rows by up to gLookBreak.y,
+ * shifts them by a phase of its own and keeps 1 - gLookBreak.z to 1 of
+ * their height - three numbers of the cells' hash (CellHash: 16 and 256
+ * times the first, 16 times the second), never a curve. The four cells
+ * round the point are blended by the smoothstep of its place in the cell,
+ * so no seam is left, and the blend is held to one cell's spread (over the
+ * root of its weights' squares). Units of height, -1 to 1 times the two
+ * rows' heights' sum. */
+float SeaRipple(float2 p, float t)
+{
+	const float2 c = p * gLookBreak.x;
+	const float2 i = floor(c);
+	const float2 f = c - i;
+	const float2 s = f * f * (3.0f - 2.0f * f);
+	float4 second;
+	const float4 h = CellHash(float4(i.x, i.x + 1.0f, i.x, i.x + 1.0f),
+		float4(i.y, i.y, i.y + 1.0f, i.y + 1.0f), second);
+	float4 sn, cs;
+
+	sincos((frac(h * 16.0f) * 2.0f - 1.0f) * gLookBreak.y, sn, cs);
+
+	const float4 phase = frac(second * 16.0f) * 6.2831853f;
+	const float4 keep = 1.0f - gLookBreak.z * frac(h * 256.0f);
+	// A row turned by an angle: cos times k.p plus sin times k's normal.p.
+	const float2 k0 = gLookWave[0].xy, k1 = gLookWave[1].xy;
+	const float4 a = cs * dot(p, k0) + sn * dot(p, float2(-k0.y, k0.x)) -
+		gLookWave[0].z * t + phase;
+	const float4 b = cs * dot(p, k1) + sn * dot(p, float2(-k1.y, k1.x)) -
+		gLookWave[1].z * t + phase;
+	const float4 w = float4((1.0f - s.x) * (1.0f - s.y), s.x * (1.0f - s.y),
+		(1.0f - s.x) * s.y, s.x * s.y);
+
+	return dot(w, keep * (gLookWave[0].w * sin(a) + gLookWave[1].w *
+		sin(b))) * rsqrt(dot(w, w));
 }
 
 float4 LookPS(float2 vpos : VPOS) : COLOR0
@@ -160,25 +222,32 @@ float4 LookPS(float2 vpos : VPOS) : COLOR0
 
 	/* The sea's sheet in the place of its art, where the eye has that
 	 * surface over it (gLookMore.z, 0 elsewhere): the water's own colour,
-	 * dimmed as the room shader dims the art (UnderWater: the way under
-	 * the extinction's surface less the clear zone), over the art's box
-	 * alone and fading in from its edge, its ripple the body's two longest
-	 * rows' height, brighter where a shaft leaves it (LookShaft). */
+	 * dimmed as the room shader dimmed the art (UnderWater: the way under
+	 * the stand-in's surface less the clear zone) and by the fog along it,
+	 * over its box (the art's and the water rooms', the margin past them)
+	 * and fading in from a ragged edge, its ripple the body's two longest
+	 * rows broken per cell (SeaRipple), brighter where a shaft leaves it
+	 * (LookShaft). */
 	if (gLookMore.z > 0.0f && vu.y > 1.0e-3f)
 	{
 		const float ta = gLookMore.z / vu.y;
 		const float2 at = gLookEye.xz + v.xz * ta;
-		const float inside = saturate(min(min(at.x - gLookBox.x,
-			gLookBox.y - at.x), min(at.y - gLookBox.z, gLookBox.w - at.y)) /
-			gLookEdge.x);
+		/* The edge ragged: where it comes in moves by up to its own way,
+		 * a value noise of the cells' hash over cells that wide. */
+		const float edge = min(min(at.x - gLookBox.x, gLookBox.y - at.x),
+			min(at.y - gLookBox.z, gLookBox.w - at.y));
+		const float inside = saturate((edge - gLookEdge.x *
+			CellNoise(at / gLookEdge.x)) / gLookEdge.x);
+		/* The fog along the sheet (HDWaterSheetFog): the way past the eye's
+		 * own height under the plane counts too. */
+		const float along = ta * sqrt(saturate(1.0f - vu.y * vu.y));
 		const float path = max(min(ta, gLookMore.w / vu.y) - gLookSea.z,
-			0.0f);
-		float2 tilt;
-		const float h = WaveSum(at, gLookGain.w, gLookWave[0], gLookWave[1],
-			0.0f, 0.0f, tilt);
+			0.0f) + max(along - gLookMore.z, 0.0f) * gLookEdge.z;
+		const float h = clamp(SeaRipple(at, gLookGain.w) * gLookSea.w, -1.0f,
+			1.0f);
 
 		col += gLookLight.rgb * exp(-path * gLookSigma.rgb) * gLookSea.x *
-			inside * (1.0f + gLookSea.y * h * gLookSea.w) *
+			inside * (1.0f + gLookSea.y * h) *
 			(1.0f + gLookEdge.y * LookShaft(at, gLookGain.w));
 	}
 

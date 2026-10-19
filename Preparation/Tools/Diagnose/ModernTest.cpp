@@ -23126,7 +23126,8 @@ static void water_look()
 	float k[HD_LOOK_KNOBS];
 
 	HDWaterLookKnobs(k);
-	ok(HD_LOOK_KNOBS == 18, "water look: eighteen numbers", HD_LOOK_KNOBS, 18);
+	ok(HD_LOOK_KNOBS == 25, "water look: twenty-five numbers", HD_LOOK_KNOBS,
+		25);
 	ok(k[HD_LOOK_FLOOR] > 0.0f && k[HD_LOOK_FLOOR] < 1.0f,
 		"water look: the noise's floor between 0 and 1",
 		(long)(k[HD_LOOK_FLOOR] * 100.0f), 62);
@@ -23235,6 +23236,121 @@ static void water_sea()
 	ok(kHDWaterSheetEdge > 0.0f,
 		"sea sheet: the sheet comes in over a way in from the box's edge",
 		(long)kHDWaterSheetEdge, 4096);
+
+	/* The disc a glow: the power whose cosine halves at the reference's
+	 * 22.5 degrees, against the spot's 600 of the disc off the sheet. */
+	const float glow = HDWaterGlowPower(22.5f);
+
+	ok(glow > 8.74f && glow < 8.77f,
+		"sea glow: half at 22.5 degrees is the cosine's power 8.75",
+		(long)(glow * 100.0f), 875);
+	ok(fabsf(powf(cosf(22.5f * 0.017453293f), glow) - 0.5f) < 1.0e-4f,
+		"sea glow: ...and that power halves the light there", 0, 0);
+	ok(HDWaterGlowPower(2.7f) > 550.0f && HDWaterGlowPower(2.7f) < 700.0f,
+		"sea glow: 2.7 degrees is the spot's power of about 600",
+		(long)HDWaterGlowPower(2.7f), 600);
+	ok(HDWaterGlowPower(0.0f) == 0.0f && HDWaterGlowPower(90.0f) == 0.0f,
+		"sea glow: no power for a half angle outside 0 to 90", 0, 0);
+
+	/* The extinction up to the sheet's plane where no sheet lies over the
+	 * eye's room and the eye is under the stand-in: JOBY4's plane -4,269,
+	 * the basin 12,032. */
+	ok(HDWaterUnderSeaDepth(1, 1, 11941.0f, 12032.0f, none, 1, -4269.0f) ==
+		none,
+		"sea depth: 91 units over the basin the whole way, the fade kept",
+		0, 0);
+	ok(HDWaterUnderSeaDepth(1, 1, 12100.0f, 12032.0f, none, 1, -4269.0f) ==
+		16369.0f,
+		"sea depth: 68 units under the basin up to the plane",
+		(long)HDWaterUnderSeaDepth(1, 1, 12100.0f, 12032.0f, none, 1,
+		-4269.0f), 16369);
+	ok(HDWaterUnderSeaDepth(1, 1, 12032.0f, 12032.0f, none, 1, -4269.0f) ==
+		none,
+		"sea depth: at the basin's own height the whole way", 0, 0);
+	ok(HDWaterUnderSeaDepth(1, 1, 14558.0f, 12032.0f, none, 1, -4269.0f) ==
+		18827.0f,
+		"sea depth: under the basin too, up to the plane",
+		(long)HDWaterUnderSeaDepth(1, 1, 14558.0f, 12032.0f, none, 1,
+		-4269.0f), 18827);
+	ok(HDWaterUnderSeaDepth(1, 1, 11941.0f, 12032.0f, none, 0, -4269.0f) ==
+		none,
+		"sea depth: without the sheet the stand-in's rule (the whole way)",
+		0, 0);
+	ok(HDWaterUnderSeaDepth(0, 1, 14786.0f, 12032.0f, none, 1, -4269.0f) ==
+		2754.0f,
+		"sea depth: a room under a sheet of its own keeps its surface",
+		(long)HDWaterUnderSeaDepth(0, 1, 14786.0f, 12032.0f, none, 1,
+		-4269.0f), 2754);
+	ok(HDWaterUnderSeaDepth(1, 0, 14558.0f, 12032.0f, none, 1, -4269.0f) ==
+		none,
+		"sea depth: no deep look, the fallback rule (whole way)", 0, 0);
+	ok(HDWaterUnderSeaDepth(1, 1, -5000.0f, 12032.0f, none, 1, -4269.0f) ==
+		none,
+		"sea depth: an eye over the plane has no sea over it", 0, 0);
+	ok(!HDWaterSeaOver(1, 1, 1, HDWaterUnderSeaDepth(1, 1, 11941.0f,
+		12032.0f, none, 1, -4269.0f), none),
+		"sea depth: so over the basin no sheet, the surface fades out", 0, 0);
+	ok(HDWaterSeaOver(1, 1, 1, HDWaterUnderSeaDepth(1, 1, 12100.0f,
+		12032.0f, none, 1, -4269.0f), none),
+		"sea depth: ...and under it the sheet is drawn", 0, 0);
+
+	ok(HDWaterSheetDepth(14786.0f, 12032.0f) == 2754.0f,
+		"sheet depth: under the stand-in its depth, as the art's way",
+		(long)HDWaterSheetDepth(14786.0f, 12032.0f), 2754);
+	ok(HDWaterSheetDepth(11941.0f, 12032.0f) == 1.0f,
+		"sheet depth: never under 1 at the stand-in's height", 0, 0);
+
+	/* The sheet's reach: the plane's height over the lowest floor, 23,469,
+	 * and the fog's twentieth, ln 20 / 0.000444 = 6,747. */
+	const float margin = HDWaterSheetMargin(19200.0f, -4269.0f, 0.000444f);
+
+	ok(margin > 30215.0f && margin < 30218.0f,
+		"sheet reach: the height and the fog's twentieth",
+		(long)margin, 30216);
+	ok(HDWaterSheetMargin(19200.0f, -4269.0f, 0.0f) == 23469.0f,
+		"sheet reach: without an extinction the height alone",
+		(long)HDWaterSheetMargin(19200.0f, -4269.0f, 0.0f), 23469);
+
+	const float art[4] = { -6608.0f, 55136.0f, 39944.0f, 99327.0f };
+	const float water[4] = { 6144.0f, 44032.0f, 25600.0f, 97280.0f };
+	const float dry[4] = { 0.0f, -1.0f, 0.0f, -1.0f };
+	float box[4];
+
+	HDWaterSheetBox(art, water, 0.0f, box);
+	ok(box[0] == -6608.0f && box[1] == 55136.0f && box[2] == 25600.0f &&
+		box[3] == 99327.0f,
+		"sheet box: the art's and the water's together (z from 25,600)",
+		(long)box[2], 25600);
+	HDWaterSheetBox(art, water, 1000.0f, box);
+	ok(box[0] == -7608.0f && box[1] == 56136.0f && box[2] == 24600.0f &&
+		box[3] == 100327.0f,
+		"sheet box: grown by the margin on every side", (long)box[0],
+		-7608);
+	HDWaterSheetBox(art, dry, 0.0f, box);
+	ok(box[0] == art[0] && box[1] == art[1] && box[2] == art[2] &&
+		box[3] == art[3],
+		"sheet box: no water room, the art's alone", 0, 0);
+
+	ok(HDWaterSheetFog(18000.0f, 18000.0f, 1.0f) == 0.0f &&
+		HDWaterSheetFog(9000.0f, 18000.0f, 1.0f) == 0.0f,
+		"sheet fog: none within 45 degrees of straight up", 0, 0);
+	ok(HDWaterSheetFog(30000.0f, 18000.0f, 1.0f) == 12000.0f,
+		"sheet fog: the way past the eye's height counts",
+		(long)HDWaterSheetFog(30000.0f, 18000.0f, 1.0f), 12000);
+	ok(HDWaterSheetFog(30000.0f, 18000.0f, 0.0f) == 0.0f,
+		"sheet fog: share 0, no fog", 0, 0);
+
+	ok(k[HD_LOOK_SEA_DISC] < 8.0f && k[HD_LOOK_SEA_POWER] < k[HD_LOOK_POWER],
+		"sea glow: the disc weaker and wider where the sheet lies",
+		(long)k[HD_LOOK_SEA_DISC], 4);
+	ok(k[HD_LOOK_SEA_TURN] > 0.0f && k[HD_LOOK_SEA_TURN] < 1.5708f &&
+		k[HD_LOOK_SEA_SWELL] > 0.0f && k[HD_LOOK_SEA_SWELL] < 1.0f,
+		"sea ripple: a turn under a right angle, a loss under the whole",
+		(long)(k[HD_LOOK_SEA_TURN] * 100.0f), 90);
+	ok(k[HD_LOOK_SEA_PLANE] == 1.0f && k[HD_LOOK_SEA_MARGIN] == 1.0f &&
+		k[HD_LOOK_SEA_FOG] > 0.0f && k[HD_LOOK_SEA_RAGGED] > 0.0f,
+		"sheet reach: the plane, the margin, the fog and a ragged edge on",
+		0, 0);
 }
 
 /* The room whose art is the sea's surface (hd_water_under.h,

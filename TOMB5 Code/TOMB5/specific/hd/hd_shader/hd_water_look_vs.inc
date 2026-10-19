@@ -35,4 +35,4 @@ const BYTE kHDWaterLookVS[] =
       0,   0
 };
 // bshader-include hd_room 438c717f3d45d26fa77cea887e03281f
-// bshader-stamp 34c803065602b4354797344e7a47f947
+// bshader-stamp 7aff8403b3a6aa01869cb33ec4d0e5d1

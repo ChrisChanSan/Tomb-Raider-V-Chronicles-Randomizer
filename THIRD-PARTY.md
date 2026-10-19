@@ -3639,6 +3639,70 @@ carries the tables.
     bulb's radial profile, the key, the haze out without the pass, the pass's GPU
     time; the rule's pure functions checked. OWN, this project's tools.
 
+366. **The glass takes the hue of the classic glass at its place**
+    (`hd_debris_rules.h`, "the glass's look": `HDGlassFace`,
+    `HDGlassAtPlace`, `HD_GLASS_PLACE_MARGIN`, `HDGlassTintOf`,
+    `HDGlassLuma`, `HDGlassSplit`, `HDGlassStaticLight`, `HDGlassFaceColour`,
+    `HDGlassFaceArea`;
+    `hd_render.cpp`, `GlassCandidate`, `GlassTintPrepare`,
+    `HDRenderGlassTint`, `draw_pass`'s `gTint`; `hd_room.hlsl`, `gTint` and
+    its select; `hd_level.cpp`, `BuildGlassLooks`) - a draw call the room
+    draw draws as the classic's glass (the split's glass half, the additive
+    run's whole glass) has the luma of its add put on the direction of the
+    classic glass at its place: every classic face the classic adds whose
+    centre lies in one of its triangles' boxes grown by 32, their added
+    colour (the texel times the face's light) weighted by area, over its
+    luma. CLASSIC: what the classic adds (a room face of draw type 2, a mesh
+    face with effects bit 0, `drawroom.cpp`, `output.cpp`), its light (the
+    room vertex colour, the prelight times the static's shade, red in its
+    low five bits, `aTransformLightPrelightClipMesh`; a moveable at its
+    room's ambient)
+    and its split (`drawroom.cpp`, `polyinsert.cpp`). DATA: the classic
+    glass of the fifteen classic files at the place of the 181 material 14
+    parts (GlassHue, a scratch census: ANDREA2's panes 11.4, 27.5, 38.1,
+    the bridge's 6.3, 11.9, 11.2) and the art's add there (grey, 16, 17,
+    16). PICTURE (RoomProbe, the glass half against none and `-glow
+    -addmat 14`): the luma kept to the tenth of a level, the hue the
+    classic's. OWN: the margin the census's (Round 4), the area weighting,
+    the luma kept (Rec. 601), the select, the rule over a colour, the
+    owner's order of 2026-10-18 ("einen blauen Teint").
+367. **The glass pieces of a broken static show** (`hd_debris_rules.h`,
+    `HDGlassBand`, `HDGlassShardGain`, `HDGlassFramePage`,
+    `HDGlassWholePage`; `hd_debris.h`, `HDDebrisPartLook`, the glass's
+    halves in `HDDebrisDraw`; `hd_level.cpp`, `BuildGlassLooks`) - a piece's
+    glass is drawn as the room draws the classic's glass (the halves of a
+    frame with glass in it, the whole glass of the additive run), takes
+    the hue of its static's own faces the classic adds and is raised by the
+    band's top over its middle (the nine tenths and the half of their
+    texels' added luma). CLASSIC: the classic pieces of a pane added ONE /
+    ONE (`DrawDebris`, `specificfx.cpp`, its colour the static's shade
+    times the prelight, or the room's ambient for a mesh without one,
+    `ShatterObject`, `debris.cpp`). DATA: ANDREA2's window band 13, 20,
+    46 (gain 2.3), ANDREA1's 7, 11, 28. PICTURE (RoomProbe `-debris`, the
+    first second of the flight at the break's eye). OWN: the gain the
+    band's top over its middle - the pieces reach the top where the art's
+    pane adds the band's middle - for the owner's order ("ein extra
+    Boost").
+368. **The two numbers of the glass's pages read by both** (`hd_debris_rules.h`,
+    `HD_GLASS_CLEAR_BELOW`, `HD_GLASS_FRAME_PERMILLE`, moved from
+    `hd_render.cpp`) - the split's and the whole glass's page tests, the
+    same numbers and rules as entry 334 and 339. OWN (the move).
+369. **RoomProbe `-glasshue`, `-pieceslook`; `-debrisclassic` with the
+    room's ambient for a mesh without a prelight** (`Preparation/Tools/
+    Diagnose/RoomProbe.cpp`) - the classic glass handed in as the engine
+    hands it, the listing of every draw call that may be glass and every
+    paired static's pieces' look; the classic pieces' colour as
+    `DrawDebris` computes it, the room's ambient added where
+    `ShatterObject` keeps it (a mesh without a prelight). OWN, this
+    project's tool on the player's files (DATA); CLASSIC (`DrawDebris`,
+    `ShatterObject`).
+370. **ModernTest holds the hue's rules** (`Preparation/Tools/Diagnose/
+    ModernTest.cpp`, `glass_hue`) - the bodies of `HDGlassLuma`,
+    `HDGlassTintOf`, `HDGlassShardGain`, `HDGlassAtPlace` and
+    `HDGlassStaticLight` (the shade's red in its low five bits), the rules on
+    the census's classic colours and the families of the 190 draw calls
+    that may be glass. OWN.
+
 ## Credited, but not contained here
 
 trview (chreden), TRmod (b122251), TR Viewer (E. Popov) and Tomb Raider

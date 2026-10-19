@@ -11148,12 +11148,15 @@ static void glass_split()
 
 	char* render = hd_switch_text("hd_render.cpp");
 	char* shader = hd_switch_text("hd_shader/hd_room.hlsl");
+	char* rules = hd_switch_text("hd_debris_rules.h");
 
-	ok(render && shader, "glass split: the two texts are read",
-		!!render + !!shader, 2);
+	ok(render && shader && rules, "glass split: the three texts are read",
+		!!render + !!shader + !!rules, 3);
 
-	const long below = glass_define(render, "#define HD_GLASS_CLEAR_BELOW");
-	const long frame = glass_define(render, "#define HD_GLASS_FRAME_PERMILLE");
+	/* The two numbers stand with the glass's look (hd_debris_rules.h),
+	 * which the room draw and the pieces of a broken static both read. */
+	const long below = glass_define(rules, "#define HD_GLASS_CLEAR_BELOW");
+	const long frame = glass_define(rules, "#define HD_GLASS_FRAME_PERMILLE");
 
 	ok(below == 16, "glass split: a clear texel is under 16 of 255", below,
 		16);
@@ -11167,14 +11170,23 @@ static void glass_split()
 
 	glass_body(render, "inline bool GlassSplits(", body, sizeof(body));
 	ok(!strcmp(body, "returnblend>0.0f&&blend<1.0f&&!clear&&"
-		"HDPageCacheSlotAlphaMin(slot)<HD_GLASS_CLEAR_BELOW&&"
-		"HDPageCacheSlotCutoutPermille(slot)>HD_GLASS_FRAME_PERMILLE;"),
+		"HDGlassFramePage(HDPageCacheSlotAlphaMin(slot),"
+		"HDPageCacheSlotCutoutPermille(slot));"),
 		"glass split: GlassSplits is the rule tested here", 0, 0);
+
+	glass_body(rules, "inline bool HDGlassFramePage(", body, sizeof(body));
+	ok(!strcmp(body, "returnalphaMin<HD_GLASS_CLEAR_BELOW&&"
+		"cutoutPermille>HD_GLASS_FRAME_PERMILLE;"),
+		"glass split: its page is the rule tested here", 0, 0);
 
 	glass_body(render, "inline bool AddGlass(", body, sizeof(body));
 	ok(!strcmp(body, "returnmaterial==HD_TRG_MATERIAL_DECAL&&"
-		"HDPageCacheSlotAlphaMin(slot)>=HD_GLASS_CLEAR_BELOW;"),
+		"HDGlassWholePage(HDPageCacheSlotAlphaMin(slot));"),
 		"glass split: AddGlass is the rule tested here", 0, 0);
+
+	glass_body(rules, "inline bool HDGlassWholePage(", body, sizeof(body));
+	ok(!strcmp(body, "returnalphaMin>=HD_GLASS_CLEAR_BELOW;"),
+		"glass split: AddGlass's page is the rule tested here", 0, 0);
 
 	int split = 0, parts = 0;
 
@@ -11230,7 +11242,8 @@ static void glass_split()
 	int n = hd_switch_count(render,
 		"GlassSplits(range.blend, range.clear, range.pageSlot)");
 
-	ok(n == 1, "glass split: draw_pass asks the rule", n, 1);
+	ok(n == 2, "glass split: draw_pass and the hue's listing ask the rule",
+		n, 2);
 
 	n = hd_switch_count(render, "additive_pass && AddGlass(range.material,");
 	ok(n == 1, "glass added whole: draw_pass asks the rule", n, 1);
@@ -11251,6 +11264,271 @@ static void glass_split()
 
 	free(render);
 	free(shader);
+	free(rules);
+}
+
+/* The glass's hue and its pieces' look (hd_debris_rules.h, "the glass's
+ * look"): the bodies of the hue's and the gain's rules held as the engine
+ * has them, the rules run on the classic glass the census measured, and
+ * the seams that carry them in the engine's text - the room shader's
+ * select, draw_pass's constant, the pieces' halves. The census: every draw
+ * call the room draw may draw as glass with a hue, by family: the classic
+ * faces it adds at the place, whether the room draw draws it as glass (the
+ * split's glass half, the additive run's whole glass), and so whether the
+ * hue reaches the picture. */
+static void glass_hue()
+{
+	char* render = hd_switch_text("hd_render.cpp");
+	char* shader = hd_switch_text("hd_shader/hd_room.hlsl");
+	char* rules = hd_switch_text("hd_debris_rules.h");
+	char* debris = hd_switch_text("hd_debris.h");
+	char* level = hd_switch_text("hd_level.cpp");
+	char body[1024];
+	int n;
+
+	ok(render && shader && rules && debris && level,
+		"glass hue: the five texts are read", !!render + !!shader + !!rules +
+		!!debris + !!level, 5);
+
+	// The rules, blank for blank.
+	glass_body(rules, "inline float HDGlassLuma(", body, sizeof(body));
+	ok(!strcmp(body, "return0.299f*rgb[0]+0.587f*rgb[1]+0.114f*rgb[2];"),
+		"glass hue: the luma is Rec. 601's", 0, 0);
+
+	glass_body(rules, "inline void HDGlassTintOf(", body, sizeof(body));
+	ok(!strcmp(body, "constfloatluma=HDGlassLuma(sum);for(inti=0;i<4;i++)"
+		"out[i]=0.0f;if(!(luma>1.0e-6f))return;for(inti=0;i<3;i++)"
+		"out[i]=sum[i]/luma;out[3]=1.0f;"),
+		"glass hue: HDGlassTintOf is the rule tested here", 0, 0);
+
+	glass_body(rules, "inline float HDGlassShardGain(", body, sizeof(body));
+	ok(!strcmp(body, "returnhalf>0.0f&&top>half?top/half:1.0f;"),
+		"glass hue: HDGlassShardGain is the rule tested here", 0, 0);
+
+	glass_body(rules, "inline bool HDGlassAtPlace(", body, sizeof(body));
+	ok(!strcmp(body, "for(inta=0;a<3;a++)if(centre[a]<box[a]-"
+		"HD_GLASS_PLACE_MARGIN||centre[a]>box[a+3]+HD_GLASS_PLACE_MARGIN)"
+		"returnfalse;returntrue;"),
+		"glass hue: HDGlassAtPlace is the rule tested here", 0, 0);
+
+	const long margin = glass_define(rules, "#define HD_GLASS_PLACE_MARGIN");
+
+	ok(margin == 32, "glass hue: the place's margin is the census's 32",
+		margin, 32);
+
+	// The hue of ANDREA2's window: the classic panes' 11.4, 27.5, 38.1.
+	float tint[4];
+	const float panes[3] = { 11.4f, 27.5f, 38.1f };
+
+	HDGlassTintOf(panes, tint);
+	ok(tint[3] == 1.0f && fabsf(HDGlassLuma(tint) - 1.0f) < 1.0e-4f,
+		"glass hue: a direction of luma 1", (int)(HDGlassLuma(tint) * 1000),
+		1000);
+	ok(tint[2] > tint[1] && tint[1] > tint[0] &&
+		fabsf(tint[2] - 1.5945f) < 0.0005f, "glass hue: the window's is blue",
+		(int)(tint[2] * 1000), 1594);
+
+	// The art's grey add keeps its luma and takes the classic's hue.
+	const float grey[3] = { 16.0f, 17.0f, 16.0f };
+	const float luma = HDGlassLuma(grey);
+	const float lit[3] = { luma * tint[0], luma * tint[1], luma * tint[2] };
+
+	ok(fabsf(HDGlassLuma(lit) - luma) < 1.0e-3f, "glass hue: the add keeps "
+		"its luma", (int)(HDGlassLuma(lit) * 100), (int)(luma * 100));
+
+	// The bridge's, 6.3, 11.9, 11.2: green.
+	const float bridge[3] = { 6.3f, 11.9f, 11.2f };
+
+	HDGlassTintOf(bridge, tint);
+	ok(tint[1] > tint[2] && tint[2] > tint[0], "glass hue: the bridge's is "
+		"green", (int)(tint[1] * 1000), (int)(tint[2] * 1000));
+
+	// No classic glass: no hue.
+	const float none[3] = { 0.0f, 0.0f, 0.0f };
+
+	HDGlassTintOf(none, tint);
+	ok(tint[3] == 0.0f && tint[0] == 0.0f, "glass hue: none where the "
+		"classic adds nothing", (int)tint[3], 0);
+
+	// The place: a centre 32 units off a triangle's box is at it, 33 not.
+	const float box[6] = { 0.0f, 0.0f, 0.0f, 100.0f, 100.0f, 100.0f };
+	const float at[3] = { 132.0f, 50.0f, 50.0f };
+	const float off[3] = { 133.0f, 50.0f, 50.0f };
+
+	ok(HDGlassAtPlace(box, at) && !HDGlassAtPlace(box, off),
+		"glass hue: the place is the box grown by 32",
+		HDGlassAtPlace(box, at) + 2 * HDGlassAtPlace(box, off), 1);
+
+	// The classic's split: doubled up to 128, pinned at 255 above.
+	ok(HDGlassSplit(64.0f) == 128.0f && HDGlassSplit(200.0f) == 255.0f,
+		"glass hue: the classic's light split", (int)HDGlassSplit(64.0f),
+		128);
+
+	/* A static's light: the prelight times the shade, red in the shade's
+	 * low five bits as aTransformLightPrelightClipMesh reads it. */
+	glass_body(rules, "inline void HDGlassStaticLight(", body, sizeof(body));
+	ok(!strcmp(body, "for(inti=0;i<3;i++)rgb[i]=HDGlassSplit(prelight*"
+		"(float)(((shade>>(5*i))&0x1F)<<3)/256.0f);"),
+		"glass hue: HDGlassStaticLight is the rule tested here", 0, 0);
+
+	float light[3];
+
+	HDGlassStaticLight(128.0f, 0x001F, light);
+	ok(light[0] == 248.0f && light[1] == 0.0f && light[2] == 0.0f,
+		"glass hue: a shade's low five bits are its red", (int)light[0],
+		248);
+	HDGlassStaticLight(128.0f, 0x7C00, light);
+	ok(light[0] == 0.0f && light[1] == 0.0f && light[2] == 248.0f,
+		"glass hue: a shade's high five bits are its blue", (int)light[2],
+		248);
+	HDGlassStaticLight(255.0f, 0x0200, light);
+	ok(light[0] == 0.0f && light[1] == 255.0f && light[2] == 0.0f,
+		"glass hue: the middle five are green, split above 128",
+		(int)light[1], 255);
+	n = hd_switch_count(level, "HDGlassStaticLight(data->prelight ?");
+	ok(n == 1, "glass hue: the level's static light is the rule", n, 1);
+	n = hd_switch_count(level, "(10 - 5 * i)");
+	ok(n == 0, "glass hue: no shade read blue first", n, 0);
+
+	/* A face's colour on a page of two by two texels, the face over the
+	 * whole page at full light: the texels' mean, four texels counted. */
+	const unsigned char page[16] =
+	{
+		10, 20, 30, 255,	40, 50, 60, 255,
+		70, 80, 90, 255,	100, 110, 120, 255
+	};
+	const float uv[4][2] = { { 0, 0 }, { 1, 0 }, { 1, 1 }, { 0, 1 } };
+	const float full[3] = { 255.0f, 255.0f, 255.0f };
+	unsigned int hist[256] = { 0 };
+	float colour[3];
+	const long texels = HDGlassFaceColour(page, 8, 2, 2, uv, 4, full,
+		colour, hist);
+
+	ok(texels == 4 && colour[0] == 75.0f && colour[2] == 55.0f,
+		"glass hue: a face's colour is its texels' mean, red first",
+		(int)texels * 1000 + (int)colour[0], 4075);
+
+	// The band: tenth, half and nine tenths of a histogram.
+	unsigned int band[256] = { 0 };
+
+	band[10] = 1;
+	band[20] = 4;
+	band[30] = 4;
+	band[46] = 1;
+	ok(HDGlassBand(band, 256, 0.1f) == 10.0f &&
+		HDGlassBand(band, 256, 0.5f) == 20.0f &&
+		HDGlassBand(band, 256, 0.9f) == 30.0f, "glass hue: the band's three "
+		"levels", (int)HDGlassBand(band, 256, 0.9f), 30);
+
+	/* The pieces' gain at ANDREA2's window, band 13, 20, 46 in whole
+	 * levels: 2.3, the top over the middle; none without a band. */
+	ok(fabsf(HDGlassShardGain(20.0f, 46.0f) - 2.3f) < 1.0e-5f &&
+		HDGlassShardGain(0.0f, 46.0f) == 1.0f &&
+		HDGlassShardGain(30.0f, 20.0f) == 1.0f, "glass hue: the pieces' gain",
+		(int)(HDGlassShardGain(20.0f, 46.0f) * 1000), 2300);
+
+	// The seams in the engine's text.
+	n = hd_switch_count(shader, "float4 gTint : register(c37);");
+	ok(n == 1, "glass hue: the room shader's gTint is c37", n, 1);
+	n = hd_switch_count(shader, "lit = gTint.w > 0.0f ?");
+	ok(n == 1, "glass hue: a select, every other draw call to the bit", n, 1);
+	n = hd_switch_count(shader,
+		"dot(lit, float3(0.299f, 0.587f, 0.114f)) * gTint.rgb : lit;");
+	ok(n == 1, "glass hue: the add's luma on the direction", n, 1);
+	n = hd_switch_count(render, "SetPixelShaderConstantF(37, tint, 1);");
+	ok(n == 2, "glass hue: draw_pass writes it at the top and per call", n,
+		2);
+	n = hd_switch_count(render, "const bool hue = ((split && blendOnly) || "
+		"add_glass) &&");
+	ok(n == 1, "glass hue: only the glass half and the whole glass", n, 1);
+	n = hd_switch_count(debris, "b.glass == GLASS_HALVES ? 2 : 1;");
+	ok(n == 1, "glass hue: a piece of a frame with glass in two halves", n,
+		1);
+	n = hd_switch_count(debris, "HDGlassWholePage(alphaMin) ? GLASS_WHOLE");
+	ok(n == 1, "glass hue: a piece of the whole glass added whole", n, 1);
+	n = hd_switch_count(level, "BuildGlassLooks();");
+	ok(n == 1, "glass hue: the level build hands the classic glass", n, 1);
+
+	/* The census (RoomProbe -glasshue over the fifteen levels), by family:
+	 * the draw calls, their pass, see-through weight and page (its smallest
+	 * alpha and its share below 0.5 in per mille), whether the classic adds
+	 * glass at their place, and whether the listing shows the hue reaching
+	 * the picture. The rules decide the last column out of the others: the
+	 * room draw draws the call as glass (HDGlassFramePage for the alpha
+	 * pass's split, HDGlassWholePage for the additive run) and the classic
+	 * adds glass there. */
+	struct Family
+	{
+		const char* what;
+		int calls;
+		int pass;
+		float blend;
+		int alphaMin;
+		int permille;
+		int classic;
+		int hue;
+	};
+
+	static const Family families[] =
+	{
+		{ "ANDREA2 65/132 page 3007, the split", 2, 1, 0.1f, 0, 856, 1, 1 },
+		{ "RICH2 125 page 16103, the bridge", 1, 2, 0, 100, 62, 1, 1 },
+		{ "JOBY3/JOBY5/RICH2 page 16103, no classic glass", 12, 2, 0, 100, 62,
+			0, 0 },
+		{ "RICH2 6 page 1038", 1, 2, 0, 254, 0, 1, 1 },
+		{ "RICH1/RICH3 page 3068 at classic glass", 16, 2, 0, 165, 0, 1, 1 },
+		{ "RICH1/RICH3 page 3068, no classic glass", 10, 2, 0, 165, 0, 0, 0 },
+		{ "RICH3 page 3309, additive, at classic glass", 6, 2, 0, 165, 0, 1,
+			1 },
+		{ "RICH3 page 3309, additive, no classic glass", 15, 2, 0, 165, 0, 0,
+			0 },
+		{ "RICH2 page 3309, alpha run at 0.8417, at classic glass", 2, 1,
+			0.8417f, 165, 0, 1, 0 },
+		{ "RICH2 page 3309, alpha run, no classic glass", 7, 1, 0.8417f, 165,
+			0, 0, 0 },
+		{ "ANDREA1 arched panes page 15074", 7, 2, 0, 0, 328, 1, 0 },
+		{ "RICH2/RICH3 lamp glass page 15101", 5, 2, 0, 12, 0, 1, 0 },
+		{ "ANDREA1/2 lanterns page 11047", 19, 2, 0, 115, 0, 0, 0 },
+		{ "ANDREA1/2 street lamps page 13066", 6, 2, 0, 81, 0, 0, 0 },
+		{ "ANDREA1 157 page 16063", 1, 2, 0, 83, 0, 0, 0 },
+		{ "ANDREA1 93 page 16070, the glass on a table", 1, 2, 0, 75, 0, 0,
+			0 },
+		{ "RICH2 page 15026", 13, 2, 0, 0, 0, 0, 0 },
+		{ "JOBY3/JOBY5 lamp covers page 10072", 58, 1, 0.1f, 120, 46, 0, 0 },
+		{ "RICH3 46 page 10084, at classic glass", 2, 1, 0.1f, 0, 116, 1, 0 },
+		{ "RICH3 46 page 10084, no classic glass", 3, 1, 0.1f, 0, 116, 0, 0 },
+		{ "JOBY2 52/78 page 16073", 2, 1, 0.1f, 77, 12, 0, 0 },
+		{ "JOBY2 102 page 513", 1, 1, 0.2333f, 254, 0, 1, 0 }
+	};
+
+	int calls = 0, reach = 0;
+
+	for (size_t i = 0; i < sizeof(families) / sizeof(families[0]); i++)
+	{
+		const Family& f = families[i];
+		const bool glass = f.pass == 1 ?
+			f.blend > 0.0f && f.blend < 1.0f &&
+			HDGlassFramePage(f.alphaMin, f.permille) :
+			HDGlassWholePage(f.alphaMin);
+		const int hue = glass && f.classic ? 1 : 0;
+		char what[160];
+
+		snprintf(what, sizeof(what), "glass hue: %s %s", f.what,
+			f.hue ? "takes the classic's hue" : "keeps the art's colour");
+		ok(hue == f.hue, what, hue, f.hue);
+		calls += f.calls;
+		reach += hue * f.calls;
+	}
+
+	ok(calls == 190, "glass hue: the draw calls that may be glass", calls,
+		190);
+	ok(reach == 26, "glass hue: the draw calls the hue reaches", reach, 26);
+
+	free(render);
+	free(shader);
+	free(rules);
+	free(debris);
+	free(level);
 }
 
 /* The build gate and the draw, in the engine's own text. HDEnabled() is
@@ -25672,6 +25950,7 @@ int main()
 	hd_switch_option();
 	hd_switch_wiring();
 	glass_split();
+	glass_hue();
 	hd_build_gate();
 	load_keep();
 	load_mode();

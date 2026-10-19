@@ -5278,6 +5278,349 @@ static int g_statics_by_group = 0;
 static int g_statics_classic = 0;
 static int g_statics_piece = 0;
 
+/* The classic glass of the level, for the glass's look (hd_debris_rules.h):
+ * the faces the classic adds and the texels under them on the classic
+ * pages, each page locked read only once and let go at the end. */
+struct GlassPages
+{
+	LPDIRECT3DTEXTURE9 tex[256];
+	D3DLOCKED_RECT rect[256];
+	int w[256];
+	int h[256];
+	unsigned char state[256];	// 0 not asked, 1 locked, 2 none
+
+	GlassPages()
+	{
+		memset(this, 0, sizeof(*this));
+	}
+
+	~GlassPages()
+	{
+		for (int i = 0; i < 256; i++)
+			if (state[i] == 1)
+				tex[i]->UnlockRect(0);
+	}
+
+	// Page `tpage` of Textures[]: its texels, its size and pitch, or none.
+	const unsigned char* Bits(int tpage, int* pw, int* ph, int* pitch)
+	{
+		if (tpage <= 0 || tpage >= nTextures || tpage >= 256)
+			return 0;
+
+		if (!state[tpage])
+		{
+			D3DSURFACE_DESC d;
+
+			state[tpage] = 2;
+			tex[tpage] = Textures[tpage].tex;
+
+			if (tex[tpage] && SUCCEEDED(tex[tpage]->GetLevelDesc(0, &d)) &&
+				d.Format == D3DFMT_A8R8G8B8 &&
+				SUCCEEDED(tex[tpage]->LockRect(0, &rect[tpage], 0,
+					D3DLOCK_READONLY)))
+			{
+				state[tpage] = 1;
+				w[tpage] = (int)d.Width;
+				h[tpage] = (int)d.Height;
+			}
+		}
+
+		if (state[tpage] != 1)
+			return 0;
+
+		*pw = w[tpage];
+		*ph = h[tpage];
+		*pitch = (int)rect[tpage].Pitch;
+		return (const unsigned char*)rect[tpage].pBits;
+	}
+};
+
+/* One face the classic adds, its corners in world units and its light (0
+ * to 255 a channel, split), into a glass face: its texels on the classic
+ * page under the texinfo's corners (HDGlassFaceColour), counted into `hist`
+ * where one is given. False for a face on no page or over no texel. */
+static bool GlassFace(GlassPages& pages, const TEXTURESTRUCT* tex,
+	const float (*corner)[3], int corners, const float* light,
+	HDGlassFace* out, unsigned int* hist)
+{
+	int w = 0, h = 0, pitch = 0;
+	const unsigned char* bits = pages.Bits(tex->tpage, &w, &h, &pitch);
+
+	if (!bits || corners < 3)
+		return false;
+
+	const float uv[4][2] =
+	{
+		{ tex->u1, tex->v1 }, { tex->u2, tex->v2 },
+		{ tex->u3, tex->v3 }, { tex->u4, tex->v4 }
+	};
+
+	if (HDGlassFaceColour(bits, pitch, w, h, uv, corners, light,
+		out->colour, hist) <= 0)
+		return false;
+
+	for (int a = 0; a < 3; a++)
+	{
+		out->centre[a] = 0.0f;
+
+		for (int k = 0; k < corners; k++)
+			out->centre[a] += corner[k][a] / (float)corners;
+	}
+
+	out->area = HDGlassFaceArea(corner, corners);
+	return true;
+}
+
+/* The faces of a classic mesh at its place that the classic adds - effects
+ * bit 0 or draw type 2 (output.cpp) - turned by `yRot` as ShatterObject
+ * turns them; `light(v, rgb)` gives vertex v its light. */
+template <class Light>
+static void GlassMeshFaces(GlassPages& pages, const MESH_DATA* data,
+	long x, long y, long z, short yRot, Light light,
+	std::vector<HDGlassFace>& out, unsigned int* hist)
+{
+	if (!data || !data->aVtx)
+		return;
+
+	const float c = (float)phd_cos(yRot) * (1.0f / 16384.0f);
+	const float sn = (float)phd_sin(yRot) * (1.0f / 16384.0f);
+
+	for (int f = 0; f < data->ngt3 + data->ngt4; f++)
+	{
+		const bool tri = f < data->ngt3;
+		const short* face = tri ? (data->gt3 ? data->gt3 + f * 5 : 0) :
+			(data->gt4 ? data->gt4 + (f - data->ngt3) * 6 : 0);
+
+		if (!face)
+			continue;
+
+		const int corners = tri ? 3 : 4;
+		const TEXTURESTRUCT* tex = &textinfo[face[corners] & 0x7FFF];
+
+		if (!(face[corners + 1] & 1) && tex->drawtype != 2)
+			continue;
+
+		float corner[4][3], lit[3] = { 0.0f, 0.0f, 0.0f };
+		bool ok = true;
+
+		for (int k = 0; k < corners && ok; k++)
+		{
+			const int v = (unsigned short)face[k];
+
+			if (v >= data->nVerts)
+			{
+				ok = false;
+				break;
+			}
+
+			const ACMESHVERTEX& at = data->aVtx[v];
+			float rgb[3];
+
+			corner[k][0] = (float)x + at.x * c + at.z * sn;
+			corner[k][1] = (float)y + at.y;
+			corner[k][2] = (float)z + at.z * c - at.x * sn;
+			light(v, rgb);
+
+			for (int i = 0; i < 3; i++)
+				lit[i] += rgb[i] / (float)corners;
+		}
+
+		HDGlassFace g;
+
+		if (ok && GlassFace(pages, tex, corner, corners, lit, &g, hist))
+			out.push_back(g);
+	}
+}
+
+/* A static's light at vertex v as the classic draws it: the prelight - or
+ * full light for a mesh lit at run time - times the static's shade
+ * (HDGlassStaticLight). */
+static void GlassStaticLight(const MESH_DATA* data, short shade, int v,
+	float* rgb)
+{
+	HDGlassStaticLight(data->prelight ? (float)(data->prelight[v] & 0xFF) :
+		255.0f, shade, rgb);
+}
+
+/* The glass's look (hd_debris_rules.h): every face the classic adds - a
+ * room face whose texinfo has draw type 2, lit by its vertex colours, and
+ * the faces of every placed static and of every moveable of one mesh at its
+ * item (lit by its room's ambient) - handed to the room draw for the hue of
+ * its glass (HDRenderGlassTint); and for every pair of a static and a
+ * destructible part, the look of the glass pieces the part breaks into: the
+ * hue and the band of the static's own faces the classic adds
+ * (HDDebrisPartLook). After HDDebrisLevelRead, which forgets the looks. */
+static void BuildGlassLooks()
+{
+	LARGE_INTEGER from, to, rate;
+
+	QueryPerformanceCounter(&from);
+
+	GlassPages pages;
+	std::vector<HDGlassFace> faces;
+
+	for (int r = 0; r < number_rooms; r++)
+	{
+		const ROOM_INFO* info = &room[r];
+
+		for (int n = 0; info->pRoomlets && n < info->nRoomlets; n++)
+		{
+			const ROOMLET* rl = &info->pRoomlets[n];
+
+			if (!rl->pSVtx || !rl->pFac)
+				continue;
+
+			const short* face = rl->pFac;
+
+			for (int f = 0; f < rl->nQuad + rl->nTri; f++)
+			{
+				const int corners = f < rl->nQuad ? 4 : 3;
+				const short* at = face;
+
+				face += corners + 2;
+
+				const TEXTURESTRUCT* tex = &textinfo[at[corners] & 0x3FFF];
+
+				if (tex->drawtype != 2)
+					continue;
+
+				float corner[4][3], lit[3] = { 0.0f, 0.0f, 0.0f };
+				bool ok = true;
+
+				for (int k = 0; k < corners && ok; k++)
+				{
+					const int v = (unsigned short)at[k];
+
+					if (v >= rl->nVtx)
+					{
+						ok = false;
+						break;
+					}
+
+					const float* xyz = rl->pSVtx + v * 7;
+					unsigned int colour;
+
+					memcpy(&colour, xyz + 6, 4);
+					corner[k][0] = xyz[0] + (float)info->x;
+					corner[k][1] = xyz[1];
+					corner[k][2] = xyz[2] + (float)info->z;
+
+					for (int i = 0; i < 3; i++)
+						lit[i] += HDGlassSplit(
+							(float)((colour >> (16 - 8 * i)) & 0xFF)) /
+							(float)corners;
+				}
+
+				HDGlassFace g;
+
+				if (ok && GlassFace(pages, tex, corner, corners, lit, &g, 0))
+					faces.push_back(g);
+			}
+		}
+
+		for (int i = 0; i < info->num_meshes; i++)
+		{
+			const MESH_INFO* mesh = &info->mesh[i];
+			const MESH_DATA* data = (const MESH_DATA*)
+				meshes[static_objects[mesh->static_number].mesh_number];
+
+			GlassMeshFaces(pages, data, mesh->x, mesh->y, mesh->z, mesh->y_rot,
+				[&](int v, float* rgb)
+				{
+					GlassStaticLight(data, mesh->shade, v, rgb);
+				}, faces, 0);
+		}
+	}
+
+	for (int i = 0; i < level_items; i++)
+	{
+		const ITEM_INFO* item = &items[i];
+		const OBJECT_INFO* obj = &objects[item->object_number];
+
+		if (!obj->loaded || obj->nmeshes != 1 || item->room_number < 0 ||
+			item->room_number >= number_rooms)
+			continue;
+
+		const long ambient = room[item->room_number].ambient;
+
+		GlassMeshFaces(pages, (const MESH_DATA*)meshes[obj->mesh_index],
+			item->pos.x_pos, item->pos.y_pos, item->pos.z_pos, item->pos.y_rot,
+			[&](int, float* rgb)
+			{
+				for (int k = 0; k < 3; k++)
+					rgb[k] = HDGlassSplit((float)((ambient >> (16 - 8 * k)) &
+						0xFF));
+			}, faces, 0);
+	}
+
+	const int tinted = HDRenderGlassTint(faces.empty() ? 0 : &faces[0],
+		(int)faces.size());
+	int candidates = 0;
+	HDGlassTintInfo info;
+
+	while (HDRenderGlassTintInfo(candidates, &info))
+		candidates++;
+
+	// The glass pieces of every pair: the static's own faces' look.
+	int looks = 0;
+
+	for (size_t p = 0; p < g_destruct_pairs.size(); p++)
+	{
+		const HDStaticPair& pair = g_destruct_pairs[p];
+		const MESH_INFO* mesh = &room[pair.room].mesh[pair.mesh];
+		const MESH_DATA* data = (const MESH_DATA*)
+			meshes[static_objects[mesh->static_number].mesh_number];
+		int group = -1;
+		unsigned int material = 0;
+
+		if (!HDRenderDestructibleInfo(pair.piece, &group, &material, 0, 0))
+			continue;
+
+		std::vector<HDGlassFace> own;
+		unsigned int hist[256] = { 0 };
+
+		GlassMeshFaces(pages, data, mesh->x, mesh->y, mesh->z, mesh->y_rot,
+			[&](int v, float* rgb)
+			{
+				GlassStaticLight(data, mesh->shade, v, rgb);
+			}, own, hist);
+
+		float sum[3] = { 0.0f, 0.0f, 0.0f }, tint[4];
+
+		for (const HDGlassFace& g : own)
+			for (int i = 0; i < 3; i++)
+				sum[i] += g.colour[i] * g.area;
+
+		const float band[3] =
+		{
+			HDGlassBand(hist, 256, 0.1f), HDGlassBand(hist, 256, 0.5f),
+			HDGlassBand(hist, 256, 0.9f)
+		};
+		const float gain = HDGlassShardGain(band[1], band[2]);
+
+		HDGlassTintOf(sum, tint);
+		HDDebrisPartLook(group, material, tint, gain);
+		looks += tint[3] > 0.0f ? 1 : 0;
+
+		if (gLogEnabled)
+			Log("HDLOG level=%s glass pieces room=%d mesh=%d group=%d "
+				"material=0x%04x faces=%d tint=%.3f,%.3f,%.3f "
+				"band=%.0f,%.0f,%.0f gain=%.3f", g_stem, (int)pair.room,
+				(int)pair.mesh, group, material, (int)own.size(), tint[0],
+				tint[1], tint[2], band[0], band[1], band[2], gain);
+	}
+
+	QueryPerformanceCounter(&to);
+	QueryPerformanceFrequency(&rate);
+
+	if (gLogEnabled)
+		Log("HDLOG level=%s glass classic_faces=%d candidates=%d tinted=%d "
+			"piece_looks=%d ms=%.1f", g_stem, (int)faces.size(), candidates,
+			tinted, looks, rate.QuadPart ?
+			(double)(to.QuadPart - from.QuadPart) * 1000.0 /
+			(double)rate.QuadPart : 0.0);
+}
+
 static void BuildStaticTables()
 {
 	g_static_art.clear();
@@ -5583,6 +5926,9 @@ static void BuildStaticTables()
 		Log("HDLOG level=%s debris parts=%d tris=%d ms=%.1f", g_stem,
 			d.parts, d.triangles, d.ms);
 	}
+
+	// The hue of the art's glass and the look of its pieces.
+	BuildGlassLooks();
 }
 
 /* Indexed through g_room_group: a flipmap swaps two ROOM_INFO records, their

@@ -3495,7 +3495,7 @@ carries the tables.
     colour and the bulb's colour times it added (`drawroom.cpp`,
     `aRoomletTransformLight`). OWN: the exponential, under which 1 - T never exceeds
     tau. PICTURE (RoomProbe at six eyes of ANDY3: the fog's added luma under the
-    haze's own most at each).
+    haze's own most at each; per pixel not, up to 36 brighter than the haze left it).
 346. **The breath** (`hd_fog.h`, `HD_FOG_BREATH`, `HD_FOG_CELL`, `HD_FOG_RISE`,
     `HD_FOG_STEPS`, `HDFogHash`, `HDFogNoise`, `HDFogBreath`) - the density times
     1 - 0.5 n, n a value noise of hashed lattice points over cells of half the bulb's
@@ -3505,10 +3505,12 @@ carries the tables.
 347. **The fog's place in the frame and the haze taken out** (`hd_render.cpp`, "the
     fog bulbs' body": `fog_take`, `fog_note`, `fog_draw`; the call in
     `HDRenderFrameEnd`) - one quad per bulb in view at the end of the bracket that
-    asks the rooms' additive pass; a drawn bulb's density uploaded as 0 (c40). OWN.
-    PICTURE (RoomProbe `-fogpass 0`: the haze out and no pass is the picture without
-    bulbs byte for byte at six eyes; `hd_fog` 0 the head's picture with the same
-    bulbs).
+    asks the rooms' additive pass; a drawn bulb's density uploaded as 0 (c40); the
+    bulbs taken once a bracket, a second take (the marble floors' mirror's
+    `apply_frame_lighting`) keeping them. OWN. PICTURE (RoomProbe `-fogpass 0`: the
+    haze out and no pass is the picture without bulbs byte for byte at six eyes and at
+    RICH2's marble eye with `-marble 1 -wetlara`; `hd_fog` 0 the head's picture with
+    the same bulbs).
 348. **The frame's depth for the fog** (`hd_render.cpp`, `fog_take`) - the INTZ
     texture the water binds (`HDRenderWaterDepthBind`) in a level that built sheets;
     nothing without it. OWN; PLACE (`hd_level.cpp`'s water build binds it, RoomProbe's

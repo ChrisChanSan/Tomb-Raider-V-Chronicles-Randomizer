@@ -22802,7 +22802,7 @@ static void water_sea()
 		-4269.0f), 2754);
 	ok(HDWaterUnderSeaDepth(1, 0, 14558.0f, 12032.0f, none, 1, -4269.0f) ==
 		none,
-		"sea depth: no deep look, the fallback rule as before", 0, 0);
+		"sea depth: no deep look, the fallback rule (whole way)", 0, 0);
 	ok(HDWaterUnderSeaDepth(1, 1, -5000.0f, 12032.0f, none, 1, -4269.0f) ==
 		none,
 		"sea depth: an eye over the plane has no sea over it", 0, 0);

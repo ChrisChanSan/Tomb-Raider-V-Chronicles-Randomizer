@@ -3472,6 +3472,85 @@ carries the tables.
     OWN.
 342. **RoomProbe's `-gpu` line** (`Preparation/Tools/Diagnose/
     RoomProbe.cpp`) - the line as it was, `-gpuall` named at its end. OWN.
+343. **Every plane mirrored** (`hd_render.cpp`, `HDRenderMarbleDraw`,
+    `g_marble_cap`, `g_marble_slots`; `hd_marble_math.h`, `HDMarblePlanesCap`,
+    `HD_MARBLE_PLANES_MOST`; `tomb5.cpp`, `hd_marble_ceiling`) - every plane
+    that shows is mirrored, up to a ceiling of 64. OWN, the owner's
+    decision of 2026-10-18 and the ceiling a free choice over the data;
+    DATA: RoomProbe `-marblelist` at the census eyes (four views from every
+    room with a flat mirror floor of half a square or more), at most 39
+    planes in view and 21 showing (RICH2). The key of its own: DATA,
+    `REG_ReadLong` writes its default, so every registry that ran the cap
+    holds `hd_marble_planes` 2.
+344. **No plane fades out while the places can take every plane**
+    (`hd_marble_math.h`, `HDMarbleSlotsStep`) - a plane gives its place up
+    only while the empty places cannot take every plane waiting. OWN; DATA:
+    RoomProbe `-marblesim` over round 3's walks of the owner's log, RICH2's
+    stair 8 fade-out frames of a showing plane before, none after.
+345. **The mirror's scissor and the draws it leaves out** (`hd_render.cpp`,
+    `marble_scissor`, `marble_box_out`, `kMarbleScissorMargin`;
+    `hd_marble_math.h`, `HDMarbleTargetRect`, `HDMarbleBoxOut`) - each
+    plane's mirrored draws cut to its faces' box on the screen turned as
+    the target is, two pixels of the frame wider, and a room, stand range
+    or room over whose box lies past the mirrored view, under its clip or
+    beside the scissor not drawn. OWN, from general graphics knowledge
+    (scissoring and box culling); the target's turn and rows are the
+    record's (entry 234); DATA: md5-identical pictures at the cap of 2 at
+    three of the owner's eyes, RICH2's draw calls at tick 5222 1,340 for 8
+    planes before and 792 for 9 after.
+346. **The least a plane shows** (`hd_marble_math.h`, `HDMarbleShown`,
+    `HD_MARBLE_LEAST` 0.004; `hd_render.cpp`, `g_marble_least`) - a plane
+    whose occlusion count saw under a thousandth of the screen counts as
+    showing nothing. DATA: RoomProbe `-marbleleast` at 0, 0.05, 0.1 and
+    0.25 % at the worst census eyes at 2,560 x 1,440 - RICH2's lobby 20
+    planes, 2,414 calls and 5.4 ms of the GPU at 0, 7 planes, 879 calls and
+    1.8 ms at 0.1 %, 3,643 to 6,351 pixels changed by more than 8 of 255;
+    OWN, the choice of the thousandth.
+347. **The leaning floors** (`hd_render.cpp`, `marble_lean`,
+    `g_marble_store`; `hd_marble_math.h`, `HDMarbleLeanFace`,
+    `HD_MARBLE_LEAN` 0.5) - a face of the column's pages facing up and
+    leaning past the flat face but less than 60 degrees lies in a sloped
+    plane of its own. DATA: RoomProbe `-marblesteep` over the fifteen
+    levels - the faces of the column's pages facing up lean up to 56.3
+    degrees or 85 and more, nothing between (the area by five degrees);
+    ANDREA1's corridors going up at 26.4 to 26.6. THIRD for the same line:
+    TROne (GPLv3) by Todesengel1931 - https://github.com/todesengel1931 -
+    takes floors and ramps up to 60 degrees by a normal's height over half
+    its length (`host/render/reflection_plane.h`, `floor_plane`), read on
+    2026-10-19 in the copy the owner named for this round; no code was
+    taken, the number coincides with the census's gap and is credited
+    here.
+348. **A slope's faces share a plane by their corners** (`hd_marble_math.h`,
+    `HDMarbleTiltFits`; `hd_render.cpp`, `marble_build`) - a sloped face
+    joins a plane found already where its corners lie within the clip's
+    offset of it. OWN, the offset entry 258's (the rule a level face keeps
+    to its height); DATA: RICH2 147 sloped planes with the normals' rule
+    alone, 55 with this.
+349. **The store of the planes' own faces** (`hd_render.cpp`,
+    `g_marble_store`, `marble_build`'s own height) - the leaning and rising
+    faces kept by group and joined to the level faces at every run, the
+    rise tested against a face's own height. OWN; DATA: RoomProbe
+    `-reload` at RICH2 tick 5222, 30 sloped planes before the reload and
+    0 after it with the base, 55 and 55 and the picture md5-identical now.
+350. **ANDREA1's church mosaic in the mirror column** (`hd_gloss_pages.h`,
+    169, 170 and 183, class `A`) - OWN, the owner's note of 2026-10-18;
+    DATA: RoomProbe `-marblesteep -marblepages 169,170,183`, faces of them
+    facing up only in rooms 165 and 177 of the fifteen levels (162 flat
+    faces at -6144); PICTURE: DdsProbe over the three pages (a mosaic
+    beside a relief and bricks), and at round 3's church ticks 263 and 283
+    41,438 and 33,708 pixels of the floor changed at 960 x 540.
+351. **The Reflections row** (`game/menu_frame.cpp`, `MenuValReflect`,
+    `MenuStepReflect`; `hd_render.cpp`, `HDRenderMarbleSet`,
+    `HDRenderMarbleOn`, `g_marble_want`; `hd_marble_math.h`,
+    `HDMarbleBuildAfterSwitch`; `tomb5.cpp`, `hd_marble` on a first run) -
+    the row writes `hd_marble` and hands it to the renderer at once; a
+    level built with the mirror keeps its build until the next load. OWN,
+    the owner's wish of 2026-10-18; the menu's own row and registry
+    patterns.
+352. **RoomProbe `-marblelist`, `-marblesteep`, `-marbleslopes`,
+    `-marbleleast` and `-marbletread`; ModernTest's `marble_every` and
+    MenuTest's Reflections row** (`Preparation/Tools/Diagnose/`) - OWN,
+    this project's tools.
 
 ## Credited, but not contained here
 

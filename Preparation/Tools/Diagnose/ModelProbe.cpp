@@ -714,6 +714,12 @@
  *                         with -slot: the picture in that keyframe of one of
  *                         the slot's own animations, on the bind pose's
  *                         camera.
+ *     -classicdots        with -slot: every vertex of the slot's classic
+ *                         meshes as a cyan cross over the picture, posed by
+ *                         the node matrices the .TRM was drawn with, and per
+ *                         node how many land on a pixel the model covered -
+ *                         the HD model held against the classic one in any
+ *                         pose (-animframe), with no classic draw needed.
  *     -pagelist           every slot of the page cache after the build:
  *                         its key as the cache holds it,
  *                         where the .DDS was read from, the size it was
@@ -897,6 +903,19 @@ struct OverlayLine
 };
 
 static std::vector<OverlayLine> g_overlay;
+
+/* -classicdots: the classic mesh's vertices over the picture, each where
+ * the node matrices the .TRM was drawn with put it. ShotWrite counts the
+ * ones that land on a pixel the model covered before it draws the crosses,
+ * so the number is about the renderer's picture and not about the marks. */
+struct OverlayDot
+{
+	double x, y;
+	int node;
+};
+
+static std::vector<OverlayDot> g_dots;
+static bool g_dotsAsked = false;
 
 static void OverlayClear()
 {
@@ -1367,6 +1386,58 @@ static bool ShotWrite(Shot& shot, const char* path)
 	}
 
 	shot.readback->UnlockRect();
+
+	/* -classicdots: a vertex is on the model when its pixel or one of the
+	 * eight around it is not the background - a vertex on the outline
+	 * rounds to either side of it. Counted per node, so a node the .TRM
+	 * leaves empty or puts elsewhere shows as that node's own number. */
+	if (g_dotsAsked)
+	{
+		int on[33] = { 0 }, all[33] = { 0 }, off = 0;
+
+		for (size_t i = 0; i < g_dots.size(); i++)
+		{
+			const long x = (long)(g_dots[i].x + 0.5);
+			const long y = (long)(g_dots[i].y + 0.5);
+			const int n = g_dots[i].node < 32 ? g_dots[i].node : 32;
+			bool hit = false;
+
+			if (x < 0 || x >= shot.w || y < 0 || y >= shot.h)
+			{
+				off++;
+				continue;
+			}
+
+			for (long dy = -1; dy <= 1 && !hit; dy++)
+				for (long dx = -1; dx <= 1 && !hit; dx++)
+				{
+					const long px = x + dx, py = y + dy;
+
+					hit = px >= 0 && px < shot.w && py >= 0 && py < shot.h &&
+						(pixels[py * shot.w + px] & 0x00FFFFFFu) != 0x00FF00FFu;
+				}
+
+			all[n]++;
+			on[n] += hit ? 1 : 0;
+		}
+
+		int onSum = 0, allSum = 0;
+
+		for (int n = 0; n <= 32; n++)
+		{
+			onSum += on[n];
+			allSum += all[n];
+
+			if (all[n])
+				printf("  classic dots node %2d: %4d of %4d on the model\n", n,
+					on[n], all[n]);
+		}
+
+		printf("  classic dots: %d of %d on the model (%.1f%%), %d off the "
+			"picture\n", onSum, allSum,
+			allSum ? 100.0 * (double)onSum / (double)allSum : 0.0, off);
+		g_dots.clear();
+	}
 
 	/* And the floor over it. After the background count above and
 	 * before the file: the percentages beside every picture this tool writes
@@ -12708,6 +12779,8 @@ int main(int argc, char** argv)
 			animAsk = atoi(argv[++i]);
 			animKey = atoi(argv[++i]);
 		}
+		else if (!_stricmp(argv[i], "-classicdots"))
+			g_dotsAsked = true;
 		/* Every slot of the page cache, so that the cost of a
 		 * second outfit is a set difference and not a guess. */
 		else if (!_stricmp(argv[i], "-pagelist"))
@@ -15373,6 +15446,49 @@ int main(int argc, char** argv)
 			&light[0], nodeMask, &lighting, 0,
 			cullMode >= 0 ? cullMode : HD_MODEL_CULL_NONE,
 			lipsOnHead ? -1 : lipsTrack, lipsOnHead || lipsTrack < 0 ? -1 : lips.frames[0]);
+
+		/* -classicdots: every vertex of the classic mesh of each node, in
+		 * the node's own frame (the .TRC's shorts, the bind offset left
+		 * out), through the same matrix the .TRM node was just drawn with -
+		 * a node matrix takes a point of its node into view space. Where
+		 * the model stands where the classic meshes stand, the dots lie on
+		 * it in every keyframe; a part the model leaves out or puts
+		 * elsewhere leaves its dots on the background. */
+		if (g_dotsAsked && here->slot >= 0)
+			for (int node = 0; node < here->nodes; node++)
+			{
+				std::vector<float> cv;
+				const int verts = ClassicNodeVertices(level, *here, node, cv);
+				const float* m = &own[(size_t)node * 16];
+
+				for (int v = 0; v < verts; v++)
+				{
+					OverlayDot dot;
+					const float* at = &cv[(size_t)v * 3];
+					const double x = at[0] - here->bind[node][0];
+					const double y = at[1] - here->bind[node][1];
+					const double z = at[2] - here->bind[node][2];
+
+					if (!OverlayProject(m, persp, width, height, x, y, z,
+						&dot.x, &dot.y))
+						continue;
+
+					dot.node = node;
+					g_dots.push_back(dot);
+
+					OverlayLine line;
+
+					line.colour = 0x0000FFFFu;
+					line.x0 = dot.x - 2.0;
+					line.x1 = dot.x + 2.0;
+					line.y0 = line.y1 = dot.y;
+					g_overlay.push_back(line);
+					line.x0 = line.x1 = dot.x;
+					line.y0 = dot.y - 2.0;
+					line.y1 = dot.y + 2.0;
+					g_overlay.push_back(line);
+				}
+			}
 	}
 
 	bool drewHead = false;

@@ -9646,6 +9646,176 @@ records); `32797348` (the break's glue out of `hd_level.cpp` into `game/debris.c
 `hd_debris`, the ModernTest comment back on `far_plane`) and `b16c5270` (these
 records).
 
+### The search objects' binding and the double doors (#224)
+2026-10-19
+
+**What.** Two rules of the HD object path, both from the level's own data and both in a
+new pure header, `specific/hd/hd_object_rules.h`. The skeleton fit: a model the bind drift
+refuses is asked, per node, how far the centre of its single-weight vertices stands from
+the centre of the classic mesh of that node in the bind pose; within 256 units at every
+node it is drawn HD with `reason=fit` (`hd_object.cpp`, `skeleton_fit_of` and the verdict;
+`hd_model.cpp` keeps the drift's per-node centres, `HDModelNodeCentre`). The pocket: a
+slot whose animations carry it out of its own box and fold it flat, with no node turning
+within an animation, is drawn one-sided (`pocket_of`, the side in `HDObjectEnd`).
+ModelProbe takes both apart (`-bindcheck`, `-crossdrift`, `-slidecensus`, `-animframe`,
+`-itemanim`, `-itempush`, `-nopocket`, `-itemcull`; `-cull` for `-slot`) and judges its
+`-all` table by them; ModernTest holds the rules (22 checks).
+
+**Why.** The owner, 2026-10-17, with three pictures of RICH2's cabinets and one of JOBY2's
+lockers: "Gleiches Problem wie in Joby2, die Schraenke scheinen allgemein noch nicht HD zu
+sein." - the cabinets seem not to be HD at all. Asked whether the measuring round should
+start: "Ja, schau auch bei TROne rein, die sind da HD." On the doors, 2026-10-18, with a
+picture of a grey steel double door in JOBY2: "Alle Doppeltueren haben noch ein altes
+Problem: wenn die sich oeffnen, kaempfen Texturen an der Stelle mit sich selbst."
+
+**The lockers, measured** (`ModelProbe -slot 164 -bindcheck` against the shipped `.TRC`).
+`SEARCH_OBJECT1` is three nodes: the body on node 0 and a door on each of nodes 1 and 2,
+hinged at x -507 and 507, y -1690, z -274. In JOBY2:
+
+| node | classic bind | classic mesh centre | `.TRM` centre (single weight) | vertices | apart |
+|---|---|---|---|---|---|
+| 0 | 0, 0, 0 | 9, -1732, -376 | -4, -1823, -387 | 780 | 92 |
+| 1 | -507, -1689, -274 | -231, -1813, -262 | -151, -1767, -255 | 288 | 93 |
+| 2 | 507, -1691, -274 | 195, -1783, -260 | 113, -1727, -251 | 358 | 100 |
+
+The model stands where the classic meshes stand; no node order, no pivot and no offset
+baked into a mesh differ. The drift is the mean over the three pairs of |the distance
+between the two `.TRM` centres - the distance between the two joints| less the two meshes'
+spreads: 0-1 reads 683 (206 against 1,785, spreads 542 and 353), 0-2 708, 1-2 61, mean
+484. The rule behind the drift takes a node's vertex centre to lie within its spread of
+its joint; the body's centre lies 1,775 units from node 0's joint, because the cabinet's
+mesh hangs above its origin and the animation frame's offset (y 1175) brings it down.
+JOBY5's locker reads the same way (drift 428, fit 87), RICH2's cabinet (522, 143: its
+body's centre 131 units higher than the classic body's, the doors 1 and 2 units off).
+JOBY2, JOBY5 and RICH2 load the slot; RICH1's eight-node `SEARCH_OBJECT1` binds with drift
+192, `SEARCH_OBJECT2` with 0 in ANDY1, JOBY3, JOBY5 and RICH2, `SEARCH_OBJECT3` is `DUMMY`
+or has no model.
+
+The search animation (anim 1 of the slot, frames 1 to 313 at rate 4, 79 keyframes) turns
+node 1 from keyframe 18 to 53 degrees and back by 61, node 2 from 29 to 62.5 degrees and
+back by 77; node 0 never moves. Every slot the drift refuses today, all of the same shape
+(a node's mesh far off its own joint, the model in place):
+
+| level | slot | model | nodes | drift (mean/worst) | fit (worst node) |
+|---|---|---|---|---|---|
+| JOBY2 | 164 `SEARCH_OBJECT1` | `SEARCH_OBJECT1_JOBY2` | 3 | 484/708 | 100 |
+| JOBY5 | 164 `SEARCH_OBJECT1` | `SEARCH_OBJECT1_JOBY5` | 3 | 428/662 | 87 |
+| RICH2 | 164 `SEARCH_OBJECT1` | `SEARCH_OBJECT1_RICH2` | 3 | 522/806 | 143 |
+| RICH1 | 88 `CHEF_MIP` | `CHEF_MIP_RICH1` | 2 | 375/375 | 58 |
+| RICH1 | 284 `DOOR_TYPE1` | `DOOR_TYPE1_RICH1` | 4 | 690/1438 | 21 |
+| RICH1 | 439 `ANIMATING12_MIP` | `ANIMATING12_MIP_RICH1` | 6 | 330/1156 | 112 |
+| RICH2 | 416 `ANIMATING1` | `ANIMATING1_RICH2` | 9 | 308/1172 | 153 |
+| RICH2 | 440 `ANIMATING13` | `ANIMATING13_RICH2` | 9 | 308/1172 | 153 |
+| RICH3 | 320 `KICK_DOOR1` | `KICK_DOOR1_RICH3` | 14 | 687/2504 | 126 |
+| RICH3 | 397 `SMASH_OBJECT1` | `SMASH_OBJECT1` | 22 | 466/1990 | 113 |
+
+`ModelProbe -all -crossdrift` puts every bound model of two or more nodes on every other
+slot of the level with its node count: 1,489 foreign pairs over the fifteen levels. The
+drift lets 1,145 of them through and refuses 344; of those 344 the fit takes four, all
+twins of the slot itself (`SEARCH_OBJECT1` on its own `_MIP` slot in JOBY2 and JOBY5, fit
+84 and 52; RICH2's `ANIMATING1` and `ANIMATING13`, one mesh in two slots). The nearest
+truly foreign tree reads 383 (RICH1's `SPIDER` on slots 50, 302 and 304). The models that
+belong read 21 to 153: 256 stands in the gap and is the drift's own limit.
+
+**TROne, read for this round** (`C:/Cloude AI/Todesengel/TROne-main`, read only, its tr5
+glue and its renderer). `host/render/game_renderer.cpp` binds the `.MAP`'s models in its
+HD model setup with the bind pose of `bind_pose_of_slot` - the mesh tree's offsets, no
+rotation, ours too - and has no drift test at all: a model is refused only when it weights
+a bone past the tree and no other slot's tree fits it (`stub_donor`, by the lambda
+`node_offset`: per node the centre of the box of the `.TRM` vertices a bone leads against
+the centre of the classic mesh's box in the bind pose, the worst node, within 256). So
+TROne draws `SEARCH_OBJECT1` HD by the plain mesh-tree bind and the classic node matrices,
+and the 484 is a number of our own test that TROne never computes. Its place measure on
+our ten slots: 2 to 120 (`-bindcheck`'s `box=`), every one inside its 256 - it binds our
+data without a number per slot. `games/tr5/glue/hostglue_draw5.cpp` wraps the search
+objects' draw (`TR5DrawMeshBitsExact`) so that only the nodes `mesh_bits` names are drawn;
+our object path honours `mesh_bits` already. Taken: the idea of judging the places node by
+node within 256 (the origin ledger names it, entry 343). Our own: the centres are the
+drift's single-weight vertex means, and the question is asked only of a model the drift
+refuses. Nothing of TROne is copied.
+
+**The doors, measured.** JOBY2's grey steel double door is the pair `CLOSED_DOOR3` (slot
+304, `CLOSED_DOOR4_JOBY2_R`) and `CLOSED_DOOR4` (306, `CLOSED_DOOR4_JOBY2`), four pairs in
+rooms 1, 73, 106 and 108. Each leaf is three flat panels: node 0 the side at the middle,
+nodes 1 and 2 the front and the back, 1,024 apart. Anim 3 (frames 3 to 62) slides it 1,012
+units sideways, no node turning; anim 2, the open rest, puts it 1,024 along with nodes 1
+and 2 turned 90 degrees: its box is x 512..512, the front and the back panel in one plane,
+the plane of the doorway's jamb. Measured with ModelProbe at three eyes built from the
+level data (the yard side of room 73, the corridors of rooms 106 and 108, the doors placed
+by their items, Lara and the rooms' art drawn as the game draws them), each at three
+keyframes, the doors moved 1/20000 of their distance nearer and farther (`-itempush`): a
+pixel that changes by more than 12 at so small a move is a tie.
+
+| eye | closed (anim 0) | sliding (anim 3, key 9) | open (anim 2) |
+|---|---|---|---|
+| room 73 | 1 | 21 | 9,511 |
+| room 106 | 0 | 12 | 6,636 |
+| room 108 | 0 | 12 | 6,636 |
+
+The ties of the open frame do not move when the doors are pushed as a whole by up to 0.8 %
+of their distance: they are not the doors against the art. Drawn with one panel at a time
+(`-meshbits`) the open leaf shows node 1's plain grey and blue sheet or node 2's sheet
+with the grid windows; drawn whole and two-sided, both at one depth - the hatched strip of
+the owner's picture. Neither half against the other (they part as they slide), nor a
+classic mesh drawn as well (the HD path replaces it), nor the room's art: the leaf's own
+two panels. No twin triangles in the model at rest (`-bindcheck`'s `twins:`).
+
+**The rules from the data.** The fit (`HDSkeletonFitWorst`, `HDSkeletonJudge`): the drift
+first, as it was; a model it refuses is placed when every node with 16 single-weight
+vertices and a classic mesh stands within 256 units of that mesh's centre; a fit that
+measured no node vouches for nothing. The pocket (`HDSlotSlidesIntoPocket`): the walk over
+the animations a slot can reach from its first (each animation's jump and its state
+changes' ranges), every keyframe against the first animation's first: some keyframe's box
+lies wholly outside the rest box (touching counts), some keyframe's box is flat on an axis
+on which the rest's is not, and no rotation word changes within an animation. Such a
+slot's items are drawn one-sided (`HD_MODEL_CULL_BACK`, the mode that keeps a `.TRM`'s
+outside), as the classic draws every object; under a reflection's mirrored matrix the
+other mode. Over the fifteen levels it takes exactly slots 304 and 306 of JOBY2
+(`ModelProbe -all -slidecensus`: 21 slots leave their box, the doors of the three Rome
+levels among them, two of them fold); no slot or level number in the code.
+
+**Decisions.** The fit only answers where the drift refuses, so every slot that bound
+before binds as before. The fit's limit is the drift's 256. The doors are drawn one-sided
+only where they fold: a first try drew every slot that leaves its box one-sided and turned
+the title's `ANIMATING4` (a crate with an open sheet) see-through from behind (23,294
+pixels at four sides); with the fold the Rome doors and the sliding `ANIMATING` slots keep
+the two-sided draw. A depth push of the doors (a first hypothesis, the door against the
+wall's art) changed nothing measurable and is not in the code; `-itempush` stays as the
+tool that measured it.
+
+**Checked.** The binder census (`ModelProbe -all`, the fifteen shipped levels, the tool of
+`d0bf4f7b` against this round's): every row the same but the ten slots of the table above,
+`SKELETON: drift` turned into `fit <n>`, and the summary lines of JOBY2, JOBY5, RICH1,
+RICH2 and RICH3. The same over the player's randomized `.TRC` gives the same table. The
+search animation on the HD model (`-bindcheck` and `-animframe 1 <key>`): the doors open
+on the HD model as on the classic; the gap between a door's classic centre and its `.TRM`
+centre stays the same at every keyframe (JOBY2 node 1 92, node 2 100; RICH2 2 and 2), so
+the `.TRM` door turns about the classic hinge; at keyframe 45 the classic centres travel
+247 and 319 units, the `.TRM` centres 318 and 403 (their centres stand further from the
+hinge: the HD door carries its handle and frame). Pictures of the three lockers at
+keyframes 0, 26 and 45, of JOBY2's room 24 with its six lockers and of RICH2's rooms 48
+and 85 with their cabinets are kept outside the repository. The doors after the rule: the
+open frame's ties 9,511, 6,636 and 6,636 become 3, 0 and 0; the closed and the sliding
+frames are the same pictures byte for byte as before. The Rome doors (ANDREA1 room 212)
+are not taken and their pictures do not change. Byte-identical to the RoomProbe of
+`d0bf4f7b`: the classic views (`hd_build` 0, 6 of 6), the six HD views (6 of 6), the
+census eyes with `hd_water` 0 and 1 (15 of 15 each), the fifteen parity cameras with
+`hd_water` 0 and 1 (15 of 15 each). The nine scripts exit 0; ModernTest 15,851 checks
+(15,829 and this round's 22), MenuTest 44,754, InterpTest 729, LipsTest 299 with the
+scratch object folder and 272 without, 0 failed.
+
+**Left.** Not seen in the game: no run proves the engine's own fit, walk and side (the
+tool reads the `.TRC`, the engine `anims[]`, `changes[]`, `ranges[]` and `mesh_vtxbuf`;
+the log line `HDLOG slot=... reason=... fit=... pocket=...` will say it at the next
+`-log`). `ANIMATING1` and `ANIMATING13` of RICH2 leave nodes 7 and 8 empty in the HD model
+(12 classic vertices each): drawn HD, those two draw nothing, as for every other bound
+slot with an empty node. `KICK_DOOR1` of RICH3 has no geometry on node 0, a stub of three
+classic vertices. The RICH2 picture eyes are framed by hand and the classic look of a
+locker cannot be drawn by the tools, so the before picture is the owner's own.
+
+**Commits.** `7b8557f7` (the tools and the rules' header), `b9991107` (the fit),
+`54afc06a` (the doors), `59289fb8` (ModernTest), and the records.
+
 ### HD models for the pickups: the EXTRA prefix, a mod's own inventory model, and lying on the floor
 2026-09-08 - 2026-09-15
 
@@ -27883,3 +28053,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #220 | The gamma row (#220) |
 | #221 | The number beside every slider (#221) |
 | #222 | The pieces of a broken static in HD (#222) |
+| #224 | The search objects' binding and the double doors (#224) |

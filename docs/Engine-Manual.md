@@ -2834,9 +2834,36 @@ written into the log with the slot it applies to:
 | `donor_dummy` | The slot's model came from another level file and that level says, in its own name table, that the slot draws nothing on purpose. |
 | `tr3_not_installed` | The slot holds one of the four Tomb Raider III guests and *Tomb Raider I-III Remastered* was not found. Its model lives only there. |
 | `skeleton_nodes` | The model names a mesh-tree node the slot does not have. `FIREROPE` in eleven of the fourteen levels: TR5's slot is a rope with one piece and the model comes from TR4, where it had seventeen. |
-| `skeleton_drift` | The model fits the node **count** but not the tree. This is the randomizer's case: it puts foreign creatures into slots, and `SAS` in ANDREA1 holds a twenty-five-piece body where `SAS.TRM` was drawn for fifteen. Skinning that would tear the model across the room. |
+| `skeleton_drift` | The model fits the node **count** but not the tree. This is the randomizer's case: it puts foreign creatures into slots, and `SAS` in ANDREA1 holds a twenty-five-piece body where `SAS.TRM` was drawn for fifteen. Skinning that would tear the model across the room. A model the drift refuses is asked a second question before it is turned away - see "the fit" below. |
 | `no_geometry` | A model with nothing in it at all. Has not been seen; the guard is there so that it cannot become a crash. |
 | `baked` | Not classic at all: **nothing** draws it. The level's own name table says `DUMMY` for that slot, which is the remaster saying it draws nothing there as an object — usually because it has baked the thing into the room's art instead. Rome's lamp posts and its wall lanterns are the clearest case: draw the classic mesh on top and the lamp stands twice, a hand's width apart. Only in a room that really draws HD; a room that stayed classic keeps its lamp post. |
+
+**The fit.** The drift compares the distances between the model's pieces
+with the distances between the slot's joints, and that misreads one kind of
+object: one whose piece hangs far off its own joint. A locker's body stands
+1,700 units above its origin, a door's leaf 5,000 units off its hinge; the
+model sits exactly where the classic meshes sit and still reads as a foreign
+skeleton. So a model the drift refuses is asked about the places themselves:
+for every piece, how far the centre of the model's vertices on that piece
+stands from the centre of the classic mesh of that piece. Within 256 units
+for every piece and it is drawn HD, its log line ending in `reason=fit`.
+Over the fifteen levels this takes the searchable lockers and cabinets of
+JOBY2, JOBY5 and RICH2 (`SEARCH_OBJECT1`) and seven other slots (RICH1's
+`CHEF_MIP`, `DOOR_TYPE1` and `ANIMATING12_MIP`, RICH2's `ANIMATING1` and
+`ANIMATING13`, RICH3's `KICK_DOOR1` and `SMASH_OBJECT1`), whose pieces stand
+21 to 153 units from the classic meshes'. A model put on a foreign tree of the
+same piece count stands 383 units or more off. The rule is in
+`specific/hd/hd_object_rules.h`; `ModelProbe -bindcheck` takes it apart for
+one slot.
+
+**The sliding doors.** JOBY2's grey double doors slide into the wall and, at
+their open frame, fold their front and back panel into one plane. The classic
+game draws every object one-sided, so each side of that sheet shows its own
+panel; the HD path draws its models two-sided, and there the two panels
+fought for every pixel. A slot whose animations carry it out of its own box
+and fold it flat, without turning a piece within an animation, is drawn
+one-sided now - over the fifteen levels exactly those two door slots
+(`ModelProbe -all -slidecensus`).
 
 **Which model a slot asks for** comes from four places, in this order: the
 level's own name table beside it in the remaster's `DATA` folder, which lists
@@ -3227,9 +3254,9 @@ HDLOG frame rooms=17 calls=131 dropped=0 bulbs=0 fog_start=12288 wibble=930
 HDLOG frame objects hd=6 classic=4 baked=3 dropped=0 calls=20 swap_drawn=1
       swap_ignored=0 meshbits=0 clipped_lights=0(level)
 HDLOG slot=33 name=SWAT model=SWAT nodes=15 maxbone=14 cover=15
-      drift=22/114 head=-1 hd=1 reason=ok
+      drift=22/114 head=-1 hd=1 reason=ok fit=-1 pocket=0
 HDLOG slot=31 name=SAS model=SAS nodes=25 maxbone=14 cover=15
-      drift=807/2286 head=-1 hd=0 reason=skeleton_drift
+      drift=807/2286 head=-1 hd=0 reason=skeleton_drift fit=... pocket=0
 HDLOG slot=436 name=ANIMATING11 model=- nodes=2 ... hd=0 reason=baked
 HDLOG level=ANDREA1 map=read lines=42 baked_slots=14
 HDLOG level=ANDREA1 swap slot=469 name=CYBORG kind=hitman_stages

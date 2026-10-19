@@ -200,7 +200,7 @@ inline bool HDWetGivesWay(int y, const int* planeY, int drawn, int count,
 	return false;
 }
 
-/* The look's twenty-one numbers on the game's path, in the order of
+/* The look's twenty-five numbers on the game's path, in the order of
  * RoomProbe's -underlookknobs: the disc's, the shafts' and the underside's
  * strengths, the surface light's reach along the eye ray in units, the
  * disc's power, the shafts' cell size in units, the noise's floor (the
@@ -214,7 +214,13 @@ inline bool HDWetGivesWay(int y, const int* planeY, int drawn, int count,
  * the weight the art keeps; then the disc's power there
  * (HDWaterGlowPower), and the largest turn in radians and the largest
  * share of height by which each of the shafts' cells breaks the sheet's
- * ripple (hd_water_look.hlsl, SeaRipple). */
+ * ripple (hd_water_look.hlsl, SeaRipple); then the sheet's reach and fade:
+ * the share of the margin past the level's water it reaches
+ * (HDWaterSheetMargin; 0: the art's box alone), the way in units over
+ * which its ragged edge comes in, the share of the extinction's fog along
+ * it (HDWaterSheetFog; 0: none), and whether the extinction counts the way
+ * up to the sheet's plane where no sheet of the level lies over the eye's
+ * room (1) or to the stand-in's surface (0; HDWaterUnderSeaDepth). */
 enum
 {
 	HD_LOOK_DISC, HD_LOOK_SHAFTS, HD_LOOK_UNDERSIDE, HD_LOOK_REACH,
@@ -222,7 +228,8 @@ enum
 	HD_LOOK_WAVES, HD_LOOK_RIM, HD_LOOK_SEA_DISC, HD_LOOK_SEA_SHAFTS,
 	HD_LOOK_SEA_UNDERSIDE, HD_LOOK_SHEET, HD_LOOK_RIPPLE, HD_LOOK_PATCHES,
 	HD_LOOK_ART, HD_LOOK_SEA_POWER, HD_LOOK_SEA_TURN, HD_LOOK_SEA_SWELL,
-	HD_LOOK_KNOBS
+	HD_LOOK_SEA_MARGIN, HD_LOOK_SEA_RAGGED, HD_LOOK_SEA_FOG,
+	HD_LOOK_SEA_PLANE, HD_LOOK_KNOBS
 };
 
 /* The power of the cosine to the light whose glow falls to half its peak
@@ -305,7 +312,22 @@ inline float HDWaterGlowPower(float halfDeg)
  * lie by the photographs' (turns of 0.6 left 0.51, 1.2 took the
  * regularity to 237), every eye's pattern contrast at 0.70 to 0.87 of
  * before, inside its band, and the luma's step across a cell's border
- * 0.95 to 1.12 times the step inside a cell (0.99 to 1.15 before). */
+ * 0.95 to 1.12 times the step inside a cell (0.99 to 1.15 before).
+ *
+ * The sheet ended at the art's box, 10,500 to 23,000 units from the dive,
+ * 38 to 60 degrees up from its eyes, in a straight line: inside 6 to 19 of
+ * luma over the far water beyond, up to 3.3 a step of 512 units. It now
+ * reaches past the level's water rooms (JOBY4's run 14,300 units further
+ * south than the art) by the margin of HDWaterSheetMargin, its edge
+ * ragged over 4,096 units, and the fog along it takes it into the water's
+ * colour past 45 degrees from straight up: at the margin's edge it adds 0
+ * of luma at every eye that sees it (12 of 23). The fog's share is the
+ * largest halving step from 1 that keeps round 9's eleven eyes in their
+ * band: 0.25 (0.62 to 0.83 of before; 1 left five under it, down to
+ * 0.50, 0.5 two). With the plane (HDWaterUnderSeaDepth) an eye 68 units
+ * under the stand-in's surface no longer sees the rooms over its horizon
+ * in their own colours (hue 188 against the water's 200, 7.7 of luma
+ * darker than under it): hue 199, 0.8 apart. */
 inline void HDWaterLookKnobs(float* knobs)
 {
 	knobs[HD_LOOK_DISC] = 0.2f;
@@ -329,6 +351,10 @@ inline void HDWaterLookKnobs(float* knobs)
 	knobs[HD_LOOK_SEA_POWER] = HDWaterGlowPower(22.5f);
 	knobs[HD_LOOK_SEA_TURN] = 0.9f;
 	knobs[HD_LOOK_SEA_SWELL] = 0.5f;
+	knobs[HD_LOOK_SEA_MARGIN] = 1.0f;
+	knobs[HD_LOOK_SEA_RAGGED] = 4096.0f;
+	knobs[HD_LOOK_SEA_FOG] = 0.25f;
+	knobs[HD_LOOK_SEA_PLANE] = 1.0f;
 }
 
 /* The sea's surface seen from below in the art's place (hd_render.cpp,
@@ -376,6 +402,74 @@ inline float HDWaterSheetPath(float t, float up, float depth, float clear)
  * line across the far water, and the art over the dive's rooms lies
  * inside it. */
 static const float kHDWaterSheetEdge = 4096.0f;
+
+/* The extinction's depth where the level takes the deep look and its sea's
+ * sheet is found (`sheet` 1, its plane at world y `plane`): an eye in a
+ * water room no sheet of the level lies over (`fallback` 1) under that
+ * plane counts its way up to the plane, as the dive is one sea under one
+ * surface; anywhere else HDWaterUnderDepth's depth. Counted against the
+ * stand-in's surface instead, the basin of JOBY4's room 7 16,000 units
+ * under the plane, everything higher than the basin took the way only up
+ * to it, so the rooms over it showed without the water's colour, and an
+ * eye over it took the whole way, the sheet gone. */
+inline float HDWaterUnderSeaDepth(int fallback, int deep, float eyeY,
+	float surface, float none, int sheet, float plane)
+{
+	if (fallback && deep && sheet && eyeY > plane)
+		return eyeY - plane;
+
+	return HDWaterUnderDepth(fallback, deep, eyeY, surface, none);
+}
+
+/* The depth the sheet's own way is counted from (HDWaterSheetPath): the
+ * eye's under the stand-in's surface, `surface` world y, at least 1 - the
+ * art of the sea's surface took its light by that way, and the sheet takes
+ * the art's light; over the stand-in it keeps its whole light. */
+inline float HDWaterSheetDepth(float eyeY, float surface)
+{
+	const float d = eyeY - surface;
+
+	return d > 1.0f ? d : 1.0f;
+}
+
+/* How far the sheet reaches past the level's water, in units: the height
+ * of its plane over the lowest floor of a water room (`floor`, `plane`
+ * world y), so that from any eye in the water its edge lies 45 degrees or
+ * more from straight up, and the way over which the fog of the water's
+ * own extinction (`sigma` a unit, times the fog's share) leaves a
+ * twentieth of the light (HDWaterSheetFog), so that past 45 degrees it has
+ * faded before its edge. The height alone for no extinction. */
+inline float HDWaterSheetMargin(float floor, float plane, float sigma)
+{
+	const float h = floor > plane ? floor - plane : 0.0f;
+
+	return sigma > 0.0f ? h + logf(20.0f) / sigma : h;
+}
+
+/* The sheet's box in world x0, x1, z0, z1: the art's box (`art`) and the
+ * level's water rooms' (`water`) together, grown by `margin` on every
+ * side; the art's alone where `water` is empty (x1 < x0). */
+inline void HDWaterSheetBox(const float* art, const float* water,
+	float margin, float* out)
+{
+	const bool wet = water[1] >= water[0] && water[3] >= water[2];
+
+	out[0] = (wet && water[0] < art[0] ? water[0] : art[0]) - margin;
+	out[1] = (wet && water[1] > art[1] ? water[1] : art[1]) + margin;
+	out[2] = (wet && water[2] < art[2] ? water[2] : art[2]) - margin;
+	out[3] = (wet && water[3] > art[3] ? water[3] : art[3]) + margin;
+}
+
+/* The fog along the sheet (hd_water_look.hlsl): the way that the eye ray
+ * to a point of the sheet `along` units from the eye along the plane runs
+ * past the eye's own height under the plane, `height`, times `share` -
+ * added to the sheet's way through the water, so that the sheet fades into
+ * the water's own colour from 45 degrees from straight up toward the
+ * horizon, as the extinction thickens with the way. Never below 0. */
+inline float HDWaterSheetFog(float along, float height, float share)
+{
+	return along > height ? (along - height) * share : 0.0f;
+}
 
 /* The sheet's ripple, the body's two longest wave rows' height over the
  * sum of their two heights (`rows` four numbers a row, kx, kz, omega,

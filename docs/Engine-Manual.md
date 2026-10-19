@@ -1683,13 +1683,16 @@ see *Lara in HD* below for which of her stays classic and why.
   under the Remaster's art. That art of the sea's surface is drawn at every
   frame of the dive, with the water sheets on or off, wherever the camera
   looks: it stays in the picture as the camera swims from room to room. With
-  the water sheets on, seen from below by a camera inside the dive (lower than
-  the start cavern's pool, which the water's depth is measured from) that art
-  gives way to this engine's own sheet of the sea: a dark blue, softly rippled
-  underside in the water's own colour, lighter where a shaft of light leaves
-  it, in place of the bright turquoise pattern; the sun's glow, the lit
-  underside and the shafts are stronger there and carry the picture. Higher
-  up, outside the dive, the surface fades out exactly as before.
+  the water sheets on, seen from below by a camera anywhere in the sea under
+  it, that art gives way to this engine's own sheet of the sea: a dark blue
+  underside in the water's own colour, its small waves broken up and turned
+  every few metres so that no crest runs straight or repeats, lighter where a
+  shaft of light leaves it, in place of the bright turquoise pattern; the sun
+  is a broad soft glow through it rather than a bright spot, and the lit
+  underside and the shafts are stronger there and carry the picture. The sheet
+  reaches well past the level on every side, with a ragged edge, and fades
+  into the water's colour toward the horizon, so it has no visible edge; the
+  same holds above the playable area, where the camera can only fly.
 
 **The people.**
 
@@ -2133,10 +2136,13 @@ it.
   its floor, so the far walls go into dark blue-green water and not into a
   pale haze; the deeper the camera is under the highest water of the level,
   the dimmer that light, and looking up toward the surface is brighter than
-  looking down. Lara's limbs in water a sheet lies over take the light of the
-  room above the surface, not the tinted light of the water room (the lilac
-  of ANDREA1's pool). The surface seen from below fades the same way over
-  its distance, past the same clear two squares.
+  looking down. The water's way up is counted to the sea's own surface, so
+  the rooms higher than the start cavern's pool lie in the water's colour
+  too rather than standing out in their own. Lara's limbs in water a sheet
+  lies over take the light of the room above the surface, not the tinted
+  light of the water room (the lilac of ANDREA1's pool). The surface seen
+  from below fades the same way over its distance, past the same clear two
+  squares.
 - **Rivers.** Where the level's own triggers pull Lara through the water (a
   sink, the current that drags her along ANDY3's two rivers), the body is a
   river: it flows the way the sinks pull, at the speed they pull her (120

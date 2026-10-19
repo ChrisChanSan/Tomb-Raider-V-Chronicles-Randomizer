@@ -3472,6 +3472,62 @@ carries the tables.
     OWN.
 342. **RoomProbe's `-gpu` line** (`Preparation/Tools/Diagnose/
     RoomProbe.cpp`) - the line as it was, `-gpuall` named at its end. OWN.
+343. **The sun's disc a glow where the sea's sheet lies** (`hd_water_under.h`,
+    `HDWaterGlowPower`, `HD_LOOK_SEA_POWER`, `HD_LOOK_SEA_DISC`; `hd_render.cpp`,
+    `water_look_constants`) - the disc's power there the cosine's power that halves
+    the light at 22.5 degrees (8.75), its strength 4 in place of 8. PICTURE (the
+    sunlit photograph of a sea from below supplied as a look reference, not in the
+    repository, measured as numbers only: its glow round the sun, smoothed over 6
+    pixels at 960 wide, falls to half 178 pixels from its peak, a tenth at 326, by at
+    most 2.7 a pixel, its peak 2.49 times its median luma); the angle under the game's
+    own perspective, the photograph's lens not known. TEXTBOOK: cos^p falls to half
+    where p = ln 1/2 / ln cos. OWN: the strength, the largest whole number from 8 down
+    whose peak stays under the old one at four eyes and under the photograph's 2.49
+    over the open water's median at three (RoomProbe, `MODIFICATIONS.md`, the sea seen
+    from below, Round 10).
+344. **The sheet's ripple broken per cell** (`hd_water_look.hlsl`, `SeaRipple`;
+    `hd_water_under.h`, `HD_LOOK_SEA_TURN`, `HD_LOOK_SEA_SWELL`) - the body's two
+    longest wave rows, per cell of the shafts' 1,600-unit grid a phase, a turn of up
+    to 0.9 radians and a loss of up to half their height from three numbers of the
+    cells' hash (`CellHash`, this project's), the four cells blended by the smoothstep
+    and held to one cell's spread. DATA: the rows (JOBY4's sea). PICTURE (the two
+    photographs as above, numbers only): each 192-pixel window's spectrum, its peak
+    over its mean 253 and 341, the share of the peak ring within 15 degrees of its
+    direction 0.40 and 0.39, against the sheet's 723 and 0.81. OWN: the measure, and
+    the steps of 0.3 and 0.5 whose numbers lie by the photographs' (266, 0.42), every
+    eye inside its band and no seam (the step across a cell's border 0.86 to 1.01
+    times the step inside one).
+345. **The extinction up to the sheet's plane** (`hd_water_under.h`,
+    `HDWaterUnderSeaDepth`, `HDWaterSheetDepth`, `HD_LOOK_SEA_PLANE`; `hd_render.cpp`,
+    `water_under_fill`, `HDRenderWaterLook`) - where the level's sea's sheet is found,
+    a water room no sheet lies over counts the extinction's way up to the sheet's
+    plane, not to the stand-in's surface, and the sheet's own light keeps the way from
+    that surface (over it its whole light). DATA (JOBY4: the basin of room 7 at y
+    12,032, the sheet's plane at -4,269, 134 of its 137 rooms water rooms). OWN, the
+    rule, after the owner's word of 2026-10-18 that the room over the playable area is
+    without colour: at an eye 68 units under the basin the rooms over its horizon were
+    hue 188 against the water's 200, a line of 7.7 of luma, 0.8 after (RoomProbe).
+346. **The sheet's reach and its ragged edge** (`hd_water_under.h`,
+    `HDWaterSheetBox`, `HDWaterSheetMargin`, `HD_LOOK_SEA_MARGIN`,
+    `HD_LOOK_SEA_RAGGED`; `hd_render.cpp`, the water build; `hd_water_look.hlsl`,
+    `CellNoise`) - the art's box and the level's water rooms' together, grown by the
+    plane's height over the lowest water floor and the way over which the fog leaves a
+    twentieth, the edge moved by up to its 4,096 units by a value noise of the cells'
+    hash. DATA (the art's box, the water rooms' boxes and floors, the extinction's
+    sigma_s); TEXTBOOK: a twentieth is left after ln 20 over the extinction; OWN: the
+    45 degrees the margin keeps the edge from straight up, the 4,096 units (round 9's).
+347. **The fog along the sheet** (`hd_water_under.h`, `HDWaterSheetFog`,
+    `HD_LOOK_SEA_FOG`; `hd_water_look.hlsl`, the sheet's way) - the way of the eye ray
+    to the sheet past the eye's own height under its plane added to the sheet's way
+    through the water at 0.25 of itself, so the sheet fades into the water's colour
+    toward the horizon and adds 0 of luma at its edge (RoomProbe, twelve eyes). OWN:
+    the 45 degrees, and the share, the largest halving step from 1 that keeps round
+    9's eleven eyes in their band (0.62 to 0.83 of before).
+348. **RoomProbe's sea knobs and ModernTest's checks** (`Preparation/Tools/Diagnose/
+    RoomProbe.cpp`, `-underlookknobs` with twenty-five numbers, the `-underlook` line's
+    `power`, `break` and `edge`, `HDRenderWaterSeaKnobs` before the one bracket;
+    `ModernTest.cpp`, `water_sea`) - the tool's switches for the round's rules and 24
+    checks of their pure functions. OWN.
 
 ## Credited, but not contained here
 

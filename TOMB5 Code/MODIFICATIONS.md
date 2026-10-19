@@ -18696,7 +18696,7 @@ K1451 at most 0.55; 42 to 730 pixels each). The room over the playable area, G2 
 28.7, hue 200 / 200 - the line 7.7 / 0.8; with the plane's knob at 0 the line is back
 (21.1, hue 188), with 1 gone: the plane is the cause. Over the basin the fade stays: the
 `-undertick` walk over his flight (`-undertick` right after RoomProbe's install path)
-gives the surface's light 43.45 at tick 631, 3 units under the basin (46.20 before), and
+gives the surface's light 46.60 at tick 631, 3 units under the basin (46.20 before), and
 11.58 at 632 over it (11.58), 13.35 at 635 and 14.71 at 641 as before; every tick over
 the basin prints the line of before.
 
@@ -18717,9 +18717,9 @@ pole, drawn by the sky's code, outside this round's files and its parity; with `
 0.3 from 75 to 89 degrees (controls -2.3 to 0.7): the broad glow fills it there.
 
 GPU at 2,560 x 1,440, three runs each, medians, the look's two draws (the sheet drawn in
-the first): U85 0.934 to 0.990 ms, U45 0.937 to 0.989, T23995 0.941 to 0.988, L3 0.938 to
-0.989 - 0.05 ms more, the sheet's four cells of ripple, its edge's noise and its fog;
-with the sheet's strength 0 (`-sea look`, the branch still taken) 0.937 to 0.990 the
+the first): U85 0.933 to 0.983 ms, U45 0.933 to 0.984, T23995 0.933 to 0.985, L3 0.933 to
+0.985 - 0.05 ms more, the sheet's four cells of ripple, its edge's noise and its fog;
+with the sheet's strength 0 (`-sea look`, the branch still taken) 0.931 to 0.985 the
 same. `LookPS` 446 slots of 512 (341 before), `LookVS` 1; no texture.
 
 **Decisions.** The disc's width is the photograph's, under the game's own perspective

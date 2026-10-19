@@ -19695,7 +19695,8 @@ stair's walk, four on the ANDREA1 climb, Round 4's simulation) - whether that st
 question for the next round. `tomb5.cpp`'s `planes = 64` stays a literal beside the
 comment that names `HD_MARBLE_PLANES_MOST` (the file does not include the header).
 
-**Commits.** The fix pass's commit after Round 4's record.
+**Commits.** `d3986a7c` (the comments and the start values), `0845d204` (the records),
+and this line's own commit after them.
 
 ### The spring (#200)
 2026-10-14

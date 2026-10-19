@@ -322,12 +322,12 @@ inline float HDWaterGlowPower(float halfDeg)
  * ragged over 4,096 units, and the fog along it takes it into the water's
  * colour past 45 degrees from straight up: at the margin's edge it adds 0
  * of luma at every eye that sees it (12 of 23). The fog's share is the
- * largest halving step from 1 that keeps round 9's eleven eyes in their
- * band: 0.25 (0.62 to 0.83 of before; 1 left five under it, down to
- * 0.50, 0.5 two). With the plane (HDWaterUnderSeaDepth) an eye 68 units
- * under the stand-in's surface no longer sees the rooms over its horizon
- * in their own colours (hue 188 against the water's 200, 7.7 of luma
- * darker than under it): hue 199, 0.8 apart. */
+ * largest halving step from 1 that keeps the eleven eyes the sheet was
+ * set on in their band: 0.25 (0.62 to 0.83 of before; 1 left five under
+ * it, down to 0.50, 0.5 two). With the plane (HDWaterUnderSeaDepth) an eye
+ * 68 units under the stand-in's surface no longer sees the rooms over its
+ * horizon in their own colours (hue 188 against the water's 200, 7.7 of
+ * luma darker than under it): hue 199, 0.8 apart. */
 inline void HDWaterLookKnobs(float* knobs)
 {
 	knobs[HD_LOOK_DISC] = 0.2f;

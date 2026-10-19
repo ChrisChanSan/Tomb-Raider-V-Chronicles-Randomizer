@@ -256,7 +256,22 @@
  *                         the same for an HD item without a blob - a door, a
  *                         crate, a pickup: placed and drawn the same way,
  *                         cast into no map, and in the models' pass it takes
- *                         both.
+ *                         both. A slot the pocket rule takes is drawn
+ *                         one-sided, as HDObjectEnd draws it
+ *                         (hd_object_rules.h).
+ *     -itemanim <anim> <key>
+ *                         the -shadowcreature and -shadowitem models in that
+ *                         keyframe of their own animation (numbered from the
+ *                         slot's first) instead of the first frame, with
+ *                         that keyframe's own offset.
+ *     -itempush <e>       their node matrices scaled by 1 + e about the eye:
+ *                         every pixel stays where it is and only its depth
+ *                         moves. Two runs at +e and -e differ exactly where
+ *                         an item and another surface tie in depth - the
+ *                         measure of a fight.
+ *     -nopocket           the pocket rule left off: the before picture.
+ *     -itemcull none|back the side of every placed model drawn, whatever
+ *                         the pocket rule says.
  *     -shadowothers       the second map of this pose and these creatures,
  *                         written as <out>_shadowothers_<outfit>_c<n>.png,
  *                         2048 texels a side, grey as -shadowmap's. With
@@ -326,7 +341,8 @@
  *                         HD path draws every model double sided; with the
  *                         camera inside her that shows her own inside, so
  *                         first person culls. Default: back with
- *                         -firstperson, none otherwise.
+ *                         -firstperson, none otherwise. With -slot the side
+ *                         of that model drawn, none without the switch.
  *     -headcut <w>        the first person head cut, on her body alone: every
  *                         fragment whose weight on the head node reaches w is
  *                         discarded. A negative w draws
@@ -678,6 +694,32 @@
  *
  *   Everything else:
  *     -nodes              print the node table (also printed by -all)
+ *     -bindcheck          the skeleton test taken apart (PrintBindCheck):
+ *                         per node the classic bind, the classic mesh's
+ *                         centre and the .TRM's, their boxes, the drift's
+ *                         pairs against the joints and against the meshes,
+ *                         the model's own twin triangles, and every
+ *                         animation keyframe by keyframe - its box and
+ *                         offset, each node's turn and how far the classic
+ *                         and the .TRM centre of each node travel. With -all
+ *                         one `bindcheck` line per bound slot.
+ *     -crossdrift         with -all: every model on every other slot of the
+ *                         level with its node count, by both drifts and the
+ *                         fit - the foreign trees the skeleton test refuses.
+ *     -slidecensus        with -all: per slot how far its animations carry
+ *                         it, whether a node turns, whether a keyframe box
+ *                         leaves the rest box or folds flat, and the pocket
+ *                         rule's answer by both walks.
+ *     -animframe <anim> <key>
+ *                         with -slot: the picture in that keyframe of one of
+ *                         the slot's own animations, on the bind pose's
+ *                         camera.
+ *     -classicdots        with -slot: every vertex of the slot's classic
+ *                         meshes as a cyan cross over the picture, posed by
+ *                         the node matrices the .TRM was drawn with, and per
+ *                         node how many land on a pixel the model covered -
+ *                         the HD model held against the classic one in any
+ *                         pose (-animframe), with no classic draw needed.
  *     -pagelist           every slot of the page cache after the build:
  *                         its key as the cache holds it,
  *                         where the .DDS was read from, the size it was
@@ -763,6 +805,7 @@
 #include <string.h>
 
 #include <algorithm>
+#include <array>
 #include <map>
 #include <string>
 #include <vector>
@@ -798,6 +841,7 @@
 char tomb5_hd_install[260];
 char tomb5_hd_install_tr3[260];
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_trm.h"
+#include "../../../TOMB5 Code/TOMB5/specific/hd/hd_object_rules.h"
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_trl.h"
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_shadow.h"
 
@@ -859,6 +903,19 @@ struct OverlayLine
 };
 
 static std::vector<OverlayLine> g_overlay;
+
+/* -classicdots: the classic mesh's vertices over the picture, each where
+ * the node matrices the .TRM was drawn with put it. ShotWrite counts the
+ * ones that land on a pixel the model covered before it draws the crosses,
+ * so the number is about the renderer's picture and not about the marks. */
+struct OverlayDot
+{
+	double x, y;
+	int node;
+};
+
+static std::vector<OverlayDot> g_dots;
+static bool g_dotsAsked = false;
 
 static void OverlayClear()
 {
@@ -1329,6 +1386,58 @@ static bool ShotWrite(Shot& shot, const char* path)
 	}
 
 	shot.readback->UnlockRect();
+
+	/* -classicdots: a vertex is on the model when its pixel or one of the
+	 * eight around it is not the background - a vertex on the outline
+	 * rounds to either side of it. Counted per node, so a node the .TRM
+	 * leaves empty or puts elsewhere shows as that node's own number. */
+	if (g_dotsAsked)
+	{
+		int on[33] = { 0 }, all[33] = { 0 }, off = 0;
+
+		for (size_t i = 0; i < g_dots.size(); i++)
+		{
+			const long x = (long)(g_dots[i].x + 0.5);
+			const long y = (long)(g_dots[i].y + 0.5);
+			const int n = g_dots[i].node < 32 ? g_dots[i].node : 32;
+			bool hit = false;
+
+			if (x < 0 || x >= shot.w || y < 0 || y >= shot.h)
+			{
+				off++;
+				continue;
+			}
+
+			for (long dy = -1; dy <= 1 && !hit; dy++)
+				for (long dx = -1; dx <= 1 && !hit; dx++)
+				{
+					const long px = x + dx, py = y + dy;
+
+					hit = px >= 0 && px < shot.w && py >= 0 && py < shot.h &&
+						(pixels[py * shot.w + px] & 0x00FFFFFFu) != 0x00FF00FFu;
+				}
+
+			all[n]++;
+			on[n] += hit ? 1 : 0;
+		}
+
+		int onSum = 0, allSum = 0;
+
+		for (int n = 0; n <= 32; n++)
+		{
+			onSum += on[n];
+			allSum += all[n];
+
+			if (all[n])
+				printf("  classic dots node %2d: %4d of %4d on the model\n", n,
+					on[n], all[n]);
+		}
+
+		printf("  classic dots: %d of %d on the model (%.1f%%), %d off the "
+			"picture\n", onSum, allSum,
+			allSum ? 100.0 * (double)onSum / (double)allSum : 0.0, off);
+		g_dots.clear();
+	}
 
 	/* And the floor over it. After the background count above and
 	 * before the file: the percentages beside every picture this tool writes
@@ -2038,6 +2147,739 @@ static std::string TrmPath(const std::string& root5, const char* stem)
 		return bundle + "\\6" + leaf;
 
 	return std::string();
+}
+
+/* ------------------------------------------------ the skeleton, taken apart */
+/* One animation of a slot, as the .TRC holds it: the byte offset of its first
+ * keyframe in the frame block, the keyframe stride in words, the rate and the
+ * frame range. `count` comes back as the number of animations the slot owns -
+ * up to the next slot's first one, or the end of the table. */
+struct SlotAnim
+{
+	uint32_t frameOffset = 0;
+	int rate = 1, size = 0, start = 0, end = 0;
+};
+
+static bool ReadSlotAnim(const Tr5Level& level, int slot, int anim,
+	SlotAnim& out, int* count)
+{
+	Tr5Level::MoveableInfo info;
+	size_t at = 0;
+	int32_t total = 0;
+
+	if (!level.moveableInfo(slot, info) || info.animIndex < 0 ||
+		!level.debugAnimBlock(at, total))
+		return false;
+
+	int next = total;
+	const std::vector<int> slots = level.moveableSlots();
+
+	for (size_t i = 0; i < slots.size(); i++)
+	{
+		Tr5Level::MoveableInfo other;
+
+		if (level.moveableInfo(slots[i], other) &&
+			other.animIndex > info.animIndex && other.animIndex < next)
+			next = other.animIndex;
+	}
+
+	if (count)
+		*count = next - info.animIndex;
+
+	const int index = info.animIndex + anim;
+	const std::vector<uint8_t>& bytes = level.debugBytes();
+
+	if (anim < 0 || index >= next ||
+		at + (size_t)(index + 1) * 40 > bytes.size())
+		return false;
+
+	const uint8_t* e = bytes.data() + at + (size_t)index * 40;
+	int16_t s = 0;
+
+	memcpy(&out.frameOffset, e + 0, 4);
+	out.rate = e[4] ? e[4] : 1;
+	out.size = e[5];
+	memcpy(&s, e + 24, 2);
+	out.start = s;
+	memcpy(&s, e + 26, 2);
+	out.end = s;
+
+	return out.size > 0 && out.end >= out.start;
+}
+
+/* A keyframe of one of the slot's animations through the engine's own walk,
+ * HDFramePose - twelve floats a node, the frame's offset left out as
+ * ReadFramePose leaves it out. */
+static int ReadAnimPose(const Tr5Level& level, const ClassicSlot& here,
+	int anim, int key, std::vector<float>& out)
+{
+	SlotAnim a;
+
+	out.clear();
+
+	if (!ReadSlotAnim(level, here.slot, anim, a, 0) || key < 0)
+		return 0;
+
+	std::vector<short> frame((size_t)(9 + 2 * here.nodes), 0);
+	const long long first = (long long)(a.frameOffset / 2) +
+		(long long)key * a.size;
+
+	for (size_t i = 0; i < frame.size(); i++)
+		frame[i] = level.debugReadFrameShort(first + (long long)i);
+
+	std::vector<long> tree((size_t)(here.nodes > 1 ? (here.nodes - 1) * 4 : 1),
+		0);
+
+	for (int node = 1; node < here.nodes; node++)
+	{
+		tree[(size_t)(node - 1) * 4 + 0] = here.flags[node];
+		tree[(size_t)(node - 1) * 4 + 1] = here.delta[node][0];
+		tree[(size_t)(node - 1) * 4 + 2] = here.delta[node][1];
+		tree[(size_t)(node - 1) * 4 + 3] = here.delta[node][2];
+	}
+
+	out.assign((size_t)here.nodes * 12, 0.0f);
+
+	return HDFramePose(&frame[0], here.nodes > 1 ? &tree[0] : 0, here.nodes,
+		&out[0]);
+}
+
+/* The classic mesh of one node, its vertices in the slot's frame at the bind
+ * pose (the mesh's own coordinates plus the node's bind offset). */
+static int ClassicNodeVertices(const Tr5Level& level, const ClassicSlot& here,
+	int node, std::vector<float>& out)
+{
+	Tr5Level::MoveableInfo info;
+	const std::vector<uint8_t>& bytes = level.debugBytes();
+	size_t at = 0;
+
+	out.clear();
+
+	if (!level.moveableInfo(here.slot, info) ||
+		!level.debugMeshAt(info.meshIndex + node, at) || at + 12 > bytes.size())
+		return 0;
+
+	int16_t word = 0;
+
+	memcpy(&word, &bytes[at + 10], 2);
+
+	const int verts = word & 0xFF;
+
+	if (at + 12 + (size_t)verts * 6 > bytes.size())
+		return 0;
+
+	for (int v = 0; v < verts; v++)
+	{
+		int16_t xyz[3];
+
+		memcpy(xyz, &bytes[at + 12 + (size_t)v * 6], 6);
+
+		for (int k = 0; k < 3; k++)
+			out.push_back((float)xyz[k] + here.bind[node][k]);
+	}
+
+	return verts;
+}
+
+/* The skeleton fit as hd_object.cpp asks it (skeleton_fit_of): the model's
+ * own single-weight centres (HDModelNodeCentre, the engine's numbers)
+ * against the classic meshes' centres in the bind pose, read out of the
+ * .TRC instead of mesh_vtxbuf. -1 when no node can be measured. */
+static float ToolFitOf(const Tr5Level& level, const ClassicSlot& here,
+	int slot)
+{
+	const int nodes = here.nodes < 32 ? here.nodes : 32;
+	float trm[32 * 3], mesh[32 * 3];
+	int trmCount[32], meshCount[32];
+
+	for (int node = 0; node < nodes; node++)
+	{
+		std::vector<float> cv;
+
+		trmCount[node] = HDModelNodeCentre(slot, node, trm + node * 3);
+		meshCount[node] = ClassicNodeVertices(level, here, node, cv);
+
+		double sum[3] = { 0, 0, 0 };
+
+		for (int v = 0; v < meshCount[node]; v++)
+			for (int k = 0; k < 3; k++)
+				sum[k] += cv[(size_t)v * 3 + k];
+
+		for (int k = 0; k < 3; k++)
+			mesh[node * 3 + k] = meshCount[node]
+				? (float)(sum[k] / meshCount[node]) : 0.0f;
+	}
+
+	return HDSkeletonFitWorst(trm, trmCount, mesh, meshCount, nodes);
+}
+
+/* The pocket as hd_object.cpp asks it (pocket_of): the same walk over the
+ * same words, the animations, changes and ranges read out of the .TRC -
+ * an animation entry is 40 bytes, a change 6, a range 8. */
+static bool ToolPocketOf(const Tr5Level& level, int slot)
+{
+	Tr5Level::MoveableInfo info;
+	size_t animAt = 0, changeAt = 0, rangeAt = 0;
+	int32_t anims = 0, changeCount = 0, rangeCount = 0;
+
+	if (!level.moveableInfo(slot, info) || info.animIndex < 0 ||
+		!level.debugAnimBlock(animAt, anims))
+		return false;
+
+	level.debugChangeBlock(changeAt, changeCount);
+	level.debugRangeBlock(rangeAt, rangeCount);
+
+	const std::vector<uint8_t>& bytes = level.debugBytes();
+	std::map<int, std::vector<short> > cache;
+
+	auto word = [&](size_t at) -> short
+	{
+		short s = 0;
+
+		if (at + 2 <= bytes.size())
+			memcpy(&s, &bytes[at], 2);
+
+		return s;
+	};
+
+	auto frames = [&](int anim, const short** keyframes, int* keys,
+		int* size) -> bool
+	{
+		if (anim < 0 || anim >= anims)
+			return false;
+
+		const size_t e = animAt + (size_t)anim * 40;
+		uint32_t offset = 0;
+
+		memcpy(&offset, &bytes[e], 4);
+
+		const int rate = bytes[e + 4];
+		const int base = word(e + 24), end = word(e + 26);
+
+		*size = bytes[e + 5];
+		*keys = rate > 0 && end >= base ? (end - base) / rate + 1 : 0;
+
+		if (*keys < 1 || *size < 1)
+			return false;
+
+		std::vector<short>& own = cache[anim];
+
+		if (own.empty())
+			for (int i = 0; i < *keys * *size; i++)
+				own.push_back(level.debugReadFrameShort(
+					(long long)(offset / 2) + i));
+
+		*keyframes = &own[0];
+		return true;
+	};
+
+	auto links = [&](int anim, int* out, int most) -> int
+	{
+		const size_t e = animAt + (size_t)anim * 40;
+		int count = 0;
+
+		if (count < most)
+			out[count++] = word(e + 28);
+
+		const int changesOf = word(e + 32), first = word(e + 34);
+
+		for (int c = 0; c < changesOf && first + c < changeCount; c++)
+		{
+			const size_t ce = changeAt + (size_t)(first + c) * 6;
+			const int ranges = word(ce + 2), firstRange = word(ce + 4);
+
+			for (int r = 0; r < ranges && count < most &&
+				firstRange + r < rangeCount; r++)
+				out[count++] = word(rangeAt + (size_t)(firstRange + r) * 8 + 4);
+		}
+
+		return count;
+	};
+
+	return HDSlotSlidesIntoPocket(info.animIndex, frames, links);
+}
+
+/* -bindcheck: the skeleton test of hd_model.cpp taken apart for one slot.
+ *
+ * Per node the classic bind offset and parent, the centre and spread of the
+ * classic mesh in the bind pose, and the same two numbers of the .TRM's
+ * single-weight vertices of that node - the very working set the bind drift
+ * is computed from - with their difference. Per pair of nodes the drift's own
+ * term. Then every animation the slot owns, keyframe by keyframe: how far
+ * each node's origin has moved and turned against the animation's first
+ * keyframe, which names the node an animation opens. */
+static void PrintBindCheck(const Tr5Level& level, const std::string& root5,
+	int slot, const ClassicSlot& here, bool brief)
+{
+	const char* name = HDModelName(slot);
+	const std::string path = name ? TrmPath(root5, name) : std::string();
+	HDTrmModel trm;
+	const char* why = 0;
+
+	memset(&trm, 0, sizeof(trm));
+	if (!brief)
+		printf("\n-- bindcheck: %s, slot %d ------------------------------\n",
+			name ? name : "-", slot);
+
+	if (path.empty() || !HDTrmLoad(path.c_str(), &trm, &why))
+	{
+		printf("  no .TRM to read (%s)\n", why ? why : "no file");
+		return;
+	}
+
+	const int nodes = here.nodes < 32 ? here.nodes : 32;
+	double hc[32][3] = { { 0 } }, hs[32] = { 0 };
+	int hn[32] = { 0 };
+
+	/* The box of the vertices each node LEADS (its largest weight), beside
+	 * the classic mesh's box: the place measured the second way, by box
+	 * centres rather than by vertex means. */
+	float blo[32][3], bhi[32][3];
+	bool bhas[32] = { false };
+
+	for (int v = 0; v < trm.vertices; v++)
+	{
+		const HDTrmVertex& in = trm.vertex[v];
+		int lead = 0;
+
+		for (int w = 1; w < 3; w++)
+			if (in.weight[w] > in.weight[lead])
+				lead = w;
+
+		const int ln = in.bone[lead];
+		const float at[3] = { in.x, in.y, in.z };
+
+		if (ln < 32 && in.weight[lead])
+		{
+			for (int k = 0; k < 3; k++)
+			{
+				if (!bhas[ln] || at[k] < blo[ln][k]) blo[ln][k] = at[k];
+				if (!bhas[ln] || at[k] > bhi[ln][k]) bhi[ln][k] = at[k];
+			}
+
+			bhas[ln] = true;
+		}
+
+		if (in.weight[0] != 255 || in.bone[0] >= 32)
+			continue;
+
+		const int n = in.bone[0];
+
+		hn[n]++;
+		hc[n][0] += in.x;
+		hc[n][1] += in.y;
+		hc[n][2] += in.z;
+		hs[n] += (double)in.x * in.x + (double)in.y * in.y +
+			(double)in.z * in.z;
+	}
+
+	double cc[32][3] = { { 0 } }, cs[32] = { 0 };
+	int cn[32] = { 0 };
+	double boxWorst = -1;
+
+	if (!brief)
+		printf("  %-4s %-6s %-21s %-21s %6s %-21s %6s %5s %-17s %5s\n", "node",
+			"parent", "classic bind", "classic centre", "spread",
+			"TRM centre", "spread", "vtx", "TRM - classic", "cls");
+
+	for (int node = 0; node < nodes; node++)
+	{
+		std::vector<float> cv;
+		const int count = ClassicNodeVertices(level, here, node, cv);
+		double sq = 0;
+
+		for (int v = 0; v < count; v++)
+			for (int k = 0; k < 3; k++)
+			{
+				cc[node][k] += cv[(size_t)v * 3 + k];
+				sq += (double)cv[(size_t)v * 3 + k] * cv[(size_t)v * 3 + k];
+			}
+
+		cn[node] = count;
+
+		if (count && bhas[node])
+		{
+			double d = 0;
+			float clo[3], chi[3];
+
+			for (int k = 0; k < 3; k++)
+			{
+				float lo = cv[(size_t)k], hi = cv[(size_t)k];
+
+				for (int v = 1; v < count; v++)
+				{
+					const float x = cv[(size_t)v * 3 + k];
+
+					lo = x < lo ? x : lo;
+					hi = x > hi ? x : hi;
+				}
+
+				const double e = (blo[node][k] + bhi[node][k]) * 0.5 -
+					(lo + hi) * 0.5;
+
+				clo[k] = lo;
+				chi[k] = hi;
+				d += e * e;
+			}
+
+			boxWorst = sqrt(d) > boxWorst ? sqrt(d) : boxWorst;
+
+			if (!brief)
+				printf("  %-4d boxes: classic x %.0f..%.0f y %.0f..%.0f z "
+					"%.0f..%.0f  TRM x %.0f..%.0f y %.0f..%.0f z %.0f..%.0f\n",
+					node, clo[0], chi[0], clo[1], chi[1], clo[2], chi[2],
+					blo[node][0], bhi[node][0], blo[node][1], bhi[node][1],
+					blo[node][2], bhi[node][2]);
+		}
+
+		if (count)
+		{
+			for (int k = 0; k < 3; k++)
+				cc[node][k] /= count;
+
+			const double l = cc[node][0] * cc[node][0] +
+				cc[node][1] * cc[node][1] + cc[node][2] * cc[node][2];
+
+			cs[node] = sqrt(sq / count - l > 0 ? sq / count - l : 0);
+		}
+
+		double tc[3] = { 0, 0, 0 }, ts = 0;
+
+		if (hn[node])
+		{
+			for (int k = 0; k < 3; k++)
+				tc[k] = hc[node][k] / hn[node];
+
+			const double l = tc[0] * tc[0] + tc[1] * tc[1] + tc[2] * tc[2];
+
+			const double e2 = hs[node] / hn[node] - l;
+
+			ts = sqrt(e2 > 0 ? e2 : 0);
+		}
+
+		char parent[8];
+
+		sprintf(parent, node ? "%d" : "root", here.parent[node]);
+
+		if (!brief)
+			printf("  %-4d %-6s %6.0f %6.0f %6.0f  %6.0f %6.0f %6.0f  %6.0f "
+				"%6.0f %6.0f %6.0f  %6.0f %5d %5.0f %5.0f %5.0f %5d\n", node,
+				parent, here.bind[node][0], here.bind[node][1],
+				here.bind[node][2], cc[node][0], cc[node][1], cc[node][2],
+				cs[node], tc[0], tc[1], tc[2], ts, hn[node],
+				tc[0] - cc[node][0], tc[1] - cc[node][1], tc[2] - cc[node][2],
+				cn[node]);
+
+		for (int k = 0; k < 3; k++)
+			hc[node][k] = tc[k];
+
+		hs[node] = ts;
+	}
+
+	if (!brief)
+		printf("\n  the drift's pairs (nodes with 16 or more single-weight "
+			"vertices): against the bind joints, as the engine measures, and\n"
+			"  against the classic meshes' own centres in the bind pose\n"
+			"  %-5s %9s %9s %9s %7s %7s %7s %7s %7s\n", "pair", "TRM dist",
+			"bind dist", "mesh dist", "spread", "spread", "joint", "mesh",
+			"raw");
+
+	double sum = 0, sumMesh = 0, sumRaw = 0;
+	double worst = 0, worstMesh = 0, worstRaw = 0;
+	int pairs = 0;
+
+	for (int a = 0; a < nodes; a++)
+		for (int b = a + 1; b < nodes; b++)
+		{
+			if (hn[a] < 16 || hn[b] < 16)
+				continue;
+
+			double m = 0, d = 0, c = 0;
+
+			for (int k = 0; k < 3; k++)
+			{
+				m += (hc[a][k] - hc[b][k]) * (hc[a][k] - hc[b][k]);
+				d += (here.bind[a][k] - here.bind[b][k]) *
+					(here.bind[a][k] - here.bind[b][k]);
+				c += (cc[a][k] - cc[b][k]) * (cc[a][k] - cc[b][k]);
+			}
+
+			double term = fabs(sqrt(m) - sqrt(d)) - hs[a] - hs[b];
+			double mesh = fabs(sqrt(m) - sqrt(c)) - hs[a] - hs[b];
+			const double raw = fabs(sqrt(m) - sqrt(c));
+
+			term = term < 0 ? 0 : term;
+			mesh = mesh < 0 ? 0 : mesh;
+			// A node the classic slot draws nothing on has no centre.
+			if (!cn[a] || !cn[b])
+				mesh = 0;
+
+			sum += term;
+			sumMesh += mesh;
+			sumRaw += raw;
+			worst = term > worst ? term : worst;
+			worstMesh = mesh > worstMesh ? mesh : worstMesh;
+			worstRaw = raw > worstRaw ? raw : worstRaw;
+			pairs++;
+
+			if (!brief)
+				printf("  %d-%-3d %9.0f %9.0f %9.0f %7.0f %7.0f %7.0f %7.0f "
+					"%7.0f\n", a, b, sqrt(m), sqrt(d), sqrt(c), hs[a], hs[b],
+					term, mesh, raw);
+		}
+
+	/* The fit: per node, how far the .TRM's centre stands from the classic
+	 * mesh's own centre in the bind pose - no pair, no spread, the place
+	 * itself, since that is where the bind fold puts both. `rel` is the
+	 * same distance over the classic mesh's spread. */
+	double fitSum = 0, fitWorst = 0, relWorst = 0;
+	int fitNodes = 0;
+
+	for (int node = 0; node < nodes; node++)
+	{
+		if (hn[node] < 16 || !cn[node])
+			continue;
+
+		const double dx = hc[node][0] - cc[node][0];
+		const double dy = hc[node][1] - cc[node][1];
+		const double dz = hc[node][2] - cc[node][2];
+		const double fit = sqrt(dx * dx + dy * dy + dz * dz);
+		const double rel = fit / (cs[node] > 1 ? cs[node] : 1);
+
+		fitSum += fit;
+		fitWorst = fit > fitWorst ? fit : fitWorst;
+		relWorst = rel > relWorst ? rel : relWorst;
+		fitNodes++;
+	}
+
+	printf("  bindcheck slot=%d name=%s model=%s pairs=%d joint=%.0f/%.0f "
+		"mesh=%.0f/%.0f raw=%.0f/%.0f fit=%.0f/%.0f rel=%.2f nodes=%d "
+		"box=%.0f\n",
+		slot, HDSlotName(slot) ? HDSlotName(slot) : "?", name, pairs,
+		pairs ? sum / pairs : 0.0, worst, pairs ? sumMesh / pairs : 0.0,
+		worstMesh, pairs ? sumRaw / pairs : 0.0, worstRaw,
+		fitNodes ? fitSum / fitNodes : 0.0, fitWorst, relWorst, fitNodes,
+		boxWorst);
+
+	if (brief)
+	{
+		HDTrmFree(&trm);
+		return;
+	}
+
+	/* The model's own twins: pairs of triangles whose three corners stand
+	 * at the same three places (within half a unit), told apart by whether
+	 * the two face the same way or opposite ways, with their area. Two such
+	 * triangles drawn without culling meet at one depth everywhere. */
+	{
+		const int tris = trm.indices / 3;
+		int same = 0, opposite = 0;
+		double sameArea = 0, oppositeArea = 0;
+		std::vector<std::array<float, 9> > at((size_t)tris);
+		std::vector<int> nodeOf((size_t)tris);
+
+		for (int t = 0; t < tris; t++)
+			for (int c = 0; c < 3; c++)
+			{
+				const HDTrmVertex& v = trm.vertex[trm.index[t * 3 + c]];
+
+				at[(size_t)t][c * 3 + 0] = v.x;
+				at[(size_t)t][c * 3 + 1] = v.y;
+				at[(size_t)t][c * 3 + 2] = v.z;
+				nodeOf[(size_t)t] = v.bone[0];
+			}
+
+		for (int a = 0; a < tris; a++)
+			for (int b = a + 1; b < tris; b++)
+			{
+				int match[3] = { -1, -1, -1 };
+				bool all = true;
+
+				for (int i = 0; i < 3 && all; i++)
+				{
+					all = false;
+
+					for (int j = 0; j < 3; j++)
+						if (fabs(at[a][i * 3] - at[b][j * 3]) < 0.5f &&
+							fabs(at[a][i * 3 + 1] - at[b][j * 3 + 1]) < 0.5f &&
+							fabs(at[a][i * 3 + 2] - at[b][j * 3 + 2]) < 0.5f)
+						{
+							match[i] = j;
+							all = true;
+							break;
+						}
+				}
+
+				if (!all)
+					continue;
+
+				// Same winding when the corner map is a rotation.
+				const bool rotation = (match[1] - match[0] + 3) % 3 == 1;
+				const double ux = at[a][3] - at[a][0], uy = at[a][4] - at[a][1],
+					uz = at[a][5] - at[a][2];
+				const double vx = at[a][6] - at[a][0], vy = at[a][7] - at[a][1],
+					vz = at[a][8] - at[a][2];
+				const double cx = uy * vz - uz * vy, cy = uz * vx - ux * vz,
+					cz = ux * vy - uy * vx;
+				const double area = 0.5 * sqrt(cx * cx + cy * cy + cz * cz);
+
+				if (rotation)
+				{
+					same++;
+					sameArea += area;
+				}
+				else
+				{
+					opposite++;
+					oppositeArea += area;
+				}
+			}
+
+		printf("\n  twins: %d triangle pairs at the same places facing "
+			"the same way (%.0f square units), %d facing opposite ways "
+			"(%.0f), of %d triangles\n", same, sameArea, opposite,
+			oppositeArea, tris);
+	}
+
+	int anims = 0;
+	SlotAnim first;
+
+	ReadSlotAnim(level, slot, 0, first, &anims);
+	printf("\n  animations: %d\n", anims);
+
+	for (int anim = 0; anim < anims; anim++)
+	{
+		SlotAnim a;
+
+		if (!ReadSlotAnim(level, slot, anim, a, 0))
+			continue;
+
+		const int keys = (a.end - a.start) / a.rate + 1;
+		std::vector<float> rest, pose;
+
+		ReadAnimPose(level, here, anim, 0, rest);
+		printf("  anim %d: frames %d..%d, rate %d, %d keyframes\n", anim,
+			a.start, a.end, a.rate, keys);
+
+		for (int key = 0; key < keys; key++)
+		{
+			if (!ReadAnimPose(level, here, anim, key, pose) || rest.empty())
+				continue;
+
+			/* The keyframe's own offset, words 6..8 - the part of a motion
+			 * the node matrices above leave out (a door that slides). */
+			const long long word = (long long)(a.frameOffset / 2) +
+				(long long)key * a.size;
+
+			printf("    key %-3d box %d..%d %d..%d %d..%d off %5d %5d %5d", key,
+				level.debugReadFrameShort(word + 0),
+				level.debugReadFrameShort(word + 1),
+				level.debugReadFrameShort(word + 2),
+				level.debugReadFrameShort(word + 3),
+				level.debugReadFrameShort(word + 4),
+				level.debugReadFrameShort(word + 5),
+				level.debugReadFrameShort(word + 6),
+				level.debugReadFrameShort(word + 7),
+				level.debugReadFrameShort(word + 8));
+
+			/* Each node's turn against the slot's rest (its first
+			 * animation's first keyframe), beside the turn within this
+			 * animation printed below. */
+			{
+				std::vector<float> home;
+
+				if (ReadAnimPose(level, here, 0, 0, home))
+					for (int node = 0; node < nodes; node++)
+					{
+						const float* p = &pose[(size_t)node * 12];
+						const float* h = &home[(size_t)node * 12];
+						double tr = 0;
+
+						for (int i = 0; i < 3; i++)
+							for (int j = 0; j < 3; j++)
+								tr += h[i * 4 + j] * p[i * 4 + j];
+
+						double c = (tr - 1.0) * 0.5;
+
+						c = c > 1 ? 1 : c < -1 ? -1 : c;
+						printf(" r%d %.0f", node,
+							acos(c) * 180.0 / 3.14159265358979);
+					}
+			}
+
+			for (int node = 0; node < nodes; node++)
+			{
+				const float* p = &pose[(size_t)node * 12];
+				const float* r = &rest[(size_t)node * 12];
+				const double dx = p[3] - r[3], dy = p[7] - r[7],
+					dz = p[11] - r[11];
+				// The angle between the two frames, from the trace of
+				// R_rest^T * R_pose.
+				double tr = 0;
+
+				for (int i = 0; i < 3; i++)
+					for (int j = 0; j < 3; j++)
+						tr += r[i * 4 + j] * p[i * 4 + j];
+
+				double c = (tr - 1.0) * 0.5;
+
+				c = c > 1 ? 1 : c < -1 ? -1 : c;
+				printf("  n%d %4.0f/%5.1fdeg", node,
+					sqrt(dx * dx + dy * dy + dz * dz),
+					acos(c) * 180.0 / 3.14159265358979);
+
+				/* Where the two meshes of the node travel: the classic
+				 * mesh's centre and the .TRM's, each in node space (the
+				 * bind offset off), through this keyframe and the first -
+				 * c and t the two travels, g the gap between the two
+				 * centres in this keyframe. The bind fold puts a .TRM
+				 * vertex through the same matrix, so a model that moves
+				 * the right part has c = t. */
+				if (!cn[node] || hn[node] < 16)
+					continue;
+
+				double ct[3], tt[3], cr[3], tr0[3];
+
+				for (int i = 0; i < 3; i++)
+				{
+					const double cl[3] = { cc[node][0] - here.bind[node][0],
+						cc[node][1] - here.bind[node][1],
+						cc[node][2] - here.bind[node][2] };
+					const double tl[3] = { hc[node][0] - here.bind[node][0],
+						hc[node][1] - here.bind[node][1],
+						hc[node][2] - here.bind[node][2] };
+
+					ct[i] = p[i * 4 + 3];
+					tt[i] = p[i * 4 + 3];
+					cr[i] = r[i * 4 + 3];
+					tr0[i] = r[i * 4 + 3];
+
+					for (int j = 0; j < 3; j++)
+					{
+						ct[i] += p[i * 4 + j] * cl[j];
+						tt[i] += p[i * 4 + j] * tl[j];
+						cr[i] += r[i * 4 + j] * cl[j];
+						tr0[i] += r[i * 4 + j] * tl[j];
+					}
+				}
+
+				double cm = 0, tm = 0, gap = 0;
+
+				for (int i = 0; i < 3; i++)
+				{
+					cm += (ct[i] - cr[i]) * (ct[i] - cr[i]);
+					tm += (tt[i] - tr0[i]) * (tt[i] - tr0[i]);
+					gap += (ct[i] - tt[i]) * (ct[i] - tt[i]);
+				}
+
+				printf(" c%.0f t%.0f g%.0f", sqrt(cm), sqrt(tm), sqrt(gap));
+			}
+
+			printf("\n");
+		}
+	}
+
+	HDTrmFree(&trm);
 }
 
 /* ------------------------------------------------------- the braid root -- */
@@ -6952,6 +7794,20 @@ struct LaraOptions
 	};
 	std::vector<Creature> creatures;
 	bool shadowOthers;
+	/* -itemanim <anim> <key>: the -shadowitem and -shadowcreature models
+	 * in that keyframe of their own animation instead of the first frame;
+	 * -itempush <e>: their node matrices scaled by 1 + e in view space,
+	 * which keeps every pixel's place and moves only its depth - two runs
+	 * with +e and -e differ exactly where a model and the room tie. */
+	int itemAnim = -1;
+	int itemKey = 0;
+	double itemPush = 0.0;
+	/* -nopocket: the pocket rule (hd_object_rules.h) left off - the
+	 * before picture of a sliding door. */
+	bool noPocket = false;
+	/* -itemcull none|back: the side of the -shadowitem models drawn, for
+	 * every one of them; -1 leaves it to the pocket rule. */
+	int itemCull = -1;
 	/* -shadownomodels: the models' receive pass left out; -shadowcount: the
 	 * pixels each model leaves visible and the models' pass reaches,
 	 * counted through the stencil, and the models' mask written in place of
@@ -9005,8 +9861,10 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 					"the picture\n", o.shadowAt[0], o.shadowAt[1], o.shadowRoom);
 
 			printf("shadowroom: room %d, %d x %d sectors, group box x %.0f..%.0f y %.0f..%.0f "
-				"z %.0f..%.0f\n", o.shadowRoom, rm.numXSectors, rm.numZSectors, gmin[0], gmax[0],
-				gmin[1], gmax[1], gmin[2], gmax[2]);
+				"z %.0f..%.0f, origin x %ld z %ld\n", o.shadowRoom,
+				rm.numXSectors, rm.numZSectors, gmin[0], gmax[0], gmin[1],
+				gmax[1], gmin[2], gmax[2], (long)rm.originX,
+				(long)rm.originZ);
 			printf("            the floor of each sector, units (x across, z down; # a wall):\n");
 
 			for (int z = 0; z < rm.numZSectors; z++)
@@ -9085,6 +9943,7 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 		float place[3];
 		bool blob;	// -shadowcreature: cast into the second map; -shadowitem: not
 		bool unseen;	// -shadowunseen: a creature cast and drawn in no pass
+		int cull;	// the side drawn, HD_MODEL_CULL_*
 	};
 	std::vector<Placed> placed;
 
@@ -9125,7 +9984,16 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 		Tr5Level::MoveableInfo info;
 		float offset[3] = { 0.0f, 0.0f, 0.0f };
 
-		if (ReadFramePose(level, tree, pose) && level.moveableInfo(tree.slot, info))
+		SlotAnim keyed;
+
+		if (o.itemAnim >= 0 && ReadAnimPose(level, tree, o.itemAnim, o.itemKey,
+			pose) && ReadSlotAnim(level, tree.slot, o.itemAnim, keyed, 0))
+			for (int i = 0; i < 3; i++)
+				offset[i] = (float)level.debugReadFrameShort(
+					(long long)(keyed.frameOffset / 2) +
+					(long long)o.itemKey * keyed.size + 6 + i);
+		else if (ReadFramePose(level, tree, pose) &&
+			level.moveableInfo(tree.slot, info))
 			for (int i = 0; i < 3; i++)
 				offset[i] = (float)level.debugReadFrameShort(
 					(long long)(info.frameOffset / 2) + 6 + i);
@@ -9151,16 +10019,30 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 		one.place[2] = pz;
 		one.blob = ask->blob;
 		one.unseen = ask->blob && o.shadowUnseen;
+		one.cull = o.itemCull >= 0 ? o.itemCull : HD_MODEL_CULL_NONE;
 		BuildNodeMatrices(tree, itemView, 0, &one.matrices[0], pose.empty() ? 0 : &pose[0]);
+
+		/* The pocket, as HDObjectEnd draws a sliding door: one-sided. The
+		 * picture holds no reflection of an item, so the outside mode. */
+		const bool pocket = !o.noPocket && ToolPocketOf(level, tree.slot);
+
+		if (o.itemCull < 0 && HDPocketSide(pocket, false) == HD_POCKET_OUTSIDE)
+			one.cull = HD_MODEL_CULL_BACK;
+
+		if (o.itemPush != 0.0)
+			for (size_t m = 0; m < one.matrices.size(); m++)
+				if (m % 4 != 3)
+					one.matrices[m] *= (float)(1.0 + o.itemPush);
 		placed.push_back(one);
 
 		printf("%s: %s (slot %d, %d nodes%s) at (%.0f, %.0f, %.0f) of her space, turned "
-			"%.0f, frame offset (%.0f, %.0f, %.0f), HD model %s\n",
+			"%.0f, frame offset (%.0f, %.0f, %.0f), HD model %s%s\n",
 			one.unseen ? "creature (unseen: cast, drawn in no pass)"
 			: ask->blob ? "creature" : "item (no blob)",
 			HDSlotName(tree.slot) ? HDSlotName(tree.slot) : "?", tree.slot, tree.nodes,
 			pose.empty() ? ", bind pose" : "", px, py, pz, ask->yaw, offset[0], offset[1],
-			offset[2], HDModelHas(tree.slot) ? "loaded" : "MISSING");
+			offset[2], HDModelHas(tree.slot) ? "loaded" : "MISSING",
+			pocket ? ", pocket" : "");
 	}
 
 	/* -shadowmirror: her reflection and the creatures', as game\mirror.cpp
@@ -9738,8 +10620,13 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 			itemLighting.specStrength = 0.0f;
 			itemLighting.specPower = 1.0f;
 
+			// A mirrored matrix turns the winding: the other side is front.
+			const int side = !reflected ? placed[c].cull
+				: placed[c].cull == HD_MODEL_CULL_CW ? HD_MODEL_CULL_CCW
+				: placed[c].cull == HD_MODEL_CULL_CCW ? HD_MODEL_CULL_CW
+				: HD_MODEL_CULL_NONE;
 			bool any = one(placed[c].slot, false, cm, placed[c].nodes,
-				&itemLight[0], ~0u, &itemLighting, 0, HD_MODEL_CULL_NONE, -1, -1, 0);
+				&itemLight[0], ~0u, &itemLighting, 0, side, -1, -1, 0);
 
 			if (HDModelHasHead(placed[c].slot))
 				any = one(placed[c].slot, true, cm, placed[c].nodes,
@@ -10044,7 +10931,7 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 			tag(2 + (int)c);
 
 			if (HDModelDraw(placed[c].slot, &placed[c].matrices[0], placed[c].nodes,
-				&itemLight[0], ~0u, &itemLighting))
+				&itemLight[0], ~0u, &itemLighting, 0, placed[c].cull))
 				drawn++;
 
 			if (HDModelHasHead(placed[c].slot) && HDModelDrawHead(placed[c].slot,
@@ -11390,6 +12277,15 @@ int main(int argc, char** argv)
 	 * of the level and draws nothing. */
 	bool floorDraw = false;
 	bool floorCheck = false;
+	/* -bindcheck: the skeleton test taken apart (PrintBindCheck);
+	 * -animframe <anim> <key>: the picture in that keyframe of one of the
+	 * slot's own animations, numbered from the slot's first. */
+	bool bindCheck = false, crossDrift = false, slideCensus = false;
+	int itemAnim = -1, itemKey = 0;
+	double itemPush = 0.0;
+	bool noPocket = false;
+	int itemCull = -1;
+	int animAsk = -1, animKey = 0;
 	/* ... and the before picture: the same draw with the lift left off, which
 	 * is what the floor showed before the lift existed. The switch exists so that
 	 * what the rule buys stays a measurement instead of a memory. */
@@ -11860,6 +12756,31 @@ int main(int argc, char** argv)
 		}
 		else if (!_stricmp(argv[i], "-nodes"))
 			nodes = true;
+		else if (!_stricmp(argv[i], "-bindcheck"))
+			bindCheck = true;
+		else if (!_stricmp(argv[i], "-crossdrift"))
+			crossDrift = true;
+		else if (!_stricmp(argv[i], "-slidecensus"))
+			slideCensus = true;
+		else if (!_stricmp(argv[i], "-itemanim") && i + 2 < argc)
+		{
+			itemAnim = atoi(argv[++i]);
+			itemKey = atoi(argv[++i]);
+		}
+		else if (!_stricmp(argv[i], "-itempush") && i + 1 < argc)
+			itemPush = atof(argv[++i]);
+		else if (!_stricmp(argv[i], "-nopocket"))
+			noPocket = true;
+		else if (!_stricmp(argv[i], "-itemcull") && i + 1 < argc)
+			itemCull = !_stricmp(argv[++i], "back") ? HD_MODEL_CULL_BACK
+				: HD_MODEL_CULL_NONE;
+		else if (!_stricmp(argv[i], "-animframe") && i + 2 < argc)
+		{
+			animAsk = atoi(argv[++i]);
+			animKey = atoi(argv[++i]);
+		}
+		else if (!_stricmp(argv[i], "-classicdots"))
+			g_dotsAsked = true;
 		/* Every slot of the page cache, so that the cost of a
 		 * second outfit is a set difference and not a guess. */
 		else if (!_stricmp(argv[i], "-pagelist"))
@@ -12387,6 +13308,11 @@ int main(int argc, char** argv)
 		o.shadowNoGuard = shadowNoGuard;
 		o.shadowTime = shadowTime;
 		o.creatures = shadowCreatures;
+		o.itemAnim = itemAnim;
+		o.itemKey = itemKey;
+		o.itemPush = itemPush;
+		o.noPocket = noPocket;
+		o.itemCull = itemCull;
 		o.shadowOthers = shadowOthers;
 		o.shadowNoModels = shadowNoModels;
 		o.shadowCount = shadowCount;
@@ -12850,7 +13776,7 @@ int main(int argc, char** argv)
 
 		int complete = 0, partial = 0, classicOnly = 0;
 		const float kProbeDriftLimit = HD_SKELETON_DRIFT_LIMIT;
-		int mismatchNodes = 0, mismatchDrift = 0;
+		int mismatchNodes = 0, mismatchDrift = 0, placedFit = 0;
 		float worstGood = 0, bestBad = 1e9f;
 
 		/* The bind step, per slot - map/hand/donor are
@@ -12944,7 +13870,12 @@ int main(int argc, char** argv)
 			/* The engine's own verdict, spelled out here so that the table and
 			 * the game cannot drift apart. */
 			const bool badNodes = maxBone >= HDModelNodes(here);
-			const bool badDrift = !badNodes && drift > kProbeDriftLimit;
+			const ClassicSlot& tree = classic[(size_t)order[i]];
+			const float fit = !badNodes && drift > kProbeDriftLimit &&
+				tree.ok ? ToolFitOf(level, tree, here) : -1.0f;
+			const HDSkeletonVerdict judged =
+				HDSkeletonJudge(drift, fit, kProbeDriftLimit);
+			const bool badDrift = !badNodes && judged == HD_SKELETON_DRIFTS;
 
 			if (badNodes)
 			{
@@ -12958,6 +13889,12 @@ int main(int argc, char** argv)
 				sprintf(note + strlen(note), "%sSKELETON: drift",
 					*note ? "; " : "");
 			}
+			else if (judged == HD_SKELETON_PLACED)
+			{
+				placedFit++;
+				sprintf(note + strlen(note), "%sfit %.0f", *note ? "; " : "",
+					fit);
+			}
 
 			if (drift >= 0)
 			{
@@ -12966,7 +13903,7 @@ int main(int argc, char** argv)
 					if (drift < bestBad)
 						bestBad = drift;
 				}
-				else if (drift > worstGood)
+				else if (judged == HD_SKELETON_FITS && drift > worstGood)
 					worstGood = drift;
 			}
 
@@ -12995,6 +13932,157 @@ int main(int argc, char** argv)
 		if (bestBad < 1e8f)
 			printf("          the smallest drift among the refused is %.0f\n",
 				bestBad);
+
+		// Only a level with a model the fit took prints the line.
+		if (placedFit)
+			printf("          %d over the drift limit taken on the fit "
+				"(limit %.0f)\n", placedFit, (double)HD_FIT_LIMIT);
+
+		/* -all -bindcheck: one bindcheck line per bound slot, so the two
+		 * drifts can be read side by side over a whole level. */
+		if (bindCheck)
+		{
+			printf("\n-- bindcheck, every bound slot -------------------\n");
+
+			for (size_t i = 0; i < wanted.size(); i++)
+				if (HDModelHas(wanted[i].slot) &&
+					classic[(size_t)order[i]].ok)
+					PrintBindCheck(level, root, wanted[i].slot,
+						classic[(size_t)order[i]], true);
+		}
+
+		/* -all -slidecensus: per slot, over every keyframe of every one of
+		 * its animations against the slot's rest (its first animation's
+		 * first keyframe): how far the frame's own offset travels, how far
+		 * any node turns against the rest (`turn`) and whether any rotation
+		 * word changes within an animation (`within`), and whether some
+		 * keyframe's own box (the frame's first six words) has left the
+		 * rest box altogether (`leaves`) or folded flat (`folds`). `pocket`
+		 * is HDSlidesIntoPocket over every animation the slot holds in the
+		 * file, `walk` the engine's walk over the animations it can reach
+		 * (ToolPocketOf) - the rule hd_object.cpp draws by. */
+		if (slideCensus)
+		{
+			printf("\n-- slidecensus ------------------------------------\n");
+
+			for (size_t i = 0; i < wanted.size(); i++)
+			{
+				const ClassicSlot& tree = classic[(size_t)order[i]];
+				int anims = 0;
+				SlotAnim a, a0;
+				double travel = 0, turn = 0;
+				bool leaves = false, folds = false, turnsWithin = false;
+				std::vector<float> rest, pose;
+
+				if (!tree.ok ||
+					!ReadSlotAnim(level, tree.slot, 0, a0, &anims) ||
+					!ReadAnimPose(level, tree, 0, 0, rest))
+					continue;
+
+				const long long home = (long long)(a0.frameOffset / 2);
+				short restBox[9];
+
+				for (int k = 0; k < 9; k++)
+					restBox[k] = level.debugReadFrameShort(home + k);
+
+				for (int anim = 0; anim < anims; anim++)
+				{
+					if (!ReadSlotAnim(level, tree.slot, anim, a, 0))
+						continue;
+
+					const long long first = (long long)(a.frameOffset / 2);
+					const int keys = (a.end - a.start) / a.rate + 1;
+
+					for (int key = 0; key < keys; key++)
+					{
+						const long long at = first + (long long)key * a.size;
+						short box[9];
+						double d = 0;
+
+						for (int k = 0; k < 9; k++)
+							box[k] = level.debugReadFrameShort(at + k);
+
+						for (int k = 0; k < 3; k++)
+							d += (double)(box[6 + k] - restBox[6 + k]) *
+								(box[6 + k] - restBox[6 + k]);
+
+						travel = sqrt(d) > travel ? sqrt(d) : travel;
+
+						if (HDSlidBoxLeaves(restBox, box))
+							leaves = true;
+
+						if (HDSlidBoxFolds(restBox, box))
+							folds = true;
+
+						// The rotation words against the animation's first
+						// keyframe's: a turn within the animation, exactly.
+						for (int w = 9; w < a.size; w++)
+							if (level.debugReadFrameShort(at + w) !=
+								level.debugReadFrameShort(first + w))
+								turnsWithin = true;
+
+						if (!ReadAnimPose(level, tree, anim, key, pose))
+							continue;
+
+						for (int n = 0; n < tree.nodes; n++)
+						{
+							const float* p = &pose[(size_t)n * 12];
+							const float* r = &rest[(size_t)n * 12];
+							double tr = 0;
+
+							for (int x = 0; x < 3; x++)
+								for (int y = 0; y < 3; y++)
+									tr += r[x * 4 + y] * p[x * 4 + y];
+
+							double c = (tr - 1.0) * 0.5;
+
+							c = c > 1 ? 1 : c < -1 ? -1 : c;
+							turn = acos(c) * 180.0 / 3.14159265358979 > turn
+								? acos(c) * 180.0 / 3.14159265358979 : turn;
+						}
+					}
+				}
+
+				if (travel > 0 || leaves)
+					printf("  slide slot=%d name=%s anims=%d travel=%.0f "
+						"turn=%.1f within=%d leaves=%d folds=%d pocket=%d "
+						"walk=%d "
+						"hd=%d\n", tree.slot,
+						HDSlotName(tree.slot) ? HDSlotName(tree.slot) : "?",
+						anims, travel, turn, turnsWithin ? 1 : 0,
+						leaves ? 1 : 0, folds ? 1 : 0,
+						HDSlidesIntoPocket(leaves, folds, turnsWithin) ? 1 : 0,
+						ToolPocketOf(level, tree.slot) ? 1 : 0,
+						HDModelHas(tree.slot) ? 1 : 0);
+			}
+		}
+
+		/* -all -crossdrift: every bound model against every OTHER slot of
+		 * the level with the same node count - the foreign skeletons the
+		 * skeleton test exists to refuse, measured by both drifts. */
+		if (crossDrift)
+		{
+			printf("\n-- crossdrift, every model on every foreign tree --\n");
+
+			for (size_t i = 0; i < wanted.size(); i++)
+			{
+				if (!HDModelHas(wanted[i].slot) ||
+					HDModelMaxBone(wanted[i].slot) < 1)
+					continue;
+
+				for (size_t j = 0; j < wanted.size(); j++)
+				{
+					const ClassicSlot& other = classic[(size_t)order[j]];
+
+					if (j == i || !other.ok ||
+						other.nodes != HDModelNodes(wanted[i].slot))
+						continue;
+
+					printf("  on slot %d: ", other.slot);
+					PrintBindCheck(level, root, wanted[i].slot, other, true);
+				}
+			}
+		}
 	}
 
 	/* --- The floor rule, slot by slot ------------------------------------ */
@@ -13256,6 +14344,9 @@ int main(int argc, char** argv)
 
 	if (nodes || !all)
 		PrintNodeTable(slot, here, HDModelName(slot));
+
+	if (bindCheck && here)
+		PrintBindCheck(level, root, slot, *here, false);
 
 	float mins[3], maxs[3];
 
@@ -13581,8 +14672,21 @@ int main(int argc, char** argv)
 	 * matrices carry every translation and every rotation of the item's
 	 * animation frame, so the bind-pose walk is not done at all. The pose itself was read before the camera, which had to frame
 	 * it. */
+	/* -animframe: a keyframe of one of the slot's own animations in place
+	 * of the bind pose, on the bind pose's camera, so two keyframes are two
+	 * pictures of one model from one place. */
+	std::vector<float> animPose;
+
+	if (animAsk >= 0 && here->slot >= 0 &&
+		ReadAnimPose(level, *here, animAsk, animKey, animPose) > 0)
+		printf("animframe: anim %d keyframe %d of slot %d\n", animAsk,
+			animKey, here->slot);
+	else if (animAsk >= 0)
+		printf("animframe: anim %d keyframe %d not in the level - the "
+			"bind pose is drawn\n", animAsk, animKey);
+
 	BuildNodeMatrices(*here, view, turn, &matrices[0],
-		floorDraw ? floorPose : 0);
+		!animPose.empty() ? &animPose[0] : floorDraw ? floorPose : 0);
 
 	/* The matrix proof of the object path, without the
 	 * game. A node matrix carries the node's origin into view space all by
@@ -14339,8 +15443,52 @@ int main(int argc, char** argv)
 		 * lips on its own draw; a body with a separate face leaves them to
 		 * the face below. */
 		drew = HDModelDraw(slot, &own[0], here->nodes,
-			&light[0], nodeMask, &lighting, 0, HD_MODEL_CULL_NONE,
+			&light[0], nodeMask, &lighting, 0,
+			cullMode >= 0 ? cullMode : HD_MODEL_CULL_NONE,
 			lipsOnHead ? -1 : lipsTrack, lipsOnHead || lipsTrack < 0 ? -1 : lips.frames[0]);
+
+		/* -classicdots: every vertex of the classic mesh of each node, in
+		 * the node's own frame (the .TRC's shorts, the bind offset left
+		 * out), through the same matrix the .TRM node was just drawn with -
+		 * a node matrix takes a point of its node into view space. Where
+		 * the model stands where the classic meshes stand, the dots lie on
+		 * it in every keyframe; a part the model leaves out or puts
+		 * elsewhere leaves its dots on the background. */
+		if (g_dotsAsked && here->slot >= 0)
+			for (int node = 0; node < here->nodes; node++)
+			{
+				std::vector<float> cv;
+				const int verts = ClassicNodeVertices(level, *here, node, cv);
+				const float* m = &own[(size_t)node * 16];
+
+				for (int v = 0; v < verts; v++)
+				{
+					OverlayDot dot;
+					const float* at = &cv[(size_t)v * 3];
+					const double x = at[0] - here->bind[node][0];
+					const double y = at[1] - here->bind[node][1];
+					const double z = at[2] - here->bind[node][2];
+
+					if (!OverlayProject(m, persp, width, height, x, y, z,
+						&dot.x, &dot.y))
+						continue;
+
+					dot.node = node;
+					g_dots.push_back(dot);
+
+					OverlayLine line;
+
+					line.colour = 0x0000FFFFu;
+					line.x0 = dot.x - 2.0;
+					line.x1 = dot.x + 2.0;
+					line.y0 = line.y1 = dot.y;
+					g_overlay.push_back(line);
+					line.x0 = line.x1 = dot.x;
+					line.y0 = dot.y - 2.0;
+					line.y1 = dot.y + 2.0;
+					g_overlay.push_back(line);
+				}
+			}
 	}
 
 	bool drewHead = false;

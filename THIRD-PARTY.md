@@ -3702,6 +3702,58 @@ carries the tables.
     `HDGlassStaticLight` (the shade's red in its low five bits), the rules on
     the census's classic colours and the families of the 190 draw calls
     that may be glass. OWN.
+371. **The skeleton fit** (`specific/hd/hd_object_rules.h`,
+    `HDSkeletonFitWorst`, `HDSkeletonJudge`; `hd_object.cpp`,
+    `skeleton_fit_of` and the verdict; `hd_model.cpp`, `HDModelNodeCentre`,
+    declared in the header) - a model the bind drift refuses is drawn HD
+    when every node's centre of its single-weight vertices stands within 256
+    units of the centre of the classic mesh of that node in the bind pose.
+    THIRD: TROne (Copyright 2026 Todesengel, GPLv3),
+    `host/render/game_renderer.cpp`, the lambda `node_offset` in its HD
+    model setup, used by `stub_donor` - per node the centre of the box of
+    the `.TRM` vertices a bone leads against the centre of the classic
+    mesh's box in the bind pose, the worst node, within 256 (TROne-main, the
+    copy read on 2026-10-19). TROne's own comment there names the measure as
+    TRForge's (MIT; `trf_remaster/ItemModels.cpp`, `worst_node_offset`), a
+    file the TRForge vendored in this tree does not carry; it was not read
+    here. DATA (ModelProbe `-bindcheck`, `-all -crossdrift`): the ten slots
+    the drift refuses on the fifteen levels read 21 to 153, the 344 foreign
+    pairs it refuses 383 or more but for four twins of a slot itself. OWN:
+    the centres are the drift's single-weight vertex means, and only a
+    refused model is asked.
+372. **The fit's two numbers** (`hd_object_rules.h`, `HD_FIT_LIMIT` 256,
+    `HD_FIT_MIN_VERTICES` 16) - the drift's own limit and the drift's own
+    working set (`hd_model.cpp`). DATA: 256 stands between 153 and 383;
+    THIRD: TROne's `node_offset` takes 256 as well. OWN: the reuse.
+373. **The pocket** (`hd_object_rules.h`, `HDSlidBoxLeaves`,
+    `HDSlidBoxFolds`, `HDSlidesIntoPocket`, `HDSlotSlidesIntoPocket`;
+    `hd_object.cpp`, `pocket_of`) - a slot whose animations, followed from
+    its first through the jumps and the state changes' ranges, carry a
+    keyframe's box out of the rest box and fold one flat, with no rotation
+    word changing within an animation. CLASSIC: the frame's six words of
+    box, three of offset and the rotation words, the rate and the size in
+    the interpolation (`GetFrames`, `game/draw.cpp`; `delstuff.cpp`). DATA
+    (ModelProbe `-all -slidecensus`): 21 slots leave their box over the
+    fifteen levels, two fold, JOBY2's 304 and 306; the title's
+    `ANIMATING4` one-sided turns see-through from behind. OWN: the rule.
+374. **A pocket's items drawn one-sided** (`hd_object.cpp`, `HDObjectEnd`;
+    `hd_object_rules.h`, `HDPocketSide`) - `HD_MODEL_CULL_BACK`, the other
+    mode under a reflection's mirrored matrix. CLASSIC: TR5 culls the back
+    of every object polygon in software (`IsVisible`, see `hd_model.h`).
+    PICTURE: `HD_MODEL_CULL_BACK` keeps a `.TRM`'s outside (the first
+    person cut); at JOBY2's doors the open frame's ties (ModelProbe
+    `-itempush`) 9,511, 6,636 and 6,636 before, 3, 0 and 0 after.
+    THIRD, not followed: TROne draws every TR4 and TR5 object one-sided
+    (`game_renderer.cpp`, `cull45`, `hd.item_cull`); here only the pocket.
+    OWN: the mirror's mode, from the turned winding.
+375. **ModelProbe's switches of the skeleton and the slides**
+    (`Preparation/Tools/Diagnose/ModelProbe.cpp`: `-bindcheck`,
+    `-crossdrift`, `-slidecensus`, `-animframe`, `-itemanim`, `-itempush`,
+    `-nopocket`, `-itemcull`, `-cull` for `-slot`; `ToolFitOf`,
+    `ToolPocketOf`) - the tie measure by a scale about the eye that keeps
+    every pixel's place. OWN.
+376. **ModernTest's object rules** (`Preparation/Tools/Diagnose/
+    ModernTest.cpp`, `object_rules`, 22 checks). OWN.
 
 ## Credited, but not contained here
 

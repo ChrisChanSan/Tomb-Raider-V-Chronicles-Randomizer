@@ -221,6 +221,12 @@ namespace
 		float driftMean = 0;
 		float driftWorst = 0;
 		bool hasDrift = false;
+		/* The working set of both: per node, the centre of the vertices
+		 * that ride on that node alone, and how many there are - kept for
+		 * the skeleton fit (hd_object_rules.h), which holds the centres
+		 * against the classic meshes'. */
+		float nodeCentre[32][3] = { { 0, 0, 0 } };
+		int nodeSingle[32] = { 0 };
 
 		float mins[3] = { 0, 0, 0 };
 		float maxs[3] = { 0, 0, 0 };
@@ -1516,6 +1522,18 @@ namespace
 
 				model.hasAxes = true;
 			}
+		}
+
+		/* The single-weight centres per node, for the skeleton fit: the
+		 * same working set the drift below reads, kept with the model. */
+		for (int node = 0; node < kJointBudget; node++)
+		{
+			model.nodeSingle[node] = single[node];
+
+			if (single[node])
+				for (int k = 0; k < 3; k++)
+					model.nodeCentre[node][k] =
+						(float)(centre[node][k] / single[node]);
 		}
 
 		/* The bind drift, between pairs of nodes and not against the origin.
@@ -5041,6 +5059,20 @@ bool HDModelBindDrift(int slot, float* mean, float* worst)
 		*worst = model->driftWorst;
 
 	return true;
+}
+
+int HDModelNodeCentre(int slot, int node, float* centre)
+{
+	const Model* model = find(g_models, slot);
+
+	if (!model || node < 0 || node >= kJointBudget)
+		return 0;
+
+	if (centre)
+		for (int k = 0; k < 3; k++)
+			centre[k] = model->nodeCentre[node][k];
+
+	return model->nodeSingle[node];
 }
 
 int HDModelVertices(int slot)

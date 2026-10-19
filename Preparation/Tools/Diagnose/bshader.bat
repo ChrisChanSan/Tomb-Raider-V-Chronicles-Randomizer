@@ -235,6 +235,16 @@ rem pretransformed and without a vertex shader, which ps_3_0 refuses.
  /Fh "%SHADERDIR%\hd_gamma_ps.inc" "%SHADERDIR%\hd_gamma.hlsl"
 if errorlevel 1 exit /b 1
 
+rem The fog bulbs' body (hd_fog.hlsl, FogVS and FogPS): a quad per bulb
+rem over the frame, the bulb's density integrated to the frame's depth.
+"%FXC%" /nologo /T vs_3_0 /E FogVS /O3 /Vn kHDFogVS ^
+ /Fh "%SHADERDIR%\hd_fog_vs.inc" "%SHADERDIR%\hd_fog.hlsl"
+if errorlevel 1 exit /b 1
+
+"%FXC%" /nologo /T ps_3_0 /E FogPS /O3 /Vn kHDFogPS ^
+ /Fh "%SHADERDIR%\hd_fog_ps.inc" "%SHADERDIR%\hd_fog.hlsl"
+if errorlevel 1 exit /b 1
+
 call :stamp hd_room hd_room_vs.inc
 if errorlevel 1 exit /b 1
 call :stamp hd_room hd_room_ps.inc
@@ -323,6 +333,10 @@ call :stamp hd_sky hd_sky_cloud_ps.inc
 if errorlevel 1 exit /b 1
 call :stamp hd_gamma hd_gamma_ps.inc
 if errorlevel 1 exit /b 1
+call :stamp hd_fog hd_fog_vs.inc
+if errorlevel 1 exit /b 1
+call :stamp hd_fog hd_fog_ps.inc
+if errorlevel 1 exit /b 1
 
 rem fxc and echo end their lines with CRLF, while .gitattributes keeps the
 rem .inc LF: without this pass git shows every .inc modified after every
@@ -358,6 +372,8 @@ call :size "%SHADERDIR%\hd_sky_layer_ps.inc"
 call :size "%SHADERDIR%\hd_sky_cloud_vs.inc"
 call :size "%SHADERDIR%\hd_sky_cloud_ps.inc"
 call :size "%SHADERDIR%\hd_gamma_ps.inc"
+call :size "%SHADERDIR%\hd_fog_vs.inc"
+call :size "%SHADERDIR%\hd_fog_ps.inc"
 exit /b 0
 
 :stamp

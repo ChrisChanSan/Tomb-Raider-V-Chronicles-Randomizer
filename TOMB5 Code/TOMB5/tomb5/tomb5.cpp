@@ -273,6 +273,11 @@ void init_tomb5_stuff()
 		tomb5.hd_threads = 0;							//the machine's
 		REG_WriteLong(buf, tomb5.hd_threads);
 
+		// The fog bulbs' own pass on (see the read below).
+		sprintf(buf, "hd_fog");
+		REG_WriteLong(buf, 1);
+		HDRenderFogSet(1);
+
 		// The Display page's slider: 50, the middle, where no pass runs.
 		sprintf(buf, "gamma");
 		tomb5.gamma = 50;
@@ -549,6 +554,18 @@ void init_tomb5_stuff()
 		// Absent - every older registry - reads as 0, the machine's count.
 		sprintf(buf, "hd_threads");
 		REG_ReadLong(buf, tomb5.hd_threads, 0);
+
+		/* The fog bulbs' body (specific\hd\hd_render.cpp, "the fog bulbs'
+		 * body"): 1 draws the frame's fog bulbs as fog of their own, 0
+		 * keeps the shaders' haze of them. Absent - every older registry -
+		 * reads as 1, and so does any value above 1. */
+		{
+			ulong fog = 1;
+
+			sprintf(buf, "hd_fog");
+			REG_ReadLong(buf, fog, 1);
+			HDRenderFogSet(fog == 0 ? 0 : 1);
+		}
 
 		// Missing - every older registry - reads as 50, the middle, where
 		// the picture is the engine's own; out of range lands on the middle

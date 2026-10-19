@@ -657,6 +657,7 @@
     <ClInclude Include="TOMB5\specific\hd\hd_softbody.h" />
     <ClInclude Include="TOMB5\specific\hd\hd_splash_math.h" />
     <ClInclude Include="TOMB5\specific\hd\hd_water_under.h" />
+    <ClInclude Include="TOMB5\specific\hd\hd_fog.h" />
     <ClInclude Include="TOMB5\tomb5\libs\discordRPC\discord_register.h" />
     <ClInclude Include="TOMB5\tomb5\libs\discordRPC\discord_rpc.h" />
     <ClInclude Include="TOMB5\tomb5\libs\zlib\zlib.h" />
@@ -684,6 +685,7 @@
     <None Include="TOMB5\specific\hd\hd_shader\hd_water_look.hlsl" />
     <None Include="TOMB5\specific\hd\hd_shader\hd_wet.hlsl" />
     <None Include="TOMB5\specific\hd\hd_shader\hd_gamma.hlsl" />
+    <None Include="TOMB5\specific\hd\hd_shader\hd_fog.hlsl" />
   </ItemGroup>
   <ItemGroup>
     <Library Include="TOMB5\tomb5\libs\discordRPC\discord-rpc.lib" />

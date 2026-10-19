@@ -316,6 +316,24 @@
  *                     blends towards anything (drawroom.cpp). The other
  *                     four are read and reported so the switch means what
  *                     it says rather than silently something else.
+ *     -fogbulbs       (with -roombox) the level's own fog bulbs out of the
+ *                     classic .TRC, as aRoomInit and aBuildFogBulbList make
+ *                     them, each with its number, room, place, radius,
+ *                     density, colour and what the frame does with it; the
+ *                     frame's are taken into the bulb list, and each is
+ *                     printed again in view space and on the screen, and
+ *                     after the picture what the fog's pass drew and its
+ *                     GPU time (namespace probefog)
+ *     -fogprofile <n> the same, and bulb n's radial profile as a table:
+ *                     the classic chord, the shaders' haze, the fog's
+ *                     column and the light it adds, by the ray's distance
+ *                     from the centre
+ *     -hdfog 0|1      the engine's hd_fog: the fog bulbs' own pass off or
+ *                     on (1 when not given). -fog 0 and -fog 1 say the
+ *                     same where the number stands alone
+ *     -fogpass 0      the bulbs the pass would draw leave the shaders' haze
+ *                     and the pass is not drawn: the picture to hold
+ *                     against the one without bulbs
  *     -underwater     the room carries ROOM_UNDERWATER and the camera is in
  *                     it: the WaterTable darkening on the colour and the
  *                     screen wobble on the position.
@@ -895,6 +913,7 @@
 // as hd_level.cpp does in the engine.
 #define HD_DEBRIS_BODY
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_debris.h"
+#include "../../../TOMB5 Code/TOMB5/specific/hd/hd_fog.h"
 #include <algorithm>
 /* hd_install.cpp reads the two registry overrides out of these, which the
  * engine defines in tomb5\tomb5.cpp; ModelProbe brings the same pair. Left
@@ -8202,6 +8221,403 @@ static bool DecideGroup(int group, int* rect, bool* full, bool* empty)
 	}
 
 	return true;
+}
+
+/* ------------------------------------------- the level's own fog bulbs -- */
+
+/* -fogbulbs and -fogprofile (with -roombox): the fog bulbs the classic .TRC
+ * stores in its rooms' data, read as the engine reads them. A room header is
+ * the engine's ROOM_INFO: fogbulb at +148 (an offset from the header's end,
+ * odd for none), nFogBulbs at +156, and each bulb a FOGBULB_INFO of nine
+ * floats - x, y, z (world), radius, radius squared, den, r, g, b (0..1).
+ * aRoomInit (drawroom.cpp) then halves den in two levels and maps it to
+ * (90 - den / 1024) * 0.8 + 0.2, at least 14; aBuildFogBulbList keeps the
+ * bulbs nearer the eye than ZFAR_SHIPPED and gives each one d = 1 / den; the
+ * HD frame leaves out a bulb in a water room a sheet lies over
+ * (hd_level.cpp, BulbUnderSheet). Every bulb the frame keeps goes into the
+ * tool's own list, room local to the seed room, as -bulb puts one. */
+namespace probefog
+{
+	struct Bulb
+	{
+		int index, room;
+		float x, y, z, rad, denRaw, den, d, r, g, b;
+		long ambient;
+		unsigned flags;
+		bool underSheet;
+		bool taken;
+		float dist;
+	};
+
+	static bool g_list = false;		// -fogbulbs
+	static int g_profile = -1;		// -fogprofile <bulb>
+	static int g_key = -1;			// -hdfog 0|1, -1 not given
+	static int g_pass = 1;			// -fogpass 0: the haze out, no pass
+	static std::vector<Bulb> g_level;
+	static float g_origin[3] = { 0, 0, 0 };
+	// The level's number of each entry of g_bulbs; -1 for a -bulb.
+	static int g_slot[HD_MAX_BULBS] = { -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+		-1, -1, -1, -1, -1, -1 };
+
+	static bool Arg(int argc, char** argv, int* at)
+	{
+		const char* a = argv[*at];
+		const bool more = *at + 1 < argc;
+
+		if (!strcmp(a, "-fogbulbs"))
+		{
+			g_list = true;
+			return true;
+		}
+
+		if (!strcmp(a, "-fogprofile") && more)
+		{
+			g_profile = atoi(argv[++*at]);
+			g_list = true;
+			return true;
+		}
+
+		/* -fogpass 0: the bulbs the pass would draw leave the shaders' haze
+		 * and the pass is not drawn - the picture to hold against the one
+		 * without bulbs, byte for byte. */
+		if (!strcmp(a, "-fogpass") && more)
+		{
+			g_pass = atoi(argv[++*at]) ? 1 : 0;
+			g_list = true;
+			return true;
+		}
+
+		/* -hdfog 0|1, and -fog 0|1 where the one number stands alone: the
+		 * distance fog's -fog takes five numbers, so a 0 or a 1 followed by
+		 * a switch or by nothing is this key and anything else is that. */
+		const bool lone = more && (!strcmp(argv[*at + 1], "0") ||
+			!strcmp(argv[*at + 1], "1")) &&
+			(*at + 2 >= argc || argv[*at + 2][0] == '-');
+
+		if ((!strcmp(a, "-hdfog") && more) || (!strcmp(a, "-fog") && lone))
+		{
+			g_key = atoi(argv[++*at]) ? 1 : 0;
+			HDRenderFogSet(g_key);
+			return true;
+		}
+
+		return false;
+	}
+
+	/* -fogprofile: one bulb's radial profile, from its centre (b 0) past its
+	 * rim (b 1.2), b the eye ray's distance from the centre over the radius,
+	 * the eye far outside and the surface far behind, in 0..255: the
+	 * classic chord's intensity (drawroom.cpp), the per-pixel haze the
+	 * shaders draw with hd_fog 0 (hd_room.hlsl, BulbIntensity: the chord
+	 * times a smoothstep over its first 0.35 of the diameter), the fog's
+	 * column (hd_fog.h, tau times 255) and the light the fog adds over
+	 * black, 255 (1 - T), each with its luma in the bulb's colour; then
+	 * where each falls from 90 to 10 per cent of its value at the centre. */
+	static void Profile(const Bulb& bulb)
+	{
+		const float luma = 0.299f * bulb.r + 0.587f * bulb.g + 0.114f * bulb.b;
+		const float dist = 64.0f * bulb.rad;
+		float first[4] = { 0, 0, 0, 0 };
+		float at90[4] = { -1, -1, -1, -1 }, at10[4] = { -1, -1, -1, -1 };
+
+		printf("-fogprofile: bulb %d radius %.0f d %.6f colour %.3f %.3f %.3f "
+			"(luma %.3f); b, classic, haze, column, fog over black, and "
+			"their luma\n", bulb.index, bulb.rad, bulb.d, bulb.r, bulb.g,
+			bulb.b, luma);
+
+		for (int i = 0; i <= 48; i++)
+		{
+			const float b = 0.025f * (float)i;
+			const float inside = 1.0f - b * b;
+			const float chord = inside > 0.0f ? 2.0f * bulb.rad *
+				sqrtf(inside) : 0.0f;
+			const float classic = chord * bulb.d;
+			float t = chord / (2.0f * bulb.rad);
+
+			t = t < 0.0f ? 0.0f : (t > 1.0f ? 1.0f : t);
+			t = t / 0.35f;
+			t = t > 1.0f ? 1.0f : t;
+
+			const float haze = classic * t * t * (3.0f - 2.0f * t);
+			// The ray along +z through (b r, 0, dist): x b r at depth dist.
+			const float dir[3] = { 0.0f, 0.0f, 1.0f };
+			const float c[3] = { b * bulb.rad, 0.0f, dist };
+			const float none[3] = { 0, 0, 0 };
+			const float axes[9] = { 1, 0, 0, 0, 1, 0, 0, 0, 1 };
+			const float tau = HDFogRayTau(dir, c, bulb.rad, bulb.d, 1.0e9f,
+				none, axes, 0.0f, 0);
+			const float column = tau * 255.0f;
+			const float over = 255.0f * (1.0f - HDFogTransmit(tau));
+			const float v[4] = { classic, haze, column, over };
+
+			for (int k = 0; k < 4; k++)
+			{
+				if (i == 0)
+					first[k] = v[k];
+
+				if (at90[k] < 0.0f && v[k] < 0.9f * first[k])
+					at90[k] = b;
+
+				if (at10[k] < 0.0f && v[k] < 0.1f * first[k])
+					at10[k] = b;
+			}
+
+			if (i % 2 == 0)
+				printf("fogprofile b %.2f classic %7.2f haze %7.2f column "
+					"%7.2f fog %7.2f luma %6.2f %6.2f %6.2f %6.2f\n", b,
+					classic, haze, column, over, classic * luma, haze * luma,
+					column * luma, over * luma);
+		}
+
+		printf("-fogprofile: 90 to 10 per cent of the centre at b: classic "
+			"%.3f..%.3f, haze %.3f..%.3f, column %.3f..%.3f, fog %.3f..%.3f"
+			"\n", at90[0], at10[0], at90[1], at10[1], at90[2], at10[2],
+			at90[3], at10[3]);
+	}
+
+	static float F(const std::vector<uint8_t>& raw, size_t at)
+	{
+		float v = 0;
+
+		memcpy(&v, raw.data() + at, 4);
+		return v;
+	}
+
+	/* The level's bulbs, the frame's choice among them for the eye at
+	 * (cx, cy, cz) in the seed room's own frame, the table, and the kept ones
+	 * appended to g_bulbs. Nothing without -fogbulbs or -fogprofile. */
+	static void Take(const char* stem, int seed, double cx, double cy,
+		double cz)
+	{
+		if (!g_list)
+			return;
+
+		// The pass timed in every bracket (a stall the picture does not see).
+		HDRenderFogProbe(1, g_pass);
+
+		if (g_roombox.empty())
+		{
+			printf("-fogbulbs: needs -roombox\n");
+			return;
+		}
+
+		Tr5Level level;
+		std::string error;
+		const std::string trc = g_roombox + "\\" + stem + ".TRC";
+		std::wstring wide;
+
+		for (size_t i = 0; i < trc.size(); i++)
+			wide.push_back((wchar_t)(unsigned char)trc[i]);
+
+		if (!level.load(wide, error))
+		{
+			printf("-fogbulbs: %s could not be read (%s)\n", trc.c_str(),
+				error.c_str());
+			return;
+		}
+
+		const std::vector<uint8_t>& raw = level.debugBytes();
+		const bool halved = !_stricmp(stem, "ANDREA2") ||
+			!_stricmp(stem, "ANDREA3");
+
+		if (seed >= 0 && seed < level.roomCount())
+		{
+			const Tr5Room& s = level.rooms()[(size_t)seed];
+
+			g_origin[0] = (float)s.originX;
+			g_origin[1] = 0.0f;
+			g_origin[2] = (float)s.originZ;
+		}
+
+		g_level.clear();
+
+		for (int r = 0; r < level.roomCount(); r++)
+		{
+			const Tr5Room& rm = level.rooms()[(size_t)r];
+			unsigned ofs = 0, count = 0, ambient = 0;
+
+			if (!rm.headerOffset || !level.headerField(r, 148, ofs, error) ||
+				!level.headerField(r, 156, count, error) ||
+				!level.headerField(r, 44, ambient, error) ||
+				(ofs & 1) || !count || count > 64)
+				continue;
+
+			const size_t base = rm.headerOffset + 208 + ofs;
+
+			for (unsigned k = 0; k < count; k++)
+			{
+				const size_t at = base + (size_t)k * 36;
+
+				if (at + 36 > raw.size())
+					break;
+
+				Bulb b = {};
+
+				b.index = (int)g_level.size();
+				b.room = r;
+				b.x = F(raw, at);
+				b.y = F(raw, at + 4);
+				b.z = F(raw, at + 8);
+				b.rad = F(raw, at + 12);
+				b.denRaw = F(raw, at + 20);
+				b.r = F(raw, at + 24);
+				b.g = F(raw, at + 28);
+				b.b = F(raw, at + 32);
+				b.ambient = (long)ambient;
+				b.flags = rm.flags;
+
+				float den = b.denRaw;
+
+				if (halved)
+				{
+					den -= den * 0.5f;
+
+					if (den < 0)
+						den = 0;
+				}
+
+				den = (90.0f - den / 1024.0f) * 0.8f + 0.2f;
+
+				if (den < 14)
+					den = 14;
+
+				b.den = den;
+				b.d = 1.0f / den;
+				b.underSheet = (rm.flags & 1) && HDRenderWaterUnderOn(r);
+
+				const float ex = (float)cx + g_origin[0] - b.x;
+				const float ey = (float)cy + g_origin[1] - b.y;
+				const float ez = (float)cz + g_origin[2] - b.z;
+
+				b.dist = sqrtf(ex * ex + ey * ey + ez * ez);
+				g_level.push_back(b);
+			}
+		}
+
+		printf("-fogbulbs: %s holds %d fog bulb(s), the seed room %d's "
+			"origin %.0f %.0f %.0f\n", stem, (int)g_level.size(), seed,
+			g_origin[0], g_origin[1], g_origin[2]);
+
+		for (Bulb& b : g_level)
+		{
+			b.taken = b.dist < 20480.0f && !b.underSheet &&
+				g_bulb_count < HD_MAX_BULBS;
+
+			if (b.taken)
+			{
+				g_slot[g_bulb_count] = b.index;
+
+				HDFogBulb& o = g_bulbs[g_bulb_count++];
+
+				o.x = b.x - g_origin[0];
+				o.y = b.y - g_origin[1];
+				o.z = b.z - g_origin[2];
+				o.rad = b.rad;
+				o.density = b.d;
+				o.r = b.r;
+				o.g = b.g;
+				o.b = b.b;
+			}
+
+			printf("fogbulb %2d room %3d world %7.0f %7.0f %7.0f radius %5.0f "
+				"den %8.1f -> %5.2f d %.9g colour %.9g %.9g %.9g ambient "
+				"%08lX water %d eye %6.0f %s\n", b.index, b.room, b.x, b.y,
+				b.z, b.rad, b.denRaw, b.den, b.d, b.r, b.g, b.b,
+				(unsigned long)b.ambient, (b.flags & 1) ? 1 : 0, b.dist,
+				b.taken ? "taken" : b.underSheet ? "under a sheet" :
+				b.dist >= 20480.0f ? "beyond 20480" : "past the 16");
+		}
+
+		if (g_profile >= 0 && g_profile < (int)g_level.size())
+			Profile(g_level[(size_t)g_profile]);
+		else if (g_profile >= 0)
+			printf("-fogprofile: the level has no bulb %d\n", g_profile);
+	}
+
+	static std::vector<double> g_times;
+
+	/* The fog's pass after a bracket (HDRenderFogLast): the bulbs offered,
+	 * the quads drawn, their pixels and the GPU time. With -fogbulbs. */
+	static void Report(const char* what)
+	{
+		if (!g_list)
+			return;
+
+		HDFogLast last;
+
+		HDRenderFogLast(&last);
+		printf("-fogbulbs: %s - hd_fog %d, the pass drew %d of %d bulb(s), %ld "
+			"pixel(s) of rectangles, GPU %s%.4f ms\n", what, HDRenderFogOn(),
+			last.drawn, last.offered, last.pixels, last.timed ? "" :
+			"(not timed) ", last.gpuMs);
+
+		if (last.placed)
+			printf("-fogbulbs: the breath placed: eye %.3f %.3f %.3f, axes "
+				"%.6f %.6f %.6f / %.6f %.6f %.6f / %.6f %.6f %.6f\n",
+				last.eye[0], last.eye[1], last.eye[2], last.axes[0],
+				last.axes[1], last.axes[2], last.axes[3], last.axes[4],
+				last.axes[5], last.axes[6], last.axes[7], last.axes[8]);
+	}
+
+	// One -gpu run's pass time.
+	static void Collect()
+	{
+		HDFogLast last;
+
+		HDRenderFogLast(&last);
+
+		if (last.timed)
+			g_times.push_back(last.gpuMs);
+	}
+
+	// The -gpu runs' pass times: median and worst.
+	static void Times()
+	{
+		if (!g_list)
+			return;
+
+		if (g_times.empty())
+		{
+			printf("-gpu: the fog's pass drew nothing (no bulb in view, or "
+				"no -fogbulbs)\n");
+			return;
+		}
+
+		std::sort(g_times.begin(), g_times.end());
+		printf("-gpu: %d run(s) of the fog's pass, median %.4f ms, worst %.4f "
+			"ms\n", (int)g_times.size(), g_times[g_times.size() / 2],
+			g_times.back());
+	}
+
+	/* The frame's bulbs as the shaders get them: each one's number in the
+	 * level (-1 for a -bulb), its centre in view space, and where it lands
+	 * on the screen - the centre's pixel and the sphere's radius in pixels
+	 * at the centre's depth (sx = x persp / z + centre, as the classic
+	 * path projects). */
+	static void Frame(const HDFrameLighting& frame, const D3DMATRIX& proj,
+		long width, long height)
+	{
+		if (!g_list)
+			return;
+
+		const double persp = proj._11 * width * 0.5;
+
+		printf("-fogbulbs: the frame takes %d bulb(s), persp %.3f, screen "
+			"%ldx%ld\n", frame.bulbCount, persp, width, height);
+
+		for (int i = 0; i < frame.bulbCount; i++)
+		{
+			const HDFogBulb& b = frame.bulbs[i];
+			const double z = b.z > 1.0f ? b.z : 1.0;
+
+			printf("framebulb %2d number %2d view %8.1f %8.1f %8.1f radius "
+				"%5.0f screen %8.1f %8.1f radius_px %8.1f%s\n", i, g_slot[i],
+				b.x, b.y, b.z, b.rad, b.x * persp / z + width * 0.5,
+				b.y * persp / z + height * 0.5, b.rad * persp / z,
+				b.z + b.rad <= 0 ? " behind" : sqrtf(b.x * b.x + b.y * b.y +
+				b.z * b.z) < b.rad ? " eye inside" : "");
+		}
+	}
 }
 
 /* The bulbs go in room local and come out in view space, because that is the
@@ -16605,6 +17021,10 @@ static int ProbeMain(int argc, char** argv)
 		printf("       -rooms <n>  -out <prefix>  -groups  -nodraw  -matrixcheck\n");
 		printf("       -light <x y z r g b falloff>   -bulb <x y z rad den [r g b]>\n");
 		printf("       -fog <start end r g b>  -underwater  -shimmer  -wibble <n>\n");
+		printf("       -fogbulbs  -fogprofile <bulb>   the level's fog bulbs "
+			"(with -roombox), the frame's taken, one bulb's profile\n");
+		printf("       -hdfog 0|1 (or -fog 0|1)  -fogpass 0   the fog bulbs' "
+			"own pass off or on; the haze out with no pass\n");
 		printf("       -effect <0..21>  -paritycheck\n");
 		printf("       -sky  -skyonly  -skycensus  -skydump <path>   the HD "
 			"sky drawn, alone, or its parts counted\n");
@@ -16849,6 +17269,9 @@ static int ProbeMain(int argc, char** argv)
 			continue;
 
 		if (MarbleArg(argc, argv, &at))
+			continue;
+
+		if (probefog::Arg(argc, argv, &at))
 			continue;
 
 		// -calltrace, -lumaat and -gpuall, for the same limit.
@@ -19950,6 +20373,11 @@ static int ProbeMain(int argc, char** argv)
 	const double persp = enginePersp > 0.0 ? enginePersp : EnginePersp(height, fov);
 	PrintZProof(persp);
 
+	/* -fogbulbs with -nodraw: the level's fog bulbs for the eye as given;
+	 * a picture takes them below, once its camera stands. */
+	if (noDraw)
+		probefog::Take(stem, room, cx, cy, cz);
+
 	if (noDraw)
 	{
 		HDRenderShutdown();
@@ -20072,8 +20500,11 @@ static int ProbeMain(int argc, char** argv)
 	for (int i = 0; i < 32; i++)
 		wibbleTable[i] = (float)(2.0 * sin(i * 0.19634955));
 
+	// -fogbulbs: the level's fog bulbs, the frame's taken into the list.
+	probefog::Take(stem, room, cx, cy, cz);
 	FillLighting(frame, lighting, (float)width * 0.5f, (float)height * 0.5f, view);
 	frame.wibbleTable = wibbleTable;
+	probefog::Frame(frame, projection, width, height);
 
 	/* -underwater with sheets: the eye in the seed room under the water,
 	 * as hd_level.cpp sets it (HDFrameDraw) - the room, the eye's y (the
@@ -20461,6 +20892,7 @@ static int ProbeMain(int argc, char** argv)
 	g_call_trace_live = false;
 	HDRenderFrameEnd();
 	g_device->EndScene();
+	probefog::Report("the picture");
 
 	/* The frame's time on the processor from its BeginScene to the GPU's
 	 * end - what a first water frame's wait for the driver adds to
@@ -20619,6 +21051,10 @@ static int ProbeMain(int argc, char** argv)
 			HDRenderFrameEnd();
 			g_device->EndScene();
 
+			// The fog's own pass, timed by itself after the rooms' stamp.
+			if (run > 0)
+				probefog::Collect();
+
 			UINT64 a = 0, b = 0, f = 0;
 			BOOL disjoint = TRUE;
 
@@ -20651,6 +21087,7 @@ static int ProbeMain(int argc, char** argv)
 			times.empty() ? -1.0 : times[times.size() / 2],
 			times.empty() ? -1.0 : times.back(), gpuCalls, tris,
 			g_with_count + 1, g_gpu_all ? ", -gpuall: every pass timed" : "");
+		probefog::Times();
 	}
 
 	/* -glow: the additive pass of every drawn group again, alone, onto

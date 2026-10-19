@@ -7031,9 +7031,11 @@ supplied for this project, not in the repository). No log came with them, so the
 eye was rebuilt from the picture and the forest's from his trview cameras.
 
 **The migration** (`tomb5/tomb5.cpp`; `hd_vis.h`, `HD_VIS_REV`, `HDVisSetting`). What a
-registry holds, measured in the settings code: every earlier build's first-run block wrote
-`hd_vis` 0, and `REG_ReadLong` writes the default of an absent value, so a registry that
-saw any earlier build holds 0 - a value no player chose, the option having no row. The
+registry holds, measured in the settings code and its history: the first-run block of
+the earlier builds wrote `hd_vis` 0 until `02937171`, from which on the head's builds
+wrote and read 1, and `REG_ReadLong` writes the default of an absent value, so a registry
+that saw one of the many earlier builds holds 0 - a value no player chose, the option
+having no row - and one that saw only the last few holds 1. The
 settings carry no version of their own; the earlier migration (`hd_build`, the HD switch
 entry) needed none, because its key was new and absent read as the default. A `0` written
 by hand and a `0` an earlier build wrote look the same, so a value beside `hd_vis` now
@@ -7132,12 +7134,58 @@ triangles, room 44's 201) and has been hidden since.
 `HDVisTables::floorRooms`; `hd_vis.cpp`, `HDVisBuild`; `hd_level.cpp`,
 `VisHidesClassicRoom`; the visibility path only). An empty, uncovered classic room is left
 out as before when its inside holds a guest, and now also when it has floor links and all
-of them name rooms drawn HD this frame. The census of the rooms with classic faces and no
+of them name rooms drawn HD - the level's verdict per room (`GroupOfRoom`, `g_group_hd`
+through the flip table, the same in every frame), not the frame's list. The rule over the
+tables is `HDVisClassicRoomVerdict` with `HDVisFloorOnArt` in `hd_vis.h`, so the
+floor-link part is the tests' too. The census of the rooms with classic faces and no
 art over the fifteen levels: twelve - ANDY1 212, ANDY3 26, 28, 88, 103, 118, 122 and 210,
 RICH2 15, 16, 18 and 19. The four RICH2 rooms are covered (the stand rule draws them), the
 four with guests were hidden already, and the rule adds ANDY3's 26, 28 and 210 and no
 other: 103 has no floor link (one portal, to room 102). Every link and not one, so a room
 half over classic ground keeps its faces.
+
+**The sky behind the lids** (the check after the build). Neither the lids nor the hollows
+under them are under the sky (`ROOM_OUTSIDE`), and the engine draws its sky only when the
+walk lists a room under the sky (`SkyDrawPhase`; the outside rectangle the walk also keeps
+has no reader, so whenever the sky is drawn it fills the frame behind the rooms). From
+inside a hollow the walk often lists none, and there the lid left out showed the clear
+colour, black, the sky coming and going as the eye turned. RoomProbe `-vis 1 -walk
+-farcull`, the yaw every 45 degrees at pitch 0, -25 and -45, without and with the new
+`-opensky`:
+
+| Eye | directions | a lid listed | no sky, lid left out | with the sky rule |
+|---|---:|---:|---:|---:|
+| room 24 under 26 (72,700, 2,500, 45,600) | 24 | 24 | 9 (yaw 225 to 315) | 0 |
+| room 27 under 28 (83,400, 3,500, 51,000) | 24 | 23 | 6 (yaw 45 to 135) | 0 |
+| room 209 under 210 (83,400, 3,400, 53,400) | 24 | 23 | 6 (yaw 45 and 90) | 0 |
+| trview hillside, room 27 | 24 | 13 | 0 | 0 |
+| trview, room 24 from room 87 | 24 | 12 | 0 | 0 |
+
+At the three in-hollow eyes of the table above, pixels at 1,280 x 720 (2,560 x 1,440):
+
+| Eye | before round 14 | lids left out, no sky | with the sky rule |
+|---|---|---|---|
+| room 24, yaw 270, pitch -25 | lid 510,031, black 392,603 | black 902,634 (3,609,976) | sky 902,634 (3,609,976) |
+| room 27, yaw 90, pitch -25 | lids 422,034, black 287,798 | black 709,832 (2,838,625) | sky 709,832 (2,838,625) |
+| room 209, yaw 0, pitch -25 | lid 346,296, sky 98,311 | sky 238,829, art 205,778 | the same (the walk lists sky) |
+
+The black beside the lid at the first two eyes is older than this round: there the art of
+the hollow is open where the classic walls stood, and with no room under the sky in the
+list the frame was black there before round 14 as well. The trview eyes list a room under
+the sky, so their 8,475 and 3,300 pixels were sky already.
+
+*The rule from the data* (`hd_vis.h`, `HDVisClassicRoomOpensSky`, `HDVisRoomOpensSky`;
+`hd_level.cpp` beside `VisHidesClassicRoom`; `game/draw.cpp`, `GetRoomBounds`). A listed
+room the visibility path leaves out that is not under the sky turns the walk's `outside`
+on, as a listed room under the sky does: its own faces closed its window, no art covers
+them (the lids' ceilings 0 of 31, 13 and 15 faces), so what lies behind is the trees of
+rooms 86 and 87 and the sky. Over the fifteen levels it answers yes for ANDY3's 26, 28 and
+210 alone (RoomProbe's `classic` lines, `opens_sky=`); the other rooms left out, ANDY1 212
+and ANDY3 88, 118 and 122, are under the sky, and nothing changes for them. A frame
+changes only where the walk lists one of the three lids and no room under the sky. Two
+other readers follow `outside`: the weather (`DoRain` and `DoSnow` start drops only while
+it is on, in a level that has weather) and `S_GetObjectBounds`, which keeps an object past
+the far plane while it is on - in such a frame both do what they do under the sky.
 
 **The sweep** (as round 13's: head `d0bf4f7b` against this round's tool, the visibility
 path with both and the eye one unit along x; with `hd_vis` 0 byte for byte). Every picture
@@ -7165,16 +7213,20 @@ round 12's three and round 13's three places at both sizes, and this round's nin
 at both sizes (the window's four eyes, the hollows' five): the head's to the byte, with
 `hd_vis` 0 too. The pictures that change are the game's, at the places of the two tables
 above, and nowhere else: the rooms the rules name are JOBY2's 19 and 21 and ANDY3's 26, 28
-and 210.
+and 210. The whole sweep was run again with the tool of the sky rule (its `-opensky` in no
+set): every set, every picture and every total the same, to the byte. The sky rule reaches
+no probe picture (the probe draws no sky); the game's frames it changes are those of the
+sky table above.
 
 **Checked.** The engine and all nine tools build from the last code commit; ModernTest
-15,847 checks (18 more than the head: 10 on the migration, 6 on the enclosed rooms kept, 8
-on the lids, 6 of round 13's on the enclosed rule gone), MenuTest 44,754, InterpTest 729,
+15,871 checks (42 more than the head: 10 on the migration, 6 and 1 on the enclosed rooms
+kept, 8 on the lids, 7 on the floor rule, 9 on the floor-link table and its verdict, 7 on
+the sky rule, 6 of round 13's on the enclosed rule gone), MenuTest 44,754, InterpTest 729,
 LipsTest 299 with the `.OBJ` folder and 272 without (the cutseq file named by hand), 0
 failed; the shaders' `.inc` untouched. Every rule asks `g_vis_level` first, so with
 `hd_vis` 0 and with `hd_build` 0 the engine draws as before; the migration changes what a
 registry an earlier build wrote reads as, once. The engine of the last code commit:
-`PCtomb5.exe` built Oct 19 2026 00:06:03, md5 `1c509c30e9d6cc7b827c154398dcf44b`.
+`PCtomb5.exe` built Oct 19 2026 03:00:59, md5 `bab208569d4239a88bcc2ccb67bbe33f`.
 
 **Left.** The window's reveal is black in the game where room 146's art has dark wood (the
 classic faces over the art that lies on them); the alternative is to draw the sniper
@@ -7184,10 +7236,14 @@ the walk lists them; `-hollow` makes a picture the engine's, and earlier picture
 list JOBY2 19 or 21, ANDREA2 124, RICHCUT2 2 to 4 or TITLE 70, 101 or 103 drew art the
 game does not. ANDY3's room 103 keeps its faces (no floor link, no guest), not at his
 places. The window's eye is rebuilt from his picture, not logged. The game's frame at the
-lids and the window is his to see.
+lids and the window is his to see. From inside room 27 looking level south (yaw 180) the
+walk lists room 27 alone, no lid and no room under the sky, and the probe leaves 921,480
+of 921,600 pixels clear: black in the game, as at the head - the hollow's art is open
+there, and no rule of this round reaches a frame that lists no lid.
 
 **Commits.** `9861906a` (the migration), `20208f11` (the sniper rooms keep their faces),
-`d7d27e58` (the forest lids) and the records.
+`d7d27e58` (the forest lids), the records, `4abe27f5` (the lids open the sky, the verdict
+in `hd_vis.h`) and the records of the sky.
 
 ### A classic room covered by another group's art is drawn as that art
 2026-10-04

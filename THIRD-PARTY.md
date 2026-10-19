@@ -3477,7 +3477,9 @@ carries the tables.
     settings` line's `hd_vis=`) - a registry without the revision has its
     `hd_vis` moved to 1 and both written back; from the revision on the
     value is kept as set, above 1 read as 0. DATA: the engine's own
-    settings code - the first-run block of every earlier build wrote 0,
+    settings code and its history - the first-run block of the earlier
+    builds wrote 0 until `02937171`, which wrote and read 1, none wrote a
+    revision,
     `REG_ReadLong` writes an absent value's default, the option has no row
     and the settings carry no version. OWN: a revision beside the one key
     whose meaning changed, not a version of all settings, so no other key's
@@ -3496,10 +3498,12 @@ carries the tables.
     the engine leaves it. OWN.
 346. **The lid over an HD room** (`hd_vis.h`, `HDVisClassicRoomHidden`'s
     `floorOnArt`, `HDVisTables::floorRooms`; `hd_vis.cpp`, `HDVisBuild`;
-    `hd_level.cpp`, `VisHidesClassicRoom`) - an empty, uncovered classic
-    room whose floor links all name rooms drawn HD that frame draws none of
-    its faces. DATA: the census of the rooms with classic faces and no art
-    over the fifteen levels (RoomProbe `-vis 1 -walk`: twelve, ANDY1 212,
+    `hd_level.cpp`, `VisHidesClassicRoom`; `hd_vis.h`,
+    `HDVisClassicRoomVerdict`, `HDVisFloorOnArt`) - an empty, uncovered
+    classic room whose floor links all name rooms drawn HD (the level's
+    verdict per room, not the frame's list) draws none of its faces.
+    DATA: the census of the rooms with classic faces and no art over the
+    fifteen levels (RoomProbe `-vis 1 -walk`: twelve, ANDY1 212,
     ANDY3 26, 28, 88, 103, 118, 122 and 210, RICH2 15, 16, 18 and 19), their
     guests, their floor links and covers (TrgProbe `-classicart`); ANDY3's
     26, 28 and 210 every floor square over room 24, 27 or 209, 103 none.
@@ -3510,9 +3514,27 @@ carries the tables.
     RoomProbe.cpp`) - per room with classic faces and no art, its faces,
     `ROOM_OUTSIDE`, guests, box and the rooms its floor links and portals
     name. OWN.
-348. **ModernTest's three sets** (`vis_setting_migration`,
-    `vis_enclosed_kept`, `vis_lid_rule`) - the migration's three cases, the
-    sniper rooms kept, the lids taken. OWN.
+348. **ModernTest's sets** (`vis_setting_migration`, `vis_enclosed_kept`,
+    `vis_lid_rule`, `vis_floor_on_art`, `vis_opens_sky`,
+    `vis_floor_tables`, one check in `vis_enclosed_tables`) - the
+    migration's three cases, the sniper rooms kept, the lids taken, the
+    floor-link table and rule, the sky behind a lid. OWN.
+349. **A lid left out opens the sky** (`hd_vis.h`,
+    `HDVisClassicRoomOpensSky`; `hd_level.cpp`, `HDVisRoomOpensSky`;
+    `game/draw.cpp`, `GetRoomBounds`) - a listed room the visibility path
+    leaves out that is not under the sky turns the walk's `outside` on.
+    DATA: the walk's `outside` is the only switch of the sky
+    (`SkyDrawPhase`; the outside rectangle has no reader); RoomProbe
+    `-vis 1 -walk -farcull` sweeps from inside ANDY3's hollows, 72
+    directions, found 21 that list a lid and no room under the sky (room
+    24 looking west, rooms 27 and 209 looking east), the lids' ceilings
+    covered by no art (TrgProbe `-classicart`); the census answers yes for
+    ANDY3's 26, 28 and 210 alone over the fifteen levels. PICTURE: 902,634
+    and 709,832 pixels at 1,280 x 720 from black to sky at the two
+    in-hollow eyes. OWN.
+350. **RoomProbe `-opensky` and `opens_sky=`** (`Preparation/Tools/
+    Diagnose/RoomProbe.cpp`) - the walk's `outside` with the rule above,
+    and per classic room without art whether it opens the sky. OWN.
 
 ## Credited, but not contained here
 

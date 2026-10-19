@@ -113,7 +113,8 @@ float FogColumn(float k, float s0, float s1)
 float4 FogPS(float2 vpos : VPOS) : COLOR
 {
 	const float2 pix = vpos + 0.5f;
-	const float2 ndc = float2((pix.x - gFogScreen.x) * gFogScreen.z * 2.0f - 1.0f,
+	const float2 ndc = float2(
+		(pix.x - gFogScreen.x) * gFogScreen.z * 2.0f - 1.0f,
 		1.0f - (pix.y - gFogScreen.y) * gFogScreen.w * 2.0f);
 	const float3 dir = float3(ndc.x * gFogRay.x, ndc.y * gFogRay.y, 1.0f);
 	const float depth = tex2Dlod(sFogDepth, float4(pix * gFogTex.xy, 0.0f,

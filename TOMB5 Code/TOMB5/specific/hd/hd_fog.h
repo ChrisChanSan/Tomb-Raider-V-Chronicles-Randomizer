@@ -278,7 +278,8 @@ inline float HDFogRayTau(const float dir[3], const float c[3], float rad,
 	if (!HDFogSpan(dir, c, rad, zs, &s0, &s1, &b2))
 		return 0.0f;
 
-	const float len = sqrtf(dir[0] * dir[0] + dir[1] * dir[1] + dir[2] * dir[2]);
+	const float len = sqrtf(dir[0] * dir[0] + dir[1] * dir[1] +
+		dir[2] * dir[2]);
 	const float m = (dir[0] * c[0] + dir[1] * c[1] + dir[2] * c[2]) / len;
 	float column = 0.0f;
 

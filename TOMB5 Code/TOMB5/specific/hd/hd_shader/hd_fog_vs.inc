@@ -34,4 +34,4 @@ const BYTE kHDFogVS[] =
       0,   0, 228, 144, 255, 255, 
       0,   0
 };
-// bshader-stamp c5a458ee8c42810e47402c662c917265
+// bshader-stamp 0e217022461eab0104d2331c979ab0ef

@@ -27809,6 +27809,7 @@ in 0..1 folding at 64, the breath's band and its rise, the ray's tau with and wi
 the breath, and the rectangle ahead, behind, over the near plane and beside the frame),
 MenuTest 44,754, InterpTest 729, LipsTest 299 with the `.OBJ` folder and 272 without
 (the cutseq file named by hand, the worktree having no game folder), 0 failed each.
+`PCtomb5 built Oct 19 2026 02:02:44`, md5 `2c82fc8dabae47163299680290ab174b`.
 The parity, the head's tool (`d0bf4f7b`) against this round's at 960 x 540, round
 209's sets with `-surfacealways`. With no bulb, the tools' default, every picture is the
 head's: the six classic views and JOBY4's 229 eye (`hd_build` 0, `-classiconly`) 7 of
@@ -27842,7 +27843,9 @@ lines stand outside the fog's own block in `hd_render.cpp`: the note in
 release in `HDRenderShutdown`.
 
 **Commits.** `49e6714a` (the rule and the pass), `25c1fa73` (the key), `72a46acd`
-(RoomProbe's switches and ModernTest's group) and the record.
+(RoomProbe's switches and ModernTest's group), `5a34ae95` (the record), `62dd4151` (two
+lines of the rule wrapped at 80 columns, the bytecode unchanged) and the record's
+commits and build stamp.
 
 ## 3. Randomizer changes since Beta 1.0
 

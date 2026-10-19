@@ -3518,8 +3518,8 @@ carries the tables.
     takes floors and ramps up to 60 degrees by a normal's height over half
     its length (`host/render/reflection_plane.h`, `floor_plane`), read on
     2026-10-19 in the copy the owner named for this round; no code was
-    taken, the number coincides with the census's gap and is credited
-    here.
+    taken. The census's gap (56.3 to 85 degrees) does not choose a line
+    inside it: 60 is TROne's line, taken as its number and credited here.
 348. **A slope's faces share a plane by their corners** (`hd_marble_math.h`,
     `HDMarbleTiltFits`; `hd_render.cpp`, `marble_build`) - a sloped face
     joins a plane found already where its corners lie within the clip's

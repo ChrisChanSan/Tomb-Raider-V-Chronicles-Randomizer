@@ -19484,12 +19484,13 @@ for last frame's and none under a hundredth of the best, one plane per normal an
 within 2 units, floors and ramps up to 60 degrees (a normal's height over half its
 length), the clip 16 units over the floor, the target at half the frame's size with a
 blurred mip. Measured against our data: a cap of 6 leaves 14 of the 20 planes showing at
-L4 - the cap's swaps again wherever more than six show; its ramp line is the same 60
-degrees as our census's gap. Chosen: (a) and (b) with the rules above - every plane, the
+L4 - the cap's swaps again wherever more than six show; its ramp line, 60 degrees,
+falls inside our census's gap. Chosen: (a) and (b) with the rules above - every plane, the
 slopes in planes of their own, the cost bounded by what a plane shows - because the
 stair's and the corridors' reflections must stand at their own heights, which only a plane
-per height gives. Taken from TROne: no code and no number; the 60 degrees coincide with
-our data's line (the origin ledger names it).
+per height gives. Taken from TROne: no code, one number - the lean line of 60 degrees.
+Our census leaves a gap from 56.3 to 85 degrees and does not choose a line inside it; 60
+is TROne's line and stands credited to it as THIRD in the origin ledger (entry 347).
 
 **The church's mosaic and the floors.** Room 165's pattern (and its flip twin 177) wears
 three atlas pages, 169 (the mosaic's corner and border beside a relief), 170 (the border
@@ -19565,9 +19566,13 @@ times again after a first five gave the head 1,037 ms more, its fill step alike 
 | RICHCUT2 | 1,883 | 1,664 | -219 | 49.0 / 45.5 |
 | TITLE | 4,308 | 4,799 | 491 | 52.6 / 51.2 |
 
-None more than a second; the differences are the machine's spread (the fill step of the
-build, which takes the leaning floors, measured apart at ANDY1, ANDREA2 and RICH2, the
-least of four: 797 / 825, 2,780 / 2,628 and 1,759 / 1,481 ms, base / head).
+None more than a second. The table does not give the head's own cost: under the other work
+single runs spread by up to 4 s, more than the differences, so they read both ways. On a
+quieter machine the head is slower on every level but one, by tens of milliseconds - the
+leaning floors are looked for in every group, also in levels without a mirror page; the
+fix pass's table below. (The fill step of the build, which takes the leaning floors,
+measured apart under the load at ANDY1, ANDREA2 and RICH2, the least of four: 797 / 825,
+2,780 / 2,628 and 1,759 / 1,481 ms, base / head.)
 
 **Checked.** The nine builds exit 0; ModernTest 15,839 (the round's 10 new checks in
 `marble_every` and the page column's 40 pages), MenuTest 44,773 (the Reflections row's 19
@@ -19613,11 +19618,12 @@ the HD switch it depends on. No translation row: the label is the menu's English
 eyes: no log came with them, so the places are rooms and round 3's ticks of the same
 walks, and RoomProbe's camera looks down more steeply than his, where polished stone
 reflects least - the probe's pictures change less than his views would (R4920 5,677 pixels
-by more than 8 of 255). The load times under other work's load (above). The German column
-of the label "Reflections" in `game/gameflow.cpp`'s table ("Spiegelungen"), outside this
-round's files. `hd_render.h`'s comment of `HDRenderMarbleSet` still says "1 to 8" (outside
-this round's files); RoomProbe declares the round's three probe functions itself. The sky
-in the mirror stays out (round 3's Left).
+by more than 8 of 255). The first load table was taken under other work's load (above; the
+fix pass measured it again). The German column of the label "Reflections" in
+`game/gameflow.cpp`'s table ("Spiegelungen"), outside this round's files. `hd_render.h`'s
+comment of `HDRenderMarbleSet` still says "1 to 8" (outside this round's files); RoomProbe
+declares the round's four probe functions itself. The sky in the mirror stays out (round
+3's Left).
 
 **Commits.** `64e31b7f` (RoomProbe `-marblelist` and `-marblesteep`, the plane rows),
 `1ce21944` (every plane: the ceiling, the places, the scissor and the draws left out, the
@@ -19626,6 +19632,70 @@ least share, `hd_marble_ceiling`, `-marbleplanes` 64; its message names `-marble
 corners' rule, the store), `e6d4716e` (the church's mosaic), `ff20b660` (the Reflections
 row), `2e077352` (ModernTest's `marble_every`, `-marbletread`, the two switches' parsing),
 and this record's own commit after it.
+
+**Round 4, its fix pass.** 2026-10-19
+
+**What.** The review of Round 4 found comments that told the code's history and named
+rooms and levels, a start value written twice, and four places where this record or the
+user's documents said less or other than the measurements. Changed: the comment over the
+`hd_marble` read in `tomb5.cpp` says why the ceiling has a key of its own (REG_ReadLong
+writes its default where a key is absent, so existing registries hold `hd_marble_planes`
+as 2); `HDMarbleTiltFits`' and `HD_MARBLE_LEAST`'s comments in `hd_marble_math.h` and
+`marble_lean`'s in `hd_render.cpp` say the rule without the history and without rooms or
+levels (the measured views stay here); `g_marble_cap` and `g_marble_least` start from two
+constants beside them, held equal to `HD_MARBLE_PLANES_MOST` and `HD_MARBLE_LEAST` by a
+`static_assert` where `hd_marble_math.h` is included (the header comes later in the file,
+so the globals cannot name it), and a change of one without the other no longer builds.
+The record's TROne sentence above now says that the line of 60 degrees is TROne's number,
+as the origin ledger's entry 347 has it; the load sentence above says what the first table
+can and cannot show; the Left names RoomProbe's four probe functions. The engine manual
+and README.md now name the least share: a plane showing less than a thousandth of the
+screen stays plain and leaves at once, without a fade.
+
+**Why.** The comment rule (what, why, what for; no history; rules from the data, so no
+room or level in engine code), and records that match the measurements.
+
+**Measured.** The load again, base (`d0bf4f7b`'s RoomProbe) and the fix pass's RoomProbe
+in turn, three runs each, the least (ms; `read` + `build` + the marble warm-up, room 0 of
+each level, the mirror on; other work still ran on the machine, less than before):
+
+| level | base | fix pass | more |
+|---|---|---|---|
+| ANDREA1 | 1,206 | 1,241 | 36 |
+| ANDREA2 | 2,392 | 2,508 | 116 |
+| ANDREA3 | 1,454 | 1,489 | 35 |
+| ANDY1 | 1,177 | 1,205 | 28 |
+| ANDY2 | 1,158 | 1,171 | 13 |
+| ANDY3 | 1,305 | 1,339 | 34 |
+| JOBY2 | 1,481 | 1,534 | 53 |
+| JOBY3 | 748 | 776 | 28 |
+| JOBY4 | 773 | 796 | 23 |
+| JOBY5 | 956 | 980 | 24 |
+| RICH1 | 956 | 967 | 11 |
+| RICH2 | 2,038 | 2,075 | 38 |
+| RICH3 | 1,063 | 1,015 | -47 |
+| RICHCUT2 | 816 | 851 | 35 |
+| TITLE | 1,944 | 2,002 | 58 |
+
+None more than a second; the head costs 11 to 116 ms more on fourteen levels (RICH3's -47
+is the spread), alike to the review's own quiet run of the final head (4 to 93 ms).
+
+**Checked.** The nine builds exit 0 (each in its own `cmd` call); ModernTest 15,839,
+MenuTest 44,773, InterpTest 729, LipsTest 299 with the lip objects and 272 without (the
+cutseq path given by hand), none failed. The fix pass's RoomProbe against Round 4's head
+renders, md5-identical everywhere: the 15 cameras at `hd_water` 0 and 1 with `hd_marble` 0
+and 1 (60 of 60), the six HD views with the mirror off and on (12 of 12), round 2's 36
+eyes at `hd_water` 0 and 1 with `hd_marble` 0 and 1 (144 of 144), his 21 ticks with the
+mirror off and on (42 of 42); the classic path 6 of 6 against the base. The comments and
+the start values change no picture.
+
+**Left.** The least share has no hold: a plane falling under a thousandth of the screen
+leaves at once and fades in again when it comes back over it (two such drops on the RICH2
+stair's walk, four on the ANDREA1 climb, Round 4's simulation) - whether that stays is a
+question for the next round. `tomb5.cpp`'s `planes = 64` stays a literal beside the
+comment that names `HD_MARBLE_PLANES_MOST` (the file does not include the header).
+
+**Commits.** The fix pass's commit after Round 4's record.
 
 ### The spring (#200)
 2026-10-14

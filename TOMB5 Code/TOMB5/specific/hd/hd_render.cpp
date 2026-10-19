@@ -4175,6 +4175,10 @@ namespace
 	int marble_copies(const trf::remaster::Trg& trg,
 		const trf::remaster::TrgGroup& source, int g,
 		std::vector<std::vector<unsigned char> >& copies);
+	// The leaning floors of the mirror's pages (see "the marble floors").
+	void marble_lean(const trf::remaster::Trg& trg,
+		const trf::remaster::TrgGroup& source, int g,
+		const std::vector<std::vector<unsigned char> >& copies);
 	// RoomProbe's crack census (see "the marble floors").
 	bool g_crack_on = false;
 	void marble_crack_collect(const trf::remaster::Trg& trg,
@@ -7038,6 +7042,9 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 		group.mirrorCopies = g_marble_on && !g_marble_keep_copies &&
 			(int)g < g_room_groups ? marble_copies(trg, source, (int)g,
 			marbleCopies) : 0;
+
+		if (g_marble_on && (int)g < g_room_groups)
+			marble_lean(trg, source, (int)g, marbleCopies);
 
 		if (g_crack_on && g_marble_on && (int)g < g_room_groups)
 			marble_crack_collect(trg, source, (int)g, marbleCopies);
@@ -19504,6 +19511,13 @@ namespace
 	std::vector<std::vector<int> > g_marble_tilt_id;
 	std::vector<float> g_marble_tilts;
 	const int kMarbleTiltKey = 1 << 28;
+	/* The faces that lie in planes of their own, by group, nine floats a
+	 * face: the leaning floors marble_lean takes with the group's fill,
+	 * and the rising faces marble_build moves out of the level faces. A
+	 * resident load sets the rooms' flags again over the kept groups -
+	 * marble_build once more, without a fill - and finds them here. */
+	std::map<int, std::vector<float> > g_marble_store;
+	std::mutex g_marble_store_lock;
 	/* Two sloped faces lie in one plane when their normals' parts differ
 	 * by at most this and their distances by kMarbleHeightJoin. */
 	const float kMarbleTiltSame = 0.001f;
@@ -19626,6 +19640,10 @@ namespace
 
 		g_marble_slots.assign((size_t)g_marble_cap, { INT_MIN, 0.0f });
 
+		// A level built without the marble floors holds none of its own.
+		if (!g_marble_on)
+			g_marble_store.clear();
+
 		for (int g = 0; g < g_room_groups && g < (int)g_groups.size(); g++)
 		{
 			HDGroup& group = g_groups[(size_t)g];
@@ -19634,6 +19652,23 @@ namespace
 
 			g_marble_copies += group.mirrorCopies;
 			g_marble_copies_water += water ? group.mirrorCopies : 0;
+
+			/* The faces in planes of their own join the level faces, to be
+			 * sorted out below as they were at the build (g_marble_store);
+			 * the rising ones go back to the store. */
+			std::vector<float>& stored = g_marble_store[g];
+			std::vector<float> risen;
+
+			for (size_t f = 0; f + 8 < stored.size(); f += 9)
+			{
+				group.mirrorFaces.insert(group.mirrorFaces.end(),
+					stored.begin() + (ptrdiff_t)f,
+					stored.begin() + (ptrdiff_t)f + 9);
+				group.mirrorY.push_back((int)lroundf((stored[f + 1] +
+					stored[f + 4] + stored[f + 7]) / 3.0f));
+			}
+
+			stored.clear();
 
 			if (water)
 			{
@@ -19646,12 +19681,16 @@ namespace
 
 			for (size_t f = 0; f < group.mirrorY.size(); f++)
 			{
+				/* Against the face's own height, the corners' mean rounded,
+				 * not its floor's joined one: a resident load runs this again
+				 * over joined heights and must find the faces it found. */
+				const float* q = &group.mirrorFaces[f * 9];
+				const float own = (float)lroundf((q[1] + q[4] + q[7]) / 3.0f);
 				float most = 0.0f;
 
 				for (int c = 0; c < 3; c++)
 				{
-					const float d = fabsf(group.mirrorFaces[f * 9 + c * 3 + 1] -
-						(float)group.mirrorY[f]);
+					const float d = fabsf(q[c * 3 + 1] - own);
 
 					most = d > most ? d : most;
 				}
@@ -19670,6 +19709,7 @@ namespace
 					g_marble_rise_list.insert(g_marble_rise_list.end(), row,
 						row + 6);
 					g_marble_rising++;
+					risen.insert(risen.end(), p, p + 9);
 
 					/* Its own plane (HDMarbleTiltPlane), joined to a plane
 					 * of the level found already (HDMarbleTiltSame). */
@@ -19687,7 +19727,9 @@ namespace
 					for (size_t t = 0; t + 3 < g_marble_tilts.size() && id < 0;
 						t += 4)
 						if (HDMarbleTiltSame(&g_marble_tilts[t], plane,
-							kMarbleTiltSame, (float)kMarbleHeightJoin))
+							kMarbleTiltSame, (float)kMarbleHeightJoin) ||
+							HDMarbleTiltFits(&g_marble_tilts[t], p, ox, oz,
+							kMarbleClipOver))
 							id = (int)(t / 4);
 
 					if (id < 0)
@@ -19715,6 +19757,7 @@ namespace
 
 			group.mirrorFaces.resize(kept * 9);
 			group.mirrorY.resize(kept);
+			stored.swap(risen);
 
 			/* A face lying wholly under higher faces of its own room is no
 			 * mirror: hidden under the floor over it, it would yet be a
@@ -20237,6 +20280,84 @@ namespace
 			copies.clear();
 
 		return flagged;
+	}
+
+	/* The leaning floors of the mirror's pages (hd_marble_math.h,
+	 * HDMarbleLeanFace): a group's triangles of its opaque pass or of its
+	 * clear floors, as the triangle loop takes a mirror face, that face up
+	 * and lean past the flat face - the ramps and the corridors going up
+	 * (ANDREA1 rooms 172, 173 and 176 at 26.6 degrees), a pool's sloped
+	 * surround - and are no copy (marble_copies' flags). Taken with the
+	 * group's fill, on the pool's threads, into g_marble_store under its
+	 * lock; marble_build lays them into planes of their own. */
+	void marble_lean(const trf::remaster::Trg& trg,
+		const trf::remaster::TrgGroup& source, int g,
+		const std::vector<std::vector<unsigned char> >& copies)
+	{
+		std::vector<float> lean;
+
+		for (size_t pi = 0; pi < source.parts.size(); pi++)
+			for (int pass = 0; pass < 2; pass++)
+			{
+				const trf::remaster::TrgPart& part = source.parts[pi];
+				const trf::remaster::TrgPart::Pass& run = part.pass[pass];
+				const float blend = MaterialBlend(part, pass);
+				const size_t list = pi * 3 + (size_t)pass;
+
+				for (unsigned int at = 0; at + 2 < run.count; at += 3)
+				{
+					const unsigned int first = run.start + at;
+
+					if (first + 2 >= trg.indices.size())
+						break;
+
+					if (list < copies.size() && at / 3 < copies[list].size() &&
+						copies[list][at / 3])
+						continue;
+
+					float p[9];
+					float ny = 0.0f;
+					int page = -1;
+
+					for (int c = 0; c < 3; c++)
+					{
+						const trf::remaster::TrgVertex& v =
+							trg.vertices[trg.indices[first + c]];
+
+						p[c * 3] = (float)v.x;
+						p[c * 3 + 1] = (float)v.y;
+						p[c * 3 + 2] = (float)v.z;
+						ny += v.normal_y();
+
+						if (c == 0)
+							page = v.layer && v.layer <= trg.textures.size() ?
+								(int)trg.textures[v.layer - 1u] :
+								trg.textures.empty() ? -1 :
+								(int)trg.textures[0];
+					}
+
+					const int slot = HDPageCacheSlotOf(page);
+					/* A sliver whose corners lie within the clip's offset of
+					 * its own height (marble_build's rising rule) is no slope
+					 * to mirror: it stays out. */
+					const float own = (float)lroundf((p[1] + p[4] + p[7]) /
+						3.0f);
+					const float most = fmaxf(fabsf(p[1] - own),
+						fmaxf(fabsf(p[4] - own), fabsf(p[7] - own)));
+
+					if (!(pass == 0 || (blend == 0.0f && !g_no_clear &&
+						HDPageCacheSlotClear(slot))) || !MirrorPage(page) ||
+						most <= kMarbleClipOver || !HDMarbleLeanFace(p, p + 3,
+						p + 6, ny / 3.0f, HD_MARBLE_FLAT))
+						continue;
+
+					lean.insert(lean.end(), p, p + 9);
+				}
+			}
+
+		std::lock_guard<std::mutex> hold(g_marble_store_lock);
+
+		g_marble_store[g] = lean;
 	}
 
 	/* RoomProbe's -marblecracks (marble_crack_census): every triangle of

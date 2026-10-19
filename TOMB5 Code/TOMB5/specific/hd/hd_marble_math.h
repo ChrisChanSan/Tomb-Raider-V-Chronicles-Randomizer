@@ -339,6 +339,33 @@ inline int HDMarblePlanesCap(int planes)
 		HD_MARBLE_PLANES_MOST : planes;
 }
 
+/* A leaning floor of the mirror's pages: a triangle facing up whose
+ * normal leans further than the flat face's (HD_MARBLE_FLAT,
+ * hd_splash_math.h) and its height is still over HD_MARBLE_LEAN of its
+ * length - 60 degrees off the level. The fifteen levels' faces of the
+ * mirror's pages that face up (RoomProbe -marblesteep) lean at most 56.3
+ * degrees as floors (ramps, the corridors going up, a pool's surround)
+ * and 85 and more as walls, and none between: the line lies in that gap.
+ * `nyVertex` is the corners' own normals' height (up being negative), the
+ * side as the flat face takes it. */
+#define HD_MARBLE_LEAN	0.5f
+
+inline bool HDMarbleLeanFace(const float* a, const float* b, const float* c,
+	float nyVertex, float flat)
+{
+	const double ux = (double)b[0] - a[0], uy = (double)b[1] - a[1];
+	const double uz = (double)b[2] - a[2];
+	const double vx = (double)c[0] - a[0], vy = (double)c[1] - a[1];
+	const double vz = (double)c[2] - a[2];
+	const double nx = uy * vz - uz * vy;
+	const double ny = uz * vx - ux * vz;
+	const double nz = ux * vy - uy * vx;
+	const double len = sqrt(nx * nx + ny * ny + nz * nz);
+
+	return len > 1e-6 && nyVertex < 0.0f && fabs(ny) > HD_MARBLE_LEAN * len &&
+		fabs(ny) <= flat * len;
+}
+
 /* The scissor of one plane's mirrored draw, in the target's pixels: the
  * plane's faces cover the frame's pixels x0..x1, y0..y1 (whole, the last
  * included) of a viewport at (vx, vy), `vw` wide; the target holds the
@@ -412,3 +439,27 @@ inline bool HDMarbleBoxOut(const float* h, const float* clip,
 		lo[1] > (float)rect[3] + 1.0f);
 }
 
+/* Whether a sloped face lies in a sloped plane found already: each of its
+ * corners `p` (nine floats, the group's own x and z, the world's y; the
+ * group's origin ox, oz added) within `within` units of the plane `t`
+ * (HDMarbleTiltPlane's four floats) - the rule a level face keeps to its
+ * floor height (marble_build: corners within the mirror clip's offset).
+ * A slope tessellated into faces of slightly different lean (a ramp's
+ * rounded corner, a pool's sloped surround) so shares one plane where its
+ * faces lie within the offset of it, where the normals' rule
+ * (HDMarbleTiltSame) made a plane of nearly every face. */
+inline bool HDMarbleTiltFits(const float* t, const float* p, float ox,
+	float oz, float within)
+{
+	for (int c = 0; c < 3; c++)
+	{
+		const double d = (double)t[0] * ((double)p[c * 3] + ox) +
+			(double)t[1] * p[c * 3 + 1] + (double)t[2] * ((double)p[c * 3 + 2] +
+			oz) - t[3];
+
+		if (d > within || d < -within)
+			return false;
+	}
+
+	return true;
+}

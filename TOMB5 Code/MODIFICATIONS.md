@@ -18538,10 +18538,10 @@ the sheet 0). The camera of each picture is rebuilt from its eye (`LookAt`,
 
 | eye | peak | pixels over half | its fall at the rim, a pixel | half at r | over the open water's median |
 |---|---|---|---|---|---|
-| W1 | 151.0 / 143.9 | 502 / 34,592 | 21.5 / 2.4 | 12 / 92 | 2.04 / 1.53 |
-| W2 | 152.3 / 143.9 | 559 / 34,972 | 27.3 / 3.1 | 7 / 86 | 2.72 / 1.93 |
+| W1 | 151.0 / 143.9 | 502 / 34,592 | 21.5 / 2.4 | 12 / 92 | 2.04 / 1.51 |
+| W2 | 152.3 / 143.9 | 559 / 34,972 | 27.3 / 3.1 | 7 / 86 | 2.72 / 1.86 |
 | U65 | 148.1 / 139.9 | 474 / 26,634 | 23.2 / 2.5 | 11 / 84 | 2.11 / 1.57 |
-| K1211 | 160.6 / 151.0 | 824 / 20,254 | 25.7 / 2.9 | 8 / 97 | 3.74 / 3.04 |
+| K1211 | 160.6 / 151.0 | 824 / 20,254 | 25.7 / 2.9 | 8 / 97 | 3.74 / 2.57 |
 
 (before / after; luma of 255; the profile the ring means round the peak, r in pixels;
 the last column the whole picture's luma smoothed over 6 pixels at the disc over the
@@ -18603,30 +18603,36 @@ build, `water_look_constants`, `HDRenderWaterLook`, `HDRenderWaterSeaKnobs`;
   regularity and straightness both lie by the photographs' (turns of 0.6 left 0.51, 1.2
   took the regularity to 237, under the photographs').
 - *The extinction up to the sheet's plane* (`HDWaterUnderSeaDepth`): where the sheet is
-  found, a water room no sheet of the level lies over counts its way up to the sheet's
-  plane, not to the basin; a room under a sheet of its own (room 2, under the basin)
-  keeps its own surface. The sheet's own light keeps the art's way from the basin
-  (`HDWaterSheetDepth`, at least 1: over the basin its whole light), so the sheet is drawn
-  from every eye under its plane, over the basin as well. The rule from the data: the
-  sea's surface is the one plane over the whole dive; the basin stands for it only where
-  a sheet lies.
+  found, an eye in a water room no sheet of the level lies over and under the basin
+  counts its way up to the sheet's plane, not to the basin; a room under a sheet of its
+  own (room 2, under the basin) keeps its own surface, and an eye over the basin keeps
+  the whole way, so the surface fades out over the playable area as *The fade* of Round
+  5 keeps it. The sheet's own light keeps the art's way from the basin
+  (`HDWaterSheetDepth`, at least 1). The rule from the data: the sea's surface is the one
+  plane over the whole dive; the basin stands for it only where a sheet lies, and over
+  the basin the eye is out of the dive.
 - *The sheet's reach* (`HDWaterSheetBox`, `HDWaterSheetMargin`): the art's box and the
   level's water rooms' box together, grown by the plane's height over the lowest water
-  floor (23,469 units: from any eye in the water the edge lies 45 degrees or more from
-  straight up) and the way over which the fog leaves a twentieth (ln 20 over the
-  extinction's sigma_s times the fog's share: 26,988), x -57,065 to 105,593, z -24,857 to
-  149,784; the edge comes in over 4,096 units (`HD_LOOK_SEA_RAGGED`), moved by up to that
-  way by a value noise of the cells' hash (`CellNoise`): ragged.
+  floor (19,200 as the build reads it from the squares, printed on the `-underlook` line
+  after `reach`: 23,469 units, so that from any eye in the water the edge lies 45 degrees
+  or more from straight up) and the way over which the fog leaves a twentieth (ln 20
+  over the extinction's sigma_s times the fog's share: 215,693), x -245,770 to 294,298,
+  z -213,562 to 338,489 (the line's own numbers); the edge comes in over 4,096 units
+  (`HD_LOOK_SEA_RAGGED`), moved by up to that way by a value noise of the cells' hash
+  (`CellNoise`): ragged.
 - *The fog along the sheet* (`HDWaterSheetFog`): the way of the eye ray past the eye's
   own height under the plane counts to the sheet's way through the water at
   `HD_LOOK_SEA_FOG` of itself, so the sheet fades into the water's colour from 45 degrees
-  from straight up to the horizon. 0.25 is the largest halving step from 1 that keeps
-  round 9's eleven eyes in their band (1 left five under it, down to 0.50; 0.5 two).
+  from straight up to the horizon. 1/32 is the largest halving step from 1 that keeps
+  every eye under the sheet in its band, the 24 of the dive and the flight (1/4 left four
+  under it - G2 0.14, G3 0.17, K190 0.44, K1211 0.55, where the fog flattens the far
+  sheet along the horizon; 1/8 four; 1/16 one, G3 at 0.52).
 
 RoomProbe's `-underlookknobs` takes the twenty-five numbers and the -underlook line ends
-in `power`, `break` and `edge`; the art's weight and the plane are set before the probe's
-one bracket (`HDRenderWaterSeaKnobs`), as the game's rooms take them a bracket after the
-look; `-sea art` counts to the stand-in.
+in `power`, `break`, `edge` and `reach` (the water rooms' lowest floor and the box the
+last sheet was drawn over, `HDRenderWaterSheetReach`); the art's weight and the plane are
+set before the probe's one bracket (`HDRenderWaterSeaKnobs`), as the game's rooms take
+them a bracket after the look; `-sea art` counts to the stand-in.
 
 **Measured.** After, the same eyes and tools (the tool of the last commit against
 `d0bf4f7b`'s):
@@ -18634,53 +18640,65 @@ look; `-sea art` counts to the stand-in.
 The disc: the table above; its light now covers 20,000 to 35,000 pixels over half its
 peak (500 to 820 before), its peak 140 to 151 (148 to 161), its fall at the rim 2.4 to
 3.1 a pixel (21.5 to 27.3; the photograph 2.7), the picture's peak over the open water's
-median 1.53 to 1.93 at the three eyes facing it (2.04 to 2.72). The waves: regularity
-266 and straightness 0.42 over the fifteen eyes (162 to 412, 0.36 to 0.46); the luma's
-step between neighbouring pixels in two cells of the 1,600-unit grid 0.86 to 1.01 times
-the step between neighbours in one cell (0.99 to 1.15 before, with no cells): no seam.
-The band (round 9's form, the art's region of before):
+median 1.51 to 1.86 at the three eyes facing it (2.04 to 2.72). The waves: regularity
+242 and straightness 0.43 over the fifteen eyes (133 to 379, 0.38 to 0.60), 737 and 0.81
+before by the same measure (434 to 1,117, 0.69 to 0.90); the luma's step between
+neighbouring pixels in two cells of the 1,600-unit grid 0.94 to 1.15 times the step
+between neighbours in one cell (0.99 to 1.15 before, with no cells): no seam. The band
+(round 9's form, the art's region of before), every eye under the sheet:
 
 | eye | luma | spread (band) | of before | carry |
 |---|---|---|---|---|
-| U85 | 71.1 / 87.6 | 0.072 / 0.048 (0.044-0.096) | 0.66 | 1.87 / 2.82 |
-| U45 | 54.1 / 55.1 | 0.063 / 0.045 (0.038-0.083) | 0.72 | 1.77 / 1.95 |
-| U65 | 71.9 / 82.3 | 0.038 / 0.031 (0.023-0.050) | 0.82 | 2.38 / 3.51 |
-| U26 | 60.0 / 57.4 | 0.061 / 0.038 (0.036-0.080) | 0.62 | 1.69 / 1.78 |
-| E216 | 96.0 / 98.8 | 0.042 / 0.033 (0.025-0.055) | 0.80 | 1.51 / 1.53 |
-| T23995 | 74.3 / 73.5 | 0.049 / 0.036 (0.029-0.064) | 0.74 | 2.95 / 3.16 |
-| T24484 | 56.2 / 54.3 | 0.061 / 0.039 (0.036-0.080) | 0.65 | 1.86 / 1.94 |
-| L3 | 95.2 / 96.1 | 0.042 / 0.035 (0.025-0.056) | 0.83 | 3.01 / 3.24 |
-| G628 | 73.1 / 82.4 | 0.087 / 0.055 (0.052-0.116) | 0.63 | 1.86 / 2.01 |
-| G630 | 74.8 / 84.7 | 0.085 / 0.053 (0.051-0.113) | 0.63 | 2.10 / 2.12 |
-| G631 | 76.1 / 86.1 | 0.082 / 0.051 (0.049-0.108) | 0.63 | 1.98 / 2.08 |
-| W1 | 78.8 / 107.8 | 0.058 / 0.042 (0.035-0.077) | 0.73 | 2.27 / 4.57 |
-| W2 | 63.9 / 95.8 | 0.079 / 0.049 (0.047-0.104) | 0.62 | 1.84 / 4.51 |
-| N1 | 64.3 / 74.9 | 0.081 / 0.050 (0.049-0.107) | 0.62 | 1.65 / 1.80 |
-| E1 | 53.2 / 53.8 | 0.067 / 0.050 (0.040-0.089) | 0.74 | 1.43 / 1.51 |
-| K450 | 79.0 / 77.7 | 0.051 / 0.036 (0.031-0.067) | 0.71 | 2.06 / 2.07 |
-| K611 | 63.0 / 62.1 | 0.095 / 0.071 (0.057-0.126) | 0.75 | 1.65 / 1.76 |
+| U85 | 71.1 / 87.8 | 0.072 / 0.048 (0.044-0.096) | 0.66 | 1.87 / 2.76 |
+| U45 | 54.1 / 55.7 | 0.063 / 0.046 (0.038-0.083) | 0.73 | 1.77 / 1.87 |
+| U65 | 71.9 / 82.6 | 0.038 / 0.032 (0.023-0.050) | 0.83 | 2.38 / 3.41 |
+| U26 | 60.0 / 59.7 | 0.061 / 0.045 (0.036-0.080) | 0.75 | 1.69 / 1.71 |
+| E216 | 96.0 / 99.1 | 0.042 / 0.033 (0.025-0.055) | 0.79 | 1.51 / 1.53 |
+| T23995 | 74.3 / 74.5 | 0.049 / 0.038 (0.029-0.064) | 0.79 | 2.95 / 3.02 |
+| T24484 | 56.2 / 56.4 | 0.061 / 0.045 (0.036-0.080) | 0.75 | 1.86 / 1.88 |
+| L3 | 95.2 / 97.1 | 0.042 / 0.036 (0.025-0.056) | 0.86 | 3.01 / 3.10 |
+| G628 | 73.1 / 84.8 | 0.087 / 0.057 (0.052-0.116) | 0.65 | 1.86 / 1.85 |
+| G630 | 74.8 / 87.1 | 0.085 / 0.056 (0.051-0.113) | 0.66 | 2.10 / 1.95 |
+| G631 | 76.1 / 88.4 | 0.082 / 0.054 (0.049-0.108) | 0.66 | 1.98 / 1.92 |
+| W1 | 78.8 / 108.7 | 0.058 / 0.043 (0.035-0.077) | 0.75 | 2.27 / 4.30 |
+| W2 | 63.9 / 97.1 | 0.079 / 0.051 (0.047-0.104) | 0.64 | 1.84 / 4.13 |
+| N1 | 64.3 / 75.3 | 0.081 / 0.050 (0.049-0.107) | 0.62 | 1.65 / 1.80 |
+| E1 | 53.2 / 54.5 | 0.067 / 0.049 (0.040-0.089) | 0.73 | 1.43 / 1.50 |
+| K185 | 42.0 / 41.6 | 0.042 / 0.038 (0.025-0.056) | 0.89 | 1.03 / 1.03 |
+| K190 | 37.7 / 37.3 | 0.034 / 0.025 (0.020-0.045) | 0.74 | 1.03 / 1.04 |
+| K330 | 53.3 / 53.0 | 0.064 / 0.048 (0.038-0.085) | 0.76 | 1.53 / 1.53 |
+| K450 | 79.0 / 78.9 | 0.051 / 0.038 (0.031-0.067) | 0.75 | 2.06 / 2.06 |
+| K580 | 120.0 / 120.1 | 0.064 / 0.061 (0.038-0.084) | 0.96 | 1.44 / 1.45 |
+| K611 | 63.0 / 63.2 | 0.095 / 0.072 (0.057-0.126) | 0.76 | 1.65 / 1.67 |
+| K1211 | 49.0 / 70.4 | 0.137 / 0.086 (0.082-0.181) | 0.63 | 1.89 / 3.67 |
+| G2 | 38.4 / 47.6 | 0.108 / 0.095 (0.065-0.143) | 0.88 | 1.66 / 1.20 |
+| G3 | 43.8 / 50.2 | 0.146 / 0.093 (0.088-0.194) | 0.63 | 1.54 / 1.17 |
 
-(before / after.) Every eye of round 9 and every new eye where the art lay inside its
-band; the mean luma at most 107.8, under the brighter photograph's 116; the carry 1.5 to
-4.6 (the photographs' 7.7). Outside the band, by the rules: the eyes over the basin
-(G632, G634, G641, K671, K691), where there was no sheet and is now (spread 3 to 5 times
-before); G2 and G3, level under the basin, whose art lay along the horizon and is now
-the fog's (0.14 and 0.17); K1211 (room 70, 654 under the basin) at 0.55. The disc's
-broad glow lifts the mean luma at the eyes that face the light (W1 +29, W2 +32, U85
-+17); the shafts and the underside keep round 9's strengths, the picture staying under
-the photograph's mean.
+(before / after.) All 24 inside their band, 0.62 to 0.96 of before; the mean luma at
+most 108.7, under the brighter photograph's 116; the carry 1.0 to 4.3 (the photographs'
+7.7). The five eyes over the basin (G632, G634, G641, K671, K691) draw the pictures of
+before byte for byte (1.00). Each of the four eyes the fog's share of 1/4 put under the
+band was taken apart by setting one knob back at a time: with the fog 0 all four are
+inside it (G2 1.20, G3 0.78, K190 0.84, K1211 0.65); with the waves unbroken, the disc of
+before or the art's box alone they stay under it. The fog was the cause, the far sheet
+flattened along the horizon, and its share is chosen above. The disc's broad glow lifts
+the mean luma at the eyes that face the light (W1 +30, W2 +33, U85 +17); the shafts and
+the underside keep round 9's strengths, the picture staying under the photograph's mean.
 
-The edges (as in the cause, before / after): E1 8.1 / 4.5, N1 15.6 / 9.2, K450 12.4 /
-7.7, G628 18.8 / 5.3, G631 19.3 / 5.8, K611 12.8 / 5.1, E216 15.0 / 11.7, U45 8.6 /
-5.4, T24484 8.7 / 4.5, K1211 17.1 / 2.6, G2 17.9 / 1.1 - what is left is the fog's own
-fall across 6,144 units, no step: the steepest 512 units at most 2.1 (3.3 before). At
-the new box's edge (within 4,096 units of it, open pixels) the sheet alone adds 0.00 of
-luma at every one of the 12 eyes that see it (2,261 to 11,075 pixels each). The room over
-the playable area, G2 (before / after): the rooms over the horizon luma 21.1 / 29.6, hue
-188 / 199, under it 28.7 / 28.7, hue 200 / 200 - the line 7.7 / 0.8; with the plane's
-knob at 0 the line is back (21.1, hue 188), with 1 gone: the plane is the cause. The
-sheet alone over the open water just under and over the basin: G631 14.6, G632 14.7,
-G634 14.8, G641 15.0, K651 15.1 of luma - continuous; before, 0 over it.
+The edges (as in the cause, before / after): E1 8.1 / 3.9, N1 15.6 / 8.0, K450 12.4 /
+7.7, G628 18.8 / 2.3, G631 19.3 / 2.9, K611 12.8 / 3.3, E216 15.0 / 10.0, U45 8.6 /
+4.5, T24484 8.7 / 5.3, K1211 17.1 / 0.7, G2 17.9 / 1.3 - what is left is the fog's own
+fall across 6,144 units, no step: the steepest 512 units at most 2.5 (3.3 before). At
+the new box's edge (within 4,096 units of it, open pixels) the sheet alone adds under 1
+of luma at each of the 4 eyes that see it (G2 at most 0.81, mean 0.14; G3, K1211 and
+K1451 at most 0.55; 42 to 730 pixels each). The room over the playable area, G2 (before
+/ after): the rooms over the horizon luma 21.1 / 29.6, hue 188 / 199, under it 28.7 /
+28.7, hue 200 / 200 - the line 7.7 / 0.8; with the plane's knob at 0 the line is back
+(21.1, hue 188), with 1 gone: the plane is the cause. Over the basin the fade stays: the
+`-undertick` walk over his flight (`-undertick` right after RoomProbe's install path)
+gives the surface's light 43.45 at tick 631, 3 units under the basin (46.20 before), and
+11.58 at 632 over it (11.58), 13.35 at 635 and 14.71 at 641 as before; every tick over
+the basin prints the line of before.
 
 *The two parked notes* (round 1's *Left* and round 3's). The look's shafts end at every
 opaque edge: what the look adds on the open water's pixels within 3 of a room's pixel
@@ -18710,7 +18728,10 @@ are this round's. The waves are broken per cell of the shafts' own grid by the c
 own hash; no curve decides a place. The sheet's box comes from the data (the art, the
 water rooms, the lowest floor, the extinction); the fog's start at 45 degrees is the
 margin's own angle, its share the band's. The extinction is counted up to the sheet's
-plane only where the level has the sheet; RICH3 and every other level keep their depth.
+plane only where the level has the sheet and only from an eye under the stand-in's
+surface: over it the eye is out of the dive, and *The fade* of Round 5 ("That stays as it
+is") holds - the pictures over the basin are byte for byte the ones before this round.
+RICH3 and every other level keep their depth.
 
 **Checked.** With the tools of the last commit against `d0bf4f7b`'s: the classic path 6 of
 6; the fifteen cameras 15 of 15 with `hd_water` 0 and 1, marble floors off and on; the six
@@ -18719,22 +18740,29 @@ his RICH2 eyes with `hd_water` 0, 0 with the marble and 1, 48 of 48 each; RICH3'
 6 of 6 with each key; the other levels' under views (ANDREA2, JOBY2) and JOBY4's air room
 7 7 of 7 with each key; round 9's eight JOBY4 eyes and six edge eyes with `hd_water` 0 14
 of 14; the `WATERLOG` sweep 268 of 268 lines identical (`under_deep=1` in JOBY4 alone);
-the `-undertick` walk over his flight's 66 ticks, `room=`, `rooms=`, `listed=` and
-`carried=` 66 of 66 identical (the pictures over the basin change: the sheet is there).
-`-sea art` draws round 9's before picture byte for byte at the eight dive eyes. ModernTest
-15,853 checks with 24 new in `water_sea`, MenuTest 44,754, InterpTest 729, LipsTest 299
+the `-undertick` walk over his flight's 66 ticks (`-undertick` placed right after the
+install path, so that the walk runs: 0 lines without a walk), `room=`, `rooms=`,
+`listed=` and `carried=` 66 of 66 identical, and 30 whole lines with them, every tick
+over the basin among them; the pictures over the basin (G632, G634, G641, K651, K671,
+K691, K1911) byte for byte in the five sets. `-sea art` draws round 9's before picture
+byte for byte at the eight dive eyes. ModernTest 15,856 checks with 27 new in
+`water_sea`, MenuTest 44,754, InterpTest 729, LipsTest 299
 with round 163's `.OBJ` folder and 272 without (`cutseq.bin` given by hand), 0 failed; the
 engine and all nine tools build.
 
 **Left.** Not seen in the game yet; the numbers are the probe's, which draws no Lara and
 no objects, so his two pictures with the submarine's hull are matched by content, not
-placed. The fog's start (45 degrees) and share are tuned on these 28 eyes. The shafts
-still end at opaque edges and the pole's disc stays (above). The art still costs its
-additive draw at weight 0.
+placed. The fog's start (45 degrees) and share are tuned on the 24 eyes under the
+sheet. Over the basin, where only the fly cheat takes the camera, the surface fades out
+as before; if the room over the playable area is meant as seen from inside it over the
+basin, that fade is what it shows, and the plane's rule would have to reach over the
+basin. The shafts still end at opaque edges and the pole's disc stays (above). The art
+still costs its additive draw at weight 0.
 
 **Commits.** `82795cfc` (the disc), `f9c08425` (the waves), `4ed8fd0f` (the reach, the
-fog and the plane), `3ab086da` (ModernTest), `64bb2216` (the knobs' comment) and the
-records' commit.
+fog and the plane), `3ab086da` (ModernTest), `64bb2216` (the knobs' comment), the
+records' commit, and the prover's findings: the fade over the basin kept, the fog's share
+over every eye and the sheet's reach printed (the code's commit) and these records.
 
 ### The marble floors' mirror (#205)
 2026-10-16

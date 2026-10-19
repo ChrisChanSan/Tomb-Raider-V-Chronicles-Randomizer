@@ -676,7 +676,7 @@ nearer end. The seven tabs:
 |---|---|---|
 | Audio | Music volume, SFX volume, Sound quality, Language | 80 / 90 / Medium / automatic |
 | Controls | *Key bindings*, *View*, *Modes*, Control type, Action, Control layout, Camera speed, Dead zone, Mouse sensitivity, Invert mouse, Targeting, Ammotype hotkeys | see below |
-| Graphics | *Display*, HD textures, Body physics, HD water, Fog, Distance fog, Shimmer, Mono screen style, Shadow mode, PSX skies, Static lighting, UW Effect, Look transparency, Footprints — fourteen rows on two pages of seven, turned with the arrows at the bottom | see **tomb5 options**; Body physics off; HD water on; Shadow mode *Projected* (offered only while HD is on, see **The projected shadow**) |
+| Graphics | *Display*, HD textures, Body physics, HD water, Reflections, Fog, Distance fog, Shimmer, Mono screen style, Shadow mode, PSX skies, Static lighting, UW Effect, Look transparency, Footprints — fifteen rows on two pages, eight and seven, turned with the arrows at the bottom | see **tomb5 options**; Body physics off; HD water on; Reflections on; Shadow mode *Projected* (offered only while HD is on, see **The projected shadow**) |
 | HUD | Bar mode, Bar positions, Enemy bars, Ammo counter, Gameover menu, Loadbar style, Loading text | see **tomb5 options** |
 | tomb5 options | Cutscene skipper, Cheats, Level Select, Fix climb up delay, Flexible crawling, Crawl Tilting | see below |
 | Special Features | the bonus gallery (title screen only) | all locked |
@@ -711,8 +711,8 @@ delay* (on — removes the pause before Lara pulls herself up), *Flexible
 crawling* (on), *Crawl Tilting* (on).
 
 The other settings the original never had — *Footprints*, *Shadow mode*,
-*Fog*, *HD textures*, *Body physics*, *HD water*, *Bar mode*, *Bar positions*,
-*Enemy bars*, *Ammo counter*, *Gameover menu*, *PSX skies*,
+*Fog*, *HD textures*, *Body physics*, *HD water*, *Reflections*, *Bar mode*,
+*Bar positions*, *Enemy bars*, *Ammo counter*, *Gameover menu*, *PSX skies*,
 *Loadbar style*, *Mono screen style*, *Loading text*, *Shimmer*, *Distance fog*,
 *Ammotype hotkeys*, *Look transparency*, *Static lighting*, *UW Effect* — sit on
 the tab their subject belongs to. *Graphics* holds the picture rows (plus
@@ -1648,11 +1648,13 @@ see *Lara in HD* below for which of her stays classic and why.
   corridors, its lobby with the green tiles and the gallery, the pool's
   surround, the washrooms - reflects the room standing over it: the walls,
   the pipes, the statics, Lara and the items, drawn a second time through
-  the floor. Which floors: a list of 37 texture pages built into the engine
-  (the *mirror column* of the gloss's page list), and only their flat,
-  upward faces, so the mirror ends where the floor's own art ends - along
+  the floor. Which floors: a list of 40 texture pages built into the engine
+  (the *mirror column* of the gloss's page list; ANDREA1's church mosaic
+  among them), and only their upward faces, flat or leaning up to 60
+  degrees, so the mirror ends where the floor's own art ends - along
   Core's diagonal edges too - and never in a water room; a slope (a ramp
-  of marble) mirrors in its own tilted plane, and a face lying wholly under
+  of marble, ANDREA1's corridors going up, a pool's sloped surround)
+  mirrors in its own tilted plane, and a face lying wholly under
   a higher floor of its room is no mirror (a floor running out from under
   a step still mirrors where it shows). The see-through
   floors of RICH2's corridor and lobby and of the title, under which the
@@ -1667,11 +1669,20 @@ see *Lara in HD* below for which of her stays classic and why.
   until the graphics device is made again). The
   reflection is weak looking straight down and grows the flatter you look
   (polished stone reflects 4 % face on), with no darkening. A frame
-  mirrors at most `hd_marble_planes` floor heights, the ones that show the
-  most of themselves - a floor hidden behind a wall takes no place - and a
-  height that takes a place or gives one up, climbing stairs, fades in or
-  out over an eighth of a second at any frame rate instead of at once;
-  another height in view stays a plain floor in that frame. The rooms
+  mirrors every floor height and slope that shows, each at its own height
+  - every tread of a stair, a raised floor beside a lower one - up to a
+  ceiling, `hd_marble_ceiling`, far over the most a frame shows, and
+  each showing at least a thousandth of the screen: a sliver under that
+  (a floor's edge beside a door, a step's bevel across a hall) stays
+  plain, and a height that falls under it leaves at once, without a
+  fade. A floor hidden behind a wall costs nothing, a height coming into
+  view fades in over an eighth of a second at any frame rate, and none
+  fades out while it shows more than that thousandth. Each mirror draws
+  only the rooms whose boxes can show in it,
+  within a rectangle round its floor. *Options -> Graphics ->
+  Reflections* switches the mirror off at once and costs nothing from the
+  next frame; the see-through floors stay solid until the next level
+  load, which builds them as without the mirror. The rooms
   over the rooms in view and over the rooms beside them - ANDREA1's church
   and its vault, RICH2's shaft - are in the mirror also where you look
   down and see none of them; what the mirror still shows as a flat sheen
@@ -2624,8 +2635,8 @@ values, in the same key as every other setting
 | `hd_reflect` | DWORD | The **gloss** of metal, marble, ice and glass in an HD room, `1` by default: a highlight from the level's lamps where they hang - worked out once per level for every spot, so it stays by its lamp and runs on across doorways - and a reflection of the surface's own light that grows the flatter you look at it, on floors, walls, crates and ducts alike, never more than two and a half times the surface's own lit colour and never to white. Not a mirror: nothing is drawn twice. Which surfaces shine, in this order: the gloss the Remaster's artists gave a surface themselves (its own strength); your file `hd_gloss.txt`; a list of texture pages built into the engine; and the pages that lie on floors whose footsteps sound of metal, marble or ice - in every room that wears them. RICH2's lobby pages and every see-through floor stay exactly as they were. **`hd_gloss.txt`** lies beside the executable, where `SCRIPT.DAT` and `Balance.txt` are, and is read at every level load, so a change shows at the next one. One texture page per line: the page number, a class (`metal`, `marble`, `ice`, `glass` or `custom`) and optionally strength (above 0, up to 1), exponent (1 to 255, the tighter the highlight the higher) and F0 (0 to 1, how much it reflects face on), where `-` or leaving a number out takes the class's own; a `custom` page names all three. `-<page>` takes a page out (a surface the artists gave a gloss keeps it), `#` starts a comment, and a line that cannot be read is counted and skipped; a file saved as UTF-8 with or without a byte order mark reads the same - for example `140 metal 0.6 32` or `-3149 # the girders stay matt`. The page numbers of a room are in the `GLOSSLOG` lines of a `-log` run. Like `hd_motion` it has no options row and is a way back rather than a taste; set it to `0` and the picture is the one without any gloss. Does nothing while `hd_enable` is off. |
 | `hd_softbody` | DWORD | The options row *Body physics* writes this. The **soft motion of the chest** of the HD Lara (see *Lara in HD*): `0` off, the default, `1` subtle, `2` normal, `3` strong; any other number reads as off. Never on a young-Lara level, never for a Lara drawn classic, and nothing at all while `hd_enable` is off. |
 | `hd_water` | DWORD | The options row *HD water* writes this. The **water sheets** (see *Water* above), `1` by default: every water square the sheet can cover - over an underwater room, in a room drawn HD - gets this engine's own water surface with a caustic on the floor under it (none in the night levels, see *Water* above), and the level's own water face there is not drawn, nor the Remaster's own water art over it (`art keep` in `hd_water.txt` draws that art again); a water plane with no underwater room below keeps its faces. `0` builds no sheet, restores every water face of the level as without them and switches the caustic under them off; what stays is only the caustic's shape and its fade with distance on the Remaster's own marked water art and the wave on that art, which live in the compiled shaders. Taken at the start of a level; nothing at all with `hd_build` at `0`. Tuning per body of water: `hd_water.txt`. In the Deepsea Dive, under the water, `1` also draws the sea's surface seen from below with the sky (see *The sky is the Remaster's sky*); `0` draws none of it and keeps the level's old moving layers of that surface under the Remaster's art; the Remaster's art of the surface itself is drawn at every frame of the dive either way. |
-| `hd_marble` | DWORD | Not on the options page. The **polished floors' mirror** (see *The polished floors mirror the room* above), `1` by default: the floors of the pages in the mirror column reflect the room, its statics, Lara and the items, and the see-through floors of RICH2's corridor and lobby and of the title are drawn solid, the Remaster's copy of the room under them left out of the level. `0` draws every floor as it was, the see-through ones over the Remaster's copy. Read at the game's start; a level already in memory is built again at its next load when it changed. Does nothing while `hd_enable` is off. |
-| `hd_marble_planes` | DWORD | Not on the options page. How many **floor heights** one frame mirrors, `2` by default, `1` to `8`: each costs about the frame's room drawing once more (the cost table in the record of the marble floors), and the ones showing the most of the screen come first; a change of the set fades over an eighth of a second. Read at the game's start. |
+| `hd_marble` | DWORD | The options row *Reflections* writes this. The **polished floors' mirror** (see *The polished floors mirror the room* above), `1` by default: the floors of the pages in the mirror column reflect the room, its statics, Lara and the items, and the see-through floors of RICH2's corridor and lobby and of the title are drawn solid, the Remaster's copy of the room under them left out of the level. `0` draws every floor as it was, the see-through ones over the Remaster's copy. Read at the game's start; the row switches the mirror's draw at once (off costs nothing from the next frame) and the floors' build at the next level load, when a level already in memory is built again. Does nothing while `hd_enable` is off. |
+| `hd_marble_ceiling` | DWORD | Not on the options page. The most **planes** - floor heights and slopes - one frame mirrors, `64` by default, `1` to `64`: a ceiling far over the most a frame shows, so every plane that shows at least a thousandth of the screen is mirrored (a sliver under that stays plain); each costs a mirrored draw of the rooms that can show in it (the cost table in the record of the marble floors). Past the ceiling the planes covering the least are left plain. Read at the game's start. `hd_marble_planes`, the cap of two before it, is no longer read (a registry that holds it keeps it unread). |
 | `hd_springs` | DWORD | Not on the options page. The **springs** the rule places (see *The springs* above): absent - every registry until you add it - the rule as built, one deep pool in two; `0` none of the rule's (ANDREA2's fountain and the springs of `hd_water.txt` stay); `n` one pool in two times n. Read at the start of a level, never written by the game. |
 | `hd_springcrack` | DWORD | Not on the options page. The **cracks** the springs rise out of (see *The springs* above): absent - every registry until you add it - or `1` every spring has its crack; `0` none, the springs as they were before the cracks. Read at the start of a level, never written by the game. |
 | `hd_reach` | DWORD | The **reach** of the portal walk, `1` by default. In an HD level a room whose portal faces the eye and lands on the screen is drawn even where the classic walk, portal window by portal window, would refuse it, because the Remaster's art opens walls the classic level keeps shut: the torn wall beside the stairs in The Base, the tower of Trajan's Markets. Set it to `0` and the walk is the classic one in an HD level too: a room the reach alone would have listed is not drawn, so the art of one room that showed through the walls of another is gone, and an opened wall may show the clear colour behind it instead. It is there to compare the two answers at the same place with the same build, not a taste; the ROOMLIST dump says `reach=0` in the log. Does nothing while `hd_enable` is off. |

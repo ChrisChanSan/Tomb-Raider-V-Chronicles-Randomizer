@@ -20254,6 +20254,398 @@ a device, `-marbletarget`, `-marbleover`, `-marblecracks`, `-marblelag`,
 `-marblemodelpart`, `-marblenomodelwarm`, ModernTest's counts and rooms over), and
 `b6ad2d76` (this record's own commit after it).
 
+**Round 4.** 2026-10-19
+
+**What.** Answered on 2026-10-18, put into English, after his play test of round 3 in
+RICH2 and ANDREA1. On the cap of two planes: they must all go in; the lag he had seen came
+from the full load of his machine while other work ran, and a switch could turn the mirror
+off entirely for a machine that cannot carry it ("Ja, die muessen ganz mit. Nebenbei: das
+Laggen war wegen der Vollbelastung, jetzt ist alles wieder fluessig. Wir koennten einen
+Schalter einfuehren, der das fuer den User komplett ausschaltet, falls der PC es nicht
+schafft."). On the load: anything over a second more would be bad ("alles ueber 1 s waere
+schlecht"). On the fade: he saw it, and asked whether it can be avoided ("Keine
+Moeglichkeit, das Ein-/Ausblenden zu verhindern?"). On ANDREA1's church: the stair meshes
+175/176 carry the marble too, they mirror depending on the height and only at certain
+angles, and the corridors going up have none, probably for the slope and the height ("die
+Treppen-Meshes 175/176 etc. tragen auch die Textur. Die spiegeln, von der Hoehe abhaengig
+und nur in speziellen Winkeln. Die Flure nach oben haben auch keine"). His notes: the
+pattern in the church's middle can mirror too, and slopes have no mirror for the height
+rule - could that be done natively, which would mend every other slope as well ("Das
+Muster in der Kirchenmitte kann auch Spiegelung bekommen. Schraegen haben keine Spiegelung
+wegen unserer Hoehenregel. Keine Moeglichkeit, das nativ zu implementieren?"); in RICH2
+some floors still lack their mirror and have the height problem, and TROne, which does
+something of the kind, may be looked at ("Es fehlen an manchen Boeden noch die
+Spiegelungen. Auch hier haben die Spiegelungen das Hoehenproblem ... Du kannst ja mal bei
+TROne spicken"). Six pictures and a video supplied for this project (not in the
+repository; no log came with them): RICH2's stepped corridor with the band at Lara's feet
+unmirrored, a floor beside the lobby without its mirror, the ramp of the tanks' room with
+a reflection off its height; ANDREA1's stair with the columns and ravens, a corridor going
+up, room 165's mosaic in trview, and a 4.5-second climb of a stair whose treads mirror one
+after another.
+
+**Why: each place, measured before a line changed.** The places were found from the level
+data and round 3's ticks of his log of the same walks: RICH2's stair of room 45 (floors 0,
+-256, -512 and -768; ticks 4855 to 4953, eyes R4892, R4920, R4946), the tanks' room 120
+and its ramp (R5205, R5222), the corridor (R3682), the lobby rooms 2 and 4 (census eyes
+L2, L4); ANDREA1's church (A263, A283), the stairs from room 174 to 165 and room 175's
+five treads at -6144, -6012, -5880, -5760 and -5632 (A690, A717, ticks 669 to 760 for the
+climb) and the corridor going up, room 173 (Aup, an eye built from the room's box looking
+up the slope). What carries the marble at "175/176": rooms - 175 the stair of five treads,
+176 a corridor going up; the statics there wear no page of the column. RoomProbe
+`-marblelist` (every plane of the frame with the pixels its occlusion count saw) at 2,560
+x 1,440 with the base tool (`d0bf4f7b`, the cap of 2):
+
+| eye | planes in view | drawn | px left by the cap | px of slopes refused |
+|---|---|---|---|---|
+| R4920 stair | 3 | 2 | 10,633 | 146,606 |
+| R4892 stair | 4 | 2 | 179,762 | 26,405 |
+| R4946 stair top | 12 | 2 | 905 | 548,602 |
+| R5222 ramp | 11 | 2 | 246,340 | 264,417 |
+| R5205 tanks' room | 4 | 2 | 25,966 | 6,621 |
+| A263 church | 11 | 2 | 20 | 0 |
+| A717 stair | 12 | 2 | 62,634 | 1,729 |
+| A690 stair | 12 | 2 | 27,016 | 0 |
+| Aup corridor up | 1 | 1 | 0 | 407,007 |
+
+(Px left by the cap: the pixels the occlusion counts saw of the planes in view and not
+drawn. Px of slopes refused: what the leaning floors of this round show there, faces the
+base never made a mirror face of, less the base's own slopes.) The causes. *The cap*: two
+planes a frame, chosen by what shows, so a tread, a raised floor or a ramp's part beside
+two larger floors stays plain - the band at Lara's feet in the stepped corridor (R4920,
+-256 left), the treads of room 175 one after another in his climb (A717: 12 planes in
+view, 2 drawn), the floor beside the lobby (L4: 39 in view). *The flat-face rule*
+(`HDMarbleFace`'s `HD_MARBLE_FLAT`, 0.95, 18.2 degrees): a face leaning further is no
+mirror face at all. RoomProbe `-marblesteep` over the fifteen levels: the faces of the
+column's pages facing up lean either up to 56.3 degrees or 85 and more (walls), nothing
+between; 1,825 lean between 18.2 and 60 (RICH2's art copies under its floors counted) -
+ANDREA1 rooms 172, 173 and 176 at 26.4 to 26.6 degrees (his corridors going up, 90 faces),
+RICH1 room 75 (26.6), ANDREA2 room 32 (46.4), ANDREA3 room 31 (35.1), RICHCUT2 rooms 0 and
+193 (19.3 to 36.9), RICH2 rooms 2, 4, 26, 28, 75, 120 and 124 to 127 and six offices at
+-22,132 to -22,249 (18.2 to 56.3: the lobby's step bevels, the ramps of the tanks' room,
+the pool's surround) and RICH3 room 46 (20.8). *The normals' rule for slopes*
+(`HDMarbleTiltSame`, normals within 0.001): a ramp tessellated into faces of slightly
+different lean (the tanks' room's ramp, its rounded corner) made a plane of nearly every
+few faces - eleven planes at R5222 - and the cap drew one of them: the part drawn mirrored
+about its own face's plane, the parts beside it not, the reflection's foot set off along
+the ramp (his "Hoehenversatz"). *The page*: room 165's mosaic wears pages 169, 170 and
+183, which the column did not name (below). *A resident load*: a level kept from the last
+load runs `marble_build` again over the kept groups, and round 3's rising faces had been
+moved out of the level faces at the first run - RoomProbe `-reload` at R5222: 30 sloped
+planes before the reload, 0 after it.
+
+The planes a frame shows, the census eyes (four views, yaw 45 to 315, pitch 25, from 768
+units over the largest floor of every room with a flat mirror face of at least half a
+square, the offline walk's room list; RoomProbe `-marblelist` at 480 x 270):
+
+| level | eyes | in view, most | showing, most | showing, mean |
+|---|---|---|---|---|
+| ANDREA1 | 56 | 13 / 16 | 9 / 9 | 2.00 / 2.27 |
+| ANDREA2 | 120 | 4 / 4 | 2 / 2 | 0.95 / 0.95 |
+| ANDREA3 | 88 | 6 / 6 | 4 / 5 | 1.47 / 1.62 |
+| RICH1 | 40 | 2 / 3 | 2 / 3 | 1.05 / 1.30 |
+| RICH2 | 364 | 18 / 39 | 14 / 21 | 1.38 / 1.66 |
+| RICH3 | 80 | 7 / 6 | 7 / 6 | 1.71 / 1.52 |
+| RICHCUT2 | 8 | 6 / 6 | 4 / 3 | 1.75 / 1.50 |
+| TITLE | 36 | 1 / 1 | 1 / 1 | 1.00 / 1.00 |
+
+(In view: planes with a face in the view; showing: planes whose occlusion count saw a
+pixel; before the base's faces, after this round's, leaning floors included. ANDY1 to
+ANDY3 and JOBY2 to JOBY5 have no mirror face.) One plane's mirrored draw before this
+round, the base at a cap of 1, three runs, medians: 0.19 to 0.63 ms on the GPU at 2,560 x
+1,440 (A690 0.19, A717 0.22, A263 0.29, R4892 0.49, R5205 0.53, R4920 0.54, R5222 0.54,
+R3682 0.55, R4946 0.63; Aup 0.08), 48 to 180 draw calls - every plane the frame's rooms
+once more, whatever the plane covers.
+
+**The rules.** *Every plane* (`hd_marble_math.h`, `HDMarblePlanesCap`,
+`HD_MARBLE_PLANES_MOST` 64): the cap goes; `g_marble_cap` is a ceiling, 64, far over the
+most a frame shows (39 planes in view and 21 showing at the census eyes), and the places
+(`g_marble_slots`, now as many as the ceiling) take every plane that shows. The registry's
+`hd_marble_ceiling` sets it (1 to 64): `hd_marble_planes` stands written as 2 in every
+registry a build with the cap read (`REG_ReadLong` writes its default), so the ceiling has
+a key of its own and that one is no longer read. *No fade while a plane shows*
+(`HDMarbleSlotsStep`): a plane gives its place up only while the empty places cannot take
+every plane waiting outside, which with places for every plane never happens; a plane
+coming into view fades in once over an eighth of a second, a plane that shows nothing
+leaves at once. *The mirror's scissor and the draws left out* (`HDMarbleTargetRect`,
+`HDMarbleBoxOut`, `marble_scissor`, `marble_box_out`, `kMarbleScissorMargin` 2): each
+plane's mirrored draws are cut to its faces' box on the screen, turned as the target is
+and two pixels of the frame wider (the layer reads the target nowhere else, bilinear
+neighbours included), and every noted room or stand range, and every room over, whose box
+lies past a side of the mirrored view, wholly under the clip or beside the scissor is not
+drawn - at the cap of 2 his eyes R3682, R4920 and R5222 are md5-identical to the base with
+this alone, and the draw calls at R5222 fall from 1,340 (8 planes, the base at a cap of 8)
+to 792 (9 planes). *The least a plane shows* (`HDMarbleShown`, `HD_MARBLE_LEAST`, a
+thousandth of the screen; `g_marble_least`): a plane whose occlusion count saw less is
+counted as showing nothing. The bound comes from the worst frames: in RICH2's lobby and
+gallery a view shows up to 21 planes, most of them the lobby's step bevels and the edges
+of floors seen through doors, a few hundred pixels each, and every plane is a whole
+mirrored draw of the rooms - at L4 2,414 draw calls, 5.4 ms on the GPU and 5.2 on the
+processor at 2,560 x 1,440, a frame of 165 Hz (6 ms) gone. Measured at four shares
+(RoomProbe `-marbleleast`, one run each, 2,560 x 1,440):
+
+| eye | share | planes drawn | calls | GPU ms | px changed (> 8 / > 2 of 255) |
+|---|---|---|---|---|---|
+| L4 | 0 | 20 | 2,414 | 5.45 | - |
+| L4 | 0.05 % | 10 | 1,268 | 3.55 | 2,255 / 2,959 |
+| L4 | 0.1 % | 7 | 879 | 1.78 | 3,643 / 6,332 |
+| L4 | 0.25 % | 3 | 377 | 1.16 | 22,878 / 27,990 |
+| L2 | 0.1 % | 7 | 890 | 2.27 | 4,574 / 6,475 |
+| R26 gallery | 0.1 % | 8 | 392 | 0.88 | 6,351 / 8,691 |
+| R5222 | 0.1 % | 9 | 860 | 2.35 | 0 / 2,166 |
+| R4946 | 0.1 % | 3 | 393 | 0.97 | 1,788 / 1,830 |
+
+(Of 3,686,400 pixels. R26: the gallery over the tanks, room 26, 21 planes showing.) A
+thousandth: under 0.2 % of the frame changes, by faint reflections on slivers, and the
+lobby's frame keeps 7 planes in 2 ms. *The leaning floors* (`marble_lean`,
+`hd_marble_math.h`'s `HDMarbleLeanFace`, `HD_MARBLE_LEAN` 0.5): a triangle of the column's
+pages, of the opaque pass or a clear floor and no copy, facing up and leaning past the
+flat face but less than 60 degrees - the line in the census's gap between 56.3 and 85 - is
+taken with the group's fill into a store of its own and laid by `marble_build` into a
+sloped plane as round 3's rising faces are; a sliver whose corners lie within the clip's
+offset of its own height stays out. *A slope's faces share a plane by their corners*
+(`HDMarbleTiltFits`): a face joins a sloped plane found already when each corner lies
+within the clip's offset (`kMarbleClipOver`, 4 units, the rule a level face keeps to its
+floor) of it; RICH2's sloped planes 147 with the normals' rule alone, 55 with this. *The
+store* (`g_marble_store`, `marble_build`): the faces of planes of their own - the leaning
+floors and the rising faces - stay in a store by group and join the level faces at every
+run of `marble_build`, which tests a face's rise against its own height, not its floor's
+joined one: a resident load finds the planes the build found (`-reload` at R5222: 55
+sloped planes and the picture md5-identical before and after the reload). *The church's
+mosaic* (`hd_gloss_pages.h`): pages 169, 170 and 183 in the mirror column, class `A`; see
+below.
+
+**The candidates for slopes and stairs.** (a) Round 3's sloped planes, extended: what
+limited them was the flat-face rule (18.2 degrees, below every ramp steeper than 1 in 3)
+and the normals' rule; both answered above. (b) A mirror a tread: every plane - the cost
+table above, one plane 0.19 to 0.63 ms before this round. (c) A march over the screen: the
+measurement's approach A (the record above, "Approach A"; `WetPS`'s march on a copy of the
+frame) cost 0.04 to 0.19 ms but finds only what the frame shows - 47 of the 1,233 pixels
+of picture 4's light, nothing beyond the view's edge - and its probe path was removed in
+round 1 (`1117ac10`); it lives on only as the wet floor's march, where the water's ripple
+hides its gaps. Not built: a stair's columns and walls stand mostly off the treads' screen
+region seen from behind Lara. (d) TROne's way, read as a reference
+(`host/render/reflection_plane.h`, `floor_plane`, `same_plane`, `selection_score`;
+`host/render/game_renderer.cpp`, `refl_run_inner`; GPLv3, read only, nothing of it in this
+repository): a planar mirror like this project's, at most `hd.reflection_planes` planes a
+frame (6 by default, 8 at most), chosen by area over distance squared with a hold of 1.25
+for last frame's and none under a hundredth of the best, one plane per normal and distance
+within 2 units, floors and ramps up to 60 degrees (a normal's height over half its
+length), the clip 16 units over the floor, the target at half the frame's size with a
+blurred mip. Measured against our data: a cap of 6 leaves 14 of the 20 planes showing at
+L4 - the cap's swaps again wherever more than six show; its ramp line, 60 degrees,
+falls inside our census's gap. Chosen: (a) and (b) with the rules above - every plane, the
+slopes in planes of their own, the cost bounded by what a plane shows - because the
+stair's and the corridors' reflections must stand at their own heights, which only a plane
+per height gives. Taken from TROne: no code, one number - the lean line of 60 degrees.
+Our census leaves a gap from 56.3 to 85 degrees and does not choose a line inside it; 60
+is TROne's line and stands credited to it as THIRD in the origin ledger (entry 389).
+
+**The church's mosaic and the floors.** Room 165's pattern (and its flip twin 177) wears
+three atlas pages, 169 (the mosaic's corner and border beside a relief), 170 (the border
+beside a brick wall) and 183 (the middle beside bricks): in the .TRG an opaque part whose
+material names nothing (the census's class `none`, like every floor), footstep stone (fx
+6, as page 162 around it), no name. The column did not list them: they were not among each
+level's thirty largest floor pages. RoomProbe `-marblesteep -marblepages 169,170,183`: of
+the fifteen levels only rooms 165 and 177 hold faces of them facing up, 162 flat faces at
+-6144 (9,437,184 units squared, the 3 by 3 squares) - the bricks and the relief are walls.
+So the rule is the page table's: three lines of class `A` with the mirror column 1. At
+A263 41,438 pixels of the floor change (960 x 540), at A283 33,708: the altar and the
+columns in the mosaic. His two RICH2 floors: the stepped corridor's band is the cap
+(R4920: plane -256 left, 10,633 pixels; drawn now, the tread's reflection at its own
+height); the floor beside the lobby is the cap and the step bevels (L4: 39 planes in view,
+2 drawn; now 7, the bevels under a thousandth of the screen each).
+
+**Measured.** At his places, 2,560 x 1,440, three runs, medians (ms; before the base at
+its cap of 2, after the head):
+
+| eye | planes drawn before / after | mirror GPU before / after | CPU before / after | rooms' frame |
+|---|---|---|---|---|
+| R4920 | 2 / 4 | 1.07 / 0.76 | 0.61 / 0.95 | 0.53 |
+| R4892 | 2 / 5 | 0.99 / 0.89 | 2.03 / 0.73 | 0.25 |
+| R4946 | 2 / 3 | 1.12 / 0.95 | 1.41 / 1.74 | 0.37 |
+| R5222 | 2 / 9 | 0.93 / 2.79 | 1.32 / 2.27 | 0.52 |
+| R5205 | 2 / 4 | 0.88 / 1.08 | 0.96 / 1.51 | 0.33 |
+| R3682 | 1 / 1 | 0.56 / 0.54 | 1.44 / 1.62 | 0.13 |
+| A263 | 2 / 1 | 0.53 / 0.31 | 0.79 / 0.97 | 0.15 |
+| A283 | 2 / 1 | 0.81 / 0.41 | 1.03 / 0.85 | 0.16 |
+| A717 | 2 / 4 | 0.35 / 0.37 | 0.64 / 0.95 | 0.15 |
+| A690 | 2 / 5 | 0.35 / 0.32 | 1.10 / 1.75 | 0.13 |
+| Aup | 1 / 3 | 0.08 / 0.09 | 0.07 / 0.15 | 0.11 |
+| L4 (worst) | 2 / 7 | 1.28 / 2.03 | 2.28 / 3.00 | 0.42 |
+| L2 | 2 / 7 | 1.25 / 1.95 | 2.45 / 2.85 | 0.36 |
+| R26 gallery | 2 / 8 | 0.54 / 0.73 | 0.89 / 1.20 | 0.10 |
+
+(Rooms' frame: the frame's own room draws, every pass (`-gpu 3 -gpuall`), after. The
+mirror's time is the timestamps round `HDRenderMarbleDraw`; its processor time the call's
+own. Other work ran on the machine through every run - single runs reached 5 to 12 ms
+where the medians stand at 1 to 3 -, so a median is the measure. The scissor is why one
+plane more can cost less than before: a tread's mirror fills its tread.) *The fade*,
+RoomProbe `-marblesim` over the walks' own counts, two frames a tick at 60 a second:
+
+| walk | before (cap 2) | after |
+|---|---|---|
+| RICH2 stair, ticks 4855-4953 | 8 frames of a plane fading out while it shows; 3 planes fading in | 2 planes leaving at under a thousandth of the screen; 5 planes fading in, each once |
+| ANDREA1 climb, ticks 669-760 | 7 fade-out frames while showing; 5 fading in | 4 leaving at under a thousandth; 8 planes fading in, 3 of them twice (gone from view behind a step and back) |
+
+What remains is the fade-in of a plane that comes into view (an eighth of a second, as it
+enters from the view's edge or past a step) and a sliver of under a thousandth of the
+screen dropping out. *The load*: RoomProbe's own lines at the level's load (`read`,
+`build` and the `-marble: warm-up`), room 0 of each level, the mirror on, the base and the
+head run in turn five times, the least of each (milliseconds; other work ran on the
+machine, single runs spread by up to 4 s, so the least is the measure; ANDY1 run seven
+times again after a first five gave the head 1,037 ms more, its fill step alike in both,
+797 and 825 ms):
+
+| level | base | head | more | marble warm-up base / head |
+|---|---|---|---|---|
+| ANDREA1 | 3,349 | 3,134 | -215 | 42.6 / 44.4 |
+| ANDREA2 | 5,605 | 6,357 | 752 | 45.4 / 45.8 |
+| ANDREA3 | 3,509 | 3,468 | -41 | 51.3 / 47.8 |
+| ANDY1 | 2,276 | 2,195 | -81 | - |
+| ANDY2 | 3,569 | 3,319 | -250 | - |
+| ANDY3 | 4,237 | 4,402 | 165 | - |
+| JOBY2 | 3,443 | 3,477 | 34 | - |
+| JOBY3 | 1,859 | 1,762 | -97 | - |
+| JOBY4 | 2,126 | 1,933 | -193 | - |
+| JOBY5 | 2,048 | 2,369 | 321 | - |
+| RICH1 | 2,260 | 2,179 | -81 | 50.4 / 49.9 |
+| RICH2 | 3,177 | 3,327 | 150 | 33.9 / 34.9 |
+| RICH3 | 2,140 | 2,134 | -5 | 42.5 / 44.5 |
+| RICHCUT2 | 1,883 | 1,664 | -219 | 49.0 / 45.5 |
+| TITLE | 4,308 | 4,799 | 491 | 52.6 / 51.2 |
+
+None more than a second. The table does not give the head's own cost: under the other work
+single runs spread by up to 4 s, more than the differences, so they read both ways. On a
+quieter machine the head is slower on every level but one, by tens of milliseconds - the
+leaning floors are looked for in every group, also in levels without a mirror page; the
+fix pass's table below. (The fill step of the build, which takes the leaning floors,
+measured apart under the load at ANDY1, ANDREA2 and RICH2, the least of four: 797 / 825,
+2,780 / 2,628 and 1,759 / 1,481 ms, base / head.)
+
+**Checked.** The nine builds exit 0; ModernTest 15,839 (the round's 10 new checks in
+`marble_every` and the page column's 40 pages), MenuTest 44,773 (the Reflections row's 19
+and the Graphics page's fifteen rows), InterpTest 729, LipsTest 299 with the lip objects
+and 272 without (the cutseq path given by hand; run without it in the worktree, which has
+no game folder, 268 with 9 failed), none failed. Every commit of the round built on its
+own (RoomProbe and ModernTest at each, the engine at the every-plane, slopes and switch
+commits; exported from the index and built apart). Against the base tool (`d0bf4f7b`),
+md5-identical: the classic path 6 of 6 (`-classiconly`); with `hd_marble` 0 the 15 cameras
+at `hd_water` 0 and 1, the six HD views, round 2's 28 eyes and 8 at `hd_water` 0 and 1 and
+his 21 ticks; with `hd_marble` 1 the 15 cameras at `hd_water` 0 and 1 and the six HD
+views. With `hd_marble` 1 and the base at its cap of 2, the pictures that change (960 x
+540; pixels changed, of them by more than 8 of 255): round 2's eyes, alike at `hd_water` 0
+and 1 - A165 184,483 (15,113; the church's mosaic and its treads), A175 78,413 (15,240)
+and A175b 7,081 (7,023; room 175's treads), A174 4,871 (2,180), P125 116,884 (104,797) and
+P126 84,093 (80,440; the pool's sloped surround), p10 132,022 (8,519), L0 26,607 (11,641),
+L120 9,672 (9,639), L120b 12,358 (8,258), L120d 22,667 (16,683), L2 6,053 (3,676), L4
+6,171 (3,781; the lobby's floors past the cap), t33 43,144 (10,466), E189t 3,237 (91),
+k185 150 (150), p5 79 (74) and p6 9 (9; planes past the cap at the corridor's mouth); his
+ticks - ANDREA1 263 154,773 (41,614) and 283 163,533 (33,792; the mosaic), 449 28,010
+(4,681), 497 13,233 (1,632), 677 16,130 (931), 690 3,801 (2,404) and 717 51,407 (1,366;
+the treads of rooms 174 and 175), RICH2 4882 16,630 (10,272), 4912 34,993 (21,349), 4920
+21,562 (5,677), 4942 58,439 (11,066) and 4946 77,260 (11,260; the stair of room 45 and the
+pool's ramps beyond it), 5062 24,066 (2,894), 5072 21,267 (2,989), 5205 5,352 (300) and
+5222 72,119 (14,688; the tanks' room's ramp in one plane), 3812 316 (167); 3402, 3682 and
+4402 md5-identical.
+
+**Decisions.** The ceiling stands at 64 rather than at the number the data gives: the
+census's most is a view's count, not a bound, and the least share - not the ceiling -
+bounds the cost. A thousandth of the screen rather than a twentieth of it: a sliver at the
+ceiling's place in his pictures shows a faint reflection on a few hundred pixels, and at a
+thousandth the worst frame measured keeps its mirror under 2.1 ms of the GPU. The switch:
+the row writes `hd_marble` itself and hands it over at once (`HDRenderMarbleSet` with
+planes 0 keeps the ceiling); a level built with the mirror keeps its build until the next
+load (`HDMarbleBuildAfterSwitch`, `HDRenderMarbleOn` hands the wish to the build at the
+load's key), because its see-through floors were made solid and their copies left out -
+off in the menu stops the mirror's draw from the next frame, the floors stay solid until
+the level loads again. The row stands under HD water: Body physics keeps its place under
+the HD switch it depends on. No translation row: the label is the menu's English
+("Reflections"); the strings' table is another file's.
+
+**Left.** The look in the game: nobody in this round could play it. The pictures' own
+eyes: no log came with them, so the places are rooms and round 3's ticks of the same
+walks, and RoomProbe's camera looks down more steeply than his, where polished stone
+reflects least - the probe's pictures change less than his views would (R4920 5,677 pixels
+by more than 8 of 255). The first load table was taken under other work's load (above; the
+fix pass measured it again). The German column of the label "Reflections" in
+`game/gameflow.cpp`'s table ("Spiegelungen"), outside this round's files. `hd_render.h`'s
+comment of `HDRenderMarbleSet` still says "1 to 8" (outside this round's files); RoomProbe
+declares the round's four probe functions itself. The sky in the mirror stays out (round
+3's Left).
+
+**Commits.** `64e31b7f` (RoomProbe `-marblelist` and `-marblesteep`, the plane rows),
+`1ce21944` (every plane: the ceiling, the places, the scissor and the draws left out, the
+least share, `hd_marble_ceiling`, `-marbleplanes` 64; its message names `-marbleleast` and
+`-marbleslopes`, which parse from `2e077352`), `0d43f57f` (the leaning floors, the
+corners' rule, the store), `e6d4716e` (the church's mosaic), `ff20b660` (the Reflections
+row), `2e077352` (ModernTest's `marble_every`, `-marbletread`, the two switches' parsing),
+and this record's own commit after it.
+
+**Round 4, its fix pass.** 2026-10-19
+
+**What.** The review of Round 4 found comments that told the code's history and named
+rooms and levels, a start value written twice, and four places where this record or the
+user's documents said less or other than the measurements. Changed: the comment over the
+`hd_marble` read in `tomb5.cpp` says why the ceiling has a key of its own (REG_ReadLong
+writes its default where a key is absent, so existing registries hold `hd_marble_planes`
+as 2); `HDMarbleTiltFits`' and `HD_MARBLE_LEAST`'s comments in `hd_marble_math.h` and
+`marble_lean`'s in `hd_render.cpp` say the rule without the history and without rooms or
+levels (the measured views stay here); `g_marble_cap` and `g_marble_least` start from two
+constants beside them, held equal to `HD_MARBLE_PLANES_MOST` and `HD_MARBLE_LEAST` by a
+`static_assert` where `hd_marble_math.h` is included (the header comes later in the file,
+so the globals cannot name it), and a change of one without the other no longer builds.
+The record's TROne sentence above now says that the line of 60 degrees is TROne's number,
+as the origin ledger's entry 389 has it; the load sentence above says what the first table
+can and cannot show; the Left names RoomProbe's four probe functions. The engine manual
+and README.md now name the least share: a plane showing less than a thousandth of the
+screen stays plain and leaves at once, without a fade.
+
+**Why.** The comment rule (what, why, what for; no history; rules from the data, so no
+room or level in engine code), and records that match the measurements.
+
+**Measured.** The load again, base (`d0bf4f7b`'s RoomProbe) and the fix pass's RoomProbe
+in turn, three runs each, the least (ms; `read` + `build` + the marble warm-up, room 0 of
+each level, the mirror on; other work still ran on the machine, less than before):
+
+| level | base | fix pass | more |
+|---|---|---|---|
+| ANDREA1 | 1,206 | 1,241 | 36 |
+| ANDREA2 | 2,392 | 2,508 | 116 |
+| ANDREA3 | 1,454 | 1,489 | 35 |
+| ANDY1 | 1,177 | 1,205 | 28 |
+| ANDY2 | 1,158 | 1,171 | 13 |
+| ANDY3 | 1,305 | 1,339 | 34 |
+| JOBY2 | 1,481 | 1,534 | 53 |
+| JOBY3 | 748 | 776 | 28 |
+| JOBY4 | 773 | 796 | 23 |
+| JOBY5 | 956 | 980 | 24 |
+| RICH1 | 956 | 967 | 11 |
+| RICH2 | 2,038 | 2,075 | 38 |
+| RICH3 | 1,063 | 1,015 | -47 |
+| RICHCUT2 | 816 | 851 | 35 |
+| TITLE | 1,944 | 2,002 | 58 |
+
+None more than a second; the head costs 11 to 116 ms more on fourteen levels (RICH3's -47
+is the spread), alike to the review's own quiet run of the final head (4 to 93 ms).
+
+**Checked.** The nine builds exit 0 (each in its own `cmd` call); ModernTest 15,839,
+MenuTest 44,773, InterpTest 729, LipsTest 299 with the lip objects and 272 without (the
+cutseq path given by hand), none failed. The fix pass's RoomProbe against Round 4's head
+renders, md5-identical everywhere: the 15 cameras at `hd_water` 0 and 1 with `hd_marble` 0
+and 1 (60 of 60), the six HD views with the mirror off and on (12 of 12), round 2's 36
+eyes at `hd_water` 0 and 1 with `hd_marble` 0 and 1 (144 of 144), his 21 ticks with the
+mirror off and on (42 of 42); the classic path 6 of 6 against the base. The comments and
+the start values change no picture.
+
+**Left.** The least share has no hold: a plane falling under a thousandth of the screen
+leaves at once and fades in again when it comes back over it (two such drops on the RICH2
+stair's walk, four on the ANDREA1 climb, Round 4's simulation) - whether that stays is a
+question for the next round. `tomb5.cpp`'s `planes = 64` stays a literal beside the
+comment that names `HD_MARBLE_PLANES_MOST` (the file does not include the header).
+
+**Commits.** `d3986a7c` (the comments and the start values), `0845d204` (the records),
+and this line's own commit after them.
+
 ### The spring (#200)
 2026-10-14
 

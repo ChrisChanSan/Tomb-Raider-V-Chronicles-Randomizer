@@ -653,8 +653,8 @@
  *                     -wetstand) drawn through each floor height and laid
  *                     over the floor (HDRenderMarbleDraw), timed on the GPU
  *                     (marble: line).
- *     -marbleplanes n the most floor heights a frame mirrors
- *                     (tomb5.hd_marble_planes, 2 where not given).
+ *     -marbleplanes n the most planes a frame mirrors (hd_marble_ceiling,
+ *                     64, the engine's, where not given).
  *     -marblerows 1|2 the mirror's target at one or two rows a row of the
  *                     frame (2, the engine's, where not given).
  *     -marbleclip <units>  how far over the floor's plane the mirrored draw
@@ -717,6 +717,41 @@
  *                     a row of the frame, turned in x; -marbleslots picks
  *                     the plane): what the mirrored draw drew, and where
  *                     -marblevoid's magenta is, nothing.
+ *     -marbletread n  floor heights of the frame each within n units of
+ *                     the one before share the plane of the one covering
+ *                     the most (a stair's treads under one mirror): the
+ *                     picture against -marbletread 0 (every tread at its
+ *                     own height, the engine's) is the error of sharing.
+ *     -marbleleast s  the least share of the screen (the -1..1 square
+ *                     being 4, as the occlusion counts' scores are) a
+ *                     plane shows to be mirrored (HDRenderMarbleLeast;
+ *                     0.004, the engine's thousandth, where not given; 0
+ *                     mirrors every plane that shows a pixel).
+ *     -marbleslopes   one marbleslope line a sloped plane of the level: its
+ *                     number, normal and distance (n.p = d), its faces,
+ *                     their area in units squared and the room of its
+ *                     first face.
+ *     -marblelist     one marblelist line a plane of the frame, all of them
+ *                     in the frame's order: its height (or "slope" and the
+ *                     slope's number), its faces in view, their cover, the
+ *                     pixels its occlusion count saw, drawn or left, the
+ *                     strength, the room covering the most of it, the
+ *                     mirrored draw calls it took, the noted draws its
+ *                     mirror left out (box out of its view, under its clip
+ *                     or beside its scissor) and its plane in world space
+ *                     (n.p = d); and one marblecpu line,
+ *                     the picture's HDRenderMarbleDraw on the processor
+ *                     beside its GPU time.
+ *     -marblesteep    the level's triangles of the mirror's pages (the
+ *                     table's, or -marblepages') that face up, by lean: one
+ *                     marblesteep line a room with faces leaning past the
+ *                     flat face (HD_MARBLE_FLAT) and up to 60 degrees - its
+ *                     faces, area, least and most lean, y range and pages -
+ *                     one marbleflat line a room with flat faces (each
+ *                     height's faces and area), a marblesteeplevel line
+ *                     (flat, to 60 degrees, steeper: faces and area) and a
+ *                     marblesteepbins line (the area by lean, five degrees
+ *                     a bin). Needs -roombox and -hdwater.
  *     -marbleplanefloor  the mirror's plane in the floor and the clip
  *                     -marbleclip units over it (HDRenderMarblePlaneFloor),
  *                     which leaves the strip at a wall's foot out.
@@ -907,6 +942,7 @@
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_pagecache.h"
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_splash_math.h"
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_marble_math.h"
+#include "../../../TOMB5 Code/TOMB5/specific/hd/hd_gloss_pages.h"
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_light.h"
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_dxt5.h"
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_scan.h"
@@ -10554,6 +10590,154 @@ static void ProbeMarbleCensus(const std::vector<HDWaterRoom>& rooms,
 		byPage, both, mirror, roomsMirror, refit);
 }
 
+/* -marblesteep: the triangles of the mirror column's pages (the table's,
+ * or -marblepages' list) that face up, by how far they lean: flat (the
+ * face rule's HD_MARBLE_FLAT), up to 60 degrees and steeper. One
+ * marblesteep line a room with a leaning face - its faces, their area,
+ * the steepest and least steep in degrees, their lowest and highest y and
+ * pages - and one marblesteeplevel line. */
+static bool g_marble_steep = false;
+
+static void ProbeMarbleSteep(const char* root, const char* stem)
+{
+	if (!g_marble_steep)
+		return;
+
+	trf::remaster::Trg trg;
+	std::string error;
+
+	if (!trf::remaster::read_trg(std::string(root) + "\\DATA\\" + stem +
+		".TRG", trg, error))
+	{
+		printf("marblesteep: no .TRG (%s)\n", error.c_str());
+		return;
+	}
+
+	int faces[3] = { 0, 0, 0 };
+	double area[3] = { 0.0, 0.0, 0.0 };
+	// The leaning faces' area by their lean, five degrees a bin.
+	double bins[18] = {};
+
+	for (size_t g = 0; g < trg.groups.size(); g++)
+	{
+		int n = 0;
+		double a = 0.0;
+		float lo = 90.0f, hi = 0.0f, ylo = 1e9f, yhi = -1e9f;
+		std::set<int> pages;
+		// The flat faces: their count and area by height (rounded).
+		std::map<int, std::pair<int, double> > flat;
+
+		for (const trf::remaster::TrgPart& part : trg.groups[g].parts)
+			for (int pass = 0; pass < 2; pass++)
+				for (unsigned int i = 0; i + 2 < part.pass[pass].count; i += 3)
+				{
+					const unsigned int first = part.pass[pass].start + i;
+					float p[9], ny = 0.0f;
+					int page = -1;
+
+					for (int c = 0; c < 3; c++)
+					{
+						const trf::remaster::TrgVertex& v =
+							trg.vertices[trg.indices[first + c]];
+
+						p[c * 3] = (float)v.x;
+						p[c * 3 + 1] = (float)v.y;
+						p[c * 3 + 2] = (float)v.z;
+						ny += v.normal_y();
+
+						if (c == 0)
+							page = v.layer && v.layer <= trg.textures.size() ?
+								(int)trg.textures[v.layer - 1u] : -1;
+					}
+
+					const bool listed = page >= 0 &&
+						(g_marble_pages.count(page) ||
+						HDGlossMirror(-1, HDGlossTableFind(page)));
+
+					if (!listed || ny >= 0.0f)
+						continue;
+
+					const double ux = p[3] - p[0], uy = p[4] - p[1];
+					const double uz = p[5] - p[2], vx = p[6] - p[0];
+					const double vy = p[7] - p[1], vz = p[8] - p[2];
+					const double nx = uy * vz - uz * vy;
+					const double nyy = uz * vx - ux * vz;
+					const double nz = ux * vy - uy * vx;
+					const double len = sqrt(nx * nx + nyy * nyy + nz * nz);
+
+					if (len <= 1e-6)
+						continue;
+
+					const double c = fabs(nyy) / len;
+					const int k = c > HD_MARBLE_FLAT ? 0 : c > 0.5 ? 1 : 2;
+					const float deg = (float)(acos(c) * 57.29577951308232);
+
+					faces[k]++;
+					area[k] += 0.5 * len;
+
+					if (k == 0)
+					{
+						std::pair<int, double>& f = flat[(int)lroundf((p[1] +
+							p[4] + p[7]) / 3.0f)];
+
+						f.first++;
+						f.second += 0.5 * len;
+					}
+					bins[(int)(deg / 5.0f) % 18] += 0.5 * len;
+
+					if (k != 1)
+						continue;
+
+					n++;
+					a += 0.5 * len;
+					lo = deg < lo ? deg : lo;
+					hi = deg > hi ? deg : hi;
+
+					for (int v = 0; v < 3; v++)
+					{
+						ylo = p[v * 3 + 1] < ylo ? p[v * 3 + 1] : ylo;
+						yhi = p[v * 3 + 1] > yhi ? p[v * 3 + 1] : yhi;
+					}
+
+					pages.insert(page);
+				}
+
+		/* One marbleflat line a room with flat faces: each height with its
+		 * faces and area (units squared). */
+		if (!flat.empty())
+		{
+			printf("marbleflat: level=%s room=%d", stem, (int)g);
+
+			for (const std::pair<const int, std::pair<int, double> >& f : flat)
+				printf(" %d:%d:%.0f", f.first, f.second.first, f.second.second);
+
+			printf("\n");
+		}
+
+		if (!n)
+			continue;
+
+		std::string pl;
+
+		for (int pg : pages)
+			pl += (pl.empty() ? "" : ",") + std::to_string(pg);
+
+		printf("marblesteep: level=%s room=%d faces=%d area=%.0f "
+			"deg=%.1f..%.1f y=%.0f..%.0f pages=%s\n", stem, (int)g, n, a,
+			lo, hi, ylo, yhi, pl.c_str());
+	}
+
+	printf("marblesteeplevel: level=%s flat=%d (%.0f) to60=%d (%.0f) "
+		"steeper=%d (%.0f)\n", stem, faces[0], area[0], faces[1], area[1],
+		faces[2], area[2]);
+	printf("marblesteepbins: level=%s", stem);
+
+	for (int b = 0; b < 18; b++)
+		printf(" %d:%.0f", b * 5, bins[b]);
+
+	printf("\n");
+}
+
 /* The marble floors' switches, out of ProbeMain's chain of else-ifs (the
  * usage at the top, after -tankcensus). -marblecensus needs -roombox and
  * builds the classic floor as -hdwater 0 does where -hdwater is not given;
@@ -10563,7 +10747,7 @@ static void ProbeMarbleCensus(const std::vector<HDWaterRoom>& rooms,
  * off where -marble is not given, so a picture of another switch stays the
  * one it was. */
 static int g_marble_engine = 0;
-static int g_marble_planes = 2;
+static int g_marble_planes = 64;
 // -marblerise: one marblerise line a face the build left out for rising.
 static bool g_marble_rise = false;
 // -marbletarget <path>: the mirror's target written there as a picture.
@@ -10572,6 +10756,18 @@ static const char* g_marble_target = 0;
 static bool g_marble_cracks = false;
 // -marblelag n: warm-up draws with nothing waited for (ProbeMarble).
 static int g_marble_lag = 0;
+/* -marblelist: one marblelist line a plane of the frame and the draw's
+ * time on the processor (ProbeMarble). */
+static bool g_marble_list = false;
+// The frame's planes (hd_render.cpp, the marble floors' RoomProbe part).
+int HDRenderMarblePlaneRows(const float** rows);
+// -marbletread n: floor heights within n units of the next share a plane.
+void HDRenderMarbleTread(int units);
+// -marbleleast s: the least share of the screen a plane shows.
+void HDRenderMarbleLeast(float share);
+// -marbleslopes: the level's sloped planes, one line each (ProbeMarble).
+int HDRenderMarbleSlopeRows(const float** rows);
+static bool g_marble_slopes = false;
 
 static bool MarbleArg(int argc, char** argv, int* at)
 {
@@ -10654,7 +10850,7 @@ static bool MarbleArg(int argc, char** argv, int* at)
 		const float step = (float)atof(argv[*at + 2]);
 		const float hold = (float)atof(argv[*at + 3]);
 		const int frames = atoi(argv[*at + 4]);
-		HDMarbleSlot slots[8];
+		HDMarbleSlot slots[64];
 		char line[4096];
 
 		for (HDMarbleSlot& s : slots)
@@ -10683,13 +10879,14 @@ static bool MarbleArg(int argc, char** argv, int* at)
 				scores[n++] = (float)strtod(e + 1, &s);
 			}
 
+			const int cap = g_marble_planes < 64 ? g_marble_planes : 64;
+
 			for (int k = 0; k < frames; k++)
-				HDMarbleSlotsStep(slots, g_marble_planes, ys, scores, n, step,
-					hold);
+				HDMarbleSlotsStep(slots, cap, ys, scores, n, step, hold);
 
 			printf("marblesim: %d", tick);
 
-			for (int k = 0; k < g_marble_planes; k++)
+			for (int k = 0; k < cap; k++)
 				if (slots[k].y != INT_MIN)
 					printf(" %d:%.3f", slots[k].y, slots[k].gain);
 
@@ -10700,6 +10897,41 @@ static bool MarbleArg(int argc, char** argv, int* at)
 			fclose(f);
 
 		exit(0);
+	}
+
+	// -marbletread n: a stair's treads within n units under one plane.
+	if (!strcmp(a, "-marbletread") && more)
+	{
+		HDRenderMarbleTread(atoi(argv[++*at]));
+		return true;
+	}
+
+	// -marbleleast s: the least share of the screen a mirrored plane shows.
+	if (!strcmp(a, "-marbleleast") && more)
+	{
+		HDRenderMarbleLeast((float)atof(argv[++*at]));
+		return true;
+	}
+
+	// -marbleslopes: the level's sloped planes, one line each.
+	if (!strcmp(a, "-marbleslopes"))
+	{
+		g_marble_slopes = true;
+		return true;
+	}
+
+	// -marblelist: the frame's planes, one line each (ProbeMarble).
+	if (!strcmp(a, "-marblelist"))
+	{
+		g_marble_list = true;
+		return true;
+	}
+
+	// -marblesteep: the leaning faces of the mirror's pages, by room.
+	if (!strcmp(a, "-marblesteep"))
+	{
+		g_marble_steep = true;
+		return true;
 	}
 
 	// -marblerise: the faces left out for rising, one line each.
@@ -11358,8 +11590,16 @@ static void ProbeMarble(const void* projection)
 
 	HDRenderMarbleQuiet(false);
 	timer.Begin();
-	HDRenderMarbleDraw(draw, projection, 0);
 
+	LARGE_INTEGER cpuFrom, cpuTo, cpuFreq;
+
+	QueryPerformanceFrequency(&cpuFreq);
+	QueryPerformanceCounter(&cpuFrom);
+	HDRenderMarbleDraw(draw, projection, 0);
+	QueryPerformanceCounter(&cpuTo);
+
+	const double cpu = (double)(cpuTo.QuadPart - cpuFrom.QuadPart) *
+		1000.0 / (double)cpuFreq.QuadPart;
 	const double ms = timer.End();
 	HDRenderMarbleStats s;
 
@@ -11413,6 +11653,44 @@ static void ProbeMarble(const void* projection)
 		printf("marblerise: room %d y %d low %.0f high %.0f run %.0f "
 			"rise %.1f\n", (int)rise[i * 6], (int)rise[i * 6 + 1],
 			rise[i * 6 + 2], rise[i * 6 + 3], rise[i * 6 + 4], rise[i * 6 + 5]);
+
+	/* -marbleslopes: one marbleslope line a sloped plane of the level - its
+	 * number, normal and distance, its faces, their area in units squared
+	 * and the room of its first face. */
+	const float* sl = 0;
+	const int slopes = g_marble_slopes ? HDRenderMarbleSlopeRows(&sl) : 0;
+
+	for (int i = 0; i < slopes; i++)
+	{
+		const float* r = sl + i * 8;
+
+		printf("marbleslope: %d normal %.4f %.4f %.4f d %.1f faces %d area "
+			"%.0f room %d\n", (int)r[0], r[1], r[2], r[3], r[4], (int)r[5],
+			r[6], (int)r[7]);
+	}
+
+	/* -marblelist: every plane of the frame in its order - its key (a
+	 * height, or "slope" and its number), faces in view, cover, the pixels
+	 * its count saw, drawn or left, strength, room, mirrored calls, the
+	 * noted draws its mirror left out and its plane in world space (n.p
+	 * = d) - and one marblecpu line, the picture's draw on the processor. */
+	const float* rows = 0;
+	const int listed = g_marble_list ? HDRenderMarblePlaneRows(&rows) : 0;
+
+	for (int i = 0; i < listed; i++)
+	{
+		const float* r = rows + i * 14;
+
+		printf("marblelist: %d %s %d faces %d cover %.5f seen %d %s gain %.3f "
+			"room %d calls %d left %d plane %.4f %.4f %.4f %.1f\n", i,
+			r[1] > 0.0f ? "slope" : "y", (int)r[0], (int)r[2], r[3],
+			(int)r[4], r[5] > 0.0f ? "drawn" : "left", r[6], (int)r[7],
+			(int)r[8], (int)r[9], r[10], r[11], r[12], r[13]);
+	}
+
+	if (g_marble_list)
+		printf("marblecpu: planes %d drawn %d calls %d cpu %.3f ms gpu %.4f "
+			"ms\n", s.planes, s.drawn, s.calls, cpu, ms);
 
 	/* One marbleplane line a plane of the frame, the drawn first in their
 	 * places' order, then by score; the pixels the occlusion count saw and
@@ -20537,6 +20815,7 @@ static int ProbeMain(int argc, char** argv)
 			}
 			ProbeCensus(rooms, root, stem);
 			ProbeMarbleCensus(rooms, root, stem);
+			ProbeMarbleSteep(root, stem);
 			ProbeWaterFalls(level, stem);
 
 			// -flip: the water follows the swapped pairs, as FlipMap's hook.

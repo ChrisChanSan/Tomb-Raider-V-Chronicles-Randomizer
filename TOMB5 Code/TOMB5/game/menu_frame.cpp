@@ -34,6 +34,7 @@
 #include "../specific/hd/hd_level.h"		// HDEnabled - the Shadow mode row's fifth state
 #include "../specific/hd/hd_shadow.h"		// HDShadowBlobMode - what a stored 5 draws without HD
 #include "../specific/hd/hd_switch.h"	// HDSwitchOption, HDDrawn - HD rows
+#include "../specific/hd/hd_render.h"	// HDRenderMarbleSet - Reflections
 #include "../tomb5/tomb5.h"
 #include "../tomb5/troyestuff.h"
 
@@ -856,6 +857,46 @@ static bool MenuStepHdWater(long, long dir)
 	return 1;
 }
 
+/* Reflections: the polished floors' mirror (specific/hd/hd_render.cpp, "the
+ * marble floors"), the registry's hd_marble, which the game's start hands
+ * to the renderer (tomb5/tomb5.cpp). The row shows the key - absent reads
+ * as on, as the start reads it - and a press either way writes the other
+ * value and hands it to the renderer at once (HDRenderMarbleSet, planes 0
+ * keeping the frame's ceiling): the mirror's draw follows on the next
+ * drawn frame, and off costs nothing from there; the floors' build follows
+ * at the level's next load. Offered whatever the level on screen draws, as
+ * HD water is. */
+static bool MenuReflectOn()
+{
+	ulong on = 1;
+
+	REG_PeekLong("tomb5", "hd_marble", on);
+	return on != 0;
+}
+
+static const char* MenuValReflect(long, char* buf)
+{
+	strcpy(buf, CustomText(MenuReflectOn() ? "on" : "off"));
+	return buf;
+}
+
+static bool MenuStepReflect(long, long dir)
+{
+	char key[40];
+	const bool on = !MenuReflectOn();
+
+	if (!dir)
+		return 0;
+
+	SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
+	sprintf(key, "hd_marble");
+	OpenRegistry("tomb5");
+	REG_WriteLong(key, on ? 1 : 0);
+	CloseRegistry();
+	HDRenderMarbleSet(on ? 1 : 0, 0);
+	return 1;
+}
+
 static const char* MenuValPsxSkies(long, char* buf)
 {
 	strcpy(buf, CustomText(tomb5.PSX_skies ? "on" : "off"));
@@ -1617,9 +1658,12 @@ static const menu_row menu_rows_graphics[] =
 	MENU_VALUE("HD textures", MenuValHdTextures, MenuStepHdTextures, MENU_SAVE_TOMB5),
 	// Directly under the HD switch it depends on.
 	MENU_VALUE("Body physics", MenuValBodyPhysics, MenuStepBodyPhysics, MENU_SAVE_TOMB5),
-	// Under the HD rows. Fourteen rows: the page pages seven and seven,
-	// with the arrow row under them.
+	// Under the HD rows.
 	MENU_VALUE("HD water", MenuValHdWater, MenuStepHdWater, MENU_SAVE_TOMB5),
+	// The polished floors' mirror, with the HD rows; it writes its own key.
+	// Fifteen rows: the page pages eight and seven, with the arrow row
+	// under them.
+	MENU_VALUE("Reflections", MenuValReflect, MenuStepReflect, MENU_SAVE_NONE),
 	MENU_VALUE("Fog", MenuValFog, MenuStepFog, MENU_SAVE_TOMB5),
 	MENU_VALUE("Distance fog", MenuValDistanceFog, MenuStepDistanceFog, MENU_SAVE_TOMB5),
 	MENU_VALUE("Shimmer", MenuValShimmer, MenuStepShimmer, MENU_SAVE_TOMB5),

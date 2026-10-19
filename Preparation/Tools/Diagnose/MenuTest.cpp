@@ -1848,17 +1848,17 @@ static void controls_mouse_rows()
 /* The row of the chest's soft motion lives in game\menu_frame.cpp's Graphics
  * table, which cannot be linked here, so what is checked is what the tree
  * says, the way controls_mouse_rows reads the Controls table: the table's
- * fourteen rows in order and the split they page into, the row's kind, save
+ * fifteen rows in order and the split they page into, the row's kind, save
  * class and lack of a gate, the four values it shows, their five strings
  * in game\gameflow.cpp's table, the registry name in tomb5\tomb5.cpp, and
  * the draw's reset on a change in specific\hd\hd_laradraw.cpp. The step is
  * game\menu_nav.h's MenuSliderStep over 0..3, swept whole. */
 static void graphics_softbody_row()
 {
-	static const char* const want[14] =
+	static const char* const want[15] =
 	{
-		"Display", "HD textures", "Body physics", "HD water", "Fog",
-		"Distance fog", "Shimmer", "Mono screen style", "Shadow mode",
+		"Display", "HD textures", "Body physics", "HD water", "Reflections",
+		"Fog", "Distance fog", "Shimmer", "Mono screen style", "Shadow mode",
 		"PSX skies", "Static lighting", "UW Effect", "Look transparency",
 		"Footprints"
 	};
@@ -1918,13 +1918,13 @@ static void graphics_softbody_row()
 		}
 	}
 
-	check(rows, 14, "softbody row: the Graphics table holds fourteen rows");
+	check(rows, 15, "softbody row: the Graphics table holds fifteen rows");
 
-	for (i = 0; i < rows && i < 14; i++)
+	for (i = 0; i < rows && i < 15; i++)
 		check(strcmp(label[i], want[i]), 0,
 			"softbody row: the Graphics rows stand in this order");
 
-	if (rows == 14)
+	if (rows == 15)
 	{
 		check(!strncmp(line[2], "MENU_VALUE(\"Body physics\"", 25), 1,
 			"softbody row: Body physics is an ungated value row, "
@@ -1935,21 +1935,21 @@ static void graphics_softbody_row()
 		check(strstr(line[2], "MENU_SAVE_TOMB5") != 0, 1,
 			"softbody row: it is saved with the tomb5 settings");
 		check(!strncmp(line[1], "MENU_VALUE(\"HD textures\"", 24) &&
-			!strncmp(line[4], "MENU_VALUE(\"Fog\"", 16), 1,
+			!strncmp(line[5], "MENU_VALUE(\"Fog\"", 16), 1,
 			"softbody row: ungated like its neighbours, which no page row "
 			"greys while HD is off");
 	}
 
-	// Fourteen rows at MENU_MAX_ROWS 12 and no fixed row: two pages of
-	// seven, and the second starts at Mono screen style.
-	check(MenuPageCount(14, 12), 2, "softbody row: Graphics pages in two");
-	check(MenuRowsOnPage(14, 12, 0), 7,
-		"softbody row: seven rows on the first page");
-	check(MenuRowsOnPage(14, 12, 1), 7, "softbody row: seven on the second");
-	check(MenuPageFirstRow(14, 12, 1), 7,
-		"softbody row: the second page starts at row 7");
-	check(rows == 14 &&
-		!strcmp(label[MenuPageFirstRow(14, 12, 1)], "Mono screen style"), 1,
+	// Fifteen rows at MENU_MAX_ROWS 12 and no fixed row: two pages, eight
+	// and seven, and the second starts at Mono screen style.
+	check(MenuPageCount(15, 12), 2, "softbody row: Graphics pages in two");
+	check(MenuRowsOnPage(15, 12, 0), 8,
+		"softbody row: eight rows on the first page");
+	check(MenuRowsOnPage(15, 12, 1), 7, "softbody row: seven on the second");
+	check(MenuPageFirstRow(15, 12, 1), 8,
+		"softbody row: the second page starts at row 8");
+	check(rows == 15 &&
+		!strcmp(label[MenuPageFirstRow(15, 12, 1)], "Mono screen style"), 1,
 		"softbody row: which is Mono screen style, and Body physics is on "
 		"the first page beside HD textures");
 
@@ -2133,6 +2133,97 @@ static void graphics_water_row()
 	free(flow);
 	free(opts);
 	free(level);
+}
+
+/* --------------------------------------------------- the Reflections row -- */
+
+/* The Reflections row on the Graphics page, read from the tree as the HD
+ * water row is: its table line (an ungated value row right under HD water,
+ * which writes its own key, so it saves nothing more), what it shows - the
+ * registry's hd_marble, absent read as on - and its step, which writes the
+ * other value to that key and hands it to the renderer at once with the
+ * ceiling kept (HDRenderMarbleSet, planes 0); in tomb5\tomb5.cpp the same
+ * key written on a first run and read with on as the default; and the
+ * round trip of a value through the row's write, the start's read and the
+ * row's own reading, a stored value over 1 included. */
+static void graphics_reflections_row()
+{
+	char* frame = tree_file("../../../TOMB5 Code/TOMB5/game/menu_frame.cpp");
+	char* opts = tree_file("../../../TOMB5 Code/TOMB5/tomb5/tomb5.cpp");
+	char* render = tree_file(
+		"../../../TOMB5 Code/TOMB5/specific/hd/hd_render.cpp");
+	int v;
+
+	check(frame && opts && render, 1,
+		"reflections row: the three engine files are readable from here");
+
+	if (!frame || !opts || !render)
+	{
+		free(frame);
+		free(opts);
+		free(render);
+		return;
+	}
+
+	// The table line, right under HD water.
+	{
+		const char* water = strstr(frame, "MENU_VALUE(\"HD water\"");
+		const char* row = strstr(frame, "MENU_VALUE(\"Reflections\", "
+			"MenuValReflect, MenuStepReflect, MENU_SAVE_NONE),");
+		const char* between = water ? strchr(water, '\n') : 0;
+
+		check(tree_count(frame, "MENU_VALUE(\"Reflections\""), 1,
+			"reflections row: one row of that name");
+		check(row != 0, 1, "reflections row: an ungated value row with its "
+			"own two functions, saving nothing more than its own key");
+		check(water != 0 && row != 0 && between != 0 &&
+			strstr(between + 1, "MENU_VALUE(") == row, 1,
+			"reflections row: the next row after HD water");
+	}
+
+	// What it shows: the key as the start reads it, absent as on.
+	check(strstr(frame, "ulong on = 1;\r\n\r\n\tREG_PeekLong(\"tomb5\", "
+		"\"hd_marble\", on);") != 0 || strstr(frame, "ulong on = 1;\n\n\t"
+		"REG_PeekLong(\"tomb5\", \"hd_marble\", on);") != 0, 1,
+		"reflections row: it reads hd_marble, absent as on");
+	check(strstr(frame, "CustomText(MenuReflectOn() ? \"on\" : \"off\")")
+		!= 0, 1, "reflections row: it shows the table's own on and off");
+
+	// The step: the other value, written and handed over at once.
+	check(strstr(frame, "const bool on = !MenuReflectOn();") != 0 &&
+		strstr(frame, "sprintf(key, \"hd_marble\");") != 0 &&
+		strstr(frame, "REG_WriteLong(key, on ? 1 : 0);") != 0, 1,
+		"reflections row: a press writes the other value to hd_marble");
+	check(strstr(frame, "HDRenderMarbleSet(on ? 1 : 0, 0);") != 0 &&
+		strstr(render, "\tif (planes > 0)\r\n\t\tg_marble_cap = "
+		"HDMarblePlanesCap(planes);") != 0, 1,
+		"reflections row: and hands it over at once, the ceiling kept");
+
+	// The start: written on a first run, read with on as the default.
+	check(tree_count(opts, "sprintf(buf, \"hd_marble\");"), 2,
+		"reflections row: hd_marble is written on a first run and read");
+	check(strstr(opts, "REG_ReadLong(buf, marble, 1);") != 0 &&
+		strstr(opts, "HDRenderMarbleSet(marble > 1 ? 1 : (int)marble, "
+		"(int)planes);") != 0, 1,
+		"reflections row: the start reads it, absent as on, over 1 as on");
+
+	// The round trip, the three expressions as the tree holds them.
+	for (v = 0; v <= 7; v++)
+	{
+		const unsigned long stored = (unsigned long)v;
+		const int started = stored > 1 ? 1 : (int)stored;
+		const int shown = stored != 0 ? 1 : 0;
+		const int pressed = !shown ? 1 : 0;
+		const int again = pressed > 1 ? 1 : pressed;
+
+		check(started == shown && again == !shown, 1,
+			"reflections row: a stored value reads alike at the start and "
+			"in the row, and a press flips it");
+	}
+
+	free(frame);
+	free(opts);
+	free(render);
 }
 
 /* -------------------------------------------------- the Shadow mode row -- */
@@ -4174,6 +4265,7 @@ int main()
 	controls_mouse_rows();
 	graphics_softbody_row();
 	graphics_water_row();
+	graphics_reflections_row();
 	graphics_shadow_row();
 	hd_switch_rows();
 	graphics_hd_row();

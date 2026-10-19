@@ -29,14 +29,17 @@
  *
  * The places. At most `cap` planes are mirrored, each in a place that
  * holds its plane and the strength its mirror is laid at (its gain, 0 to
- * 1). A plane in a place keeps it while it scores at least HD_MARBLE_HOLD
- * of the best plane outside the places, and its gain then rises by a step a
- * frame to 1; a plane that no longer does fades out by the same step and
- * leaves the place at 0, which the best plane outside then takes, rising
- * from one step. A plane that shows nothing leaves at once - there is
- * nothing to fade. Places all empty after that take the best planes at
- * full strength: the first frame of a level, or of a view none of whose
- * last planes shows any more, shows its mirror whole. */
+ * 1). A plane in a place keeps it while the empty places take every plane
+ * waiting outside, or while it scores at least HD_MARBLE_HOLD of the best
+ * plane outside, and its gain then rises by a step a frame to 1; a plane
+ * that does neither fades out by the same step and leaves the place at 0,
+ * which the best plane outside then takes, rising from one step. With
+ * places for every plane a frame shows (HD_MARBLE_PLANES_MOST) no plane
+ * fades out while it shows, and a plane coming into view fades in once.
+ * A plane that shows nothing leaves at once - there is nothing to fade.
+ * Places all empty after that take the best planes at full strength: the
+ * first frame of a level, or of a view none of whose last planes shows
+ * any more, shows its mirror whole. */
 
 // One place of the frame's mirror: its floor height, INT_MIN when empty.
 struct HDMarbleSlot
@@ -84,6 +87,24 @@ inline float HDMarbleFadeStep(double ms, double whole, double longest)
 	return s > 1.0 ? 1.0f : (float)s;
 }
 
+/* The least a plane shows to be mirrored: a score (HDMarbleScore's share
+ * of the screen, the -1..1 square being 4) under `least` counts as nothing
+ * shown, so the plane takes no place and costs no mirrored draw. Planes
+ * showing a sliver - the edge of a floor beside a door, a step's bevel seen
+ * across a hall - each cost a whole mirrored draw of the rooms for a few
+ * pixels of a faint reflection. HD_MARBLE_LEAST is a thousandth of the
+ * screen: where a view shows some twenty planes, it leaves 7 to 8 of
+ * them, takes the mirrored draw calls from 2,414 to 879, and changes
+ * 3,643 to 6,351 of 3,686,400 pixels by more than 8 of 255 (RoomProbe
+ * -marbleleast at 2,560 x 1,440; the measured views are in the record,
+ * TOMB5 Code/MODIFICATIONS.md). */
+#define HD_MARBLE_LEAST	0.004f
+
+inline float HDMarbleShown(float score, float least)
+{
+	return score >= least ? score : 0.0f;
+}
+
 // The score of height y among `count` (y, score) pairs; 0 when absent.
 inline float HDMarbleScoreOf(const int* ys, const float* scores, int count,
 	int y)
@@ -126,10 +147,21 @@ inline int HDMarbleSlotsStep(HDMarbleSlot* slots, int cap, const int* ys,
 		return false;
 	};
 	float best = 0.0f;
+	int empty = 0, waiting = 0;
 
 	for (int i = 0; i < count; i++)
-		if (!placed(ys[i]) && scores[i] > best)
-			best = scores[i];
+		if (!placed(ys[i]) && scores[i] > 0.0f)
+		{
+			waiting++;
+			best = scores[i] > best ? scores[i] : best;
+		}
+
+	for (int s = 0; s < cap; s++)
+		empty += slots[s].y == INT_MIN ? 1 : 0;
+
+	/* Where the empty places take every plane waiting, no plane need give
+	 * its place up: none fades out while it shows. */
+	const bool room = waiting <= empty;
 
 	for (int s = 0; s < cap; s++)
 	{
@@ -138,7 +170,7 @@ inline int HDMarbleSlotsStep(HDMarbleSlot* slots, int cap, const int* ys,
 
 		const float own = HDMarbleScoreOf(ys, scores, count, slots[s].y);
 
-		if (own >= hold * best)
+		if (room || own >= hold * best)
 			slots[s].gain = slots[s].gain + step >= 1.0f ? 1.0f :
 				slots[s].gain + step;
 		else if (slots[s].gain - step <= 0.0f)
@@ -290,4 +322,157 @@ inline bool HDMarbleTiltSame(const float* a, const float* b, float same,
 {
 	return fabsf(a[0] - b[0]) <= same && fabsf(a[1] - b[1]) <= same &&
 		fabsf(a[2] - b[2]) <= same && fabsf(a[3] - b[3]) <= join;
+}
+
+/* How many planes a frame mirrors at most: the registry's
+ * hd_marble_ceiling, held to 1 to HD_MARBLE_PLANES_MOST. The ceiling
+ * stands far over what a frame shows (RoomProbe's census eyes, four views
+ * from every room with a mirror floor of the fifteen levels, find at most
+ * 39 planes in view at once and 21 of them showing): every plane that
+ * shows is mirrored, each at its own height (HDMarbleShown bounds what a
+ * sliver costs), and the planes past the ceiling, should a frame ever
+ * show more, are the ones covering the least (HDMarblePlanesPick). */
+#define HD_MARBLE_PLANES_MOST	64
+
+inline int HDMarblePlanesCap(int planes)
+{
+	return planes < 1 ? 1 : planes > HD_MARBLE_PLANES_MOST ?
+		HD_MARBLE_PLANES_MOST : planes;
+}
+
+/* The switch (the options' Reflections row, HDRenderMarbleSet): what the
+ * level's build state becomes when the setting turns to `want` while a
+ * level with `faces` mirror faces is built `built`. A level built with the
+ * mirror keeps its build until the next load - its polished clear floors
+ * are drawn solid over no copy of the room - and only its draw follows the
+ * setting at once; a level without mirror faces takes the setting at once,
+ * as nothing of it was built either way. */
+inline bool HDMarbleBuildAfterSwitch(bool built, bool want, int faces)
+{
+	return built && faces > 0 ? true : want;
+}
+
+/* A leaning floor of the mirror's pages: a triangle facing up whose
+ * normal leans further than the flat face's (HD_MARBLE_FLAT,
+ * hd_splash_math.h) and its height is still over HD_MARBLE_LEAN of its
+ * length - 60 degrees off the level. The fifteen levels' faces of the
+ * mirror's pages that face up (RoomProbe -marblesteep) lean at most 56.3
+ * degrees as floors (ramps, the corridors going up, a pool's surround)
+ * and 85 and more as walls, and none between: the line lies in that gap.
+ * `nyVertex` is the corners' own normals' height (up being negative), the
+ * side as the flat face takes it. */
+#define HD_MARBLE_LEAN	0.5f
+
+inline bool HDMarbleLeanFace(const float* a, const float* b, const float* c,
+	float nyVertex, float flat)
+{
+	const double ux = (double)b[0] - a[0], uy = (double)b[1] - a[1];
+	const double uz = (double)b[2] - a[2];
+	const double vx = (double)c[0] - a[0], vy = (double)c[1] - a[1];
+	const double vz = (double)c[2] - a[2];
+	const double nx = uy * vz - uz * vy;
+	const double ny = uz * vx - ux * vz;
+	const double nz = ux * vy - uy * vx;
+	const double len = sqrt(nx * nx + ny * ny + nz * nz);
+
+	return len > 1e-6 && nyVertex < 0.0f && fabs(ny) > HD_MARBLE_LEAN * len &&
+		fabs(ny) <= flat * len;
+}
+
+/* The scissor of one plane's mirrored draw, in the target's pixels: the
+ * plane's faces cover the frame's pixels x0..x1, y0..y1 (whole, the last
+ * included) of a viewport at (vx, vy), `vw` wide; the target holds the
+ * frame turned left to right (pixel x at 2 vx + vw - x) at `rows` rows a
+ * row, and the layer reads it there (MarblePS). `margin` pixels of the
+ * frame more on every side keep the bilinear read's neighbours; the
+ * rectangle (right and bottom past its last pixel) is held to the target,
+ * `tw` by `th`. False when nothing of it lies in the target. */
+inline bool HDMarbleTargetRect(int x0, int y0, int x1, int y1, int vx,
+	int vw, int rows, int margin, int tw, int th, int* out)
+{
+	const int left = 2 * vx + vw - (x1 + margin);
+	const int right = 2 * vx + vw - (x0 - margin) + 1;
+	const int top = (y0 - margin) * rows;
+	const int bottom = (y1 + margin + 1) * rows;
+
+	out[0] = left < 0 ? 0 : left;
+	out[1] = top < 0 ? 0 : top;
+	out[2] = right > tw ? tw : right;
+	out[3] = bottom > th ? th : bottom;
+	return out[0] < out[2] && out[1] < out[3];
+}
+
+/* Whether a box can show nothing in one plane's mirror: its eight corners
+ * `h` in clip space (four floats each, the mirrored view's) all lie past
+ * one side of the view, or all under the mirror's clip plane `clip` (clip
+ * space), or - all of them in front of the eye - their box on the target,
+ * the view's `vp` (x, y, width, height in the target's pixels), misses the
+ * scissor `rect` (left, top, right, bottom; null for none). */
+inline bool HDMarbleBoxOut(const float* h, const float* clip,
+	const float* vp, const int* rect)
+{
+	int outside[7] = { 0, 0, 0, 0, 0, 0, 0 };
+	bool front = true;
+	float lo[2] = { 1e30f, 1e30f }, hi[2] = { -1e30f, -1e30f };
+
+	for (int c = 0; c < 8; c++)
+	{
+		const float* p = h + c * 4;
+
+		outside[0] += p[0] < -p[3] ? 1 : 0;
+		outside[1] += p[0] > p[3] ? 1 : 0;
+		outside[2] += p[1] < -p[3] ? 1 : 0;
+		outside[3] += p[1] > p[3] ? 1 : 0;
+		outside[4] += p[2] < 0.0f ? 1 : 0;
+		outside[5] += p[2] > p[3] ? 1 : 0;
+		outside[6] += clip[0] * p[0] + clip[1] * p[1] + clip[2] * p[2] +
+			clip[3] * p[3] < 0.0f ? 1 : 0;
+
+		if (p[3] <= 1e-3f)
+		{
+			front = false;
+			continue;
+		}
+
+		const float sx = vp[0] + (p[0] / p[3] + 1.0f) * 0.5f * vp[2];
+		const float sy = vp[1] + (1.0f - p[1] / p[3]) * 0.5f * vp[3];
+
+		lo[0] = sx < lo[0] ? sx : lo[0];
+		lo[1] = sy < lo[1] ? sy : lo[1];
+		hi[0] = sx > hi[0] ? sx : hi[0];
+		hi[1] = sy > hi[1] ? sy : hi[1];
+	}
+
+	for (int s = 0; s < 7; s++)
+		if (outside[s] == 8)
+			return true;
+
+	return front && rect && (hi[0] < (float)rect[0] - 1.0f ||
+		lo[0] > (float)rect[2] + 1.0f || hi[1] < (float)rect[1] - 1.0f ||
+		lo[1] > (float)rect[3] + 1.0f);
+}
+
+/* Whether a sloped face lies in a sloped plane found already: each of its
+ * corners `p` (nine floats, the group's own x and z, the world's y; the
+ * group's origin ox, oz added) within `within` units of the plane `t`
+ * (HDMarbleTiltPlane's four floats) - the rule a level face keeps to its
+ * floor height (marble_build: corners within the mirror clip's offset).
+ * A slope tessellated into faces of slightly different lean (a ramp's
+ * rounded corner, a pool's sloped surround) so shares one plane where its
+ * faces lie within the offset of it; by the normals' rule alone
+ * (HDMarbleTiltSame) such a slope would split into a plane per face. */
+inline bool HDMarbleTiltFits(const float* t, const float* p, float ox,
+	float oz, float within)
+{
+	for (int c = 0; c < 3; c++)
+	{
+		const double d = (double)t[0] * ((double)p[c * 3] + ox) +
+			(double)t[1] * p[c * 3 + 1] + (double)t[2] * ((double)p[c * 3 + 2] +
+			oz) - t[3];
+
+		if (d > within || d < -within)
+			return false;
+	}
+
+	return true;
 }

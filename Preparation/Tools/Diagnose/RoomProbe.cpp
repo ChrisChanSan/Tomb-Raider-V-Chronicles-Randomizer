@@ -325,6 +325,8 @@
  *                     through the surface, its lit underside and the
  *                     shafts - right after the sky and before the rooms,
  *                     at HDWaterLookKnobs' numbers, its GPU time printed
+ *                     and its line ending in `reach`: the water rooms'
+ *                     lowest floor and the last sheet's box
  *     -underlookknobs <disc shafts underside reach power cell floor deep len
  *                     waves rim seadisc seashafts seaunderside sheet ripple
  *                     patches art seapower seaturn seaswell seamargin
@@ -2772,6 +2774,8 @@ static float g_under_knobs[HD_LOOK_KNOBS] = { 3.0f, 3.0f, 0.25f,
 static float g_under_game_set[HD_LOOK_KNOBS] = {};
 // hd_render.cpp: the art's weight and the extinction's plane set early.
 void HDRenderWaterSeaKnobs(const float* knobs);
+// hd_render.cpp: the water's lowest floor and the sheet's last box.
+void HDRenderWaterSheetReach(float* out);
 /* -surfaceroom: the room whose art is the sea's surface, printed;
  * -surfacealways: that room drawn as the game draws it at every frame of a
  * level that takes the deep look - added to the -with list where the
@@ -20185,16 +20189,20 @@ static int ProbeMain(int argc, char** argv)
 			(float)cx + g_seed_origin[0], (float)cz + g_seed_origin[1],
 			g_under_game_knobs ? g_under_game_set : 0, &gpu);
 		float k[HD_LOOK_KNOBS];
+		float reach[5];
 
 		if (g_under_game_knobs)
 			memcpy(k, g_under_game_set, sizeof(k));
 		else
 			HDWaterLookKnobs(k);
 
+		HDRenderWaterSheetReach(reach);
+
 		printf("-underlook: %s, GPU %.4f ms (timestamps round the pass) at "
 			"%ldx%ld, knobs %.2f %.2f %.2f %.0f %.0f %.0f %.2f %.0f %.0f "
 			"%.0f %.2f, sea %.2f %.2f %.2f %.3f %.2f %.2f %.2f, power "
-			"%.2f, break %.3f %.2f, edge %.2f %.0f %.2f %.0f\n", drawn ?
+			"%.2f, break %.3f %.2f, edge %.2f %.0f %.2f %.0f, reach %.0f "
+			"%.0f %.0f %.0f %.0f\n", drawn ?
 			"drawn" : skyDrew ? "NOT drawn (no deep "
 			"look, no -hdwater 1 or no frame under the water)" :
 			"NOT drawn (no sky)",
@@ -20202,7 +20210,8 @@ static int ProbeMain(int argc, char** argv)
 			k[7], k[8], k[9], k[10], k[11], k[12], k[13], k[14], k[15],
 			k[16], k[17], k[HD_LOOK_SEA_POWER], k[HD_LOOK_SEA_TURN],
 			k[HD_LOOK_SEA_SWELL], k[HD_LOOK_SEA_MARGIN],
-			k[HD_LOOK_SEA_RAGGED], k[HD_LOOK_SEA_FOG], k[HD_LOOK_SEA_PLANE]);
+			k[HD_LOOK_SEA_RAGGED], k[HD_LOOK_SEA_FOG], k[HD_LOOK_SEA_PLANE],
+			reach[0], reach[1], reach[2], reach[3], reach[4]);
 	}
 
 	/* The scene: one room, or a room and the neighbours -with names, drawn

@@ -22757,7 +22757,7 @@ static void water_sea()
 		(long)kHDWaterSheetEdge, 4096);
 
 	/* The disc a glow: the power whose cosine halves at the reference's
-	 * 22.5 degrees, against the old spot's 600. */
+	 * 22.5 degrees, against the spot's 600 of the disc off the sheet. */
 	const float glow = HDWaterGlowPower(22.5f);
 
 	ok(glow > 8.74f && glow < 8.77f,
@@ -22766,18 +22766,26 @@ static void water_sea()
 	ok(fabsf(powf(cosf(22.5f * 0.017453293f), glow) - 0.5f) < 1.0e-4f,
 		"sea glow: ...and that power halves the light there", 0, 0);
 	ok(HDWaterGlowPower(2.7f) > 550.0f && HDWaterGlowPower(2.7f) < 700.0f,
-		"sea glow: 2.7 degrees is the old spot's power of about 600",
+		"sea glow: 2.7 degrees is the spot's power of about 600",
 		(long)HDWaterGlowPower(2.7f), 600);
 	ok(HDWaterGlowPower(0.0f) == 0.0f && HDWaterGlowPower(90.0f) == 0.0f,
 		"sea glow: no power for a half angle outside 0 to 90", 0, 0);
 
 	/* The extinction up to the sheet's plane where no sheet lies over the
-	 * eye's room: JOBY4's plane -4,269, the basin 12,032. */
+	 * eye's room and the eye is under the stand-in: JOBY4's plane -4,269,
+	 * the basin 12,032. */
 	ok(HDWaterUnderSeaDepth(1, 1, 11941.0f, 12032.0f, none, 1, -4269.0f) ==
-		16210.0f,
-		"sea depth: 91 units over the basin the plane counts, not the whole",
-		(long)HDWaterUnderSeaDepth(1, 1, 11941.0f, 12032.0f, none, 1,
-		-4269.0f), 16210);
+		none,
+		"sea depth: 91 units over the basin the whole way, the fade kept",
+		0, 0);
+	ok(HDWaterUnderSeaDepth(1, 1, 12100.0f, 12032.0f, none, 1, -4269.0f) ==
+		16369.0f,
+		"sea depth: 68 units under the basin up to the plane",
+		(long)HDWaterUnderSeaDepth(1, 1, 12100.0f, 12032.0f, none, 1,
+		-4269.0f), 16369);
+	ok(HDWaterUnderSeaDepth(1, 1, 12032.0f, 12032.0f, none, 1, -4269.0f) ==
+		none,
+		"sea depth: at the basin's own height the whole way", 0, 0);
 	ok(HDWaterUnderSeaDepth(1, 1, 14558.0f, 12032.0f, none, 1, -4269.0f) ==
 		18827.0f,
 		"sea depth: under the basin too, up to the plane",
@@ -22798,15 +22806,18 @@ static void water_sea()
 	ok(HDWaterUnderSeaDepth(1, 1, -5000.0f, 12032.0f, none, 1, -4269.0f) ==
 		none,
 		"sea depth: an eye over the plane has no sea over it", 0, 0);
-	ok(HDWaterSeaOver(1, 1, 1, HDWaterUnderSeaDepth(1, 1, 11941.0f,
+	ok(!HDWaterSeaOver(1, 1, 1, HDWaterUnderSeaDepth(1, 1, 11941.0f,
 		12032.0f, none, 1, -4269.0f), none),
-		"sea depth: so the sheet is drawn over the basin as well", 0, 0);
+		"sea depth: so over the basin no sheet, the surface fades out", 0, 0);
+	ok(HDWaterSeaOver(1, 1, 1, HDWaterUnderSeaDepth(1, 1, 12100.0f,
+		12032.0f, none, 1, -4269.0f), none),
+		"sea depth: ...and under it the sheet is drawn", 0, 0);
 
 	ok(HDWaterSheetDepth(14786.0f, 12032.0f) == 2754.0f,
 		"sheet depth: under the stand-in its depth, as the art's way",
 		(long)HDWaterSheetDepth(14786.0f, 12032.0f), 2754);
 	ok(HDWaterSheetDepth(11941.0f, 12032.0f) == 1.0f,
-		"sheet depth: over the stand-in 1, the sheet's whole light", 0, 0);
+		"sheet depth: never under 1 at the stand-in's height", 0, 0);
 
 	/* The sheet's reach: the plane's height over the lowest floor, 23,469,
 	 * and the fog's twentieth, ln 20 / 0.000444 = 6,747. */

@@ -14550,6 +14550,9 @@ namespace
 	float g_wsea_floor = 0.0f;
 	float g_wsea_stand = 0.0f;
 	bool g_wsea_plane = true;
+	/* The sheet's box the look's last sheet was drawn over (x0, x1, z0,
+	 * z1; x1 < x0 before one), for RoomProbe (HDRenderWaterSheetReach). */
+	float g_wsea_sheet[4] = { 0.0f, -1.0f, 0.0f, -1.0f };
 	std::vector<float> g_wsea_base;
 	// This frame: the art gives way, at that weight.
 	bool g_wsea_given = false;
@@ -14689,10 +14692,11 @@ namespace
 		 * 0.0004 of it was left and it went black, while from room 123
 		 * under the basin of room 7 it showed (RoomProbe -underwater, the
 		 * frame drawn with and without room 19). With the sea's sheet found
-		 * such a room counts up to the sheet's plane instead
+		 * such a room under the basin counts up to the sheet's plane instead
 		 * (HDWaterUnderSeaDepth): the sheet takes the art's place, its own
 		 * way counted from the basin (g_wsea_stand, HDWaterSheetDepth), and
-		 * what stands over the basin keeps the water's colour. */
+		 * what stands over the basin keeps the water's colour seen from
+		 * the dive; an eye over the basin keeps the whole way. */
 		const float depth = HDWaterUnderSeaDepth(fallback ? 1 : 0,
 			g_wdeep_on ? 1 : 0, f->underEyeY, surface, kUnderNoSurface,
 			g_wsea_group >= 0 && g_wsea_plane ? 1 : 0, g_wsea_y);
@@ -16007,6 +16011,8 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 		g_wsea_water[0] = g_wsea_water[2] = 0.0f;
 		g_wsea_water[1] = g_wsea_water[3] = -1.0f;
 		g_wsea_floor = -1.0e9f;
+		g_wsea_sheet[0] = g_wsea_sheet[2] = 0.0f;
+		g_wsea_sheet[1] = g_wsea_sheet[3] = -1.0f;
 		g_wsea_given = false;
 		g_wsea_set = -1.0f;
 		g_wsea_drawn = false;
@@ -18871,6 +18877,7 @@ namespace
 		HDWaterSheetBox(g_wsea_box, g_wsea_water, knobs[HD_LOOK_SEA_MARGIN] *
 			HDWaterSheetMargin(g_wsea_floor, g_wsea_y, sigma[3] *
 			knobs[HD_LOOK_SEA_FOG]), c + 60);
+		std::memcpy(g_wsea_sheet, c + 60, sizeof(g_wsea_sheet));
 		c[64] = knobs[HD_LOOK_SHEET];
 		c[65] = knobs[HD_LOOK_RIPPLE];
 		c[66] = kUnderClear;
@@ -19099,6 +19106,20 @@ void HDRenderWaterSeaKnobs(const float* knobs)
 
 	g_wsea_art = knobs[HD_LOOK_ART];
 	g_wsea_plane = knobs[HD_LOOK_SEA_PLANE] > 0.5f;
+}
+
+/* RoomProbe's -underlook: the lowest floor of the level's water rooms'
+ * squares (world y) the sheet's margin is measured from, and the box the
+ * look's last sheet was drawn over (x0, x1, z0, z1); `out` five numbers. */
+void HDRenderWaterSheetReach(float* out)
+{
+	if (!out)
+		return;
+
+	out[0] = g_wsea_floor;
+
+	for (int k = 0; k < 4; k++)
+		out[1 + k] = g_wsea_sheet[k];
 }
 
 /* The sea seen from below on the game's path: the look of the study above

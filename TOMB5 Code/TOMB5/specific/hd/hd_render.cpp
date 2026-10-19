@@ -4128,10 +4128,17 @@ namespace
 	bool g_gloss_max = false;
 
 	/* The marble floors (see "the marble floors"): whether the level is
-	 * built and drawn with them (tomb5.hd_marble, HDRenderMarbleSet), and
-	 * the most floor heights a frame mirrors (tomb5.hd_marble_planes). */
+	 * built and drawn with them (the registry's hd_marble,
+	 * HDRenderMarbleSet), and the most planes a frame mirrors
+	 * (hd_marble_ceiling, hd_marble_math.h's HDMarblePlanesCap: a ceiling
+	 * over the planes a frame shows). */
 	bool g_marble_on = false;
-	int g_marble_cap = 2;
+	// HD_MARBLE_PLANES_MOST until HDRenderMarbleSet says otherwise.
+	int g_marble_cap = 64;
+	/* The least share of the screen a plane shows to be mirrored
+	 * (hd_marble_math.h, HDMarbleShown): HD_MARBLE_LEAST, or RoomProbe's
+	 * -marbleleast. */
+	float g_marble_least = 0.004f;
 	// RoomProbe's -marblecopies 1: the copies kept (HDRenderMarbleKeepCopies).
 	bool g_marble_keep_copies = false;
 
@@ -19325,19 +19332,22 @@ bool HDRenderWaterProbeStand(float x, float z, float height, float offX,
  * The frame. Every room, stand range and static piece the frame draws is
  * noted as it is drawn (marble_note); the faces of the rooms drawn are
  * taken into view space and summed by height into planes, each by the
- * share of the screen its faces cover (HDMarbleCoverage), and the planes
- * covering the most are mirrored, at most g_marble_cap of them
- * (HDMarblePlanesPick): for each, the noted draws made again through the
- * projection folded with the plane's reflection and turned left to right
- * (two flips keep the winding), one clip plane keeping what stands over
- * the floor, the models with them (the frame's object list through the
- * same projection), into one target and its INTZ depth used again for the
- * next plane. Then over the frame: the plane's faces mark stencil bit
- * kMarbleStencilBit under the depth test, a wet floor's points of this
- * frame take it away again (the water's mirror is the wet floor's), and
- * the faces are drawn once more through MarblePS where the bit stands,
- * clearing it. Called once a frame between the rooms' glows and the wet
- * floor's models (hd_level.cpp, HDFrameDrawGlow). */
+ * share of the screen its faces cover (HDMarbleCoverage), and every plane
+ * that shows is mirrored, each at its own height - g_marble_cap is a
+ * ceiling far over what a frame shows (HDMarblePlanesPick takes the ones
+ * covering the most should it ever be reached): for each, the noted draws
+ * made again through the projection folded with the plane's reflection
+ * and turned left to right (two flips keep the winding), one clip plane
+ * keeping what stands over the floor, the models with them (the frame's
+ * object list through the same projection), into one target and its INTZ
+ * depth used again for the next plane, within a scissor round the plane's
+ * faces and leaving out every noted draw whose box cannot show in that
+ * mirror (marble_box_out). Then over the frame: the plane's faces mark
+ * stencil bit kMarbleStencilBit under the depth test, a wet floor's
+ * points of this frame take it away again (the water's mirror is the wet
+ * floor's), and the faces are drawn once more through MarblePS where the
+ * bit stands, clearing it. Called once a frame between the rooms' glows
+ * and the wet floor's models (hd_level.cpp, HDFrameDrawGlow). */
 namespace
 {
 	/* The stencil bit of the mirror's mask: bits 1, 2, 4 and 8 are the
@@ -19427,8 +19437,9 @@ namespace
 	 * rate. A frame's time counts at most kMarbleFadeLongest. */
 	const double kMarbleFadeMs = 8000.0 / 60.0;
 	const double kMarbleFadeLongest = 50.0;
-	// The frame's places, kept from frame to frame (HDMarbleSlotsStep).
-	HDMarbleSlot g_marble_slots[8];
+	/* The frame's places, kept from frame to frame (HDMarbleSlotsStep),
+	 * g_marble_cap of them. */
+	std::vector<HDMarbleSlot> g_marble_slots;
 	// The time of the last mirrored frame (warm_now_ms), 0 before one.
 	double g_marble_last_ms = 0.0;
 	/* The pixels of each plane the last count saw past what stands in
@@ -19506,13 +19517,14 @@ namespace
 
 	HDRenderMarbleStats g_marble_stats = {};
 	/* The last frame's planes for RoomProbe's -marblelist, kMarbleRowWidth
-	 * floats a plane in the frame's order: its key (a floor height, or
-	 * kMarbleTiltKey and the slope's number), its faces in view, their
-	 * cover, the pixels its last count saw (-1 none), 1 when drawn, the
-	 * strength laid, the room covering the most of it, and the mirrored
-	 * draw calls it took. */
+	 * floats a plane in the frame's order: its floor height or the slope's
+	 * number, 1 for a slope, its faces in view, their cover, the pixels its
+	 * last count saw (-1 none), 1 when drawn, the strength laid, the room
+	 * covering the most of it, the mirrored draw calls it took, the noted
+	 * draws its mirror left out (marble_replay), and its plane in world
+	 * space (normal x, y, z and distance, n.p = d). */
 	std::vector<float> g_marble_rows_list;
-	const int kMarbleRowWidth = 8;
+	const int kMarbleRowWidth = 14;
 	// RoomProbe's warm-up draw: the mirrored rooms alone, nothing laid.
 	bool g_marble_quiet = false;
 	// The mirror target's rows a frame's row (marble_make): 1 or 2.
@@ -19612,11 +19624,7 @@ namespace
 		g_marble_tilt_id.assign(g_groups.size(), std::vector<int>());
 		g_marble_tilts.clear();
 
-		for (HDMarbleSlot& s : g_marble_slots)
-		{
-			s.y = INT_MIN;
-			s.gain = 0.0f;
-		}
+		g_marble_slots.assign((size_t)g_marble_cap, { INT_MIN, 0.0f });
 
 		for (int g = 0; g < g_room_groups && g < (int)g_groups.size(); g++)
 		{
@@ -20620,19 +20628,97 @@ namespace
 		float axes[12] = {};
 		// Its cover by room, for the stats' room of the most.
 		std::map<int, float> rooms;
+		/* The frame's pixels its faces reach (x0, y0, x1, y1), for the
+		 * mirrored draw's scissor; `behind` where a corner lies at or
+		 * behind the eye, whose box on the screen is unbounded. */
+		float box[4] = { 1e30f, 1e30f, -1e30f, -1e30f };
+		bool behind = false;
 	};
 
-	/* The noted draws made again; the projection is the caller's. A sky
-	 * group is left out: it is drawn in a depth slice of its own. */
-	void marble_replay()
+	/* The scissor of the plane being mirrored (marble_scissor), in the
+	 * target's pixels (hd_marble_math.h, HDMarbleTargetRect): its faces'
+	 * box on the screen turned as the target is, kMarbleScissorMargin
+	 * pixels of the frame wider. What lies outside it the layer never
+	 * reads, so the mirrored draws leave it out, and the noted draws and
+	 * the rooms over whose boxes miss it are not made at all
+	 * (HDMarbleBoxOut). Off while no plane is drawn. */
+	int g_marble_rect[4] = { 0, 0, 0, 0 };
+	bool g_marble_rect_on = false;
+	const int kMarbleScissorMargin = 2;
+
+	void marble_scissor()
 	{
-		HDRenderScissorOff();
+		if (g_marble_rect_on)
+			HDRenderScissor(g_marble_rect[0], g_marble_rect[1],
+				g_marble_rect[2], g_marble_rect[3]);
+		else
+			HDRenderScissorOff();
+	}
+
+	/* Whether a group's box, drawn with `world`, can show nothing in the
+	 * plane's mirror: the mirrored view (g_viewproj), its clip `clip` in
+	 * clip space and the scissor. No box, no answer. */
+	bool marble_box_out(int group, const D3DMATRIX& world, const float* clip)
+	{
+		if (group < 0 || group >= (int)g_groups.size())
+			return false;
+
+		const HDGroup& room = g_groups[(size_t)group];
+
+		if (!room.hasBounds)
+			return false;
+
+		float h[32];
+
+		for (int c = 0; c < 8; c++)
+		{
+			const float p[3] = { c & 1 ? room.maxs[0] : room.mins[0],
+				c & 2 ? room.maxs[1] : room.mins[1],
+				c & 4 ? room.maxs[2] : room.mins[2] };
+			float q[4];
+
+			for (int k = 0; k < 4; k++)
+				q[k] = p[0] * world.m[0][k] + p[1] * world.m[1][k] +
+					p[2] * world.m[2][k] + world.m[3][k];
+
+			for (int k = 0; k < 4; k++)
+				h[c * 4 + k] = q[0] * g_viewproj[k] + q[1] * g_viewproj[4 + k] +
+					q[2] * g_viewproj[8 + k] + q[3] * g_viewproj[12 + k];
+		}
+
+		D3DVIEWPORT9 vp = {};
+
+		g_device->GetViewport(&vp);
+
+		const float view[4] = { (float)vp.X, (float)vp.Y, (float)vp.Width,
+			(float)vp.Height };
+
+		return HDMarbleBoxOut(h, clip, view, g_marble_rect_on ?
+			g_marble_rect : 0);
+	}
+
+	/* The noted draws made again; the projection is the caller's. A sky
+	 * group is left out: it is drawn in a depth slice of its own; and a
+	 * room or stand range whose box can show nothing in this mirror
+	 * (marble_box_out, `clip` the mirror's in clip space). Returns how
+	 * many were left out so. */
+	int marble_replay(const float* clip)
+	{
+		int culled = 0;
+
+		marble_scissor();
 		g_marble_replay = true;
 
 		for (const MarbleDraw& d : g_marble_draws)
 		{
 			if (d.kind != 2 && d.id >= g_room_groups)
 				continue;
+
+			if (d.kind != 2 && marble_box_out(d.id, d.world, clip))
+			{
+				culled++;
+				continue;
+			}
 
 			if (d.kind == 2)
 				HDRenderStaticPiece(d.id, &d.world, d.lighting, d.passes);
@@ -20646,22 +20732,24 @@ namespace
 
 		HDRenderScissorOff();
 		g_marble_replay = false;
+		return culled;
 	}
 
 	/* The rooms over (HDMarbleOverRooms), each drawn whole into the plane's
 	 * mirror with the matrix and the light of the drawn room it was found
 	 * from, moved by the two rooms' origins - unless its box lies wholly
-	 * outside the mirrored view (g_viewproj, the mirror's) or under the
-	 * plane `clip` (clip space), where nothing of it can show. Returns how
-	 * many were drawn; `culled` counts those left out so, and `outs` (when
-	 * given) takes 1 for each of the first sixteen left out. */
+	 * outside the mirrored view (g_viewproj, the mirror's), under the
+	 * plane `clip` (clip space) or outside the scissor, where nothing of it
+	 * can show (marble_box_out). Returns how many were drawn; `culled`
+	 * counts those left out so, and `outs` (when given) takes 1 for each of
+	 * the first sixteen left out. */
 	int marble_replay_over(const std::vector<HDMarbleOverRoom>& over,
 		const std::vector<const MarbleDraw*>& noted, const float* clip,
 		int* culled, int* outs)
 	{
 		int drawn = 0;
 
-		HDRenderScissorOff();
+		marble_scissor();
 		g_marble_replay = true;
 
 		for (const HDMarbleOverRoom& o : over)
@@ -20686,40 +20774,7 @@ namespace
 				world.m[3][k] += off[0] * under->world.m[0][k] +
 					off[1] * under->world.m[2][k];
 
-			// The box's corners in clip space: out when all lie past a side.
-			const HDGroup& room = g_groups[(size_t)o.group];
-			int outside[7] = { 0, 0, 0, 0, 0, 0, 0 };
-
-			for (int c = 0; c < 8 && room.hasBounds; c++)
-			{
-				const float p[3] = { c & 1 ? room.maxs[0] : room.mins[0],
-					c & 2 ? room.maxs[1] : room.mins[1],
-					c & 4 ? room.maxs[2] : room.mins[2] };
-				float q[4], h[4];
-
-				for (int k = 0; k < 4; k++)
-					q[k] = p[0] * world.m[0][k] + p[1] * world.m[1][k] +
-						p[2] * world.m[2][k] + world.m[3][k];
-
-				for (int k = 0; k < 4; k++)
-					h[k] = q[0] * g_viewproj[k] + q[1] * g_viewproj[4 + k] +
-						q[2] * g_viewproj[8 + k] + q[3] * g_viewproj[12 + k];
-
-				outside[0] += h[0] < -h[3] ? 1 : 0;
-				outside[1] += h[0] > h[3] ? 1 : 0;
-				outside[2] += h[1] < -h[3] ? 1 : 0;
-				outside[3] += h[1] > h[3] ? 1 : 0;
-				outside[4] += h[2] < 0.0f ? 1 : 0;
-				outside[5] += h[2] > h[3] ? 1 : 0;
-				outside[6] += clip[0] * h[0] + clip[1] * h[1] +
-					clip[2] * h[2] + clip[3] * h[3] < 0.0f ? 1 : 0;
-			}
-
-			bool out = false;
-
-			for (int s = 0; s < 7; s++)
-				out = out || outside[s] == 8;
-
+			const bool out = marble_box_out(o.group, world, clip);
 			const size_t at = (size_t)(&o - &over[0]);
 
 			if (outs && at < 16)
@@ -21124,7 +21179,10 @@ double HDRenderMarbleWarmUp(double* ms, int max)
 void HDRenderMarbleSet(int on, int planes)
 {
 	g_marble_on = on != 0;
-	g_marble_cap = planes < 1 ? 1 : planes > 8 ? 8 : planes;
+	g_marble_cap = HDMarblePlanesCap(planes);
+
+	if ((int)g_marble_slots.size() != g_marble_cap)
+		g_marble_slots.assign((size_t)g_marble_cap, { INT_MIN, 0.0f });
 }
 
 int HDRenderMarbleOn()
@@ -21164,7 +21222,54 @@ int HDRenderMarbleRisingFaces(const float** rows)
 	return (int)(g_marble_rise_list.size() / 6);
 }
 
-/* RoomProbe's -marblelist: the last frame's planes, eight floats a plane
+/* RoomProbe's -marbleslopes: the level's sloped planes, eight floats a
+ * plane - its number, its normal and distance (n.p = d), its faces, their
+ * area in units squared and the group of its first face. Returns how
+ * many. */
+int HDRenderMarbleSlopeRows(const float** rows)
+{
+	static std::vector<float> list;
+	const size_t count = g_marble_tilts.size() / 4;
+
+	list.assign(count * 8, 0.0f);
+
+	for (size_t t = 0; t < count; t++)
+	{
+		list[t * 8] = (float)t;
+		list[t * 8 + 7] = -1.0f;
+
+		for (int k = 0; k < 4; k++)
+			list[t * 8 + 1 + k] = g_marble_tilts[t * 4 + k];
+	}
+
+	for (size_t g = 0; g < g_marble_tilt_faces.size(); g++)
+		for (size_t f = 0; f < g_marble_tilt_id[g].size(); f++)
+		{
+			const float* p = &g_marble_tilt_faces[g][f * 9];
+			const size_t t = (size_t)g_marble_tilt_id[g][f];
+			const double ux = p[3] - p[0], uy = p[4] - p[1], uz = p[5] - p[2];
+			const double vx = p[6] - p[0], vy = p[7] - p[1], vz = p[8] - p[2];
+			const double cx = uy * vz - uz * vy, cy = uz * vx - ux * vz;
+			const double cz = ux * vy - uy * vx;
+
+			if (t >= count)
+				continue;
+
+			list[t * 8 + 5] += 1.0f;
+			list[t * 8 + 6] += (float)(0.5 * sqrt(cx * cx + cy * cy +
+				cz * cz));
+
+			if (list[t * 8 + 7] < 0.0f)
+				list[t * 8 + 7] = (float)g;
+		}
+
+	if (rows)
+		*rows = list.empty() ? 0 : &list[0];
+
+	return (int)count;
+}
+
+/* RoomProbe's -marblelist: the last frame's planes, fourteen floats a plane
  * (g_marble_rows_list). Returns how many. */
 int HDRenderMarblePlaneRows(const float** rows)
 {
@@ -21172,6 +21277,12 @@ int HDRenderMarblePlaneRows(const float** rows)
 		*rows = g_marble_rows_list.empty() ? 0 : &g_marble_rows_list[0];
 
 	return (int)(g_marble_rows_list.size() / kMarbleRowWidth);
+}
+
+// RoomProbe's -marbleleast: the least share of the screen a plane shows.
+void HDRenderMarbleLeast(float share)
+{
+	g_marble_least = share > 0.0f ? share : 0.0f;
 }
 
 void HDRenderMarbleOver(int group, int room)
@@ -21470,6 +21581,26 @@ void HDRenderMarbleDraw(HDWetModelDraw draw, const void* projection,
 			layer.cover += cover;
 			layer.rooms[d.id] += cover;
 			layer.verts.insert(layer.verts.end(), v, v + 3);
+
+			// The face's corners on the screen, for the plane's scissor.
+			for (int c = 0; c < 3; c++)
+			{
+				const float* q = clip + c * 4;
+
+				if (q[3] <= 1e-3f)
+				{
+					layer.behind = true;
+					continue;
+				}
+
+				const float sx = (q[0] / q[3] + 1.0f) * 0.5f;
+				const float sy = (1.0f - q[1] / q[3]) * 0.5f;
+
+				layer.box[0] = sx < layer.box[0] ? sx : layer.box[0];
+				layer.box[1] = sy < layer.box[1] ? sy : layer.box[1];
+				layer.box[2] = sx > layer.box[2] ? sx : layer.box[2];
+				layer.box[3] = sy > layer.box[3] ? sy : layer.box[3];
+			}
 		}
 	}
 
@@ -21498,10 +21629,10 @@ void HDRenderMarbleDraw(HDWetModelDraw draw, const void* projection,
 	{
 		const std::map<int, MarbleSeen>::const_iterator seen =
 			g_marble_seen.find(l.first);
-		const float score = seen == g_marble_seen.end() ? l.second.cover :
-			HDMarbleScore(seen->second.pixels, g_marble_clock -
-			seen->second.frame, kMarbleSeenOldest, l.second.cover,
-			(int)vp.Width, (int)vp.Height);
+		const float score = HDMarbleShown(seen == g_marble_seen.end() ?
+			l.second.cover : HDMarbleScore(seen->second.pixels,
+			g_marble_clock - seen->second.frame, kMarbleSeenOldest,
+			l.second.cover, (int)vp.Width, (int)vp.Height), g_marble_least);
 
 		planes.push_back({ l.first, score });
 		ys.push_back(l.first);
@@ -21524,9 +21655,13 @@ void HDRenderMarbleDraw(HDWetModelDraw draw, const void* projection,
 			g_marble_last_ms, kMarbleFadeMs, kMarbleFadeLongest) : 1.0f;
 
 		g_marble_last_ms = now;
-		HDMarbleSlotsStep(g_marble_slots, g_marble_cap, ys.data(),
+
+		if ((int)g_marble_slots.size() != g_marble_cap)
+			g_marble_slots.assign((size_t)g_marble_cap, { INT_MIN, 0.0f });
+
+		HDMarbleSlotsStep(g_marble_slots.data(), g_marble_cap, ys.data(),
 			scores.data(), (int)ys.size(), step, HD_MARBLE_HOLD);
-		use.assign(g_marble_slots, g_marble_slots + g_marble_cap);
+		use = g_marble_slots;
 	}
 
 	// The places' planes first, in their order, then the rest by score.
@@ -21597,10 +21732,18 @@ void HDRenderMarbleDraw(HDWetModelDraw draw, const void* projection,
 				room = (float)r.first;
 			}
 
-		const float row[kMarbleRowWidth] = { (float)planes[i].y,
+		const int key = planes[i].y;
+		const bool tilt = key >= kMarbleTiltKey;
+		const float* t = tilt && (size_t)(key - kMarbleTiltKey) * 4 + 3 <
+			g_marble_tilts.size() ? &g_marble_tilts[(size_t)(key -
+			kMarbleTiltKey) * 4] : 0;
+		const float row[kMarbleRowWidth] = {
+			(float)(tilt ? key - kMarbleTiltKey : key), tilt ? 1.0f : 0.0f,
 			(float)(l.verts.size() / 3), l.cover, seen != g_marble_seen.end() ?
 			(float)seen->second.pixels : -1.0f, (int)i < drawn ? 1.0f : 0.0f,
-			(int)i < drawn ? gains[i] : 0.0f, room, 0.0f };
+			(int)i < drawn ? gains[i] : 0.0f, room, 0.0f, 0.0f,
+			t ? t[0] : 0.0f, t ? t[1] : -1.0f, t ? t[2] : 0.0f,
+			t ? t[3] : (float)-key };
 
 		g_marble_rows_list.insert(g_marble_rows_list.end(), row,
 			row + kMarbleRowWidth);
@@ -21728,22 +21871,39 @@ void HDRenderMarbleDraw(HDWetModelDraw draw, const void* projection,
 		multiply(g_view, g_proj, g_viewproj);
 		marble_room_state();
 
-		const int callsBefore = g_draw_calls;
+		/* The scissor: the plane's faces' box on the screen, in the
+		 * target's pixels (HDMarbleTargetRect); none where a face reaches
+		 * behind the eye. */
+		g_marble_rect_on = !layer.behind && layer.box[0] <= layer.box[2] &&
+			HDMarbleTargetRect((int)floorf((float)vp.X + layer.box[0] *
+			(float)vp.Width), (int)floorf((float)vp.Y + layer.box[1] *
+			(float)vp.Height), (int)ceilf((float)vp.X + layer.box[2] *
+			(float)vp.Width), (int)ceilf((float)vp.Y + layer.box[3] *
+			(float)vp.Height), (int)vp.X, (int)vp.Width, g_marble_rows,
+			kMarbleScissorMargin, (int)g_marble_desc.Width,
+			(int)g_marble_desc.Height, g_marble_rect);
 
-		marble_replay();
+		const int callsBefore = g_draw_calls;
+		const int left = marble_replay(clip);
+
 		g_marble_stats.over += marble_replay_over(overRooms, noted, clip,
 			&g_marble_stats.over_culled, i ? 0 : g_marble_stats.over_out);
 		g_marble_stats.calls += g_draw_calls - callsBefore;
-		g_marble_rows_list[(size_t)i * kMarbleRowWidth + 7] =
+		g_marble_rows_list[(size_t)i * kMarbleRowWidth + 8] =
 			(float)(g_draw_calls - callsBefore);
+		g_marble_rows_list[(size_t)i * kMarbleRowWidth + 9] = (float)left;
 
 		if (draw && projection)
 		{
+			marble_scissor();
 			draw(mirrored, bulbs, HD_PASS_SOLID);
 			marble_room_state();
 			g_water_table_up = (const void*)~(size_t)0;
 			apply_frame_lighting(g_marble_frame);
 		}
+
+		HDRenderScissorOff();
+		g_marble_rect_on = false;
 
 		std::memcpy(g_proj, keepProj, sizeof(keepProj));
 		multiply(g_view, g_proj, g_viewproj);

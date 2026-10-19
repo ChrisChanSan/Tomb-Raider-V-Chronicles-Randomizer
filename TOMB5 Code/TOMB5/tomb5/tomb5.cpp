@@ -265,8 +265,9 @@ void init_tomb5_stuff()
 		tomb5.hd_vis = 1;								//the visibility path
 		REG_WriteLong(buf, tomb5.hd_vis);
 
-		// The marble floors on, two floor heights (see the read below).
-		HDRenderMarbleSet(1, 2);
+		// The marble floors on, every plane a frame shows (see the read
+		// below).
+		HDRenderMarbleSet(1, 64);
 
 		sprintf(buf, "hd_threads");
 		tomb5.hd_threads = 0;							//the machine's
@@ -531,17 +532,21 @@ void init_tomb5_stuff()
 		if (tomb5.hd_vis > 1)
 			tomb5.hd_vis = 0;
 
-		/* The marble floors' mirror and the most floor heights a frame
-		 * mirrors (specific\hd\hd_render.cpp, "the marble floors"), handed
-		 * to the renderer before any level is built. Absent - every older
-		 * registry - reads as on and 2. */
+		/* The marble floors' mirror (the registry's hd_marble) and the
+		 * most planes a frame mirrors, a ceiling over what a frame shows
+		 * (specific\hd\hd_render.cpp, "the marble floors"; 64 is
+		 * hd_marble_math.h's HD_MARBLE_PLANES_MOST), handed to the renderer
+		 * before any level is built. Absent - every older registry - reads
+		 * as on and 64. The ceiling has a key of its own: hd_marble_planes,
+		 * the cap of two it replaces, stands written as 2 in every registry
+		 * a build with that cap read, and is no longer read. */
 		{
-			ulong marble = 1, planes = 2;
+			ulong marble = 1, planes = 64;
 
 			sprintf(buf, "hd_marble");
 			REG_ReadLong(buf, marble, 1);
-			sprintf(buf, "hd_marble_planes");
-			REG_ReadLong(buf, planes, 2);
+			sprintf(buf, "hd_marble_ceiling");
+			REG_ReadLong(buf, planes, 64);
 			HDRenderMarbleSet(marble > 1 ? 1 : (int)marble, (int)planes);
 		}
 

@@ -625,8 +625,8 @@
  *                     -wetstand) drawn through each floor height and laid
  *                     over the floor (HDRenderMarbleDraw), timed on the GPU
  *                     (marble: line).
- *     -marbleplanes n the most floor heights a frame mirrors
- *                     (tomb5.hd_marble_planes, 2 where not given).
+ *     -marbleplanes n the most planes a frame mirrors (hd_marble_ceiling,
+ *                     64, the engine's, where not given).
  *     -marblerows 1|2 the mirror's target at one or two rows a row of the
  *                     frame (2, the engine's, where not given).
  *     -marbleclip <units>  how far over the floor's plane the mirrored draw
@@ -693,8 +693,11 @@
  *                     in the frame's order: its height (or "slope" and the
  *                     slope's number), its faces in view, their cover, the
  *                     pixels its occlusion count saw, drawn or left, the
- *                     strength, the room covering the most of it and the
- *                     mirrored draw calls it took; and one marblecpu line,
+ *                     strength, the room covering the most of it, the
+ *                     mirrored draw calls it took, the noted draws its
+ *                     mirror left out (box out of its view, under its clip
+ *                     or beside its scissor) and its plane in world space
+ *                     (n.p = d); and one marblecpu line,
  *                     the picture's HDRenderMarbleDraw on the processor
  *                     beside its GPU time.
  *     -marblesteep    the level's triangles of the mirror's pages (the
@@ -10211,7 +10214,7 @@ static void ProbeMarbleSteep(const char* root, const char* stem)
  * off where -marble is not given, so a picture of another switch stays the
  * one it was. */
 static int g_marble_engine = 0;
-static int g_marble_planes = 2;
+static int g_marble_planes = 64;
 // -marblerise: one marblerise line a face the build left out for rising.
 static bool g_marble_rise = false;
 // -marbletarget <path>: the mirror's target written there as a picture.
@@ -10225,6 +10228,11 @@ static int g_marble_lag = 0;
 static bool g_marble_list = false;
 // The frame's planes (hd_render.cpp, the marble floors' RoomProbe part).
 int HDRenderMarblePlaneRows(const float** rows);
+// -marbleleast s: the least share of the screen a plane shows.
+void HDRenderMarbleLeast(float share);
+// -marbleslopes: the level's sloped planes, one line each (ProbeMarble).
+int HDRenderMarbleSlopeRows(const float** rows);
+static bool g_marble_slopes = false;
 
 static bool MarbleArg(int argc, char** argv, int* at)
 {
@@ -11090,23 +11098,38 @@ static void ProbeMarble(const void* projection)
 			"rise %.1f\n", (int)rise[i * 6], (int)rise[i * 6 + 1],
 			rise[i * 6 + 2], rise[i * 6 + 3], rise[i * 6 + 4], rise[i * 6 + 5]);
 
+	/* -marbleslopes: one marbleslope line a sloped plane of the level - its
+	 * number, normal and distance, its faces, their area in units squared
+	 * and the room of its first face. */
+	const float* sl = 0;
+	const int slopes = g_marble_slopes ? HDRenderMarbleSlopeRows(&sl) : 0;
+
+	for (int i = 0; i < slopes; i++)
+	{
+		const float* r = sl + i * 8;
+
+		printf("marbleslope: %d normal %.4f %.4f %.4f d %.1f faces %d area "
+			"%.0f room %d\n", (int)r[0], r[1], r[2], r[3], r[4], (int)r[5],
+			r[6], (int)r[7]);
+	}
+
 	/* -marblelist: every plane of the frame in its order - its key (a
 	 * height, or "slope" and its number), faces in view, cover, the pixels
-	 * its count saw, drawn or left, strength, room and mirrored calls -
-	 * and one marblecpu line, the picture's draw on the processor. */
+	 * its count saw, drawn or left, strength, room, mirrored calls, the
+	 * noted draws its mirror left out and its plane in world space (n.p
+	 * = d) - and one marblecpu line, the picture's draw on the processor. */
 	const float* rows = 0;
 	const int listed = g_marble_list ? HDRenderMarblePlaneRows(&rows) : 0;
 
 	for (int i = 0; i < listed; i++)
 	{
-		const float* r = rows + i * 8;
-		const int key = (int)r[0];
+		const float* r = rows + i * 14;
 
 		printf("marblelist: %d %s %d faces %d cover %.5f seen %d %s gain %.3f "
-			"room %d calls %d\n", i, key >= (1 << 28) ? "slope" : "y",
-			key >= (1 << 28) ? key - (1 << 28) : key, (int)r[1], r[2],
-			(int)r[3], r[4] > 0.0f ? "drawn" : "left", r[5], (int)r[6],
-			(int)r[7]);
+			"room %d calls %d left %d plane %.4f %.4f %.4f %.1f\n", i,
+			r[1] > 0.0f ? "slope" : "y", (int)r[0], (int)r[2], r[3],
+			(int)r[4], r[5] > 0.0f ? "drawn" : "left", r[6], (int)r[7],
+			(int)r[8], (int)r[9], r[10], r[11], r[12], r[13]);
 	}
 
 	if (g_marble_list)

@@ -19383,6 +19383,12 @@ namespace
 	/* RoomProbe's -marbleplanefloor: the mirror's plane in the floor, under
 	 * the clip, which leaves the strip at a wall's foot out (a measure). */
 	bool g_marble_plane_floor = false;
+	/* RoomProbe's -marbletread: floor heights of a frame within this many
+	 * units of the next lower one share the plane of the one covering the
+	 * most (a stair's treads under one mirror), so the error of sharing is
+	 * measured against every tread at its own height; 0, the engine's,
+	 * shares none. */
+	int g_marble_tread = 0;
 	/* RoomProbe's -marblevoid: the mirror's target cleared to a colour of
 	 * its own and a depth that reads as held, so what of the floor shows
 	 * nothing of the mirrored rooms tells itself apart in the picture. */
@@ -21423,6 +21429,12 @@ void HDRenderMarbleLeast(float share)
 	g_marble_least = share > 0.0f ? share : 0.0f;
 }
 
+// RoomProbe's -marbletread: the units within which treads share a plane.
+void HDRenderMarbleTread(int units)
+{
+	g_marble_tread = units > 0 ? units : 0;
+}
+
 void HDRenderMarbleOver(int group, int room)
 {
 	if (group < 0 || group >= (int)g_marble_over.size() || room < 0)
@@ -21741,6 +21753,63 @@ void HDRenderMarbleDraw(HDWetModelDraw draw, const void* projection,
 				layer.box[3] = sy > layer.box[3] ? sy : layer.box[3];
 			}
 		}
+	}
+
+	/* RoomProbe's -marbletread: a run of floor heights each within
+	 * g_marble_tread of the one before goes into the plane of the run's
+	 * layer covering the most. */
+	if (g_marble_tread > 0)
+	{
+		std::vector<int> run;
+		const auto merge = [&]()
+		{
+			int into = run.empty() ? 0 : run[0];
+
+			for (int y : run)
+				into = layers[y].cover > layers[into].cover ? y : into;
+
+			for (int y : run)
+			{
+				if (y == into)
+					continue;
+
+				MarbleLayer& from = layers[y];
+				MarbleLayer& to = layers[into];
+
+				to.verts.insert(to.verts.end(), from.verts.begin(),
+					from.verts.end());
+				to.cover += from.cover;
+				to.behind = to.behind || from.behind;
+
+				for (int k = 0; k < 2; k++)
+				{
+					to.box[k] = fminf(to.box[k], from.box[k]);
+					to.box[k + 2] = fmaxf(to.box[k + 2], from.box[k + 2]);
+				}
+
+				for (const std::pair<const int, float>& r : from.rooms)
+					to.rooms[r.first] += r.second;
+
+				layers.erase(y);
+			}
+
+			run.clear();
+		};
+		std::vector<int> flat;
+
+		for (const std::pair<const int, MarbleLayer>& l : layers)
+			if (l.first < kMarbleTiltKey)
+				flat.push_back(l.first);
+
+		for (int y : flat)
+		{
+			if (!run.empty() && y - run.back() > g_marble_tread)
+				merge();
+
+			run.push_back(y);
+		}
+
+		merge();
 	}
 
 	/* The planes scored (hd_marble_math.h, HDMarbleScore): by what of each

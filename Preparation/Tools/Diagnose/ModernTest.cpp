@@ -24990,6 +24990,165 @@ static void marble_slopes()
 		"marble slopes: a face of no area has no plane", 0, 0);
 }
 
+/* The marble floors' every plane, leaning floors and switch
+ * (hd_marble_math.h): the ceiling held to 1 to HD_MARBLE_PLANES_MOST, the
+ * places with every plane in them fading none out while it shows, the
+ * switch keeping a built level's build, the leaning floor between the
+ * flat face and 60 degrees, a sloped face joining a plane its corners lie
+ * within the clip's offset of, the scissor turned as the target is and
+ * a box left out of a mirror only where it can show nothing. */
+static void marble_every()
+{
+	printf("the marble floors: every plane, the slopes and the switch\n");
+
+	ok(HDMarblePlanesCap(0) == 1 && HDMarblePlanesCap(2) == 2 &&
+		HDMarblePlanesCap(1000) == HD_MARBLE_PLANES_MOST,
+		"marble every: the ceiling held to 1 to 64", HDMarblePlanesCap(1000),
+		64);
+
+	// Four treads and a floor, the last tread showing a hundredth of the
+	// floor: with the places for all of them, none fades out while it
+	// shows, and a tread coming into view fades in.
+	HDMarbleSlot slots[HD_MARBLE_PLANES_MOST];
+
+	for (HDMarbleSlot& s : slots)
+	{
+		s.y = INT_MIN;
+		s.gain = 0.0f;
+	}
+
+	const int ys[5] = { -768, -512, -256, 0, -1024 };
+	const float scores[5] = { 0.9f, 0.2f, 0.05f, 0.009f, 0.0f };
+	int held = HDMarbleSlotsStep(slots, HD_MARBLE_PLANES_MOST, ys, scores, 5,
+		0.125f, HD_MARBLE_HOLD);
+	float least = 1.0f;
+
+	for (int f = 0; f < 20; f++)
+		held = HDMarbleSlotsStep(slots, HD_MARBLE_PLANES_MOST, ys, scores, 4,
+			0.125f, HD_MARBLE_HOLD);
+
+	for (int s = 0; s < held; s++)
+		least = slots[s].gain < least ? slots[s].gain : least;
+
+	ok(held == 4 && least == 1.0f,
+		"marble every: four planes showing, all held whole", held * 10 +
+		lroundf(least), 41);
+
+	const int more[5] = { -768, -512, -256, 0, -1024 };
+	const float now[5] = { 0.9f, 0.2f, 0.05f, 0.009f, 0.3f };
+
+	HDMarbleSlotsStep(slots, HD_MARBLE_PLANES_MOST, more, now, 5, 0.125f,
+		HD_MARBLE_HOLD);
+
+	float in = -1.0f, kept = 1.0f;
+
+	for (int s = 0; s < HD_MARBLE_PLANES_MOST; s++)
+		if (slots[s].y == -1024)
+			in = slots[s].gain;
+		else if (slots[s].y != INT_MIN && slots[s].gain < kept)
+			kept = slots[s].gain;
+
+	ok(in == 0.125f && kept == 1.0f,
+		"marble every: a plane coming into view fades in, the weakest held "
+		"whole", lroundf(in * 1000.0f) + lroundf(kept * 10000.0f), 10125);
+
+	// Just over a thousandth of the screen: 3,687 of 2,560 x 1,440 pixels.
+	const float thousandth = HDMarbleSeenCover(3687, 2560, 1440);
+
+	ok(HDMarbleShown(thousandth, HD_MARBLE_LEAST) > 0.0f &&
+		HDMarbleShown(HDMarbleSeenCover(3600, 2560, 1440), HD_MARBLE_LEAST) ==
+		0.0f && HDMarbleShown(0.5f, HD_MARBLE_LEAST) == 0.5f,
+		"marble every: a plane showing under a thousandth of the screen counts "
+		"as none", lroundf(thousandth * 100000.0f), 400);
+
+	ok(HDMarbleBuildAfterSwitch(true, false, 300) &&
+		!HDMarbleBuildAfterSwitch(true, false, 0) &&
+		HDMarbleBuildAfterSwitch(false, true, 0) &&
+		!HDMarbleBuildAfterSwitch(false, false, 0),
+		"marble every: a built level keeps its build, else the wish", 0, 0);
+
+	// A corridor going up two clicks a square, a ramp of 1 in 4, a level
+	// floor, a wall's leaning foot at 70 degrees and a ceiling's slope.
+	const float up2[9] = { 0.0f, 0.0f, 0.0f, 1024.0f, 0.0f, 0.0f, 0.0f,
+		-512.0f, 1024.0f };
+	const float ramp[9] = { 0.0f, 0.0f, 0.0f, 1024.0f, 0.0f, 0.0f, 0.0f,
+		-256.0f, 1024.0f };
+	const float flat[9] = { 0.0f, 0.0f, 0.0f, 1024.0f, 0.0f, 0.0f, 0.0f,
+		0.0f, 1024.0f };
+	const float wall[9] = { 0.0f, 0.0f, 0.0f, 1024.0f, 0.0f, 0.0f, 0.0f,
+		-2813.0f, 1024.0f };
+
+	ok(HDMarbleLeanFace(up2, up2 + 3, up2 + 6, -1.0f, 0.95f) &&
+		!HDMarbleLeanFace(ramp, ramp + 3, ramp + 6, -1.0f, 0.95f) &&
+		!HDMarbleLeanFace(flat, flat + 3, flat + 6, -1.0f, 0.95f) &&
+		!HDMarbleLeanFace(wall, wall + 3, wall + 6, -1.0f, 0.95f) &&
+		!HDMarbleLeanFace(up2, up2 + 3, up2 + 6, 1.0f, 0.95f),
+		"marble every: a leaning floor lies between the flat face and 60 "
+		"degrees and faces up", 0, 0);
+
+	// A ramp's next square tessellated a little apart, and a step over it.
+	float plane[4];
+
+	HDMarbleTiltPlane(ramp, 0.0f, 0.0f, plane);
+
+	const float near[9] = { 1024.0f, 2.0f, 0.0f, 2048.0f, 0.0f, 0.0f,
+		1024.0f, -253.0f, 1024.0f };
+	const float step[9] = { 1024.0f, -128.0f, 0.0f, 2048.0f, -128.0f, 0.0f,
+		1024.0f, -384.0f, 1024.0f };
+
+	ok(HDMarbleTiltFits(plane, near, 0.0f, 0.0f, 4.0f) &&
+		!HDMarbleTiltFits(plane, step, 0.0f, 0.0f, 4.0f) &&
+		HDMarbleTiltFits(plane, near + 0, -1.0f, 0.0f, 4.0f),
+		"marble every: a face within the clip's offset joins the slope, a "
+		"step over it does not", 0, 0);
+
+	// Frame pixels 100..199 x 50..59 of a viewport at 0, 960 wide, read at
+	// two rows a row with a margin of 2, in a 960 x 1080 target.
+	int r[4];
+
+	ok(HDMarbleTargetRect(100, 50, 199, 59, 0, 960, 2, 2, 960, 1080, r) &&
+		r[0] == 759 && r[1] == 96 && r[2] == 863 && r[3] == 124,
+		"marble every: the scissor turned left to right and doubled in rows",
+		r[0] * 1000 + r[2], 759863);
+	ok(HDMarbleTargetRect(0, 0, 959, 539, 0, 960, 2, 2, 960, 1080, r) &&
+		r[0] == 0 && r[1] == 0 && r[2] == 960 && r[3] == 1080 &&
+		!HDMarbleTargetRect(970, 0, 990, 10, 0, 960, 2, 2, 960, 1080, r),
+		"marble every: the scissor held to the target, none off it", 0, 0);
+
+	// A box in clip space: in view, past the right side, under the clip,
+	// and in view but beside the scissor.
+	float h[32];
+	const float clipUp[4] = { 0.0f, 1.0f, 0.0f, 0.0f };
+	const float vp[4] = { 0.0f, 0.0f, 960.0f, 1080.0f };
+	const int rect[4] = { 0, 0, 100, 1080 };
+
+	const auto box = [&](float x0, float x1, float y0, float y1)
+	{
+		for (int c = 0; c < 8; c++)
+		{
+			h[c * 4] = c & 1 ? x1 : x0;
+			h[c * 4 + 1] = c & 2 ? y1 : y0;
+			h[c * 4 + 2] = c & 4 ? 0.9f : 0.1f;
+			h[c * 4 + 3] = 1.0f;
+		}
+	};
+
+	box(-0.5f, 0.5f, 0.1f, 0.5f);
+	const bool inView = !HDMarbleBoxOut(h, clipUp, vp, 0);
+	box(1.5f, 2.0f, 0.1f, 0.5f);
+	const bool right = HDMarbleBoxOut(h, clipUp, vp, 0);
+	box(-0.5f, 0.5f, -0.5f, -0.1f);
+	const bool under = HDMarbleBoxOut(h, clipUp, vp, 0);
+	box(0.5f, 0.9f, 0.1f, 0.5f);
+	const bool beside = HDMarbleBoxOut(h, clipUp, vp, rect) &&
+		!HDMarbleBoxOut(h, clipUp, vp, 0);
+
+	ok(inView && right && under && beside,
+		"marble every: a box out past a side, under the clip or beside the "
+		"scissor, and only so", (inView ? 1 : 0) + (right ? 2 : 0) +
+		(under ? 4 : 0) + (beside ? 8 : 0), 15);
+}
+
 /* The level's HD key (hd_levelkey.h): a key equal to itself keeps the HD
  * data, every field changed alone refuses with that field's name, and a
  * load with HD off, with nothing built or after an outfit change refuses
@@ -25627,6 +25786,7 @@ int main()
 	marble_counts();
 	marble_over();
 	marble_slopes();
+	marble_every();
 	debris_pieces();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);

@@ -689,6 +689,20 @@
  *                     a row of the frame, turned in x; -marbleslots picks
  *                     the plane): what the mirrored draw drew, and where
  *                     -marblevoid's magenta is, nothing.
+ *     -marbletread n  floor heights of the frame each within n units of
+ *                     the one before share the plane of the one covering
+ *                     the most (a stair's treads under one mirror): the
+ *                     picture against -marbletread 0 (every tread at its
+ *                     own height, the engine's) is the error of sharing.
+ *     -marbleleast s  the least share of the screen (the -1..1 square
+ *                     being 4, as the occlusion counts' scores are) a
+ *                     plane shows to be mirrored (HDRenderMarbleLeast;
+ *                     0.004, the engine's thousandth, where not given; 0
+ *                     mirrors every plane that shows a pixel).
+ *     -marbleslopes   one marbleslope line a sloped plane of the level: its
+ *                     number, normal and distance (n.p = d), its faces,
+ *                     their area in units squared and the room of its
+ *                     first face.
  *     -marblelist     one marblelist line a plane of the frame, all of them
  *                     in the frame's order: its height (or "slope" and the
  *                     slope's number), its faces in view, their cover, the
@@ -10228,6 +10242,8 @@ static int g_marble_lag = 0;
 static bool g_marble_list = false;
 // The frame's planes (hd_render.cpp, the marble floors' RoomProbe part).
 int HDRenderMarblePlaneRows(const float** rows);
+// -marbletread n: floor heights within n units of the next share a plane.
+void HDRenderMarbleTread(int units);
 // -marbleleast s: the least share of the screen a plane shows.
 void HDRenderMarbleLeast(float share);
 // -marbleslopes: the level's sloped planes, one line each (ProbeMarble).
@@ -10362,6 +10378,27 @@ static bool MarbleArg(int argc, char** argv, int* at)
 			fclose(f);
 
 		exit(0);
+	}
+
+	// -marbletread n: a stair's treads within n units under one plane.
+	if (!strcmp(a, "-marbletread") && more)
+	{
+		HDRenderMarbleTread(atoi(argv[++*at]));
+		return true;
+	}
+
+	// -marbleleast s: the least share of the screen a mirrored plane shows.
+	if (!strcmp(a, "-marbleleast") && more)
+	{
+		HDRenderMarbleLeast((float)atof(argv[++*at]));
+		return true;
+	}
+
+	// -marbleslopes: the level's sloped planes, one line each.
+	if (!strcmp(a, "-marbleslopes"))
+	{
+		g_marble_slopes = true;
+		return true;
 	}
 
 	// -marblelist: the frame's planes, one line each (ProbeMarble).

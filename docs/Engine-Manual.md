@@ -3256,7 +3256,7 @@ HDLOG frame objects hd=6 classic=4 baked=3 dropped=0 calls=20 swap_drawn=1
 HDLOG slot=33 name=SWAT model=SWAT nodes=15 maxbone=14 cover=15
       drift=22/114 head=-1 hd=1 reason=ok fit=-1 pocket=0
 HDLOG slot=31 name=SAS model=SAS nodes=25 maxbone=14 cover=15
-      drift=807/2286 head=-1 hd=0 reason=skeleton_drift fit=... pocket=0
+      drift=807/2286 head=-1 hd=0 reason=skeleton_drift fit=2383 pocket=0
 HDLOG slot=436 name=ANIMATING11 model=- nodes=2 ... hd=0 reason=baked
 HDLOG level=ANDREA1 map=read lines=42 baked_slots=14
 HDLOG level=ANDREA1 swap slot=469 name=CYBORG kind=hitman_stages

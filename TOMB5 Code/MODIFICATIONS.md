@@ -9654,12 +9654,13 @@ new pure header, `specific/hd/hd_object_rules.h`. The skeleton fit: a model the 
 refuses is asked, per node, how far the centre of its single-weight vertices stands from
 the centre of the classic mesh of that node in the bind pose; within 256 units at every
 node it is drawn HD with `reason=fit` (`hd_object.cpp`, `skeleton_fit_of` and the verdict;
-`hd_model.cpp` keeps the drift's per-node centres, `HDModelNodeCentre`). The pocket: a
-slot whose animations carry it out of its own box and fold it flat, with no node turning
-within an animation, is drawn one-sided (`pocket_of`, the side in `HDObjectEnd`).
-ModelProbe takes both apart (`-bindcheck`, `-crossdrift`, `-slidecensus`, `-animframe`,
-`-itemanim`, `-itempush`, `-nopocket`, `-itemcull`; `-cull` for `-slot`) and judges its
-`-all` table by them; ModernTest holds the rules (22 checks).
+`hd_model.cpp` keeps the drift's per-node centres, `HDModelNodeCentre`, which the header
+declares). The pocket: a slot whose animations carry it out of its own box and fold it
+flat, with no node turning within an animation, is drawn one-sided (`pocket_of`, the side
+in `HDObjectEnd`). ModelProbe takes both apart (`-bindcheck`, `-crossdrift`,
+`-slidecensus`, `-animframe`, `-itemanim`, `-itempush`, `-nopocket`, `-itemcull`; `-cull`
+for `-slot`), holds the classic meshes over the HD picture (`-classicdots`) and judges its
+`-all` table by the rules; ModernTest holds the rules (22 checks).
 
 **Why.** The owner, 2026-10-17, with three pictures of RICH2's cabinets and one of JOBY2's
 lockers: "Gleiches Problem wie in Joby2, die Schraenke scheinen allgemein noch nicht HD zu
@@ -9783,38 +9784,71 @@ the two-sided draw. A depth push of the doors (a first hypothesis, the door agai
 wall's art) changed nothing measurable and is not in the code; `-itempush` stays as the
 tool that measured it.
 
+**The seven other slots, looked at.** Each drawn HD alone with `-classicdots` at
+keyframes of its own animations, and in its own room at its item's place (`-shadowroom`
+and `-shadowitem`, the room-local place out of the `.TRC`); `-bindcheck`'s per-node boxes
+against the classic meshes'.
+
+| slot | where it stands | classic vertices on the HD model | boxes apart (worst node) |
+|---|---|---|---|
+| RICH1 88 `CHEF_MIP` | nowhere: no item of slot 87 or 88, and slot 87 is not loaded | 99.2 % | 14 |
+| RICH1 284 `DOOR_TYPE1` | the vent grille at the end of room 89's duct | 99.3 to 100 % | 57 |
+| RICH1 439 `ANIMATING12_MIP` | the slanted cabinets of rooms 147 and 150 | 98.3 to 99.1 % | 2 |
+| RICH2 416 `ANIMATING1`, 440 `ANIMATING13` | the crates that fall down the shaft of rooms 62 and 63 | 87.0 to 89.0 % | 21 |
+| RICH3 320 `KICK_DOOR1` | a brick wall in 14 pieces at the end of room 62 (its item's room 60 has no HD group) | 82.2 to 89.7 % | 120 |
+| RICH3 397 `SMASH_OBJECT1` | the two glass panes lying in the floor of room 68 | 48.8 to 57.6 % | 69 |
+
+`CHEF_MIP` is never drawn in RICH1. The grille and the cabinets: every classic vertex on
+the model but a few on its outline. The crates: the misses are the crate's thin outer bars
+and nodes 7 and 8, two rods of 12 classic vertices each that tumble with the crate as it
+falls (93 to 178 degrees) and that the HD model leaves empty; drawn HD they draw nothing,
+as every bound slot's empty node does. The brick wall: the HD model cuts its pieces
+differently (boxes up to 120 apart; node 0, a classic stub of three vertices, is empty),
+the wall as a whole stands where the classic one does, and the further the pieces fly in
+anim 1 the more the two cuts differ. The panes are glass: a translucent material leaves
+the background in many of its pixels, so their dots read low; their boxes stand on the
+classic shards'.
+
 **Checked.** The binder census (`ModelProbe -all`, the fifteen shipped levels, the tool of
 `d0bf4f7b` against this round's): every row the same but the ten slots of the table above,
 `SKELETON: drift` turned into `fit <n>`, and the summary lines of JOBY2, JOBY5, RICH1,
-RICH2 and RICH3. The same over the player's randomized `.TRC` gives the same table. The
-search animation on the HD model (`-bindcheck` and `-animframe 1 <key>`): the doors open
-on the HD model as on the classic; the gap between a door's classic centre and its `.TRM`
-centre stays the same at every keyframe (JOBY2 node 1 92, node 2 100; RICH2 2 and 2), so
-the `.TRM` door turns about the classic hinge; at keyframe 45 the classic centres travel
-247 and 319 units, the `.TRM` centres 318 and 403 (their centres stand further from the
-hinge: the HD door carries its handle and frame). Pictures of the three lockers at
-keyframes 0, 26 and 45, of JOBY2's room 24 with its six lockers and of RICH2's rooms 48
-and 85 with their cabinets are kept outside the repository. The doors after the rule: the
-open frame's ties 9,511, 6,636 and 6,636 become 3, 0 and 0; the closed and the sliding
-frames are the same pictures byte for byte as before. The Rome doors (ANDREA1 room 212)
-are not taken and their pictures do not change. Byte-identical to the RoomProbe of
-`d0bf4f7b`: the classic views (`hd_build` 0, 6 of 6), the six HD views (6 of 6), the
-census eyes with `hd_water` 0 and 1 (15 of 15 each), the fifteen parity cameras with
-`hd_water` 0 and 1 (15 of 15 each). The nine scripts exit 0; ModernTest 15,851 checks
+RICH2 and RICH3. The same census over the player's randomized `.TRC` in `data` (not the
+shipped ones in `data\Backup`) changes the same ten rows and nothing else; the foreign
+tree the randomizer puts into ANDREA1's `SAS` stays refused (drift 807, fit 2,383). The
+search animation on the HD model: the `.TRM` boxes of the two doors stand on the classic
+ones with the hinge edge in place (JOBY2 node 1 x -517..-5 in both), and with
+`-classicdots` every classic vertex of the three lockers lands on the HD model at
+keyframes 0, 26 and 45 (JOBY2 165 of 165, JOBY5 158 of 158, RICH2 146 to 148 of 148, the
+missing ones on the cabinet's outline): the doors open on the HD model where the classic
+ones open. The gap between a node's classic and its `.TRM` centre stays the same at every
+keyframe by construction, one matrix moving both, and proves nothing by itself. Pictures
+of the three lockers at keyframes 0, 26 and 45, of JOBY2's room 24 with its six lockers
+and of RICH2's rooms 48 and 85 with their cabinets are kept outside the repository. The
+doors after the rule: the open frame's ties 9,511, 6,636 and 6,636 become 3, 0 and 0; the
+closed and the sliding frames are the same pictures byte for byte as before. The Rome
+doors (ANDREA1 room 212) are not taken and their pictures do not change. Byte-identical to
+the RoomProbe of `d0bf4f7b`: the classic views (`hd_build` 0, 6 of 6), the six HD views (6
+of 6), the census eyes with `hd_water` 0 and 1 (15 of 15 each), the fifteen parity cameras
+with `hd_water` 0 and 1 (15 of 15 each). The nine scripts exit 0; ModernTest 15,851 checks
 (15,829 and this round's 22), MenuTest 44,754, InterpTest 729, LipsTest 299 with the
 scratch object folder and 272 without, 0 failed.
 
 **Left.** Not seen in the game: no run proves the engine's own fit, walk and side (the
 tool reads the `.TRC`, the engine `anims[]`, `changes[]`, `ranges[]` and `mesh_vtxbuf`;
 the log line `HDLOG slot=... reason=... fit=... pocket=...` will say it at the next
-`-log`). `ANIMATING1` and `ANIMATING13` of RICH2 leave nodes 7 and 8 empty in the HD model
-(12 classic vertices each): drawn HD, those two draw nothing, as for every other bound
-slot with an empty node. `KICK_DOOR1` of RICH3 has no geometry on node 0, a stub of three
-classic vertices. The RICH2 picture eyes are framed by hand and the classic look of a
-locker cannot be drawn by the tools, so the before picture is the owner's own.
+`-log`, and the fit it prints must be the census's: 100, 87 and 143 for the lockers). The
+engine's walk follows an animation's jump and ranges into `anims[]` with no count to
+check them against, as the engine's own animation code follows them; the loader keeps
+none. The crates' rods, the brick wall's cut and the glass panes are the HD model's own
+(above); how `SMASH_OBJECT1` breaks is for the glass and debris work to look at. The tools
+draw no classic item with its textures, so the classic look is held against the HD model
+by its vertices only (`-classicdots`); the RICH2 cabinet eyes and the seven slots' eyes
+are framed by hand.
 
 **Commits.** `7b8557f7` (the tools and the rules' header), `b9991107` (the fit),
-`54afc06a` (the doors), `59289fb8` (ModernTest), and the records.
+`54afc06a` (the doors), `59289fb8` (ModernTest), `872ae0c3` (the records), `f4914aab` (the
+header's credit to TROne), `8b03b79c` (the node centre declared in the rules' header),
+`f712842c` (`-classicdots`), and this entry's last update.
 
 ### HD models for the pickups: the EXTRA prefix, a mod's own inventory model, and lying on the floor
 2026-09-08 - 2026-09-15

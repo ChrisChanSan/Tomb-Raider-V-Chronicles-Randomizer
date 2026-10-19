@@ -3474,20 +3474,23 @@ carries the tables.
     RoomProbe.cpp`) - the line as it was, `-gpuall` named at its end. OWN.
 343. **The skeleton fit** (`specific/hd/hd_object_rules.h`,
     `HDSkeletonFitWorst`, `HDSkeletonJudge`; `hd_object.cpp`,
-    `skeleton_fit_of` and the verdict; `hd_model.cpp`, `HDModelNodeCentre`)
-    - a model the bind drift refuses is drawn HD when every node's centre
-    of its single-weight vertices stands within 256 units of the centre of
-    the classic mesh of that node in the bind pose. THIRD: TROne (Copyright
-    2026 Todesengel, GPLv3), `host/render/game_renderer.cpp`, the lambda
-    `node_offset` in its HD model setup, used by `stub_donor` - per node
-    the centre of the box of the `.TRM` vertices a bone leads against the
-    centre of the classic mesh's box in the bind pose, the worst node,
-    within 256 (TROne-main, the copy read on 2026-10-19). DATA (ModelProbe
-    `-bindcheck`, `-all -crossdrift`): the ten slots the drift refuses on
-    the fifteen levels read 21 to 153, the 344 foreign pairs it refuses
-    383 or more but for four twins of a slot itself. OWN: the centres are
-    the drift's single-weight vertex means, and only a refused model is
-    asked.
+    `skeleton_fit_of` and the verdict; `hd_model.cpp`, `HDModelNodeCentre`,
+    declared in the header) - a model the bind drift refuses is drawn HD
+    when every node's centre of its single-weight vertices stands within 256
+    units of the centre of the classic mesh of that node in the bind pose.
+    THIRD: TROne (Copyright 2026 Todesengel, GPLv3),
+    `host/render/game_renderer.cpp`, the lambda `node_offset` in its HD
+    model setup, used by `stub_donor` - per node the centre of the box of
+    the `.TRM` vertices a bone leads against the centre of the classic
+    mesh's box in the bind pose, the worst node, within 256 (TROne-main, the
+    copy read on 2026-10-19). TROne's own comment there names the measure as
+    TRForge's (MIT; `trf_remaster/ItemModels.cpp`, `worst_node_offset`), a
+    file the TRForge vendored in this tree does not carry; it was not read
+    here. DATA (ModelProbe `-bindcheck`, `-all -crossdrift`): the ten slots
+    the drift refuses on the fifteen levels read 21 to 153, the 344 foreign
+    pairs it refuses 383 or more but for four twins of a slot itself. OWN:
+    the centres are the drift's single-weight vertex means, and only a
+    refused model is asked.
 344. **The fit's two numbers** (`hd_object_rules.h`, `HD_FIT_LIMIT` 256,
     `HD_FIT_MIN_VERTICES` 16) - the drift's own limit and the drift's own
     working set (`hd_model.cpp`). DATA: 256 stands between 153 and 383;

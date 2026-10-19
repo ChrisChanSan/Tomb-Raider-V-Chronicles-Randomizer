@@ -3754,6 +3754,69 @@ carries the tables.
     every pixel's place. OWN.
 376. **ModernTest's object rules** (`Preparation/Tools/Diagnose/
     ModernTest.cpp`, `object_rules`, 22 checks). OWN.
+377. **`hd_vis` moved to 1 once** (`hd_vis.h`, `HD_VIS_REV`, `HDVisSetting`;
+    `tomb5.cpp`, the value `hd_vis_rev` beside `hd_vis`, the `HDLOG
+    settings` line's `hd_vis=`) - a registry without the revision has its
+    `hd_vis` moved to 1 and both written back; from the revision on the
+    value is kept as set, above 1 read as 0. DATA: the engine's own
+    settings code and its history - the first-run block of the earlier
+    builds wrote 0 until `02937171`, which wrote and read 1, none wrote a
+    revision,
+    `REG_ReadLong` writes an absent value's default, the option has no row
+    and the settings carry no version. OWN: a revision beside the one key
+    whose meaning changed, not a version of all settings, so no other key's
+    later move can be read as this one.
+378. **A classic room inside another's box keeps its faces**
+    (`hd_level.cpp`, `VisHidesClassicRoom`; `hd_vis.h`, the enclosure
+    table noted only) - the rule that left such a room out is gone. DATA:
+    JOBY2's rooms 19 and 21 are hollow groups (360 of 360 triangles over
+    the box, `HD_OVERHANG_SLACK`), never drawn; room 146's art in them
+    covers 0 of 12 faces, the far wall 0.0 per cent (TrgProbe
+    `-classicart -perface`). PICTURE (RoomProbe `-hollow`, `-classicroom`):
+    47,201 pixels of sky in the window at 1,280 x 720 at the picture's eye,
+    46,980 at the still stand, none left. OWN.
+379. **RoomProbe `-hollow`** (`Preparation/Tools/Diagnose/RoomProbe.cpp`) -
+    every group whose triangles all overhang its room's box left out, as
+    the engine leaves it. OWN.
+380. **The lid over an HD room** (`hd_vis.h`, `HDVisClassicRoomHidden`'s
+    `floorOnArt`, `HDVisTables::floorRooms`; `hd_vis.cpp`, `HDVisBuild`;
+    `hd_level.cpp`, `VisHidesClassicRoom`; `hd_vis.h`,
+    `HDVisClassicRoomVerdict`, `HDVisFloorOnArt`) - an empty, uncovered
+    classic room whose floor links all name rooms drawn HD (the level's
+    verdict per room, not the frame's list) draws none of its faces.
+    DATA: the census of the rooms with classic faces and no art over the
+    fifteen levels (RoomProbe `-vis 1 -walk`: twelve, ANDY1 212,
+    ANDY3 26, 28, 88, 103, 118, 122 and 210, RICH2 15, 16, 18 and 19), their
+    guests, their floor links and covers (TrgProbe `-classicart`); ANDY3's
+    26, 28 and 210 every floor square over room 24, 27 or 209, 103 none.
+    PICTURE: the two trview cameras of the hollows, 18,469 and 7,167
+    pixels at 1,280 x 720. OWN: every link, not one, so a room half over
+    classic ground keeps its faces.
+381. **RoomProbe's `-vis: classic` lines** (`Preparation/Tools/Diagnose/
+    RoomProbe.cpp`) - per room with classic faces and no art, its faces,
+    `ROOM_OUTSIDE`, guests, box and the rooms its floor links and portals
+    name. OWN.
+382. **ModernTest's sets** (`vis_setting_migration`, `vis_enclosed_kept`,
+    `vis_lid_rule`, `vis_floor_on_art`, `vis_opens_sky`,
+    `vis_floor_tables`, one check in `vis_enclosed_tables`) - the
+    migration's three cases, the sniper rooms kept, the lids taken, the
+    floor-link table and rule, the sky behind a lid. OWN.
+383. **A lid left out opens the sky** (`hd_vis.h`,
+    `HDVisClassicRoomOpensSky`; `hd_level.cpp`, `HDVisRoomOpensSky`;
+    `game/draw.cpp`, `GetRoomBounds`) - a listed room the visibility path
+    leaves out that is not under the sky turns the walk's `outside` on.
+    DATA: the walk's `outside` is the only switch of the sky
+    (`SkyDrawPhase`; the outside rectangle has no reader); RoomProbe
+    `-vis 1 -walk -farcull` sweeps from inside ANDY3's hollows, 72
+    directions, found 21 that list a lid and no room under the sky (room
+    24 looking west, rooms 27 and 209 looking east), the lids' ceilings
+    covered by no art (TrgProbe `-classicart`); the census answers yes for
+    ANDY3's 26, 28 and 210 alone over the fifteen levels. PICTURE: 902,634
+    and 709,832 pixels at 1,280 x 720 from black to sky at the two
+    in-hollow eyes. OWN.
+384. **RoomProbe `-opensky` and `opens_sky=`** (`Preparation/Tools/
+    Diagnose/RoomProbe.cpp`) - the walk's `outside` with the rule above,
+    and per classic room without art whether it opens the sky. OWN.
 
 ## Credited, but not contained here
 

@@ -42,6 +42,7 @@
 #include "../game/lara.h"
 #include "../game/menu_frame.h"	// MenuSliderHeldUlong - the slider keys
 #include "../specific/hd/hd_render.h"	// HDRenderMarbleSet
+#include "../specific/hd/hd_vis.h"		// HDVisSetting, the hd_vis revision
 
 tomb5_options tomb5;
 
@@ -265,6 +266,10 @@ void init_tomb5_stuff()
 		sprintf(buf, "hd_vis");
 		tomb5.hd_vis = 1;								//the visibility path
 		REG_WriteLong(buf, tomb5.hd_vis);
+
+		// Its revision: this 1 is the default of a build that knows it.
+		sprintf(buf, "hd_vis_rev");
+		REG_WriteLong(buf, HD_VIS_REV);
 
 		// The marble floors on, two floor heights (see the read below).
 		HDRenderMarbleSet(1, 2);
@@ -530,12 +535,33 @@ void init_tomb5_stuff()
 		if (tomb5.hd_air > 2)
 			tomb5.hd_air = 1;
 
-		// Absent - every older registry - reads as 1, the visibility path.
-		sprintf(buf, "hd_vis");
-		REG_ReadLong(buf, tomb5.hd_vis, 1);
+		/* Absent - every older registry - reads as 1, the visibility path.
+		 * A registry without hd_vis_rev was written by an earlier build,
+		 * most of which wrote hd_vis 0 on their first run: the value is
+		 * moved to 1 once and both values are written back; from then on
+		 * the value is kept as it is set, and anything above 1 reads as 0
+		 * (HDVisSetting, specific\hd\hd_vis.h). */
+		{
+			ulong saved = 1, rev = 0;
 
-		if (tomb5.hd_vis > 1)
-			tomb5.hd_vis = 0;
+			sprintf(buf, "hd_vis");
+			REG_ReadLong(buf, saved, 1);
+			sprintf(buf, "hd_vis_rev");
+			REG_ReadLong(buf, rev, 0);
+			tomb5.hd_vis = HDVisSetting(saved, rev);
+
+			if (rev < HD_VIS_REV)
+			{
+				sprintf(buf, "hd_vis");
+				REG_WriteLong(buf, tomb5.hd_vis);
+				sprintf(buf, "hd_vis_rev");
+				REG_WriteLong(buf, HD_VIS_REV);
+				Log("HDLOG settings hd_vis moved from %lu to %lu, revision "
+					"%lu to %d", (unsigned long)saved,
+					(unsigned long)tomb5.hd_vis, (unsigned long)rev,
+					HD_VIS_REV);
+			}
+		}
 
 		/* The marble floors' mirror and the most floor heights a frame
 		 * mirrors (specific\hd\hd_render.cpp, "the marble floors"), handed
@@ -692,9 +718,11 @@ void init_tomb5_stuff()
 	/* HDLOG settings, behind -log, once at the start: the draw a game starts
 	 * with (hd_enable, the HD textures row: 1 HD, 0 classic) and the build
 	 * gate (hd_build: 0 builds nothing HD, any other value builds a level's
-	 * HD data whenever an installation is found). */
-	Log("HDLOG settings hd_enable=%d hd_build=%lu", tomb5.hd_enable ? 1 : 0,
-		(unsigned long)tomb5.hd_build);
+	 * HD data whenever an installation is found) and the rooms an HD frame
+	 * draws (hd_vis: 1 the visibility path, 0 the portal walk). */
+	Log("HDLOG settings hd_enable=%d hd_build=%lu hd_vis=%lu",
+		tomb5.hd_enable ? 1 : 0, (unsigned long)tomb5.hd_build,
+		(unsigned long)tomb5.hd_vis);
 }
 
 void save_new_tomb5_settings()

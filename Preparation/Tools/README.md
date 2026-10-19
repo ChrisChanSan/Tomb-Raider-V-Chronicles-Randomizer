@@ -264,7 +264,16 @@ world corners (-1 every room's);
 `VisNearPortals`, source `near`); the `-vis` tables line ends in `mirror=`, the wide
 portals that are wide by the record leading back, and `enclosed=`, the rooms whose inside
 lies wholly in a linked room's box with that room's art in it, each then on a `-vis:
-enclosed room= by= tris=` line; `-visheight 1` prints the pieces the index fill holds by
+enclosed room= by= tris=` line (nothing is drawn from them), and every room with classic
+faces and no art in the `.TRG` on a `-vis: classic room= faces= outside= guests= box=
+sectors= y= links=` line, the links the rooms its floor squares (`f`) and portals (`p`)
+name, `h` where that room has art - what the canopy rule asks - and `opens_sky=`, 1 where
+the walk turns the sky on for it; `-opensky` makes the walk's `outside` (FARCULL's
+`outside=`) also turn on for a listed room the visibility path leaves out that is not
+under the sky, as `game/draw.cpp`'s walk does; `-hollow` leaves every
+hollow group (all its triangles outside its room's box) out of the picture as the engine
+does, a `hollow: group tris overhang` line each, where `-with` draws any group it is
+given; `-visheight 1` prints the pieces the index fill holds by
 an intrusion box's height on its side plane (`visheight: <level> group= piece= holder=
 tris=` and the level's count) and draws nothing, and a `decide:` line ends in `height`
 for such a piece; `-viscams <file>` (as

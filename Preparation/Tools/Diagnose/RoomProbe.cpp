@@ -462,6 +462,16 @@
  *                     the range's visible pixels and the second 0.
  *     -skipgroup <g>  group g is left out of the picture and counts as not
  *                     listed - the seed or a -with group; repeat for more.
+ *     -hollow         every hollow group (all its triangles overhang its
+ *                     room's box, hd_level.cpp's fourth way a room stays
+ *                     classic) is left out as -skipgroup leaves a group out,
+ *                     one "hollow:" line each: the engine draws no such
+ *                     group, while -with draws whatever group it is given.
+ *     -opensky        with -vis 1 and -walk: `outside` (FARCULL's outside=)
+ *                     also turns on for a listed room the visibility path
+ *                     leaves out that is not under the sky, as the walk of
+ *                     game\draw.cpp turns it on (HDVisRoomOpensSky); the
+ *                     "classic" lines say opens_sky= for every such room.
  *     -statictable    every static mesh of the level answered as
  *                     hd_level.cpp's BuildStaticTables answers it (the same
  *                     HDRenderStaticArt), beside the answer of the rule
@@ -4061,6 +4071,7 @@ static bool g_coincide_mark = false;
  * HD_COVER_REACH, and the faces in world units. `g_stand_covered` caches each
  * holder's verdict; `g_stand_draws` are this picture's in-holder draws. */
 static bool g_stand_rule = false;
+static bool g_hollow = false;			// -hollow
 // StandState's lines held back while -statictable asks every room.
 static bool g_stand_quiet = false;
 static std::set<int> g_skip_groups;
@@ -4931,6 +4942,34 @@ namespace walkoff
 		return g_group_of[(size_t)main] == group ? main : -1;
 	}
 
+	/* -opensky: the walk's `outside` also turns on for a listed room the
+	 * visibility path leaves out that is not under the sky
+	 * (HDVisRoomOpensSky, hd_level.cpp). */
+	static bool g_open_sky = false;
+
+	/* HDVisRoomOpensSky as far as the probe knows the engine's state: a room
+	 * with classic faces whose group has no art in the .TRG (g_hd), its
+	 * guests and its floor links from the tables, every floor room's art
+	 * read as g_hd reads it (no flips, hollow groups counted). The stand
+	 * rule's cover is not asked: the rooms it covers are all under the sky
+	 * (RICH2's 15 to 19), which opens nothing. */
+	static bool VisOpensSky(int rn)
+	{
+		if (!g_vis || rn < 0 || (size_t)rn >= g_vis_rooms.size() ||
+			((size_t)rn < g_hd.size() && g_hd[(size_t)rn]))
+			return false;
+
+		const bool hidden = HDVisClassicRoomVerdict(g_vis_tables, rn, true,
+			false, g_vis_rooms[(size_t)rn].faceCount, [](int to)
+			{
+				return to >= 0 && (size_t)to < g_hd.size() &&
+					g_hd[(size_t)to] != 0;
+			});
+
+		return HDVisClassicRoomOpensSky(hidden,
+			(g_vis_rooms[(size_t)rn].flags & 8) != 0);
+	}
+
 	static void VisNote(int rn, int why, char before)
 	{
 		if (rn < 0 || (size_t)rn >= g_vis_why.size() || (before & 3) ||
@@ -5691,12 +5730,56 @@ namespace walkoff
 				g_vis_params.edge, t.wideMirrored, t.roomsEnclosed);
 
 			/* The rooms standing inside another whose art stands in
-			 * them (HDVisClassicRoomEnclosed asks the room drawn
-			 * classic). */
+			 * them (HDVisTables::enclosedBy; nothing is drawn from
+			 * it). */
 			for (int r = 0; r < t.rooms; r++)
 				if (t.enclosedBy[(size_t)r] >= 0)
 					printf("-vis: enclosed room=%d by=%d tris=%d\n", r,
 						t.enclosedBy[(size_t)r], t.enclosedTris[(size_t)r]);
+
+			/* Every room with classic faces and no art in the .TRG at
+			 * all (an empty group or none): its faces, whether it is
+			 * under the sky (ROOM_OUTSIDE) and its guests - what the
+			 * canopy rule asks besides the stand rule's cover. */
+			for (int r = 0; r < t.rooms && r < (int)g_vis_rooms.size(); r++)
+			{
+				if ((r < (int)g_hd.size() && g_hd[(size_t)r]) ||
+					g_vis_rooms[(size_t)r].faceCount <= 0)
+					continue;
+
+				const HDVisRoom& one = g_vis_rooms[(size_t)r];
+				std::string to;
+
+				// The floor links and the portals, each room HD (h) or not.
+				for (int i = 0; i < one.linkCount; i++)
+				{
+					const int at = one.firstLink + i;
+					const int l = at >= 0 && at < (int)g_vis_links.size() ?
+						g_vis_links[(size_t)at] : -1;
+
+					if (l >= 0)
+						to += " f" + std::to_string(l) + (l < (int)g_hd.size()
+							&& g_hd[(size_t)l] ? "h" : "");
+				}
+
+				for (int i = 0; i < one.portalCount; i++)
+				{
+					const int at = one.firstPortal + i;
+					const int p = at >= 0 && at < (int)g_vis_portals.size() ?
+						g_vis_portals[(size_t)at].to : -1;
+
+					if (p >= 0)
+						to += " p" + std::to_string(p) + (p < (int)g_hd.size()
+							&& g_hd[(size_t)p] ? "h" : "");
+				}
+
+				printf("-vis: classic room=%d faces=%d outside=%d "
+					"guests=%d box=%ld,%ld,%ld sectors=%dx%d y=%ld..%ld "
+					"links=%s opens_sky=%d\n", r, one.faceCount,
+					(one.flags & 8) ? 1 : 0, t.guestCount[(size_t)r], one.x,
+					one.y, one.z, one.xs, one.zs, one.top, one.bottom,
+					to.empty() ? " -" : to.c_str(), VisOpensSky(r) ? 1 : 0);
+			}
 		}
 
 		/* The carried rooms, as CarryHostsOf (hd_render.cpp) counts
@@ -6282,14 +6365,16 @@ namespace farplane
 	}
 
 	/* `outside` as the walk leaves it (game\draw.cpp): the seed room's
-	 * ROOM_OUTSIDE, or that of any listed room. */
+	 * ROOM_OUTSIDE, or that of any listed room - with -opensky also a listed
+	 * room the visibility path leaves out over an open window. */
 	static bool Outside(int seed)
 	{
 		bool out = (walkoff::g_room[(size_t)seed].flags & 0x8) != 0;
 
 		for (size_t i = 0; i < walkoff::g_drawn.size(); i++)
 			out = out || (walkoff::g_room[(size_t)walkoff::g_drawn[i]].flags &
-				0x8) != 0;
+				0x8) != 0 || (walkoff::g_open_sky &&
+				walkoff::VisOpensSky(walkoff::g_drawn[i]));
 
 		return out;
 	}
@@ -16595,7 +16680,14 @@ static void SpringBlocks(const char* stem, std::vector<HDSpringBlock>& out,
  *                     the three tables (hd_vis.h) with the reach off, no
  *                     carried rooms, every group drawn whole but for its
  *                     pieces of intruding art, answered as -viswin says;
- *                     0, the default, changes nothing
+ *                     0, the default, changes nothing. With -walk it
+ *                     prints the tables' line, an "enclosed" line per
+ *                     room standing inside another and a "classic" line
+ *                     per room with classic faces and no art: its faces,
+ *                     ROOM_OUTSIDE, guests, box, and the rooms its floor
+ *                     links (f) and portals (p) name, h where they have
+ *                     art - what the canopy rule asks - and opens_sky=, 1
+ *                     where the walk turns the sky on for it (-opensky)
  *   -vissrc <mask>    the tables -vis 1 asks: 1 guests, 2 openings, 4 wide
  *                     portals (7, the default, all three)
  *   -visreach <units> -visbare <share> -visguest <triangles>
@@ -18247,8 +18339,18 @@ static int ProbeMain(int argc, char** argv)
 			probestatics::g_list_rooms.push_back(atoi(argv[++at]));
 		else if (!strcmp(argv[at], "-staticsonly"))
 			probestatics::g_only = true;
-		else if (!strcmp(argv[at], "-skipgroup") && at + 1 < argc)
-			g_skip_groups.insert(atoi(argv[++at]));
+		else if (!strcmp(argv[at], "-hollow") ||
+			!strcmp(argv[at], "-opensky") ||
+			(!strcmp(argv[at], "-skipgroup") && at + 1 < argc))
+		{
+			// One branch for all three: the chain is at the compiler's depth.
+			if (argv[at][1] == 'h')
+				g_hollow = true;
+			else if (argv[at][1] == 'o')
+				walkoff::g_open_sky = true;
+			else
+				g_skip_groups.insert(atoi(argv[++at]));
+		}
 		else if (!strcmp(argv[at], "-walk") && at + 4 < argc)
 		{
 			walkSeed = atoi(argv[at + 1]);
@@ -20977,6 +21079,21 @@ static int ProbeMain(int argc, char** argv)
 		g_shimmer ? 1 : 0, (int)g_wibble, g_mesh_effect);
 	printf("animation: motion %d, clock %.2f s, water wobble %d\n",
 		g_motion ? 1 : 0, g_time, (g_water || g_shimmer) ? 1 : 0);
+
+	/* -hollow: the groups the engine draws classic for want of art in their
+	 * own box (hd_level.cpp, hollow), left out as the engine leaves them. */
+	for (int g = 0; g_hollow && g < HDRenderGroupCount(); g++)
+	{
+		const int tris = HDRenderGroupTriangles(g, -1);
+		const int over = HDRenderGroupOverhangTriangles(g);
+
+		if (tris <= 0 || over < tris)
+			continue;
+
+		g_skip_groups.insert(g);
+		printf("hollow: group %d tris %d overhang %d - not drawn\n", g, tris,
+			over);
+	}
 
 	// -stand: the frame's answers for the stand ranges, before the bracket;
 	// -statics new: the statics' pieces.

@@ -28,9 +28,10 @@
  * node alone stands from the centre of the classic mesh of the same node,
  * both in the bind pose - the pose the bind fold draws both in. A model
  * made for this tree answers with a few dozen units; a foreign one does
- * not. The same comparison of places is TROne's for a slot whose tree is a
- * stub (host/render/game_renderer.cpp, the node_offset lambda: box centres
- * by the leading bone, within 256 units).
+ * not. The comparison of places is TROne's (Copyright 2026 Todesengel,
+ * GPLv3), which picks a slot's tree for a stub that way
+ * (host/render/game_renderer.cpp, the node_offset lambda: box centres by
+ * the leading bone, within 256 units); here the drift's own centres.
  *
  * THE POCKET. A door that slides out of its doorway into the wall beside
  * it folds, at its open frame, its front and its back panel into one

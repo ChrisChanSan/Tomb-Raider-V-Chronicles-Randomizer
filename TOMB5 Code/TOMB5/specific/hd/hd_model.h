@@ -901,13 +901,6 @@ bool HDModelNodeCovered(int slot, int node);	// false -> nothing is drawn there
 int HDModelMaxBone(int slot);
 bool HDModelBindDrift(int slot, float* mean, float* worst);
 
-/* The working set of the drift, per node: the centre of the vertices that
- * ride on that node alone (weight 255), in the model's bind pose, and the
- * return value how many there are - 0 for a node with none, or for a slot
- * with no model. The skeleton fit holds it against the classic mesh's own
- * centre (hd_object_rules.h). */
-int HDModelNodeCentre(int slot, int node, float* centre /* 3 */);
-
 /* The drift limit, in classic units. It lives here rather
  * than beside the decision in hd_object.cpp so that the diagnostic tool, which
  * is built without the engine, judges a slot by the same number the game does.

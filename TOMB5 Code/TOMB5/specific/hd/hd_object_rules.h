@@ -61,6 +61,16 @@
  * in that gap and is the drift's own limit (HD_SKELETON_DRIFT_LIMIT). */
 #define HD_FIT_LIMIT			256.0f
 
+/* The fit's input on the model's side, defined in hd_model.cpp beside the
+ * drift it shares its working set with: per node the centre of the
+ * vertices that ride on that node alone (weight 255), in the model's bind
+ * pose, and as the return value how many there are - 0 for a node with
+ * none, or for a slot with no model. Declared here and not in hd_model.h
+ * because only the fit's callers want it - hd_object.cpp and ModelProbe,
+ * both of which link hd_model.cpp; ModernTest includes this header and
+ * never calls it. */
+int HDModelNodeCentre(int slot, int node, float* centre /* 3 */);
+
 /* The worst node of the fit, or -1 when no node can be measured (no node
  * with HD_FIT_MIN_VERTICES single-weight vertices and a classic mesh with
  * any). `trm` and `mesh` are nodes * 3 centres, `trmCount` and `meshCount`

@@ -23385,8 +23385,8 @@ static void water_look()
 	float k[HD_LOOK_KNOBS];
 
 	HDWaterLookKnobs(k);
-	ok(HD_LOOK_KNOBS == 25, "water look: twenty-five numbers", HD_LOOK_KNOBS,
-		25);
+	ok(HD_LOOK_KNOBS == 26, "water look: twenty-six numbers", HD_LOOK_KNOBS,
+		26);
 	ok(k[HD_LOOK_FLOOR] > 0.0f && k[HD_LOOK_FLOOR] < 1.0f,
 		"water look: the noise's floor between 0 and 1",
 		(long)(k[HD_LOOK_FLOOR] * 100.0f), 62);
@@ -23599,9 +23599,9 @@ static void water_sea()
 	ok(HDWaterSheetFog(30000.0f, 18000.0f, 0.0f) == 0.0f,
 		"sheet fog: share 0, no fog", 0, 0);
 
-	ok(k[HD_LOOK_SEA_DISC] < 8.0f && k[HD_LOOK_SEA_POWER] < k[HD_LOOK_POWER],
-		"sea glow: the disc weaker and wider where the sheet lies",
-		(long)k[HD_LOOK_SEA_DISC], 4);
+	ok(k[HD_LOOK_SEA_DISC] < 8.0f && k[HD_LOOK_SEA_POWER] == 0.0f,
+		"sea glow: the disc weaker, its power from the light, under the sheet",
+		(long)(k[HD_LOOK_SEA_DISC] * 10.0f), 15);
 	ok(k[HD_LOOK_SEA_TURN] > 0.0f && k[HD_LOOK_SEA_TURN] < 1.5708f &&
 		k[HD_LOOK_SEA_SWELL] > 0.0f && k[HD_LOOK_SEA_SWELL] < 1.0f,
 		"sea ripple: a turn under a right angle, a loss under the whole",
@@ -23610,6 +23610,119 @@ static void water_sea()
 		k[HD_LOOK_SEA_FOG] > 0.0f && k[HD_LOOK_SEA_RAGGED] > 0.0f,
 		"sheet reach: the plane, the margin, the fog and a ragged edge on",
 		0, 0);
+
+	/* The shafts' light at the eye's depth (HDWaterShaftHash,
+	 * HDWaterShaftMean, HDWaterShaftBound): the hash the shader's, the
+	 * cells' mean light at the floor of 0.62 about 0.054, a lit cell 18.6
+	 * times it, and the march's sum held to the photograph's 2.49 times
+	 * the mean over the same samples' weights. */
+	ok(HDWaterShaftHash(0.0f, 0.0f) == 0.0f,
+		"shaft light: the hash of cell 0, 0 is 0", 0, 0);
+
+	const float h10 = HDWaterShaftHash(1.0f, 0.0f);
+
+	ok(h10 > 0.1339f && h10 < 0.1341f,
+		"shaft light: cell 1, 0 as the shader's CellHash, 0.134",
+		(long)(h10 * 10000.0f), 1340);
+
+	bool inside = true;
+
+	for (int i = 0; i < 64; i++)
+		for (int j = 0; j < 64; j++)
+		{
+			const float h = HDWaterShaftHash((float)i * 37.0f, (float)j);
+
+			inside = inside && h >= 0.0f && h < 1.0f;
+		}
+
+	ok(inside, "shaft light: the hash from 0 to under 1", 0, 0);
+
+	const float mean = HDWaterShaftMean(k[HD_LOOK_FLOOR], 128, 4);
+
+	ok(mean > 0.053f && mean < 0.055f,
+		"shaft light: the cells' mean light at the floor, about 0.054",
+		(long)(mean * 10000.0f), 537);
+	ok(1.0f / mean > 18.0f && 1.0f / mean < 19.0f,
+		"shaft light: a lit cell 18 to 19 times the cells' mean",
+		(long)(10.0f / mean), 186);
+	ok(HDWaterShaftMean(0.0f, 64, 4) > mean &&
+		HDWaterShaftMean(0.0f, 64, 4) < 1.0f,
+		"shaft light: no floor, more light, under the whole", 0, 0);
+	ok(HDWaterShaftMean(1.0f, 64, 4) == 0.0f &&
+		HDWaterShaftMean(0.62f, 0, 4) == 0.0f,
+		"shaft light: a floor of 1 or no cells, no light", 0, 0);
+
+	const float lit = HDWaterShaftBound(10.0f, 12.0f, mean, 2.49f);
+
+	ok(lit > 2.49f * mean * 12.0f - 1.0e-4f &&
+		lit < 2.49f * mean * 12.0f + 1.0e-4f,
+		"shaft light: a lit patch held to 2.49 times the mean's light",
+		(long)(lit * 1000.0f), (long)(2.49f * mean * 12000.0f));
+	ok(HDWaterShaftBound(0.5f, 12.0f, mean, 2.49f) == 0.5f &&
+		HDWaterShaftBound(0.0f, 12.0f, mean, 2.49f) == 0.0f,
+		"shaft light: a dark or partly lit patch keeps its own light", 0,
+		0);
+	ok(HDWaterShaftBound(10.0f, 12.0f, mean, 0.0f) == 10.0f,
+		"shaft light: no peak, no bound (off the sheet)", 0, 0);
+	ok(k[HD_LOOK_SEA_PEAK] > 2.48f && k[HD_LOOK_SEA_PEAK] < 2.50f,
+		"shaft light: the peak the sunlit photograph's, 2.49",
+		(long)(k[HD_LOOK_SEA_PEAK] * 100.0f), 249);
+
+	/* The disc's power from the light's height (HDWaterGlowPowerUnder):
+	 * the photograph's 22.5 degrees in the water lies wider in the air,
+	 * where the disc's cosine is taken - 34.6 degrees on the mean for the
+	 * sea's light 22 degrees up, the power 3.57; straight overhead n times
+	 * across, 30.7 degrees, 4.60. */
+	const float up22 = sinf(22.0f * 0.017453293f);
+	const float sea22 = HDWaterGlowPowerUnder(kHDWaterGlowHalf, up22);
+
+	ok(kHDWaterGlowHalf == 22.5f,
+		"disc power: the photograph's half angle in the water, 22.5", 0, 0);
+	ok(sea22 > 3.52f && sea22 < 3.62f,
+		"disc power: the sea's light 22 degrees up, about 3.57",
+		(long)(sea22 * 100.0f), 357);
+
+	const float top = HDWaterGlowPowerUnder(kHDWaterGlowHalf, 1.0f);
+	const float over = HDWaterGlowPower(asinf(1.333f *
+		sinf(kHDWaterGlowHalf * 0.017453293f)) * 57.29578f);
+
+	ok(top > over - 0.01f && top < over + 0.01f,
+		"disc power: overhead, the ring n times wider all round, 4.60",
+		(long)(top * 100.0f), (long)(over * 100.0f));
+
+	bool wider = true;
+
+	for (int e = 5; e <= 90; e += 5)
+	{
+		const float p = HDWaterGlowPowerUnder(kHDWaterGlowHalf,
+			sinf((float)e * 0.017453293f));
+
+		wider = wider && p > 0.0f && p < HDWaterGlowPower(kHDWaterGlowHalf);
+	}
+
+	ok(wider, "disc power: at every height wider than the water's own 8.75",
+		0, 0);
+	ok(HDWaterGlowPowerUnder(kHDWaterGlowHalf, 0.0f) ==
+		HDWaterGlowPower(kHDWaterGlowHalf) &&
+		HDWaterGlowPowerUnder(kHDWaterGlowHalf, -0.5f) ==
+		HDWaterGlowPower(kHDWaterGlowHalf),
+		"disc power: a light at or under the horizon, the angle as it is",
+		0, 0);
+	ok(HDWaterGlowPowerUnder(0.0f, up22) == 0.0f &&
+		HDWaterGlowPowerUnder(90.0f, up22) == 0.0f,
+		"disc power: no power for a half angle outside 0 to 90", 0, 0);
+
+	/* The strength: the light of the power 8.75 at strength 4 spread to
+	 * the power under the sea's light (the cosine's light over the sky
+	 * one over the power plus 1), 1.88, and the knob a half step under
+	 * it. */
+	const float kept = 4.0f * (sea22 + 1.0f) /
+		(HDWaterGlowPower(kHDWaterGlowHalf) + 1.0f);
+
+	ok(kept > 1.85f && kept < 1.91f && k[HD_LOOK_SEA_DISC] <= kept &&
+		k[HD_LOOK_SEA_DISC] > kept - 0.5f,
+		"disc power: the strength a half step under the light kept, 1.5",
+		(long)(kept * 100.0f), 188);
 }
 
 /* The room whose art is the sea's surface (hd_water_under.h,

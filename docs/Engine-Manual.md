@@ -1728,8 +1728,14 @@ see *Lara in HD* below for which of her stays classic and why.
   the water's own colour, its small waves broken up and turned every few
   metres so that no crest runs straight or repeats, lighter where a shaft of
   light leaves it, in place of the bright turquoise pattern; the sun is a
-  broad soft glow through it rather than a bright spot, and the lit underside
-  and the shafts are stronger there and carry the picture. The sheet reaches
+  broad soft glow through it rather than a bright spot - as wide under the
+  water as in a photograph of the sea from below, allowing for the way the
+  surface bends the light - and the lit underside and the shafts are
+  stronger there and carry the picture. Looking up toward the sun the shafts
+  stay a soft glow: however much light passes the surface over the camera,
+  they are held to what the brightest part of a photograph of the sea from
+  below reaches over its open water, so no part of the picture burns out to
+  white. The sheet reaches
   well past the level on every side, with a ragged edge, and fades into the
   water's colour toward the horizon, so it has no visible edge. Higher up,
   outside the dive, the surface fades out exactly as before.

@@ -211,17 +211,20 @@ inline bool HDWetGivesWay(int y, const int* planeY, int drawn, int count,
  * seven of the sea's sheet in the art's place (HDWaterSeaOver): the
  * disc's, the shafts' and the underside's strengths there, the sheet's
  * own, its ripple's contrast, the share the shafts' noise lights it by and
- * the weight the art keeps; then the disc's power there
- * (HDWaterGlowPower), and the largest turn in radians and the largest
- * share of height by which each of the shafts' cells breaks the sheet's
- * ripple (hd_water_look.hlsl, SeaRipple); then the sheet's reach and fade:
- * the share of the margin past the level's water it reaches
- * (HDWaterSheetMargin; 0: the art's box alone), the way in units over
- * which its ragged edge comes in, the share of the extinction's fog along
- * it (HDWaterSheetFog; 0: none), and whether the extinction counts the way
- * up to the sheet's plane where no sheet of the level lies over the eye's
- * room and the eye is under the stand-in's surface (1) or to the
- * stand-in's surface (0; HDWaterUnderSeaDepth). */
+ * the weight the art keeps; then the disc's power there (0: taken
+ * from the light's height, HDWaterGlowPowerUnder), and the largest turn
+ * in radians and the largest share of height by which each of the shafts'
+ * cells breaks the sheet's ripple (hd_water_look.hlsl, SeaRipple); then
+ * the sheet's reach and fade: the share of the margin past the level's
+ * water it reaches (HDWaterSheetMargin; 0: the art's box alone), the way
+ * in units over which its ragged edge comes in, the share of the
+ * extinction's fog along it (HDWaterSheetFog; 0: none), and whether the
+ * extinction counts the way up to the sheet's plane where no sheet of the
+ * level lies over the eye's room and the eye is under the stand-in's
+ * surface (1) or to the stand-in's surface (0; HDWaterUnderSeaDepth);
+ * last, the most the shafts' light under the sheet may reach in a pixel,
+ * in times their mean light over the same way (HDWaterShaftBound; 0: no
+ * bound). */
 enum
 {
 	HD_LOOK_DISC, HD_LOOK_SHAFTS, HD_LOOK_UNDERSIDE, HD_LOOK_REACH,
@@ -230,8 +233,95 @@ enum
 	HD_LOOK_SEA_UNDERSIDE, HD_LOOK_SHEET, HD_LOOK_RIPPLE, HD_LOOK_PATCHES,
 	HD_LOOK_ART, HD_LOOK_SEA_POWER, HD_LOOK_SEA_TURN, HD_LOOK_SEA_SWELL,
 	HD_LOOK_SEA_MARGIN, HD_LOOK_SEA_RAGGED, HD_LOOK_SEA_FOG,
-	HD_LOOK_SEA_PLANE, HD_LOOK_KNOBS
+	HD_LOOK_SEA_PLANE, HD_LOOK_SEA_PEAK, HD_LOOK_KNOBS
 };
+
+/* The shafts at the eye's depth (hd_water_look.hlsl, LookPS). The march
+ * follows the light's way back up from each of its samples to the surface,
+ * and a value noise of the cells' hash there says whether a shaft passes
+ * (LookShaft). Every sample of the march lies about as deep as the eye, so
+ * its way back up ends near one point of the surface, the eye's depth
+ * along the light from the eye: the march's 5,000 units of way move that
+ * end by a few cells at most, and the whole picture's shafts are those few
+ * cells' hash - all lit, up to 1 over the cells' mean (18.6 times it at a
+ * floor of 0.62), or all dark, as the cells drift with the clock. Lit, the
+ * shafts at the sheet's strength burn the light toward the sun to white.
+ * So the shafts' light in a pixel is held to a number of times the light
+ * the cells' mean gives over the same samples: the sunlit photograph's
+ * brightest over its open water's median, 2.49, taken as the most the
+ * term may stand over its own typical. It holds the term, not the
+ * picture, whose own peak over its median is another number. A dark or a
+ * partly lit patch keeps its own light and its pattern, so the picture
+ * still turns between its lit and its dark state as the cells drift.
+ *
+ * HDWaterShaftHash: the cells' hash, hd_room.hlsl's CellHash (its first
+ * number) for one cell, 0 to 1.
+ *
+ * HDWaterShaftMean: the mean of LookShaft's light over the hash's cells -
+ * `cells` by `cells` of them from cell 0, `places` by `places` points in
+ * each, the smoothstep blend of the four corners' hash, above `floor`
+ * only, squared. 0 for no cells or a floor of 1 or more.
+ *
+ * HDWaterShaftBound: the march's sum `sum` held to `peak` times the cells'
+ * mean light `mean` times the sum of the samples' own weights `weights`
+ * (the reach under the surface and the extinction along the eye ray); the
+ * sum as it is for a peak of 0 or less. */
+inline float HDWaterShaftHash(float i, float j)
+{
+	const float a0 = i * (422.0f / 4096.0f) + j * (1531.0f / 4096.0f);
+	const float b0 = j * (481.0f / 4096.0f) + i * (965.0f / 4096.0f);
+	const float a = a0 - floorf(a0);
+	const float b = b0 - floorf(b0);
+	const float h = a * (b + 3.71f) * 7.13f + b;
+
+	return h - floorf(h);
+}
+
+inline float HDWaterShaftMean(float floor, int cells, int places)
+{
+	if (cells <= 0 || places <= 0 || floor >= 1.0f)
+		return 0.0f;
+
+	double sum = 0.0;
+
+	for (int i = 0; i < cells; i++)
+		for (int j = 0; j < cells; j++)
+		{
+			const float h00 = HDWaterShaftHash((float)i, (float)j);
+			const float h10 = HDWaterShaftHash((float)i + 1.0f, (float)j);
+			const float h01 = HDWaterShaftHash((float)i, (float)j + 1.0f);
+			const float h11 = HDWaterShaftHash((float)i + 1.0f,
+				(float)j + 1.0f);
+
+			for (int p = 0; p < places; p++)
+				for (int q = 0; q < places; q++)
+				{
+					const float fx = (p + 0.5f) / places;
+					const float fz = (q + 0.5f) / places;
+					const float sx = fx * fx * (3.0f - 2.0f * fx);
+					const float sz = fz * fz * (3.0f - 2.0f * fz);
+					const float v = (h00 + (h10 - h00) * sx) * (1.0f - sz) +
+						(h01 + (h11 - h01) * sx) * sz;
+					float a = (v - floor) / (1.0f - floor);
+
+					a = a < 0.0f ? 0.0f : a > 1.0f ? 1.0f : a;
+					sum += a * a;
+				}
+		}
+
+	return (float)(sum / ((double)cells * cells * places * places));
+}
+
+inline float HDWaterShaftBound(float sum, float weights, float mean,
+	float peak)
+{
+	if (peak <= 0.0f)
+		return sum;
+
+	const float most = peak * mean * weights;
+
+	return sum < most ? sum : most;
+}
 
 /* The power of the cosine to the light whose glow falls to half its peak
  * `halfDeg` degrees from the light's direction: cos^p(half) = 1/2. The
@@ -242,6 +332,67 @@ inline float HDWaterGlowPower(float halfDeg)
 	const float c = cosf(halfDeg * 0.017453293f);
 
 	return halfDeg > 0.0f && halfDeg < 90.0f ? logf(0.5f) / logf(c) : 0.0f;
+}
+
+/* The half angle in the water of the sunlit photograph's glow round the
+ * sun: 178 pixels at 960 wide under the game's own perspective. */
+static const float kHDWaterGlowHalf = 22.5f;
+
+/* The disc's power where the sheet lies, for a glow that halves `halfDeg`
+ * degrees from the light in the picture, under the water. The disc is
+ * pow(cos, p) of the eye's ray out through the surface against the light
+ * (hd_water_look.hlsl, LookPS): an angle in the air. Out of the water a
+ * ray's way from the light's grows - n times across the plane of the
+ * light, more along it - so the angle in the air of each way `halfDeg`
+ * round the light's way in the water (360 of them, those that leave
+ * through the window), meaned, is the half angle the power is taken at
+ * (HDWaterGlowPower). `up` is the light's height in the air, the sine of
+ * its elevation; n 1.333 as the shader's. HDWaterGlowPower(halfDeg) for a
+ * light at or under the horizon or no way out; 0 for a half angle outside
+ * 0 to 90. */
+inline float HDWaterGlowPowerUnder(float halfDeg, float up)
+{
+	if (!(halfDeg > 0.0f && halfDeg < 90.0f))
+		return 0.0f;
+
+	if (!(up > 0.0f && up <= 1.0f))
+		return HDWaterGlowPower(halfDeg);
+
+	const float n = 1.333f;
+	const float flat = sqrtf(1.0f - up * up);
+	// The light's way in the water (x along the light, y up) and its square.
+	const float wx = flat / n, wy = sqrtf(1.0f - wx * wx);
+	const float ux = wy, uy = -wx;
+	const float a = halfDeg * 0.017453293f;
+	const float ca = cosf(a), sa = sinf(a);
+	double sum = 0.0;
+	int count = 0;
+
+	for (int k = 0; k < 360; k++)
+	{
+		const float ph = (k + 0.5f) * (6.2831853f / 360.0f);
+		const float dx = ca * wx + sa * cosf(ph) * ux;
+		const float dy = ca * wy + sa * cosf(ph) * uy;
+		const float dz = sa * sinf(ph);
+		const float h = sqrtf(dx * dx + dz * dz);
+		const float s = h * n;
+
+		if (dy <= 0.0f || s >= 1.0f)
+			continue;
+
+		// Out of the water: the same way round, its horizontal n times.
+		float c = (h > 0.0f ? dx / h * s * flat : 0.0f) +
+			sqrtf(1.0f - s * s) * up;
+
+		c = c < -1.0f ? -1.0f : c > 1.0f ? 1.0f : c;
+		sum += acosf(c);
+		count++;
+	}
+
+	if (!count)
+		return HDWaterGlowPower(halfDeg);
+
+	return HDWaterGlowPower((float)(sum / count) * 57.29578f);
 }
 
 /* Free choices, set by eye on RoomProbe -underlook pictures of JOBY4's
@@ -291,16 +442,23 @@ inline float HDWaterGlowPower(float halfDeg)
  *
  * The disc there is a glow, not a spot: the sunlit photograph's glow
  * round the sun (smoothed over 6 pixels) falls to half 178 pixels from its
- * peak at 960 wide - 22.5 degrees under the game's own perspective, the
- * power 8.75 (HDWaterGlowPower) - and by at most 2.7 a pixel; its peak is
- * 2.49 times the photograph's median luma. The power 600 of the disc off
- * the sheet halves within 12 pixels and falls by up to 27 a pixel at its
- * rim. At 8.75 the disc's strength is the largest whole number from 8
- * down whose peak lies under the power 600's at every eye the disc is in
- * (4 of 4) and whose peak over the open water's median lies under the
- * photograph's 2.49 at the three eyes that face it from open water: 4
- * (1.5 to 1.9; 5 and 6 lift the peak over the power 600's, 6 to 181
- * against 161).
+ * peak at 960 wide - 22.5 degrees in the water under the game's own
+ * perspective (kHDWaterGlowHalf) - and by at most 2.7 a pixel; its peak is
+ * 2.49 times the photograph's median luma. The disc's cosine is taken in
+ * the air, where that ring lies wider, so its power comes from the
+ * light's height (0 here: HDWaterGlowPowerUnder, 3.57 for the sea's light
+ * 22 degrees up; the cosine's power at 22.5 itself, 8.75, halves the
+ * disc 89 to 102 pixels out). The power 600 of the disc off the sheet
+ * halves within 12 pixels and falls by up to 27 a pixel at its rim. The
+ * strength: at the power 8.75 the largest whole number from 8 down whose
+ * peak lies under the power 600's at every eye the disc is in (4 of 4)
+ * and whose peak over the open water's median lies under the
+ * photograph's 2.49 at the three eyes that face it from open water is 4;
+ * the same light spread to the power 3.57 (the cosine's light over the
+ * sky goes as one over the power plus 1) is 1.88, and the largest half
+ * step down from it that keeps every eye under the sheet in its band is
+ * 1.5 (1.75 takes the eye looking 50 degrees up to the north under its
+ * band's soft end).
  *
  * The ripple's two rows are broken per cell of the shafts' grid
  * (SeaRipple) by a phase, a turn of up to 0.9 radians and a loss of up to
@@ -328,7 +486,18 @@ inline float HDWaterGlowPower(float halfDeg)
  * plane (HDWaterUnderSeaDepth) an eye 68 units under the stand-in's surface
  * sees the rooms over its horizon in the water's colour, hue 199 against
  * the water's 200 and 0.8 of luma apart (counted to the stand-in hue 188,
- * 7.7 apart). */
+ * 7.7 apart).
+ *
+ * The shafts' light in a pixel under the sheet is held to 2.49 times the
+ * light the cells' mean gives over the same samples (HDWaterShaftBound),
+ * the sunlit photograph's peak over its open water's median, taken for
+ * the term. From an eye of the dive looking 26 degrees up toward the
+ * light the march's samples meet the surface within a few cells; where
+ * those are lit, the term unheld at the sheet's strength burns a quarter
+ * of the picture to white. Held, no eye of the dive burns at any of 30
+ * clocks 2 seconds apart, and they stay in their band. The bound is the
+ * photograph's number, not a measured step: 3 and 4 burn nowhere either
+ * and only lift the lit pictures. */
 inline void HDWaterLookKnobs(float* knobs)
 {
 	knobs[HD_LOOK_DISC] = 0.2f;
@@ -342,20 +511,21 @@ inline void HDWaterLookKnobs(float* knobs)
 	knobs[HD_LOOK_LENGTH] = 5000.0f;
 	knobs[HD_LOOK_WAVES] = 1500.0f;
 	knobs[HD_LOOK_RIM] = 0.3f;
-	knobs[HD_LOOK_SEA_DISC] = 4.0f;
+	knobs[HD_LOOK_SEA_DISC] = 1.5f;
 	knobs[HD_LOOK_SEA_SHAFTS] = 24.0f;
 	knobs[HD_LOOK_SEA_UNDERSIDE] = 0.24f;
 	knobs[HD_LOOK_SHEET] = 0.10f;
 	knobs[HD_LOOK_RIPPLE] = 0.8f;
 	knobs[HD_LOOK_PATCHES] = 1.5f;
 	knobs[HD_LOOK_ART] = 0.0f;
-	knobs[HD_LOOK_SEA_POWER] = HDWaterGlowPower(22.5f);
+	knobs[HD_LOOK_SEA_POWER] = 0.0f;
 	knobs[HD_LOOK_SEA_TURN] = 0.9f;
 	knobs[HD_LOOK_SEA_SWELL] = 0.5f;
 	knobs[HD_LOOK_SEA_MARGIN] = 1.0f;
 	knobs[HD_LOOK_SEA_RAGGED] = 4096.0f;
 	knobs[HD_LOOK_SEA_FOG] = 0.03125f;
 	knobs[HD_LOOK_SEA_PLANE] = 1.0f;
+	knobs[HD_LOOK_SEA_PEAK] = 2.49f;
 }
 
 /* The sea's surface seen from below in the art's place (hd_render.cpp,

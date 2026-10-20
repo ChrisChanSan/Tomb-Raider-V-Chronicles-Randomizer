@@ -20907,6 +20907,237 @@ comment that names `HD_MARBLE_PLANES_MOST` (the file does not include the header
 **Commits.** `d3986a7c` (the comments and the start values), `0845d204` (the records),
 and this line's own commit after them.
 
+**Round 5.** 2026-10-20
+
+**What.** Asked for after his play test of the build of 2026-10-19 (05:06:37), put into
+English: the mirror sometimes looks oddly broken, which he can live with, but at a room
+change the mirrored rooms still pop now and then ("Spiegel sieht manchmal komisch
+gebrochen aus, dass kann ich verkraften aber manchmal beim Raumwechsel ploppen die
+gespiegelten Raeume noch ab und an rum."); and from his list of 2026-10-18, on the sky in
+the mirror: "24. Ja". Changed: each plane's mirror walks its own rooms, out from the rooms
+holding its faces through every portal to three portals (`HDMarbleWalk`,
+`marble_plane_rooms`, `g_marble_walk`); the sky is drawn into a mirror whose view holds a
+room under the sky (`marble_sees_open`, `marble_sky`, `g_marble_open`).
+
+**Why: the pops, measured before a line changed.** His log of that play test holds three
+RICH2 parts (the third a resident load, ticks 15269 to 18562, 136 s through the corridor,
+the offices and the lobby), one ANDREA1 part (ticks 21447 to 23975, the church, its stairs
+and the roof walk) and the title twice; the title's lists name rooms 2, 13, 14 and 15
+only, none with a mirror face, so the title gives no walk with a mirror. The frame's room
+list of every frame was rebuilt from the `ROOMLIST` lines (the whole lists and their
+`added=`/`removed=` deltas): 388 changes in RICH2's walk, 562 in ANDREA1's, 360 and 363 of
+them with a room holding a mirror face. Each change within half a second of a change of
+the camera's room (225), and the first 44 of the others, was drawn with RoomProbe at its
+eye (the `ROOMLIST` eye, the nearest `CAMLOG` tick's target) with the list before and the
+list after, the mirror on and off (960 x 540): the mirror's own change is the pixels more
+than 8 of 255 apart with the mirror on where the pair with it off is alike.
+
+| walk | changes drawn | moving the mirror | of 100 px or more | px summed |
+|---|---|---|---|---|
+| RICH2, before | 140 | 45 | 9 | 10,357 |
+| RICH2, after | 140 | 18 | 3 | 565 |
+| ANDREA1, before | 129 | 2 | 0 | 19 |
+| ANDREA1, after | 129 | 0 | 0 | 0 |
+
+(RICH2's first change, frame 83800, is the first frame after the resident load, the whole
+list new: 3,231 pixels before, 203 after; without it 7,126 before and 362 after.) The
+largest before: frame 85616, the camera back from room 52 into 49 and rooms 48 and 135 to
+138 back in the list, 1,976 pixels; 89132, room 170 into the list from room 85, 1,764;
+90990, 1,384; 91326, 693; 91568, 321; 92578 and 92596, room 170 out of the list and back
+in four frames later, 182 and 108 with nothing of the direct view changed (the corridor
+between rooms 52 and 84, seen only in the floor). The candidates, each against the data:
+(a) the culling of rooms that cannot show in a plane - ruled out: it is a box test of the
+mirrored view at the eye, the same before and after a list change at one eye, and round 4
+found the pictures md5-identical with it; it only ever culls from the list it is given.
+(b) the least share without a hold - ruled out for the pops: at none of the drawn changes
+did the planes drawn change (the `marble:` lines' drawn counts before and after are alike
+at every change), and round 4's simulation re-run gives the same as round 4 (RICH2 stair 0
+fade-outs while showing, 15 fade-in frames; the climb 0 and 33); its drops, simulated with
+a hold at 1, 0.75, 0.5 and 0.25 of the share it entered with, are planes falling behind a
+step within a tick (to 4.6 % and 1.5 % of the share), which no hold of that kind keeps.
+(c) a plane's place at the ceiling or in the ranking - ruled out: at most 29 planes in
+view and 5 drawn over the 544 frames drawn, the ceiling 64. (d) the mirror's rooms built
+from the frame's list - ruled in: every pop is a room joining or leaving the frame's list
+while a mirror shows it; the frame's list is the eye's walk through the portals' windows
+on the screen, and a room seen only in the floor (through a door whose reflection is in
+view while the door is not) comes and goes with the windows. (e) the store of the slope
+faces at a resident load - ruled out: RoomProbe `-reload` at two eyes of the walk (frames
+91326 and 85616), md5-identical with and without.
+
+**The rule.** A plane's own walk (`hd_marble_math.h`, `HDMarbleWalk`; `hd_render.cpp`,
+`marble_plane_rooms`): from the drawn rooms holding the plane's faces out through every
+portal, over and beside, to `g_marble_walk` portals; a room is asked once, taken and
+walked on from only where the plane's mirrored view can show its box (`marble_box_out`:
+the mirrored frustum, the clip and the plane's scissor), and a room the frame did not draw
+is drawn whole with the matrix and light of the room it was found from, as the rooms over
+are (`marble_over_world`, split out of `marble_replay_over`). The frame's list no longer
+decides what a mirror holds. The depth from the same changes, RoomProbe `-marblewalk` at
+the 49 RICH2 changes that moved the mirror in the base or in a first try - every undrawn
+room beside a drawn room into the mirrors, which moved the problem one portal out (27 of
+the 140 changes moving the mirror, 10 of them by 100 pixels or more) and was dropped:
+
+| `-marblewalk` | base | 1 | 2 | 3 |
+|---|---|---|---|---|
+| changes moving the mirror | 44 | 21 | 18 | 17 |
+| of 100 px or more | 8 | 5 | 3 | 2 |
+| px summed | 7,126 | 5,188 | 778 | 362 |
+
+Three portals. What still moves at three is the plane's own floor: at 91326 room 85's
+floor joins the plane (its faces 1,396 to 1,504) and at 91568 the rooms holding most of it
+leave the list (575 faces to 94) - the floor itself comes and goes there, in the direct
+view.
+
+**The sky.** The mirrored eye saw the sky's place as the clear colour: the layer shows the
+walls' light there. The classic walk draws the sky for a frame whose list holds a room
+under the sky (`game/draw.cpp`, the walk's `outside` and `SkyDrawPhase`); the mirror now
+asks the same of its own list - the frame's rooms and the rooms it draws whole whose boxes
+its view can show - with the room's own `ROOM_OUTSIDE`, kept by group at `marble_build`
+(`g_marble_open`, `HDMarbleOpen`). Where one is, the sky is drawn into the plane's mirror
+first, as the frame draws it (`HDRenderSky`, its depth slice and order), centred on the
+eye and turned as the view is (`HDMarbleSkyTurn`: a noted room's matrix with the view, its
+move left out), under the mirror's projection, clip and scissor, without fog or bulbs as
+`HDFrameSky` draws the frame's. Measured (960 x 540): at RICH2's tanks' room (round 4's
+R5222) 99,116 pixels of floor showed none of the mirrored rooms and the sky fills them, by
+3 of 255 on the mean - RICH2's night sky; 106 pixels change by more than 8. At his ANDREA1
+roof walk (tick 22947) 52,935 pixels of floor showed nothing and the sky, Rome at sunset,
+fills them. Where the data gives no room under the sky in the mirror's list there is no
+sky: ANDREA1's church (rooms 157, 165, 174, 175 and 186 carry no `ROOM_OUTSIDE`; at round
+4's A263 and A283 no plane draws it) and the title's eyes T33 and T40. Tried and dropped:
+the sky groups' opaque pass alone after the rooms (cheap, but ANDREA1's band lies in the
+alpha pass: the 52,935 pixels stayed empty), the whole sky after the rooms on a stencil
+mark of the empty pixels (as dear as drawing it first: the band's alpha test turns the
+early depth test off), one sky a frame laid into every level plane (dearer: 0.77 to 1.55
+ms at R4920), and the sky bounded to the rectangles of the rooms under it (no gain: those
+rooms' boxes cover the screen at every eye measured).
+
+**The statics of the rooms over.** RoomProbe `-statictable`: RICH2's 405 statics are 384
+the art's (drawn with the group that holds them) and 21 classic, ANDREA1's 255 are 244
+art, 10 classic and 1 a piece. A room over drawn whole draws its own art statics with it.
+The classic statics (RICH2 rooms 6, 14 to 19, 32, 61, 126, 131 and 137; ANDREA1 136, 180,
+207 and 221) are drawn by the classic path, which the mirror draws for no room, the
+frame's own included; of the rooms over drawn at his places (the `marbleover` lines)
+RICH2's 15, 16 and 61 hold six of them. The art a carrier room holds for another room's
+static (40 statics) comes with the carrier's stand ranges, which only the frame's own
+rooms draw. Neither is drawn into the mirror this round: the classic statics' draw is the
+classic static path's and the stand ranges are decided by `hd_level.cpp`'s frame, outside
+this round's files (Left).
+
+**"Oddly broken": at his places.** His walks' ticks every second in a room with a mirror
+face (RICH2 50, ANDREA1 18; 960 x 540), each plain and with `-marblevoid`:
+
+| measured | RICH2 before | RICH2 after | ANDREA1 before | ANDREA1 after |
+|---|---|---|---|---|
+| floor showing none of the mirrored rooms (px) | 116,112 | 14,882 | 57,371 | 2,229 |
+| eyes with such floor | 31 | 13 | 12 | 9 |
+| planes drawn / of them sloped | 49 / 0 | 49 / 0 | 35 / 14 | 35 / 14 |
+| planes left under the least share, showing (px) | 0 | 0 | 22 (3,229, at most 559) | the same |
+| planes drawing the sky | - | 38 | - | 10 |
+
+That floor is what reads as broken: a patch of the floor showing the walls' light, not the
+room, beside one that mirrors - the rooms the walk now draws (the offices and the corridor
+of RICH2) and the sky (ANDREA1's roof walk) take most of it. What stays, looked at eye by
+eye: the glass and the glowing parts the mirror does not draw (it draws the rooms' solid
+passes) - RICH2's ceiling lamps (tick 15389, a square of 5,013 pixels under the lamp) and
+the office windows beyond a door (15569), ANDREA1's window over the stairs (22287, 2,066).
+The other causes asked: the plane's scissor cannot cut a reflection (the layer reads its
+own pixel's texel alone, `MarblePS`'s `at`, and the scissor is that pixel's box two pixels
+wider); the seams at a step are each tread mirroring at its own height, as a stepped stone
+floor does; the slivers under the least share are ANDREA1's stair edges, 3,229 pixels over
+18 eyes at most 559 at one. Nothing changed for these this round.
+
+**Measured: the cost.** The mirror's GPU time at round 4's eyes, 2,560 x 1,440, three
+runs, medians, the base (`76046dae`'s RoomProbe) and the head, the sky's groups given
+(`-rooms`); other work ran on the machine throughout:
+
+| eye | calls before / after | mirror GPU ms before / after | CPU ms before / after |
+|---|---|---|---|
+| R4920 | 406 / 466 | 0.74 / 1.20 | 0.62 / 0.69 |
+| R4892 | 466 / 541 | 0.82 / 1.06 | 0.52 / 0.90 |
+| R4946 | 393 / 421 | 0.91 / 1.44 | 1.18 / 1.76 |
+| R5222 | 860 / 971 | 2.34 / 3.21 | 1.55 / 2.37 |
+| R5205 | 396 / 493 | 1.04 / 2.52 | 0.71 / 1.12 |
+| R3682 | 180 / 303 | 0.53 / 1.42 | 0.61 / 1.29 |
+| L4 (lobby) | 879 / 995 | 1.77 / 2.76 | 2.62 / 3.24 |
+| L2 (lobby) | 890 / 1,007 | 1.76 / 3.56 | 1.51 / 3.48 |
+| R26 (gallery) | 392 / 1,125 | 0.71 / 1.52 | 0.77 / 1.64 |
+| A263 | 51 / 54 | 0.31 / 0.32 | 0.48 / 0.71 |
+| A283 | 53 / 53 | 0.40 / 0.41 | 0.57 / 1.16 |
+| A717 | 163 / 233 | 0.37 / 0.71 | 0.54 / 1.16 |
+| A690 | 196 / 238 | 0.30 / 0.59 | 0.94 / 1.40 |
+| Aup | 30 / 59 | 0.09 / 0.10 | 0.08 / 0.17 |
+
+(The walk alone costs within 0.15 ms but at the gallery over the tanks, R26, 0.71 to 1.40
+ms with 1,101 calls; the rest is the sky: at four RICH2 eyes, five runs, without the sky
+and with it R4920 0.77 / 1.24, R5222 2.28 / 3.24, L4 1.84 / 2.48, L2 1.82 / 2.64. The sky
+draw itself, timed apart in a throwaway build, costs 0.76 ms over a plane's whole target
+of 2,560 x 2,880 and 0.07 to 0.24 ms over a quarter of it: it is the pixels.) The level
+load (RoomProbe's `read`, `build` and the marble warm-up, room 0, three runs, the least):
+
+| level | base | head | more |
+|---|---|---|---|
+| ANDREA1 | 1,880 | 2,078 | 197 |
+| ANDREA2 | 5,102 | 5,120 | 18 |
+| ANDREA3 | 2,899 | 3,013 | 114 |
+| ANDY1 | 2,223 | 1,746 | -477 |
+| ANDY2 | 2,155 | 2,136 | -19 |
+| ANDY3 | 2,536 | 2,179 | -357 |
+| JOBY2 | 2,328 | 2,471 | 143 |
+| JOBY3 | 1,446 | 1,197 | -249 |
+| JOBY4 | 1,001 | 1,299 | 298 |
+| JOBY5 | 1,625 | 1,889 | 264 |
+| RICH1 | 1,519 | 1,736 | 217 |
+| RICH2 | 3,278 | 3,849 | 571 |
+| RICH3 | 1,810 | 1,725 | -85 |
+| RICHCUT2 | 1,364 | 1,502 | 138 |
+| TITLE | 3,336 | 3,475 | 139 |
+
+None more than a second; the head's own work at the load is one pass over the groups for
+the rooms under the sky, so the differences, both ways up to 571 ms, are the spread of the
+runs under the other work.
+
+**Decisions.** Three portals, not more: the pixels the walk leaves fall from 778 at two to
+362 at three, and what stays is the floor's own rooms. The rooms a walk finds are drawn as
+the rooms over are, with the light of the room they were found from; a room joining the
+frame's list then draws with its own (at 91278 a room drawn both ways changed 11 pixels).
+The sky drawn whole and first, as the frame draws it, over the cheaper ways tried: the
+cheap ones lose ANDREA1's sky. Its cost stands over round 4's budget at RICH2's lobby (the
+mirror under 2.1 ms at the worst eye): see Left and the question.
+
+**Checked.** The nine builds exit 0 (each in its own `cmd` call); ModernTest 16,013 (the
+round's 8 in `marble_walk`), MenuTest 44,917, InterpTest 754, LipsTest 299 with the lip
+objects and 272 without (the cutseq path given by hand), none failed. Against the base
+tool, md5-identical: the classic path 6 of 6; with `hd_marble` 0 the 15 cameras at
+`hd_water` 0 and 1, the six HD views, round 2's 36 eyes at `hd_water` 0 and 1 and his 21
+ticks; with `hd_marble` 1 the 15 cameras at `hd_water` 0 and 1 and the six HD views. With
+`hd_marble` 1 the pictures that change are the walk's alone - the head with `-marblesky 0`
+draws them the same, with `-marblewalk 0 -marblesky 0` every picture of the sets above
+md5-identical to the base: round 2's eyes, alike at `hd_water` 0 and 1, 19 of 36 (pixels
+changed, of them by more than 8 of 255) - E158 62,800 (1,238), E189t 11,657 (66), E190
+8,688 (6,693), k185 389 (239), L0 2,299 (3), L2 5,588 (2,261), L4 5,632 (2,843), p3 45,477
+(0), p4 2,001 (14), p5 26,489 (715), p6 23,255 (7,325), p7 54,580 (11,356), p8 8,411
+(1,458), p9 39,230 (8,530), T33 1,185 (651), T40 421 (166), v510 25,285 (3,829), W3c 2,237
+(1,130) and W46 2 (0); his ticks 7 of 21 - RICH2 3402 46,146 (2,632), 3682 98,775 (8,038),
+3812 92,036 (8,143), 4402 104,126 (10,003), 4582 70,428 (6,789), 5062 521 (166) and 5205 1
+(0): rooms of the eyes' own walks the frame's lists lacked, now in the mirrors (round 3's
+floor showing nothing at E190, p9 and 3682 among them). Those sets pass no room count, so
+they draw no sky groups; the 15 cameras do, and none of their mirrors holds a room under
+the sky.
+
+**Left.** The look in the game: nobody in this round could play it. The sky's cost at
+RICH2: 0.5 to 1.8 ms more of the GPU at the lobby and the tanks' room, where the night sky
+changes at most about a thousand pixels by more than 8 of 255. The glass and the glowing
+parts in the mirror (above). A room the walk finds draws with the light of the room it
+came from. The classic statics in the mirror and the stand ranges of a room over (above).
+RoomProbe has no `-marblepop`: the walks' census is a script over RoomProbe runs (the list
+before and after at each eye, the mirror on and off) kept with the round's measurements,
+not in the repository. `hd_render.h`'s comments do not name the three new probe functions
+(RoomProbe declares them itself).
+
+**Commits.** `6bf2a3e6` (the walk), `311c6d99` (the sky's opaque pass after the rooms),
+`f667fac5` (the whole sky first, as the frame draws it), `21244df2` (RoomProbe's
+`-marblewalk` and `-marblesky`, ModernTest's `marble_walk`, the tools' README), and this
+record's own commit after them.
+
 ### The spring (#200)
 2026-10-14
 

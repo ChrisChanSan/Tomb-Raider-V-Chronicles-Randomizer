@@ -3959,6 +3959,27 @@ carries the tables.
     `power`, `break`, `edge` and `reach`, `HDRenderWaterSeaKnobs` before the one
     bracket, `HDRenderWaterSheetReach`; `ModernTest.cpp`, `water_sea`) - the tool's
     switches for the round's rules and 27 checks of their pure functions. OWN.
+343. **A mirror's own walk** (`hd_marble_math.h`, `HDMarbleWalk`; `hd_render.cpp`,
+    `marble_plane_rooms`, `g_marble_walk` 3, `marble_over_world`) - each plane's mirror
+    draws the rooms found from the drawn rooms holding its faces through every portal to
+    three portals, a room taken only where the plane's mirrored view can show its box.
+    OWN; DATA: RoomProbe at the changes of the frame's room list in the owner's play log
+    of 2026-10-20 (the list rebuilt from its `ROOMLIST` lines, each change drawn before
+    and after at its eye, the mirror on and off): RICH2 45 of 140 changes moved the mirror
+    (10,357 pixels at 960 x 540) before, 18 (565) after; ANDREA1 2 of 129 before, none
+    after. The depth 3: at the 49 RICH2 changes that moved it, 7,126 pixels with none,
+    5,188 at one portal, 778 at two, 362 at three.
+344. **The sky in a mirror** (`hd_render.cpp`, `g_marble_open`, `kMarbleRoomOutside`,
+    `marble_sees_open`, `marble_sky`; `hd_marble_math.h`, `HDMarbleOpen`,
+    `HDMarbleSkyTurn`) - a plane's mirror whose list holds a room under the sky
+    (`ROOM_OUTSIDE`) gets the sky, drawn first as the frame draws it. OWN, the classic
+    walk's rule for the frame (`game/draw.cpp`, `outside` and `SkyDrawPhase`) asked of the
+    mirror's own list; DATA: RICH2's tanks' room 99,116 pixels of floor showing none of
+    the mirrored rooms filled, ANDREA1's roof walk 52,935; the sky groups' opaque pass
+    alone, measured first, left ANDREA1's 52,935 empty (its band lies in the alpha pass).
+345. **RoomProbe `-marblewalk` and `-marblesky`; ModernTest's `marble_walk`**
+    (`Preparation/Tools/Diagnose/`) - the tool's switches for the round's two rules and 8
+    checks of their pure functions. OWN.
 
 ## Credited, but not contained here
 

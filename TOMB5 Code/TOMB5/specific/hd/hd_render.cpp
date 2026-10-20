@@ -509,11 +509,16 @@ namespace
 	 * 15101, smallest 12, mean 30, its layers stacked many deep), which
 	 * drawn whole went white - 150 levels more where the classic lamp adds
 	 * 94. Of the 107 material 14 parts with an additive run in the fifteen
-	 * levels, 86 lie on pages without a clear texel and 21 on pages with. */
+	 * levels, 86 lie on pages without a clear texel and 21 on pages with.
+	 *
+	 * And a page the table of looks names (HDGlassLookOf, hd_debris_rules.h)
+	 * is glass in every texel whatever it marks clear: the arched panes'
+	 * page 15074, whose seven parts are added whole, 93 parts in all. */
 	inline bool AddGlass(int material, int slot)
 	{
 		return material == HD_TRG_MATERIAL_DECAL &&
-			HDGlassWholePage(HDPageCacheSlotAlphaMin(slot));
+			(HDGlassWholePage(HDPageCacheSlotAlphaMin(slot)) ||
+			HDGlassLookOf(HDPageCachePageOfSlot(slot)) != 0);
 	}
 
 	/* The glass's hue (hd_debris_rules.h, "the glass's look"): every draw
@@ -10673,6 +10678,14 @@ int HDRenderGlassTint(const HDGlassFace* faces, int count)
 			g_groups[(size_t)c.group].pass[c.pass][(size_t)c.range];
 
 		HDGlassTintOf(c.sum, range.tint);
+
+		// A page the table of looks names takes its hue (HDGlassTintHue).
+		const HDGlassLook* look =
+			HDGlassLookOf(HDPageCachePageOfSlot(range.pageSlot));
+
+		if (look)
+			HDGlassTintHue(range.tint, look->hue, range.tint);
+
 		tinted += range.tint[3] > 0.0f ? 1 : 0;
 	}
 

@@ -934,14 +934,16 @@ int HDModelCutRanges(int slot);
  *
  * The glass is added one-sided where a layer of its node faces against it,
  * a copy of it in the additive run is left out while its node draws glass,
- * and it is added times its part's opacity (hd_object_rules.h). Those come
+ * and one-sided it is added times its part's opacity (hd_object_rules.h,
+ * HDGlassWeight). Those come
  * from the file at the build; HDModelGlassCounts says, for the marks the
  * last HDModelSetGlassNodes set, how many glass ranges are drawn
  * (`blended`) and how many of them one-sided (`sided`), how many additive
  * ranges are copies of the glass (`copies`) and how many are left out
  * (`dropped`), the smallest opacity of a drawn glass range (`opacity`, 1
- * with none) and the factor the draw adds it with (`factor`: the opacity,
- * or 1 on a card without a blend factor). All zero and 1 for a slot with
+ * with none) and the smallest factor the draw adds a drawn glass range with
+ * (`factor`: HDGlassWeight, or 1 on a card without a blend factor). All
+ * zero and 1 for a slot with
  * no model. */
 struct HDModelGlassCount
 {

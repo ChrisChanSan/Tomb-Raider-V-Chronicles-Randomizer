@@ -70,7 +70,7 @@
  * measure of how much as well: the classic adds one face at a pixel, so
  * glass with a layer facing against it is drawn one-sided and a copy of
  * the glass in the additive run is not drawn beside it; and the part's
- * own opacity weighs what the glass adds. */
+ * own opacity weighs what the one-sided glass adds (HDGlassWeight). */
 
 /* The fewest single-weight vertices a node needs to be measured: the bind
  * drift's own working set (hd_model.cpp) uses the same count. */
@@ -449,6 +449,21 @@ inline unsigned int HDGlassOpacityByte(float opacity)
 		return 255;
 
 	return (unsigned int)(opacity * 255.0f + 0.5f);
+}
+
+/* What a glass range is added times: its opacity where the range is drawn
+ * one-sided (`sided`, HDTrmTrianglesFaceAgainst over every triangle of it),
+ * 1 where it is not. A one-sided range is a pane modelled with a layer for
+ * each side, the glass whose layers stacked where the classic adds one
+ * face; its opacity weighs the one layer left. A two-sided range is a
+ * single sheet with nothing stacked on it, and the page's own alpha stays
+ * its only weight: over the glass the shipped levels bind, every such
+ * sheet weighed by the opacity would add less than the tenth of the
+ * classic's band at its node (ModelProbe -alpha), and it adds no more than
+ * the band unweighed. */
+inline float HDGlassWeight(float opacity, bool sided)
+{
+	return sided ? HDGlassOpacity(opacity) : 1.0f;
 }
 
 /* The classic's band as the ceiling of the glass: the factor that holds

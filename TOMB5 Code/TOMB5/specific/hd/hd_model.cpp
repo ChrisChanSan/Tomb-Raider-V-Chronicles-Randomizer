@@ -3079,16 +3079,18 @@ namespace
 			/* And per range its sides and its weight (hd_object_rules.h):
 			 * a range with a glass layer facing against it culls the
 			 * winding turned away from the eye - the other winding under a
-			 * mirrored matrix - unless the whole draw culls already; a
-			 * range whose part's opacity is under 1 is added times it,
-			 * through the blend factor. Both are put back after the step.
-			 * The cull and the factor each draw holds now, -1 for none
-			 * set: the draw's own cull and a whole add. */
+			 * mirrored matrix - unless the whole draw culls already; such
+			 * a range whose part's opacity is under 1 is added times it
+			 * (HDGlassWeight), through the blend factor. Both are put back
+			 * after the step. The cull and the factor each draw holds now,
+			 * -1 for none set: the draw's own cull and a whole add; and
+			 * whether the step wrote the factor at all. */
 			const DWORD glassOutside = HDMatrixMirrors(nodeMatrix)
 				? D3DCULL_CW : D3DCULL_CCW;
 			DWORD glassFactor = 0xFFFFFFFF;
 			int glassCullNow = -1;
 			int glassByteNow = -1;
+			bool glassFactorSet = false;
 
 			if (glassStep)
 			{
@@ -3193,7 +3195,8 @@ namespace
 					const int cullHere = first.sided && cull ==
 						HD_MODEL_CULL_NONE ? (int)glassOutside : -1;
 					const int byteHere = g_blend_factor
-						? (int)HDGlassOpacityByte(first.opacity) : 255;
+						? (int)HDGlassOpacityByte(HDGlassWeight(first.opacity,
+							first.sided)) : 255;
 
 					if (cullHere != glassCullNow)
 					{
@@ -3208,9 +3211,12 @@ namespace
 							? D3DBLEND_BLENDFACTOR : D3DBLEND_ONE);
 
 						if (byteHere < 255)
+						{
 							g_device->SetRenderState(D3DRS_BLENDFACTOR,
 								D3DCOLOR_ARGB(byteHere, byteHere, byteHere,
 									byteHere));
+							glassFactorSet = true;
+						}
 
 						glassByteNow = byteHere;
 					}
@@ -3235,7 +3241,7 @@ namespace
 				g_device->SetRenderState(D3DRS_SRCBLEND, glassSrc);
 				g_device->SetRenderState(D3DRS_DESTBLEND, glassDest);
 
-				if (glassByteNow >= 0 && glassByteNow < 255)
+				if (glassFactorSet)
 					g_device->SetRenderState(D3DRS_BLENDFACTOR, glassFactor);
 
 				if (glassCullNow >= 0)
@@ -5470,6 +5476,11 @@ void HDModelGlassCounts(int slot, HDModelGlassCount* out)
 
 		if (range.opacity < out->opacity)
 			out->opacity = range.opacity;
+
+		const float weight = HDGlassWeight(range.opacity, range.sided);
+
+		if (g_blend_factor && weight < out->factor)
+			out->factor = weight;
 	}
 
 	for (const Range& range : model->pass[HD_TRM_RUN_ADDITIVE])
@@ -5477,8 +5488,6 @@ void HDModelGlassCounts(int slot, HDModelGlassCount* out)
 		out->copies += range.copy ? 1 : 0;
 		out->dropped += range.dropped ? 1 : 0;
 	}
-
-	out->factor = g_blend_factor ? out->opacity : 1.0f;
 }
 
 int HDModelGlassRanges(int slot, int* blended)

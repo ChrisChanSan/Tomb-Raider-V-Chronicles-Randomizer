@@ -14,7 +14,7 @@
 
 #include <math.h>
 
-/* Two rules of the HD object path, as pure functions, so that the engine,
+/* Three rules of the HD object path, as pure functions, so that the engine,
  * ModelProbe and ModernTest judge by the same lines.
  *
  * THE SKELETON FIT. The bind drift (hd_model.h, HDModelBindDrift) compares
@@ -48,7 +48,25 @@
  * is not - it has folded into one plane. Its items are drawn one-sided,
  * as the classic draws them (HDPocketSide). The fold is what limits the
  * rule to the case that fights: a slot whose geometry never folds keeps
- * the HD path's two-sided draw, which an open model needs. */
+ * the HD path's two-sided draw, which an open model needs. The walk keeps
+ * to the slot's own animations, the run from its first to the next
+ * object's first (HDPocketAnimEnd): a slot's state change may name an
+ * animation of another object - JOBY4's ATTACK_SUB, two animations of
+ * one keyframe each, links to four of its neighbours' - and their
+ * keyframes say nothing about this slot's place.
+ *
+ * THE GLASS. The classic draws a face see-through when its effects word
+ * has bit 0 set or its texture's draw type is 2 (specific/output.cpp,
+ * the item path). A .TRM sorts the see-through part of a model into its
+ * alpha run with material 14, the material the room art's glass carries;
+ * the HD path drew that run with the alpha test and the depth write, as
+ * a solid sheet. A triangle of a material 14 alpha run on a node whose
+ * classic mesh has a see-through face is drawn with the classic's blend
+ * for that face, added to what lies behind it (ONE / ONE), weighed by
+ * the page's own alpha as the HD additive pass weighs its texels, with
+ * no depth write and after everything solid. A node the classic draws
+ * solid keeps its .TRM part as it was, whatever the material: the
+ * classic is the measure of what is meant to be seen through. */
 
 /* The fewest single-weight vertices a node needs to be measured: the bind
  * drift's own working set (hd_model.cpp) uses the same count. */
@@ -156,10 +174,33 @@ inline bool HDSlidesIntoPocket(bool leaves, bool folds, bool turns)
  * five; a slot past this many is no door. */
 #define HD_POCKET_ANIMS			64
 
+/* Where a slot's own animations end: the smallest first animation of any
+ * other object that lies past this slot's `first`, out of `starts`, the
+ * first animation of every loaded object; -1 when none lies past it (the
+ * level's last object, whose run the file's count ends). */
+inline int HDPocketAnimEnd(int first, const int* starts, int count)
+{
+	int end = -1;
+
+	for (int i = 0; i < count; i++)
+		if (starts[i] > first && (end < 0 || starts[i] < end))
+			end = starts[i];
+
+	return end;
+}
+
+/* Whether animation `anim` is one of the slot's own: from its `first` up
+ * to `end`, or without an upper bound when `end` is -1. */
+inline bool HDPocketAnimOwn(int anim, int first, int end)
+{
+	return anim >= first && (end < 0 || anim < end);
+}
+
 /* The walk over the animations a slot can play: its first, and every one
- * a jump or a state change links to. The rest is the first animation's
- * first keyframe. A keyframe is the frame's words: six of box, three of
- * offset, then the nodes' rotations; a turn is a rotation word that
+ * of its own (HDPocketAnimOwn) a jump or a state change links to. The rest
+ * is the first animation's first keyframe. A keyframe is the frame's
+ * words: six of box, three of offset, then the nodes' rotations; a turn
+ * is a rotation word that
  * differs from the same word of its own animation's first keyframe - the
  * rotations exactly as the level holds them, no angle measured.
  *
@@ -170,7 +211,8 @@ inline bool HDSlidesIntoPocket(bool leaves, bool folds, bool turns)
  * ranges[]; ModelProbe out of the .TRC - the same walk over the same
  * words. */
 template <typename Frames, typename Links>
-inline bool HDSlotSlidesIntoPocket(int first, Frames frames, Links links)
+inline bool HDSlotSlidesIntoPocket(int first, int end, Frames frames,
+	Links links)
 {
 	int queue[HD_POCKET_ANIMS];
 	int queued = 0;
@@ -211,7 +253,7 @@ inline bool HDSlotSlidesIntoPocket(int first, Frames frames, Links links)
 
 		for (int l = 0; l < count; l++)
 		{
-			bool known = linked[l] < 0;
+			bool known = !HDPocketAnimOwn(linked[l], first, end);
 
 			for (int q = 0; q < queued && !known; q++)
 				known = queue[q] == linked[l];
@@ -222,6 +264,13 @@ inline bool HDSlotSlidesIntoPocket(int first, Frames frames, Links links)
 	}
 
 	return HDSlidesIntoPocket(leaves, folds, turns);
+}
+
+/* The walk with no end known: every link the slot names is followed. */
+template <typename Frames, typename Links>
+inline bool HDSlotSlidesIntoPocket(int first, Frames frames, Links links)
+{
+	return HDSlotSlidesIntoPocket(first, -1, frames, links);
 }
 
 /* Which side of a pocket slot's triangles is drawn: HD_POCKET_BOTH for a
@@ -243,4 +292,49 @@ inline HDPocketSideRule HDPocketSide(bool pocket, bool mirrored)
 		return HD_POCKET_BOTH;
 
 	return mirrored ? HD_POCKET_INSIDE : HD_POCKET_OUTSIDE;
+}
+
+/* The material a .TRM part's glass carries: the room art's glass material
+ * (hd_render.cpp, HD_TRG_MATERIAL_DECAL), the same number in a .TRM. */
+#define HD_TRM_MATERIAL_GLASS		14
+
+/* The runs of a .TRM part, in their order: the opaque, the alpha and the
+ * additive run (hd_trm.h). */
+#define HD_TRM_RUN_OPAQUE		0
+#define HD_TRM_RUN_ALPHA		1
+#define HD_TRM_RUN_ADDITIVE		2
+
+/* Whether the classic draws a face see-through: its effects word (the word
+ * behind its texture word) has bit 0 set, or its texture's draw type is 2.
+ * Either sends the face down the item path's additive branch
+ * (specific/output.cpp, phd_PutPolygons; polyinsert.cpp, case 2). */
+inline bool HDClassicFaceSeeThrough(int effects, int drawtype)
+{
+	return (effects & 1) != 0 || drawtype == 2;
+}
+
+/* A node mask with `node` set when the face is see-through; nodes past 31
+ * are not counted, the joint palette's own limit. */
+inline unsigned int HDSeeThroughNodes(unsigned int mask, int node,
+	bool seeThrough)
+{
+	if (!seeThrough || node < 0 || node > 31)
+		return mask;
+
+	return mask | (1u << node);
+}
+
+/* Whether a .TRM triangle is drawn as glass: it lies in its part's alpha
+ * run, the part's material is the glass material, and the classic mesh of
+ * its node has a see-through face (`nodes`, HDSeeThroughNodes). */
+inline bool HDTrmTriangleIsGlass(int run, unsigned int material, int node,
+	unsigned int nodes)
+{
+	if (run != HD_TRM_RUN_ALPHA || material != HD_TRM_MATERIAL_GLASS)
+		return false;
+
+	if (node < 0 || node > 31)
+		return false;
+
+	return (nodes & (1u << node)) != 0;
 }

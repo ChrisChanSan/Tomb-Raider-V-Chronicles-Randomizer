@@ -10718,6 +10718,127 @@ are framed by hand.
 header's credit to TROne), `8b03b79c` (the node centre declared in the rules' header),
 `f712842c` (`-classicdots`), and this entry's last update.
 
+### The translucent parts of HD models and JOBY2's window (#226)
+2026-10-20
+
+**What.** A third rule of the HD object path, from the classic mesh and the `.TRM`
+together: a triangle of a material 14 alpha run (the material the room art's glass
+carries) on a node whose classic mesh has a see-through face is drawn as the classic
+draws that face - added to what lies behind it, weighed by the page's own alpha as the
+additive pass weighs its texels, with no depth write, in the bracket of the glows
+(`hd_object_rules.h`, `HDClassicFaceSeeThrough`, `HDSeeThroughNodes`,
+`HDTrmTriangleIsGlass`; `hd_object.cpp`, `see_through_nodes_of`; `hd_model.cpp`,
+`HDModelSetGlassNodes`, the draw's glass step). The pocket's walk keeps to a slot's own
+animations (`HDPocketAnimEnd`, `HDPocketAnimOwn`). JOBY2's facade window was measured: the
+frame leaves the window's reveal out, by a rule outside this round's files. ModelProbe
+takes the glass apart (`-alpha`, `-noglass`, `-all -alpha`) and `-slidecensus` prints the
+walk before the bound as `open=`; ModernTest holds both rules (20 checks).
+
+**Why.** The owner, 2026-10-20, after the build of Oct 19 05:06:37, with pictures of
+RICH2's office cabinet and of RICH1's oval doors: "Spinde sind ok, die Schraenke haben
+keine Transparenz. In Rich1 Bild2 die haben auch keine Transparenz." - the lockers are
+fine, the cabinets have no transparency, nor have RICH1's doors. And: "Joby2 die Fenster
+sind wieder was eigenes die Animatings tragen die Textur fuer die fehlende Wand. Mein
+Fehler zu spaet gesehen." - JOBY2's windows are a thing of their own, the ANIMATINGs
+carry the texture for the missing wall. "Doppeltueren JOBY2 sind ok."
+
+**Measured at his eyes** (the play test's log; RICH1 room 15 from tick 239828, frame
+6787, RICH2 rooms 48 and 85 from 905953 and 938562, JOBY2 at the window from 1079875,
+frame 19468, the eye in room 146 looking into room 21, and from 1047453, frame 19028,
+the eye in room 146 looking down at the window). The classic faces out of the
+shipped `.TRC`, the `.TRM` parts out of the installation's `5\ITEM`, the pages' alpha
+with `DdsProbe -alpha`:
+
+| place | classic | HD before | cause |
+|---|---|---|---|
+| RICH2 cabinet, slot 164 `SEARCH_OBJECT1_RICH2`, items 92, 156, 157 | doors (nodes 1, 2) 12 of 25 faces each with effects bit 0: added ONE / ONE, no depth write | part 2, material 14 (8, 1), alpha run 24 triangles a door, pages 3068 (alpha mean 205) and 10054 (255): alpha test, depth write | the glass a solid teal sheet; part 0's additive run on 3068 lay behind it |
+| RICH1 oval doors, slot 290 `DOOR_TYPE4_RICH1` (items 21 to 26, room 15; "Door 4" is item 22) | nodes 0 and 2 to 13 carry 1 or 2 see-through faces each, the panes between the spokes | part 1, material 14 (2, 1), alpha run 77 triangles on nodes 2 to 13, page 12108 (alpha mean 47, 64 % under 16) | the test kept the texels over 0.5 as a grey plate and cut the rest out: the dark marks |
+| RICH1 slot 286 `DOOR_TYPE2_RICH1` (items 17, 18) | node 2, 2 see-through triangles | part 1, material 14 (3, 0.1), 96 triangles on node 2, page 16140 (alpha 250) | the same, a nearly solid pane |
+| JOBY2 window, slot 444 `ANIMATING15`, items 173 and 174 (room 146) | 32 faces, none see-through, 4 alpha-keyed, 14 shiny; the glass covers 10,893 of 13,924 cells of its 2048 square and leaves the broken lower quarter open | `reason=baked` (the level's `.MAP` says `DUMMY`): no item drawn; the room art has 262 triangles in item 174's box, the model's own 262 (134 of material 0, 128 of material 3), covering 10,811 cells | the hole is the classic's: behind it stands room 21, drawn classic (`hd=0 reason=hollow_group`), its far wall tile 2551 of page 5 opaque black, the sniper (item 21) in it. The reveal is not: room 146's art lying whole on room 21's faces - the window's reveal and sill, 90 triangles (at room 19's window 89) - is left out by the stand rule (`hd_cover.h`, `HDStandDraw`: a room drawn classic keeps no art on its faces), and room 21's faces there wear tile 2550 of page 5, 160 of its 256 texels black and 96 at alpha 0: black and the sky through them where the classic draws the ANIMATING's brick and wood |
+
+RICH1's `DOOR_TYPE5` (292) has no see-through face and no alpha run: unchanged.
+
+**The rule from the data.** The classic face is see-through when its effects word has
+bit 0 or its texture's draw type is 2; the item path adds it (`output.cpp`,
+`phd_PutPolygons`; `polyinsert.cpp`, case 2: ONE / ONE, no depth write). The `.TRM`
+says which of its triangles are that glass: material 14 in the alpha run. A node gates
+the part, so a material 14 run on a node the classic draws solid stays as it was. The
+census over the fifteen levels (`ModelProbe -all -alpha`; the player's `data` gives the
+same 19 rows): 19 bound slots carry a material 14 alpha run, 14 are drawn as glass -
+JOBY3 and JOBY5 slots 48, 286 and 290 (`DOOR_TYPE4_JOBY3_JOBY5`), RICH1 164, 286, 290
+and 296, RICH2 164, RICH3 284, TITLE 417 and 419 - and 5 stay, the classic drawing
+them solid: JOBY4's `ATTACK_SUB` (81), `CHAFF` (145) and `PUZZLE_ITEM1` (172), JOBY5's
+`GEN_SLOT3` (161), RICH1's `CLOSED_DOOR5` (308). No `.TRM` of either installation's
+`ITEM` folders (1,425 files, 24 with a glass run) has a glass and another alpha run
+triangle on one page and node, so splitting the ranges on the glass changes none: the
+model build's hash is the same as before over the fifteen levels.
+
+**The pocket.** #224's record said the pocket takes slots 304 and 306 alone; its census
+printed the walk only for slots whose own animations move, and the walk followed every
+link. JOBY4's `ATTACK_SUB` has two still animations (477 and 478, one keyframe each)
+whose state changes link to 481, 487, 495 and 525, its neighbours'; ANDREA1's
+`ANIMATING15` links 678 to 680. The foreign keyframes leave the box and fold, so
+`pocket=1` in the log was the rule's verdict, and both were drawn one-sided:
+`ANIMATING15_ANDREA1` seen from behind lost 87,447 of its 87,922 pixels, the sub 124
+and 125 at its sides (`ModelProbe -slot -cull back` against `none`). In vanilla JOBY2
+the open walk takes `ANIMATING7_MIP` (429) and `ANIMATING12_MIP` (439) as well. A slot's
+animations run from its first to the next object's first; kept to that run the walk
+takes 304 and 306 and nothing else, over the fifteen levels and the player's data.
+
+**Decisions.** The classic's blend and not the room glass's: the room art draws its
+unsplit glass with the page's alpha against one minus it, and drawn so the cabinet's
+pane (alpha 0.8) stayed an opaque teal; added as the classic adds, the bottles behind
+it show. The material's own opacity (`param[1]`, 0.1 to 1 over these parts) would need
+a constant the model shader does not have, so it is not applied. The glass is drawn in
+the glows' bracket because it writes no depth, and the shadow's cast and receive draws
+leave it out, as they leave the glows. JOBY2's window: not changed in this round. The
+black in the hole is the classic's; the missing wall is the window's reveal and sill,
+which the classic draws with the item (`ANIMATING15`, a `DUMMY` the art carries: 262
+triangles in each of the boxes of items 173 and 174) over the sniper rooms' faces, and
+which the frame leaves out with the art lying on those faces. The rule that leaves it out
+is the stand rule's (`hd_cover.h`, `HDStandDraw`; `hd_level.cpp`, `BuildStandFaces`), in
+no file of this round.
+
+**Checked.** Before and after with ModelProbe (`-noglass`), at the cabinet's front 76,224
+pixels change, from 30 degrees aside 68,982, at the RICH1 door 58,351, `DOOR_TYPE2`
+2,286 (12 by more than 12), RICH1's `DOOR_TYPE7` 73,587, RICH3's `DOOR_TYPE1` 82,584,
+JOBY3's door 25,539, the title's `ANIMATING1_MIP` 118,876; the lockers of JOBY2 and
+JOBY5 and JOBY2's double doors (304, 306) 0. The binder census (`ModelProbe -all`, the
+tool of `76046dae` against this round's) byte for byte the same over the fifteen levels
+and over the player's `data`. Byte-identical to the RoomProbe of `76046dae`: the
+classic views (`hd_build` 0, 6 of 6), the six HD views, the census eyes with `hd_water`
+0 and 1 (15 of 15 each), the fifteen parity cameras with `hd_water` 0 and 1. The nine
+scripts exit 0; ModernTest 16,025 checks (16,005 and this round's 20), MenuTest
+44,917, InterpTest 754, LipsTest 299 with the scratch object folder and 272 without, 0
+failed.
+
+In the rooms at his eyes (ModelProbe `-withrooms -shadowroom`, Lara at the camera's
+target, the items at their places, the camera at the logged eye's direction and
+distance; the tool of `76046dae` against this round's, 1,280 x 720): RICH2 room 48 67,394
+pixels change, room 85 83,188, RICH1 room 15 47,270 (the eight doors of slots 286 and
+290). ANDREA1's `ANIMATING15` at the eye of tick 1242547 (frame 23193, room 114) shows
+9,090 pixels, its front: the pocket's bound changes none of them there. The log's eyes
+stand 9,221 units or more from the attack subs' places, and a sub swims, so its sides
+were measured in ModelProbe's views only. JOBY2's window at frame 19028 (RoomProbe
+`-walktarget`, room 21 drawn classic with `-stand` against left out): 53,865 pixels of
+the art's reveal and sill are covered by room 21's faces, at room 19's window 23,517.
+
+**Left.** Not seen in the game. The material's opacity under 1 (RICH1's `DOOR_TYPE2`,
+`DOOR_TYPE7` and `SEARCH_OBJECT1`, RICH3's `DOOR_TYPE1` at 0.1, the JOBY doors at
+0.125) needs a constant in the model shader. Where a glass page paints its frame at
+alpha 1 the frame is added as well, brighter over a bright background than the solid
+draw was (the title's `ANIMATING1_MIP`, RICH3's `DOOR_TYPE1`). Classic nodes that are
+see-through all over and have no glass run in the `.TRM` - ANDREA2's `GUARDIAN` nodes 1
+and 2, RICH2's `RAISING_BLOCK2`, `STROBE_LIGHT`, RICH1's `ANIMATING16` - are drawn as
+before. JOBY2's windows (rooms 19 and 21): the stand rule should keep the art of a baked
+`DUMMY` item lying on a classic room's faces and draw it in front of them, as the classic
+draws the item - a change to `hd_cover.h` and `hd_level.cpp` for the round that holds
+them. The panes of RICH1's oval doors carry an alpha mean of 47 and are nearly clear
+now, where the classic adds a blue pane.
+
+**Commits.** `2247f199` (the glass), `eb605543` (the pocket's bound), `312ef5a4` (the
+tools and ModernTest), and this entry's.
+
 ### HD models for the pickups: the EXTRA prefix, a mod's own inventory model, and lying on the floor
 2026-09-08 - 2026-09-15
 
@@ -30186,3 +30307,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #222 | The pieces of a broken static in HD (#222) |
 | #224 | The search objects' binding and the double doors (#224) |
 | #225 | The zoom at the frame rate (#225) |
+| #226 | The translucent parts of HD models and JOBY2's window (#226) |

@@ -3991,6 +3991,47 @@ carries the tables.
     end and summary; `ModernTest.cpp`, `glass_look`, 17 checks, and the
     glass split's and hue's tables with a page column) - OWN, this
     project's tools.
+405. **The glass of a model** (`specific/hd/hd_object_rules.h`,
+    `HDClassicFaceSeeThrough`, `HDSeeThroughNodes`, `HDTrmTriangleIsGlass`,
+    `HD_TRM_MATERIAL_GLASS` 14; `hd_object.cpp`, `see_through_nodes_of`;
+    `hd_model.cpp`, `HDModelSetGlassNodes`, `HDModelGlassRanges`,
+    `Range::glass` and `Range::blend`) - a triangle of a `.TRM` part's alpha run
+    of material 14 on a node whose classic mesh has a see-through face is
+    drawn as glass. CLASSIC: a face is see-through by its effects word's bit 0
+    or a texture of draw type 2 (`specific/output.cpp`, `phd_PutPolygons`;
+    `file.cpp`, `LoadTextureInfos`), node n's mesh is `mesh_vtxbuf[mesh_index
+    + 2n]` with its quads at six words and its triangles at five. DATA:
+    material 14 is the room art's glass material (`hd_render.cpp`,
+    `HD_TRG_MATERIAL_DECAL`); `ModelProbe -all -alpha` over the fifteen levels
+    finds 19 bound slots with such a run, 14 on see-through nodes; 1,425
+    `.TRM` files of the two `ITEM` folders hold no glass triangle sharing a
+    page and a node with another alpha run triangle. OWN: the classic's node
+    as the gate.
+406. **The glass drawn as the classic adds it** (`hd_model.cpp`, the draw's
+    glass step; `HDModelCastDraw`, `HDModelReceiveDraw` leave it out) - ONE /
+    ONE, no depth write, the additive pass's constants (no alpha test, the
+    texel weighed by its alpha), in the bracket of the glows before the
+    additive pass. CLASSIC: `polyinsert.cpp`, case 2 (ONE / ONE, no depth
+    write). DATA: the cabinet's glass page 3068 has an alpha mean of 205 of
+    255, drawn with the alpha against one minus it the pane stayed opaque.
+    OWN: the weighting by the art's alpha (`hd_model.hlsl`, `gPass.y`).
+407. **The pocket walk keeps to the slot's own animations**
+    (`hd_object_rules.h`, `HDPocketAnimEnd`, `HDPocketAnimOwn`, the
+    `HDSlotSlidesIntoPocket` with an end; `hd_object.cpp`, `pocket_of`) - a
+    link is followed only into the run from the slot's first animation to the
+    next object's first. CLASSIC: a level's object table gives each object
+    its first animation and no count; its animations run up to the next
+    object's first (`specific/file.cpp`, the animation block read whole).
+    DATA: JOBY4's `ATTACK_SUB` (477, 478) links to 481, 487, 495 and 525,
+    ANDREA1's `ANIMATING15` (678) to 680; `ModelProbe -all -slidecensus`, the
+    walk before the bound (`open=`) takes them and JOBY2's 429 and 439, the
+    bounded walk 304 and 306 alone. OWN.
+408. **ModelProbe's glass switches** (`Preparation/Tools/Diagnose/
+    ModelProbe.cpp`: `-alpha`, `-noglass`, `ToolNodeFaces`,
+    `ToolSeeThroughNodes`, `PrintAlpha`; `-slidecensus`'s `open=`,
+    `ToolPocketOf`'s bound). OWN.
+409. **ModernTest's glass and walk checks** (`Preparation/Tools/Diagnose/
+    ModernTest.cpp`, `object_rules`, 20 checks). OWN.
 
 ## Credited, but not contained here
 

@@ -26385,7 +26385,8 @@ static PocketKey pocket_key(short x0, short x1, short z0, short z1,
 
 static void object_rules()
 {
-	printf("the object path's rules: the skeleton fit and the pocket\n");
+	printf("the object path's rules: the skeleton fit and the pocket, "
+		"the glass\n");
 
 	/* The fit: per node, the .TRM's single-weight centre against the
 	 * classic mesh's centre in the bind pose; the worst node. */
@@ -26523,6 +26524,40 @@ static void object_rules()
 		ok(!HDSlotSlidesIntoPocket(5, frames, links),
 			"pocket: a slot whose first animation has no keys is none",
 			HDSlotSlidesIntoPocket(5, frames, links), 0);
+
+		/* A slot of one still animation whose state change names the
+		 * folding door's animations, as JOBY4's ATTACK_SUB names its
+		 * neighbours': open, the walk takes the foreign keyframes in;
+		 * kept to the slot's own run, it does not. */
+		anims[2][0] = pocket_key(512, 512, -1536, -512, 0);
+		linked[0][0] = 1;
+		ok(HDSlotSlidesIntoPocket(0, -1, frames, links),
+			"pocket: an open walk follows a link into another object",
+			HDSlotSlidesIntoPocket(0, -1, frames, links), 1);
+		ok(!HDSlotSlidesIntoPocket(0, 1, frames, links),
+			"pocket: kept to its own run, the still slot is none",
+			HDSlotSlidesIntoPocket(0, 1, frames, links), 0);
+		ok(HDSlotSlidesIntoPocket(0, 3, frames, links),
+			"pocket: a run that holds the slide and the fold is one",
+			HDSlotSlidesIntoPocket(0, 3, frames, links), 1);
+	}
+
+	// Where a slot's own animations end: the next object's first.
+	{
+		const int starts[5] = { 0, 477, 479, 470, 526 };
+
+		ok(HDPocketAnimEnd(477, starts, 5) == 479,
+			"pocket: the run ends at the next object's first animation",
+			HDPocketAnimEnd(477, starts, 5), 479);
+		ok(HDPocketAnimEnd(526, starts, 5) == -1,
+			"pocket: the last object's run has no end known",
+			HDPocketAnimEnd(526, starts, 5), -1);
+		ok(HDPocketAnimOwn(478, 477, 479) && !HDPocketAnimOwn(481, 477, 479),
+			"pocket: 478 is the slot's own, 481 its neighbour's",
+			HDPocketAnimOwn(481, 477, 479), 0);
+		ok(!HDPocketAnimOwn(470, 477, -1) && HDPocketAnimOwn(900, 477, -1),
+			"pocket: with no end, anything from the first on is its own",
+			HDPocketAnimOwn(900, 477, -1), 1);
 	}
 
 	// The side drawn: two-sided unless a pocket; a reflection turns it.
@@ -26536,6 +26571,58 @@ static void object_rules()
 	ok(HDPocketSide(true, true) == HD_POCKET_INSIDE,
 		"side: a mirrored pocket takes the other mode",
 		HDPocketSide(true, true), HD_POCKET_INSIDE);
+
+	/* The glass: a classic face is see-through by its effects word's bit 0
+	 * or by a texture of draw type 2; its node's material 14 alpha run is
+	 * drawn as glass, nothing else is. RICH2's cabinet: nodes 1 and 2
+	 * carry 12 see-through quads each, node 0 none. */
+	ok(HDClassicFaceSeeThrough(0x1, 0),
+		"glass: effects bit 0 on an opaque texture is see-through",
+		HDClassicFaceSeeThrough(0x1, 0), 1);
+	ok(HDClassicFaceSeeThrough(0x0, 2),
+		"glass: a texture of draw type 2 is see-through",
+		HDClassicFaceSeeThrough(0x0, 2), 1);
+	ok(!HDClassicFaceSeeThrough(0x42, 1),
+		"glass: an env-mapped, alpha-tested face is not",
+		HDClassicFaceSeeThrough(0x42, 1), 0);
+	ok(!HDClassicFaceSeeThrough(0x20, 0),
+		"glass: a shiny opaque face is not",
+		HDClassicFaceSeeThrough(0x20, 0), 0);
+
+	{
+		unsigned int nodes = 0;
+
+		nodes = HDSeeThroughNodes(nodes, 0, false);
+		nodes = HDSeeThroughNodes(nodes, 1, true);
+		nodes = HDSeeThroughNodes(nodes, 2, true);
+		ok(nodes == 0x6, "glass: the cabinet's doors are its see-through nodes",
+			(long)nodes, 0x6);
+		ok(HDSeeThroughNodes(nodes, 32, true) == nodes &&
+			HDSeeThroughNodes(nodes, -1, true) == nodes,
+			"glass: a node past the palette is not counted", (long)nodes, 0x6);
+
+		ok(HDTrmTriangleIsGlass(HD_TRM_RUN_ALPHA, HD_TRM_MATERIAL_GLASS, 1,
+			nodes), "glass: the material 14 alpha run on a door is glass",
+			HDTrmTriangleIsGlass(HD_TRM_RUN_ALPHA, 14, 1, nodes), 1);
+		ok(!HDTrmTriangleIsGlass(HD_TRM_RUN_ALPHA, HD_TRM_MATERIAL_GLASS, 0,
+			nodes), "glass: on the body, which the classic draws solid, not",
+			HDTrmTriangleIsGlass(HD_TRM_RUN_ALPHA, 14, 0, nodes), 0);
+		ok(!HDTrmTriangleIsGlass(HD_TRM_RUN_OPAQUE, HD_TRM_MATERIAL_GLASS, 1,
+			nodes), "glass: the opaque run is never glass",
+			HDTrmTriangleIsGlass(HD_TRM_RUN_OPAQUE, 14, 1, nodes), 0);
+		ok(!HDTrmTriangleIsGlass(HD_TRM_RUN_ADDITIVE, HD_TRM_MATERIAL_GLASS, 1,
+			nodes), "glass: the additive run stays the additive pass",
+			HDTrmTriangleIsGlass(HD_TRM_RUN_ADDITIVE, 14, 1, nodes), 0);
+		ok(!HDTrmTriangleIsGlass(HD_TRM_RUN_ALPHA, 0, 1, nodes),
+			"glass: a cut-out of material 0 keeps its alpha test",
+			HDTrmTriangleIsGlass(HD_TRM_RUN_ALPHA, 0, 1, nodes), 0);
+		ok(!HDTrmTriangleIsGlass(HD_TRM_RUN_ALPHA, HD_TRM_MATERIAL_GLASS, 1, 0),
+			"glass: material 14 where the classic draws solid is not glass",
+			HDTrmTriangleIsGlass(HD_TRM_RUN_ALPHA, 14, 1, 0), 0);
+		ok(!HDTrmTriangleIsGlass(HD_TRM_RUN_ALPHA, HD_TRM_MATERIAL_GLASS, 40,
+			0xFFFFFFFFu), "glass: a node past the palette is not glass",
+			HDTrmTriangleIsGlass(HD_TRM_RUN_ALPHA, 14, 40, 0xFFFFFFFFu), 0);
+	}
 }
 
 int main()

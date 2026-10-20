@@ -709,7 +709,21 @@
  *     -slidecensus        with -all: per slot how far its animations carry
  *                         it, whether a node turns, whether a keyframe box
  *                         leaves the rest box or folds flat, and the pocket
- *                         rule's answer by both walks.
+ *                         rule's answer by both walks; `open` is the walk
+ *                         that follows every link, into other objects'
+ *                         animations, and a slot either walk takes is
+ *                         listed even when its own animations do not move.
+ *     -alpha              with -slot: the glass rule taken apart - per
+ *                         node the classic faces, how many carry effects
+ *                         bit 0 or a texture of draw type 1 or 2, and
+ *                         whether the node is see-through; per part, run
+ *                         and node of the .TRM its material, parameters,
+ *                         triangles and what the HD path draws them as
+ *                         (opaque, alpha test, additive, glass). With -all
+ *                         one `alpha` line per bound slot with a
+ *                         see-through node or a glass range: the census.
+ *     -noglass            the glass rule left off: the before picture, for
+ *                         -slot and for the -shadowitem models alike.
  *     -animframe <anim> <key>
  *                         with -slot: the picture in that keyframe of one of
  *                         the slot's own animations, on the bind pose's
@@ -842,6 +856,7 @@ char tomb5_hd_install[260];
 char tomb5_hd_install_tr3[260];
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_trm.h"
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_object_rules.h"
+#include "../../../TOMB5 Code/TOMB5/specific/hd/hd_model_cut.h"
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_trl.h"
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_shadow.h"
 
@@ -2316,7 +2331,7 @@ static float ToolFitOf(const Tr5Level& level, const ClassicSlot& here,
 /* The pocket as hd_object.cpp asks it (pocket_of): the same walk over the
  * same words, the animations, changes and ranges read out of the .TRC -
  * an animation entry is 40 bytes, a change 6, a range 8. */
-static bool ToolPocketOf(const Tr5Level& level, int slot)
+static bool ToolPocketOf(const Tr5Level& level, int slot, bool open = false)
 {
 	Tr5Level::MoveableInfo info;
 	size_t animAt = 0, changeAt = 0, rangeAt = 0;
@@ -2396,7 +2411,235 @@ static bool ToolPocketOf(const Tr5Level& level, int slot)
 		return count;
 	};
 
-	return HDSlotSlidesIntoPocket(info.animIndex, frames, links);
+	/* The slot's own run ends where the next object's begins, as the
+	 * engine's walk ends it (hd_object.cpp, pocket_of); `open` follows
+	 * every link instead - the walk before that bound. */
+	std::vector<int> starts;
+
+	for (int other : level.moveableSlots())
+	{
+		Tr5Level::MoveableInfo them;
+
+		if (other != slot && level.moveableInfo(other, them) &&
+			them.animIndex >= 0)
+			starts.push_back(them.animIndex);
+	}
+
+	const int end = open || starts.empty() ? -1
+		: HDPocketAnimEnd(info.animIndex, &starts[0], (int)starts.size());
+
+	return HDSlotSlidesIntoPocket(info.animIndex, end, frames, links);
+}
+
+/* The faces of one node's classic mesh, read out of the .TRC as the engine
+ * reads them out of mesh_vtxbuf: per face its effects word and its
+ * texture's draw type. The mesh is the header (x, y, z, radius, flags and
+ * the vertex count word), the vertices, the normals or the lights, the
+ * quads at twelve bytes and the triangles at ten, the texture word and the
+ * effects word last. */
+struct ToolFace
+{
+	bool quad;
+	int effects;
+	int drawtype;
+};
+
+static int ToolNodeFaces(const Tr5Level& level, int slot, int node,
+	std::vector<ToolFace>& out)
+{
+	Tr5Level::MoveableInfo info;
+	const std::vector<uint8_t>& bytes = level.debugBytes();
+	size_t at = 0, texAt = 0;
+	int32_t texCount = 0;
+
+	out.clear();
+
+	if (!level.moveableInfo(slot, info) || node >= info.nmeshes ||
+		!level.debugMeshAt(info.meshIndex + node, at) ||
+		!level.debugTexinfoBlock(texAt, texCount) || at + 12 > bytes.size())
+		return 0;
+
+	auto word = [&](size_t p) -> int
+	{
+		short s = 0;
+
+		if (p + 2 <= bytes.size())
+			memcpy(&s, &bytes[p], 2);
+
+		return s;
+	};
+
+	const int verts = word(at + 10) & 0xFF;
+	size_t p = at + 12 + (size_t)verts * 6;
+	const int normals = word(p);
+
+	p += 2 + (size_t)verts * (normals >= 0 ? 6 : 2);
+
+	for (int kind = 0; kind < 2; kind++)
+	{
+		const int faces = word(p);
+		const int corners = kind == 0 ? 4 : 3;
+
+		p += 2;
+
+		for (int f = 0; f < faces && p + corners * 2 + 4 <= bytes.size(); f++)
+		{
+			const int tex = word(p + corners * 2) & 0x7FFF;
+			ToolFace face;
+
+			face.quad = kind == 0;
+			face.effects = word(p + corners * 2 + 2) & 0xFFFF;
+			face.drawtype = tex < texCount
+				? (word(texAt + (size_t)tex * 40) & 0xFFFF) : -1;
+			out.push_back(face);
+			p += (size_t)corners * 2 + 4;
+		}
+	}
+
+	return (int)out.size();
+}
+
+/* The nodes whose classic mesh has a see-through face, a bit per node - the
+ * engine's see_through_nodes_of (hd_object.cpp) over the .TRC. */
+static unsigned int ToolSeeThroughNodes(const Tr5Level& level, int slot,
+	int nodes)
+{
+	unsigned int mask = 0;
+	std::vector<ToolFace> faces;
+
+	for (int node = 0; node < nodes && node < 32; node++)
+	{
+		ToolNodeFaces(level, slot, node, faces);
+
+		for (const ToolFace& face : faces)
+			mask = HDSeeThroughNodes(mask, node,
+				HDClassicFaceSeeThrough(face.effects, face.drawtype));
+	}
+
+	return mask;
+}
+
+/* -alpha: a slot's model taken apart for the glass rule. Per node of the
+ * classic tree its faces - how many, how many see-through by the effects
+ * word, by the draw type - and per run of every .TRM part on every node the
+ * part's material and parameters, the triangles and what the HD path draws
+ * them as: opaque, alpha test, additive, or glass (hd_object_rules.h,
+ * HDTrmTriangleIsGlass). A triangle's node is the bone with the most
+ * weight over its three corners. `brief` prints the one line the -all
+ * table takes. */
+static void PrintAlpha(const Tr5Level& level, const std::string& root5,
+	int slot, int nodes, bool brief)
+{
+	const unsigned int see = ToolSeeThroughNodes(level, slot, nodes);
+	const char* name = HDModelName(slot);
+	int blended = 0;
+	const int glass = HDModelGlassRanges(slot, &blended);
+
+	if (brief)
+	{
+		if (see || glass)
+			printf("  alpha slot=%d name=%s model=%s see_through=0x%X "
+				"glass_ranges=%d drawn_as_glass=%d\n", slot,
+				HDSlotName(slot) ? HDSlotName(slot) : "?", name ? name : "-",
+				see, glass, blended);
+		return;
+	}
+
+	printf("\n-- alpha: %s, slot %d ---------------------------------\n",
+		name ? name : "-", slot);
+	printf("  node  faces  effects-bit-0  drawtype-1  drawtype-2  "
+		"see-through\n");
+
+	for (int node = 0; node < nodes && node < 32; node++)
+	{
+		std::vector<ToolFace> faces;
+		int effect = 0, tested = 0, added = 0;
+
+		ToolNodeFaces(level, slot, node, faces);
+
+		for (const ToolFace& face : faces)
+		{
+			effect += (face.effects & 1) ? 1 : 0;
+			tested += face.drawtype == 1 ? 1 : 0;
+			added += face.drawtype == 2 ? 1 : 0;
+		}
+
+		printf("  %4d  %5d  %13d  %10d  %10d  %s\n", node, (int)faces.size(),
+			effect, tested, added, (see & (1u << node)) ? "yes" : "no");
+	}
+
+	const std::string path = name ? TrmPath(root5, name) : std::string();
+	HDTrmModel trm;
+	const char* why = 0;
+
+	memset(&trm, 0, sizeof(trm));
+
+	if (path.empty() || !HDTrmLoad(path.c_str(), &trm, &why))
+	{
+		printf("  no .TRM to read (%s)\n", why ? why : "no file");
+		return;
+	}
+
+	static const char* kRun[3] = { "opaque", "alpha", "additive" };
+
+	printf("  part  material  param                       run       node  "
+		"triangles  drawn as\n");
+
+	for (int part = 0; part < trm.parts; part++)
+	{
+		const HDTrmPart& p = trm.part[part];
+		const unsigned int start[3] = { p.start, p.opaqueEnd, p.alphaEnd };
+		const unsigned int count[3] = { p.opaque, p.alpha, p.additive };
+
+		for (int run = 0; run < 3; run++)
+		{
+			std::map<int, int> perNode;
+
+			for (unsigned int i = 0; i + 2 < count[run]; i += 3)
+			{
+				const unsigned int at = start[run] + i;
+
+				if (at + 2 >= (unsigned int)trm.indices)
+					break;
+
+				int weight[256] = { 0 };
+				int best = 0;
+
+				for (int c = 0; c < 3; c++)
+				{
+					const HDTrmVertex& v = trm.vertex[trm.index[at + c]];
+
+					weight[v.bone[0]] += v.weight[0];
+					weight[v.bone[1]] += v.weight[1];
+					weight[v.bone[2]] += v.weight[2];
+				}
+
+				for (int b = 1; b < 256; b++)
+					if (weight[b] > weight[best])
+						best = b;
+
+				perNode[best]++;
+			}
+
+			for (const std::pair<const int, int>& n : perNode)
+			{
+				const char* as = run == HD_TRM_RUN_ADDITIVE ? "additive"
+					: HDTrmTriangleIsGlass(run, p.material, n.first, see)
+						? "glass (blended)"
+					: run == HD_TRM_RUN_ALPHA ? "alpha test"
+					: HDTrmMaterialCuts(p.material) ? "opaque, cut material"
+					: "opaque";
+
+				printf("  %4d  %8u  %6.3g %6.3g %6.3g %6.3g  %-8s  %4d  %9d"
+					"  %s\n",
+					part, p.material, p.param[0], p.param[1], p.param[2],
+					p.param[3], kRun[run], n.first, n.second, as);
+			}
+		}
+	}
+
+	printf("  glass ranges %d, drawn as glass %d\n", glass, blended);
+	HDTrmFree(&trm);
 }
 
 /* -bindcheck: the skeleton test of hd_model.cpp taken apart for one slot.
@@ -7805,6 +8048,8 @@ struct LaraOptions
 	/* -nopocket: the pocket rule (hd_object_rules.h) left off - the
 	 * before picture of a sliding door. */
 	bool noPocket = false;
+	// -noglass: the glass rule left off.
+	bool noGlass = false;
 	/* -itemcull none|back: the side of the -shadowitem models drawn, for
 	 * every one of them; -1 leaves it to the pocket rule. */
 	int itemCull = -1;
@@ -8585,6 +8830,11 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 		printf("ModelProbe: HDModelLevelBegin failed - %s\n", trouble);
 		return 5;
 	}
+
+	// The glass of the placed items, as the main build marks it.
+	for (int i = 0; i < (int)plan.size(); i++)
+		HDModelSetGlassNodes(plan[i].slot, o.noGlass ? 0
+			: ToolSeeThroughNodes(level, plan[i].slot, plan[i].nodes));
 
 	HDLaraStats laraStats;
 	const bool ok = HDLaraLevelBuild(&wardrobe, &laraStats);
@@ -12281,6 +12531,8 @@ int main(int argc, char** argv)
 	 * -animframe <anim> <key>: the picture in that keyframe of one of the
 	 * slot's own animations, numbered from the slot's first. */
 	bool bindCheck = false, crossDrift = false, slideCensus = false;
+	// -alpha: the glass rule taken apart; -noglass: the rule left off.
+	bool alphaCheck = false, noGlass = false;
 	int itemAnim = -1, itemKey = 0;
 	double itemPush = 0.0;
 	bool noPocket = false;
@@ -12758,6 +13010,10 @@ int main(int argc, char** argv)
 			nodes = true;
 		else if (!_stricmp(argv[i], "-bindcheck"))
 			bindCheck = true;
+		else if (!_stricmp(argv[i], "-alpha"))
+			alphaCheck = true;
+		else if (!_stricmp(argv[i], "-noglass"))
+			noGlass = true;
 		else if (!_stricmp(argv[i], "-crossdrift"))
 			crossDrift = true;
 		else if (!_stricmp(argv[i], "-slidecensus"))
@@ -13312,6 +13568,7 @@ int main(int argc, char** argv)
 		o.itemKey = itemKey;
 		o.itemPush = itemPush;
 		o.noPocket = noPocket;
+		o.noGlass = noGlass;
 		o.itemCull = itemCull;
 		o.shadowOthers = shadowOthers;
 		o.shadowNoModels = shadowNoModels;
@@ -13674,6 +13931,14 @@ int main(int argc, char** argv)
 		return 5;
 	}
 
+	/* The glass, as hd_object.cpp marks it at level build: every bound
+	 * slot's material 14 alpha run on the nodes the classic draws
+	 * see-through (hd_object_rules.h). -noglass draws the picture before
+	 * the rule. */
+	for (size_t i = 0; i < wanted.size(); i++)
+		HDModelSetGlassNodes(wanted[i].slot, haveLevel && !noGlass
+			? ToolSeeThroughNodes(level, wanted[i].slot, wanted[i].nodes) : 0);
+
 	printf("\n-- what was loaded -------------------------------------------\n");
 	printf("slots asked for   %d\n", stats.slots);
 	printf("models on the card %d   (5: %d, 4: %d, mod: %d)   heads %d\n",
@@ -13938,6 +14203,20 @@ int main(int argc, char** argv)
 			printf("          %d over the drift limit taken on the fit "
 				"(limit %.0f)\n", placedFit, (double)HD_FIT_LIMIT);
 
+		/* -all -alpha: one line per bound slot that has a see-through
+		 * classic node or a glass material range - the glass rule's census
+		 * over a level. */
+		if (alphaCheck)
+		{
+			printf("\n-- alpha, every bound slot with glass or "
+				"see-through --\n");
+
+			for (size_t i = 0; i < wanted.size(); i++)
+				if (HDModelHas(wanted[i].slot))
+					PrintAlpha(level, root, wanted[i].slot, wanted[i].nodes,
+						true);
+		}
+
 		/* -all -bindcheck: one bindcheck line per bound slot, so the two
 		 * drifts can be read side by side over a whole level. */
 		if (bindCheck)
@@ -13960,7 +14239,8 @@ int main(int argc, char** argv)
 		 * rest box altogether (`leaves`) or folded flat (`folds`). `pocket`
 		 * is HDSlidesIntoPocket over every animation the slot holds in the
 		 * file, `walk` the engine's walk over the animations it can reach
-		 * (ToolPocketOf) - the rule hd_object.cpp draws by. */
+		 * (ToolPocketOf) - the rule hd_object.cpp draws by - and `open` the
+		 * same walk following every link, into other objects' runs too. */
 		if (slideCensus)
 		{
 			printf("\n-- slidecensus ------------------------------------\n");
@@ -14043,17 +14323,23 @@ int main(int argc, char** argv)
 					}
 				}
 
-				if (travel > 0 || leaves)
+				/* A slot is listed when its own animations move it or
+				 * when either walk takes it; `open` is the walk that
+				 * follows every link, into other objects' animations. */
+				const bool walk = ToolPocketOf(level, tree.slot);
+				const bool open = ToolPocketOf(level, tree.slot, true);
+
+				if (travel > 0 || leaves || walk || open)
 					printf("  slide slot=%d name=%s anims=%d travel=%.0f "
 						"turn=%.1f within=%d leaves=%d folds=%d pocket=%d "
 						"walk=%d "
-						"hd=%d\n", tree.slot,
+						"hd=%d open=%d\n", tree.slot,
 						HDSlotName(tree.slot) ? HDSlotName(tree.slot) : "?",
 						anims, travel, turn, turnsWithin ? 1 : 0,
 						leaves ? 1 : 0, folds ? 1 : 0,
 						HDSlidesIntoPocket(leaves, folds, turnsWithin) ? 1 : 0,
-						ToolPocketOf(level, tree.slot) ? 1 : 0,
-						HDModelHas(tree.slot) ? 1 : 0);
+						walk ? 1 : 0, HDModelHas(tree.slot) ? 1 : 0,
+						open ? 1 : 0);
 			}
 		}
 
@@ -14347,6 +14633,9 @@ int main(int argc, char** argv)
 
 	if (bindCheck && here)
 		PrintBindCheck(level, root, slot, *here, false);
+
+	if (alphaCheck && here)
+		PrintAlpha(level, root, slot, here->nodes, false);
 
 	float mins[3], maxs[3];
 

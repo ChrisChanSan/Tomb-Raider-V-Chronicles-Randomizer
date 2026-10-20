@@ -301,6 +301,7 @@ namespace
 		int holder;		// the classic-drawn group it stands in
 		int kind;		// HDStandRange::kind
 		int faces;		// HDStandRange::faces
+		bool baked;		// the art of a DUMMY item (HDStandRangeBaked)
 	};
 
 	std::vector<StandPiece> g_stand_pieces;
@@ -4685,6 +4686,48 @@ static void BuildStandFaces()
 		HDRenderSetStandFaces(0, 0, 0, 0, 0, 0);
 }
 
+/* The boxes of the level's items whose slot the level's .MAP calls DUMMY -
+ * the objects the art carries (hd_cover.h, HDStandDrawBaked) - as
+ * hd_object.cpp names those slots: the map's own word, never a donor slot,
+ * never Lara's. Each box out of the object's first frame's bounds, at the
+ * item's place and yaw (HDStandItemBox). The map is read for this and given
+ * back when it was not read before; the objects' build reads it again. */
+static void BuildBakedBoxes(std::vector<HDStandBox>& boxes)
+{
+	boxes.clear();
+
+	const char* had = HDMapLevel();
+	const bool kept = had && !_stricmp(had, g_stem);
+	const bool read = kept || HDMapLoadForLevel(HDInstallRoot(), g_stem);
+
+	for (int i = 0; read && i < level_items; i++)
+	{
+		const ITEM_INFO* item = &items[i];
+		const int slot = item->object_number;
+
+		if (slot < 0 || slot >= NUMBER_OBJECTS || !objects[slot].loaded ||
+			objects[slot].nmeshes <= 0 || !objects[slot].frame_base ||
+			HDSlotIsLara(slot) || HDMarkersDonorOfSlot(slot))
+			continue;
+
+		HDBindKind kind = HD_BIND_NONE;
+		bool fromMap = false;
+
+		HDBindSlot(HDInstallRoot(), slot, &kind, &fromMap, 0);
+
+		if (kind != HD_BIND_DUMMY || !fromMap)
+			continue;
+
+		const PHD_3DPOS& at = item->pos;
+
+		boxes.push_back(HDStandItemBox(objects[slot].frame_base, at.x_pos,
+			at.y_pos, at.z_pos, at.y_rot));
+	}
+
+	if (read && !kept)
+		HDMapFree();
+}
+
 /* Which rooms the stand art covers, and which of their faces, once the build
  * has said which groups are drawn HD. Per holder that is drawn classic, the
  * renderer's coverage of its faces by each group's tagged triangles
@@ -4698,7 +4741,11 @@ static void BuildStandFaces()
  * half of them (HDCoverRoomState). A room drawn in part gets its drop flags,
  * the faces InsertRoomlet leaves out; a room drawn as art, wholly or in part,
  * that keeps no classic face Lara can stand on counts as HD for her shadow
- * (HDCoverRoomShadowHD). Then the list of stand ranges the frame answers.
+ * (HDCoverRoomShadowHD). Then the list of stand ranges the frame answers,
+ * each marked when it is the art of an object the art carries
+ * (HDStandRangeBaked): its triangles counted per (group, holder, kind) - kind
+ * 1 when they lie on the holder's faces whole (HDCoverTriOnFaces, as the
+ * renderer tagged them) - and every one of them in a DUMMY item's box.
  * Returns the triangles found, for the log; `onFaces[r]` gets each holder's. */
 static int BuildStandRanges(std::vector<int>& onFaces)
 {
@@ -4855,6 +4902,67 @@ static int BuildStandRanges(std::vector<int>& onFaces)
 		total += tagged[(size_t)h];
 	}
 
+	/* The baked count: per (group, holder, kind) of the triangles on the
+	 * faces, how many and how many in a DUMMY item's box. */
+	struct BakedKey
+	{
+		int group, holder, kind;
+		int total, inBoxes;
+	};
+
+	std::vector<HDStandBox> boxes;
+	std::vector<BakedKey> keys;
+	std::vector<int> holderAt((size_t)(number_rooms > 0 ? number_rooms : 0),
+		-1);
+
+	BuildBakedBoxes(boxes);
+
+	for (size_t k = 0; k < g_stand_holders_built.size(); k++)
+		if (g_stand_holders_built[k].room >= 0 &&
+			g_stand_holders_built[k].room < (int)holderAt.size())
+			holderAt[(size_t)g_stand_holders_built[k].room] = (int)k;
+
+	for (int i = 0; i < count && !boxes.empty(); i++)
+	{
+		HDCoverTri tri;
+		int holder = -1;
+
+		if (!HDRenderStandTriangleAt(i, &tri, &holder) || holder < 0 ||
+			holder >= (int)holderAt.size() || holderAt[(size_t)holder] < 0 ||
+			tri.group < 0 || tri.group >= HD_MAX_ROOMS ||
+			!g_group_hd[tri.group])
+			continue;
+
+		const HDStandHolder& at =
+			g_stand_holders_built[(size_t)holderAt[(size_t)holder]];
+
+		if (at.faceCount <= 0 ||
+			(size_t)(at.firstFace + at.faceCount) > g_stand_faces_built.size())
+			continue;
+
+		const int kind = HDCoverTriOnFaces(tri,
+			&g_stand_faces_built[(size_t)at.firstFace], at.faceCount,
+			HD_COVER_REACH) ? 1 : 0;
+		const bool in = HDStandBoxFind(&boxes[0], (int)boxes.size(), tri) >= 0;
+		size_t k = 0;
+
+		while (k < keys.size() && !(keys[k].group == tri.group &&
+			keys[k].holder == holder && keys[k].kind == kind))
+			k++;
+
+		if (k == keys.size())
+		{
+			const BakedKey made = { tri.group, holder, kind, 0, 0 };
+
+			keys.push_back(made);
+		}
+
+		keys[k].total++;
+		keys[k].inBoxes += in ? 1 : 0;
+	}
+
+	int bakedRanges = 0, bakedTris = 0;
+
 	for (int g = 0; g < g_room_count && g < HD_MAX_ROOMS; g++)
 	{
 		if (!g_group_hd[g])
@@ -4875,9 +4983,46 @@ static int BuildStandRanges(std::vector<int>& onFaces)
 			piece.holder = range.holder;
 			piece.kind = range.kind;
 			piece.faces = range.faces;
+			piece.baked = false;
+
+			/* Its key's ranges together - a range split by the faces it
+			 * stands on is one of several - must hold the key's triangles. */
+			for (size_t k = 0; k < keys.size() && range.kind != 2; k++)
+			{
+				if (keys[k].group != g || keys[k].holder != range.holder ||
+					keys[k].kind != range.kind)
+					continue;
+
+				int sum = 0;
+
+				const int ranges = HDRenderGroupStandRanges(g);
+
+				for (int other = 0; other < ranges; other++)
+				{
+					HDStandRange one;
+
+					if (HDRenderGroupStandRange(g, other, &one) &&
+						one.holder == range.holder && one.kind == range.kind)
+						sum += one.triangles;
+				}
+
+				piece.baked = sum == keys[k].total &&
+					HDStandRangeBaked(keys[k].inBoxes, keys[k].total);
+			}
+
+			if (piece.baked)
+			{
+				bakedRanges++;
+				bakedTris += range.triangles;
+			}
+
 			g_stand_pieces.push_back(piece);
 		}
 	}
+
+	if (gLogEnabled)
+		Log("HDLOG stand_baked level=%s boxes=%d ranges=%d tris=%d", g_stem,
+			(int)boxes.size(), bakedRanges, bakedTris);
 
 	g_stand_holders_built.clear();
 	g_stand_faces_built.clear();
@@ -9503,7 +9648,13 @@ static int RoomOfGroup(int group)
  * drawn in its holder's window gets an entry of g_stand_draw with its
  * group's matrix - the holder's view * world moved by the difference of the
  * two rooms' origins, since a flipmap pair stands at one place - and its
- * group's lighting, so that it looks the same whichever room brings it. */
+ * group's lighting, so that it looks the same whichever room brings it.
+ * A range of a DUMMY item's art the answer puts in front of the classic
+ * faces (HDStandDrawBaked, on the visibility path) gets an entry too: with
+ * its own group's matrix, window and lighting when that group is listed, in
+ * the holder's window as above when it is not, the matrix pulled towards the
+ * eye by HD_STAND_PUSH (HDStandFrontMatrix) - and its group leaves it out.
+ * Counted with the in-holder draws. */
 static void DecideStand()
 {
 	g_stand_draw_count = 0;
@@ -9528,8 +9679,10 @@ static void DecideStand()
 
 		const int state = g_group_stand_covered[piece.holder] ? HD_STAND_ROOM_COVERED :
 			g_group_stand_part[piece.holder] ? HD_STAND_ROOM_PART : HD_STAND_ROOM_CLASSIC;
-		const HDStandAnswer answer = HDStandDrawFaces(holderAt >= 0, artListed, state,
-			g_group_stand_carrier[piece.holder] == piece.group, piece.kind, piece.faces);
+		const bool carrier = g_group_stand_carrier[piece.holder] == piece.group;
+		const HDStandAnswer answer = HDStandDrawBaked(HDStandDrawFaces(
+			holderAt >= 0, artListed, state, carrier, piece.kind, piece.faces),
+			holderAt >= 0, piece.kind, piece.baked && VisLevel());
 
 		HDRenderStandWith(piece.group, piece.index, answer.behind && answer.withArt ?
 			HD_STAND_BEHIND : answer.withArt ? HD_STAND_WITH : HD_STAND_OUT);
@@ -9542,11 +9695,48 @@ static void DecideStand()
 		if (answer.behind && answer.withArt)
 			g_clip_stand_behind++;
 
-		if (!answer.inHolder)
+		if (!answer.inHolder && !answer.front)
 			continue;
 
 		const StandHolderFrame& holder = g_stand_frame[holderAt];
 		const int room_of_art = RoomOfGroup(piece.group);
+		int artAt = -1;
+
+		// In front with its group: that group's own entry of the frame.
+		for (int i = 0; i < g_frame_count && answer.front && artAt < 0; i++)
+			if (g_frame[i].group == piece.group)
+				artAt = i;
+
+		if (artAt >= 0)
+		{
+			const FrameRoom& art = g_frame[artAt];
+
+			if (art.x1 <= art.x0 || art.y1 <= art.y0 || room_of_art < 0)
+				continue;	// nothing of the group is drawn here
+
+			if (g_stand_draw_count >= HD_MAX_STAND_DRAW)
+			{
+				g_clip_stand_dropped++;
+				continue;
+			}
+
+			StandDraw& draw = g_stand_draw[g_stand_draw_count++];
+
+			draw.group = piece.group;
+			draw.index = piece.index;
+			draw.behind = false;
+			draw.world = art.world;
+			HDStandFrontMatrix(&draw.world._11, HD_STAND_PUSH);
+			draw.x0 = art.x0;
+			draw.y0 = art.y0;
+			draw.x1 = art.x1;
+			draw.y1 = art.y1;
+			draw.full = art.full;
+			FillRoomLighting(room_of_art, piece.group, draw.lighting,
+				draw.lights);
+			g_clip_stand_holder++;
+			continue;
+		}
 
 		if (holder.x1 <= holder.x0 || holder.y1 <= holder.y0 || room_of_art < 0 ||
 			piece.group >= (int)g_stand_rooms.size() ||
@@ -9575,6 +9765,10 @@ static void DecideStand()
 		draw.world._42 = off[0] * m._12 + off[1] * m._22 + off[2] * m._32 + m._42;
 		draw.world._43 = off[0] * m._13 + off[1] * m._23 + off[2] * m._33 + m._43;
 		draw.world._44 = off[0] * m._14 + off[1] * m._24 + off[2] * m._34 + m._44;
+
+		if (answer.front)
+			HDStandFrontMatrix(&draw.world._11, HD_STAND_PUSH);
+
 		draw.x0 = holder.x0;
 		draw.y0 = holder.y0;
 		draw.x1 = holder.x1;

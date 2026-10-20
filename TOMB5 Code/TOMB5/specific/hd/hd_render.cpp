@@ -20274,6 +20274,17 @@ namespace
 	 * 5,188 at one portal, 778 at two and 362 at three; the record has
 	 * the walks and the cost (TOMB5 Code/MODIFICATIONS.md). */
 	int g_marble_walk = 3;
+	/* The rooms under the sky, by group (marble_build: the room's
+	 * ROOM_OUTSIDE, global\types.h), and whether a mirror draws the sky
+	 * (marble_sky): a plane's mirror whose rooms in its view hold one has
+	 * the sky behind them, as the classic walk draws it for the frame
+	 * (game\draw.cpp, SkyDrawPhase after a listed room under the sky). Off
+	 * only for RoomProbe's -marblesky 0. */
+	std::vector<char> g_marble_open;
+	const int kMarbleRoomOutside = 0x8;
+	bool g_marble_sky = true;
+	// Whether the last frame's mirrors drew the sky, for RoomProbe.
+	int g_marble_sky_planes = 0;
 	/* Which group draws which room now (HDRenderMarbleRooms: the level's
 	 * table, which a flip map changes; none in RoomProbe, room n drawn by
 	 * group n), and its length. */
@@ -20414,6 +20425,11 @@ namespace
 		g_marble_tilt_faces.assign(g_groups.size(), std::vector<float>());
 		g_marble_tilt_id.assign(g_groups.size(), std::vector<int>());
 		g_marble_tilts.clear();
+		g_marble_open.assign(g_groups.size(), 0);
+
+		for (int g = 0; g < count && g < (int)g_marble_open.size(); g++)
+			g_marble_open[(size_t)g] =
+				(rooms[g].flags & kMarbleRoomOutside) != 0 ? 1 : 0;
 
 		g_marble_slots.assign((size_t)g_marble_cap, { INT_MIN, 0.0f });
 
@@ -21765,6 +21781,101 @@ namespace
 		return rooms;
 	}
 
+	/* Whether a plane's mirror has the sky behind its rooms: a room under
+	 * the sky (g_marble_open) among the frame's noted rooms or the rooms
+	 * the mirror draws whole (`over`, marble_plane_rooms) whose box the
+	 * plane's view does not leave out (marble_box_out, `clip` the mirror's
+	 * in clip space) - the classic walk's rule for the frame, a listed
+	 * room under the sky, asked of the mirror's own list. */
+	bool marble_sees_open(const std::vector<HDMarbleOverRoom>& over,
+		const std::vector<const MarbleDraw*>& noted, const float* clip)
+	{
+		for (size_t g = 0; g < noted.size() && (int)g < g_room_groups; g++)
+			if (noted[g] && HDMarbleOpen(g_marble_open, (int)g) &&
+				!marble_box_out((int)g, noted[g]->world, clip))
+				return true;
+
+		for (const HDMarbleOverRoom& o : over)
+		{
+			const MarbleDraw* under = 0;
+			D3DMATRIX world;
+
+			if (HDMarbleOpen(g_marble_open, o.group) &&
+				marble_over_world(o, noted, &world, &under) &&
+				!marble_box_out(o.group, world, clip))
+				return true;
+		}
+
+		return false;
+	}
+
+	void marble_room_state();
+
+	/* The sky into a plane's mirror, after its rooms: the sky groups'
+	 * opaque pass in the depth slice the frame's sky takes (HDRenderSky),
+	 * so it fills only what no room covers; centred on the eye and turned
+	 * as the view is - a noted room's matrix with the view, its move left
+	 * out - under the mirror's projection and clip, without fog or bulbs,
+	 * as the frame's sky is drawn (hd_level.cpp, HDFrameSky). The view and
+	 * the frame's light come back after it. Not the alpha pass, the band
+	 * and the clouds over the dome: at the eye of a room open to the sky
+	 * it changed 167 pixels of 518,400 by more than 8 of 255 against the
+	 * opaque pass alone, for 0.8 ms more of the GPU at 2,560 x 1,440 (the
+	 * record, TOMB5 Code/MODIFICATIONS.md). */
+	const float kMarbleSkyMinZ = 0.996f;	// HDRenderSky's HD_SKY_MINZ
+
+	void marble_sky(const std::vector<const MarbleDraw*>& noted)
+	{
+		const MarbleDraw* any = 0;
+
+		for (size_t g = 0; g < noted.size() && !any; g++)
+			any = noted[g];
+
+		if (!any || g_room_groups >= (int)g_groups.size())
+			return;
+
+		float modelView[16], turn[16], keepView[16];
+
+		multiply((const float*)&any->world, g_view, modelView);
+		HDMarbleSkyTurn(modelView, turn);
+		std::memcpy(keepView, g_view, sizeof(keepView));
+		std::memcpy(g_view, kIdentity, sizeof(keepView));
+		std::memcpy(g_viewproj, g_proj, sizeof(keepView));
+
+		HDFrameLighting sky = {};
+
+		if (g_marble_frame)
+			sky = *g_marble_frame;
+
+		sky.cameraUnderwater = 0;
+		sky.distanceFogStart = 1.0e9f;
+		sky.bulbs = 0;
+		sky.bulbCount = 0;
+		sky.under = 0;
+		apply_frame_lighting(&sky);
+		marble_scissor();
+		g_marble_replay = true;
+		D3DVIEWPORT9 rows = {}, slice;
+
+		g_device->GetViewport(&rows);
+		slice = rows;
+		slice.MinZ = kMarbleSkyMinZ;
+		slice.MaxZ = 1.0f;
+		g_device->SetViewport(&slice);
+
+		for (int g = g_room_groups; g < (int)g_groups.size(); g++)
+			HDRenderRoomMask(g, (const D3DMATRIX*)turn, 0, HD_PASS_OPAQUE);
+
+		g_device->SetViewport(&rows);
+		g_marble_replay = false;
+		HDRenderScissorOff();
+		std::memcpy(g_view, keepView, sizeof(keepView));
+		multiply(g_view, g_proj, g_viewproj);
+		g_water_table_up = (const void*)~(size_t)0;
+		apply_frame_lighting(g_marble_frame);
+		marble_room_state();
+	}
+
 	// The room path's shaders and stream, as the bracket sets them.
 	void marble_room_state()
 	{
@@ -22312,6 +22423,18 @@ int HDRenderMarbleCrackRows(const float** rows, int* closed)
 	return (int)(g_crack_rows.size() / 7);
 }
 
+/* RoomProbe's -marblesky 0|1: the sky drawn into the mirrors; and how
+ * many planes of the last frame drew it. */
+void HDRenderMarbleSky(bool on)
+{
+	g_marble_sky = on;
+}
+
+int HDRenderMarbleSkyPlanes()
+{
+	return g_marble_sky_planes;
+}
+
 // RoomProbe's -marblewalk n: a plane's own walk, n portals out.
 void HDRenderMarbleWalk(int portals)
 {
@@ -22410,6 +22533,7 @@ void HDRenderMarbleDraw(HDWetModelDraw draw, const void* projection,
 	g_marble_spent = true;
 	g_marble_stats = HDRenderMarbleStats();
 	g_marble_rows_list.clear();
+	g_marble_sky_planes = 0;
 
 	if (!g_marble_on || !g_marble_want || !g_device || !g_in_frame ||
 		!g_card_vs || !g_marble_ps || g_marble_draws.empty() ||
@@ -22944,6 +23068,14 @@ void HDRenderMarbleDraw(HDWetModelDraw draw, const void* projection,
 
 		g_marble_stats.over += marble_replay_over(planeRooms, noted, clip,
 			&g_marble_stats.over_culled, i ? 0 : g_marble_stats.over_out);
+
+		// The sky behind the rooms, where the plane's view holds one under it.
+		if (g_marble_sky && marble_sees_open(planeRooms, noted, clip))
+		{
+			marble_sky(noted);
+			g_marble_sky_planes++;
+		}
+
 		g_marble_stats.calls += g_draw_calls - callsBefore;
 		g_marble_rows_list[(size_t)i * kMarbleRowWidth + 8] =
 			(float)(g_draw_calls - callsBefore);

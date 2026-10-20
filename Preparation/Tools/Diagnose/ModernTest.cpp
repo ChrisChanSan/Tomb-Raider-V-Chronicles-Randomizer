@@ -26833,6 +26833,31 @@ static void object_rules()
 		"glass opacity: the byte stays within 0 and 255",
 		(long)HDGlassOpacityByte(2.0f), 255);
 
+	/* The weight a glass range is added with: the opacity on a one-sided
+	 * range (the JOBY doors, the title's two objects), 1 on a two-sided
+	 * sheet (RICH1's DOOR_TYPE2 at 0.1: 3.1 to 4.0 unweighed under the
+	 * classic's 19.9 to 27.0 at its node). */
+	ok(HDGlassWeight(0.125f, true) == 0.125f &&
+		HDGlassWeight(0.1f, true) == 0.1f,
+		"glass weight: a one-sided range is added times its opacity",
+		(long)(HDGlassWeight(0.125f, true) * 1000.0f), 125);
+	ok(HDGlassWeight(0.1f, false) == 1.0f &&
+		HDGlassWeight(0.125f, false) == 1.0f,
+		"glass weight: a two-sided sheet is added whole",
+		(long)(HDGlassWeight(0.1f, false) * 1000.0f), 1000);
+	ok(HDGlassWeight(1.0f, true) == 1.0f && HDGlassWeight(0.0f, true) == 1.0f &&
+		HDGlassWeight(sqrtf(-1.0f), true) == 1.0f &&
+		HDGlassWeight(3.0f, true) == 1.0f,
+		"glass weight: an opacity outside (0, 1) weighs 1 one-sided too",
+		(long)(HDGlassWeight(0.0f, true) * 1000.0f), 1000);
+	ok(HDGlassOpacityByte(HDGlassWeight(0.1f, true)) == 26 &&
+		HDGlassOpacityByte(HDGlassWeight(0.1f, false)) == 255,
+		"glass weight: the byte the draw sets, 26 one-sided, 255 two-sided",
+		(long)HDGlassOpacityByte(HDGlassWeight(0.1f, false)), 255);
+	ok(HDGlassBandFactor(27.0f, 4.0f * HDGlassWeight(0.1f, false)) == 1.0f,
+		"glass weight: the two-sided sheet stays under its classic band",
+		(long)(HDGlassBandFactor(27.0f, 4.0f) * 1000.0f), 1000);
+
 	/* The classic's band as the ceiling: the cabinet's glass at the top of
 	 * its band, 101.0, under the classic's 109.2; TITLE's frame page at
 	 * 130.1 whole would be held to 109.2. */

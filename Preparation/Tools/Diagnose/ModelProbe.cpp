@@ -2880,7 +2880,10 @@ static void PrintAlpha(const Tr5Level& level, const std::string& root5,
 		if (!bandPath.empty() &&
 			HDTrmLoad(bandPath.c_str(), &bandTrm, &bandWhy))
 		{
-			glassBand = ToolGlassBand(bandTrm, root5, see, true);
+			// Weighed as the draw weighs it: by the opacity where the
+			// model's drawn glass is added times it (HDGlassWeight).
+			glassBand = ToolGlassBand(bandTrm, root5, see,
+				count.factor < 1.0f);
 			HDTrmFree(&bandTrm);
 		}
 

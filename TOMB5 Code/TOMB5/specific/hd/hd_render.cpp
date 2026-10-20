@@ -19473,6 +19473,10 @@ namespace
 	// The look's constant registers, c200 - c218 (hd_water_look.hlsl).
 	const int kLookRegs = 19;
 
+	// The disc's power under the sheet at the last frame, 0 for none
+	// (HDRenderWaterDiscPower).
+	float g_wlook_power = 0.0f;
+
 	/* The look's nineteen constants (hd_water_look.hlsl, c200 - c218):
 	 * the view's axes, the projection, the eye and its surface's depth,
 	 * the light's direction (the look's highlight direction, gWaterSun) and
@@ -19485,11 +19489,13 @@ namespace
 	 * `sea[1]`, HDWaterSheetDepth), its box (the art's and the water
 	 * rooms', the margin past them: HDWaterSheetBox), the sheet's
 	 * strength, ripple, clear zone, ragged edge's way, patches and fog,
-	 * and the disc's power and the disc's, the shafts' and the underside's
-	 * strengths there in place of the others, and the ripple's cells
-	 * broken (the shafts' cells, the turn and the height share), and the
-	 * shafts' light held to a peak over the cells' mean (HDWaterShaftBound);
-	 * all 0 without it. `knobs` in the order of HDWaterLookKnobs. */
+	 * and the disc's power (the knob's, or for 0 the one taken from the
+	 * light's height, HDWaterGlowPowerUnder) and the disc's, the shafts'
+	 * and the underside's strengths there in place of the others, and
+	 * the ripple's cells broken (the shafts' cells, the turn and the
+	 * height share), and the shafts' light held to a peak over the cells'
+	 * mean (HDWaterShaftBound); all 0 without it. `knobs` in the order of
+	 * HDWaterLookKnobs. */
 	void water_look_constants(const WaterLook& look, const float* view,
 		float persp, float centreX, float centreY, float eyeX, float eyeZ,
 		float depth, const float* sigma, const float* light,
@@ -19536,11 +19542,28 @@ namespace
 		c[55] = knobs[HD_LOOK_LENGTH];
 		c[56] = knobs[HD_LOOK_WAVES];
 		c[57] = knobs[HD_LOOK_RIM];
+		g_wlook_power = 0.0f;
 
 		if (!sea)
 			return;
 
-		c[23] = knobs[HD_LOOK_SEA_POWER];
+		/* The disc's power: the knob's, or for 0 the one whose glow halves
+		 * at the photograph's angle in the water under this light's height
+		 * (HDWaterGlowPowerUnder), kept for the height it was taken at. */
+		static float s_up = -2.0f, s_power = 0.0f;
+		const float len = sqrtf(c[20] * c[20] + c[21] * c[21] +
+			c[22] * c[22]);
+		const float up = len > 0.0f ? -c[21] / len : 0.0f;
+
+		if (s_up != up)
+		{
+			s_up = up;
+			s_power = HDWaterGlowPowerUnder(kHDWaterGlowHalf, up);
+		}
+
+		c[23] = knobs[HD_LOOK_SEA_POWER] > 0.0f ?
+			knobs[HD_LOOK_SEA_POWER] : s_power;
+		g_wlook_power = c[23];
 		c[24] = knobs[HD_LOOK_SEA_DISC];
 		c[25] = knobs[HD_LOOK_SEA_SHAFTS];
 		c[26] = knobs[HD_LOOK_SEA_UNDERSIDE];
@@ -19809,6 +19832,14 @@ void HDRenderWaterSheetReach(float* out)
 
 	for (int k = 0; k < 4; k++)
 		out[1 + k] = g_wsea_sheet[k];
+}
+
+/* The disc's power the last look under the sea's sheet drew with (the
+ * knob's, or the one HDWaterGlowPowerUnder takes from the light's
+ * height); 0 where the last look had no sheet. For RoomProbe. */
+float HDRenderWaterDiscPower()
+{
+	return g_wlook_power;
 }
 
 /* The sea seen from below on the game's path: the look of the study above

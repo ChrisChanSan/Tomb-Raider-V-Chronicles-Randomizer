@@ -346,7 +346,9 @@
  *                     and its line ending in `reach`: the water rooms'
  *                     lowest floor and the last sheet's box, and `peak`:
  *                     the bound of the shafts' light under the sheet and
- *                     the cells' mean light it is taken over
+ *                     the cells' mean light it is taken over, and `disc`:
+ *                     the disc's power the look drew with under the sheet
+ *                     (0 with none) and its strength there
  *     -underlookknobs <disc shafts underside reach power cell floor deep len
  *                     waves rim seadisc seashafts seaunderside sheet ripple
  *                     patches art seapower seaturn seaswell seamargin
@@ -360,10 +362,12 @@
  *                     has the sea's surface over it the three strengths,
  *                     the sheet's, its ripple's contrast, the share the
  *                     shafts' noise lights it by and the weight the art
- *                     keeps, the disc's power there, the turn and the
- *                     height share each cell breaks the ripple by, the
- *                     share of the margin the sheet reaches past the
- *                     level's water, the way its ragged edge comes in
+ *                     keeps, the disc's power there (0: taken from the
+ *                     light's height, HDWaterGlowPowerUnder), the
+ *                     turn and the height share each cell breaks the
+ *                     ripple by, the share of the margin the sheet
+ *                     reaches past the level's water, the way its ragged
+ *                     edge comes in
  *                     over, the share of the fog along it, and 1 for the
  *                     extinction counted up to the sheet's plane, 0 up to
  *                     the stand-in's surface; last the most the shafts'
@@ -2847,6 +2851,8 @@ static float g_under_game_set[HD_LOOK_KNOBS] = {};
 void HDRenderWaterSeaKnobs(const float* knobs);
 // hd_render.cpp: the water's lowest floor and the sheet's last box.
 void HDRenderWaterSheetReach(float* out);
+// hd_render.cpp: the disc's power the last look under the sheet drew with.
+float HDRenderWaterDiscPower();
 /* -surfaceroom: the room whose art is the sea's surface, printed;
  * -surfacealways: that room drawn as the game draws it at every frame of a
  * level that takes the deep look - added to the -with list where the
@@ -21476,7 +21482,7 @@ static int ProbeMain(int argc, char** argv)
 			"%ldx%ld, knobs %.2f %.2f %.2f %.0f %.0f %.0f %.2f %.0f %.0f "
 			"%.0f %.2f, sea %.2f %.2f %.2f %.3f %.2f %.2f %.2f, power "
 			"%.2f, break %.3f %.2f, edge %.2f %.0f %.2f %.0f, reach %.0f "
-			"%.0f %.0f %.0f %.0f, peak %.2f %.4f\n", drawn ?
+			"%.0f %.0f %.0f %.0f, peak %.2f %.4f, disc %.2f %.2f\n", drawn ?
 			"drawn" : skyDrew ? "NOT drawn (no deep "
 			"look, no -hdwater 1 or no frame under the water)" :
 			"NOT drawn (no sky)",
@@ -21486,7 +21492,8 @@ static int ProbeMain(int argc, char** argv)
 			k[HD_LOOK_SEA_SWELL], k[HD_LOOK_SEA_MARGIN],
 			k[HD_LOOK_SEA_RAGGED], k[HD_LOOK_SEA_FOG], k[HD_LOOK_SEA_PLANE],
 			reach[0], reach[1], reach[2], reach[3], reach[4],
-			k[HD_LOOK_SEA_PEAK], HDWaterShaftMean(k[HD_LOOK_FLOOR], 128, 4));
+			k[HD_LOOK_SEA_PEAK], HDWaterShaftMean(k[HD_LOOK_FLOOR], 128, 4),
+			HDRenderWaterDiscPower(), k[HD_LOOK_SEA_DISC]);
 	}
 
 	/* The scene: one room, or a room and the neighbours -with names, drawn

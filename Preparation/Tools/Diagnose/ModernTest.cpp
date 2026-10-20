@@ -23340,9 +23340,9 @@ static void water_sea()
 	ok(HDWaterSheetFog(30000.0f, 18000.0f, 0.0f) == 0.0f,
 		"sheet fog: share 0, no fog", 0, 0);
 
-	ok(k[HD_LOOK_SEA_DISC] < 8.0f && k[HD_LOOK_SEA_POWER] < k[HD_LOOK_POWER],
-		"sea glow: the disc weaker and wider where the sheet lies",
-		(long)k[HD_LOOK_SEA_DISC], 4);
+	ok(k[HD_LOOK_SEA_DISC] < 8.0f && k[HD_LOOK_SEA_POWER] == 0.0f,
+		"sea glow: the disc weaker, its power from the light, under the sheet",
+		(long)(k[HD_LOOK_SEA_DISC] * 10.0f), 15);
 	ok(k[HD_LOOK_SEA_TURN] > 0.0f && k[HD_LOOK_SEA_TURN] < 1.5708f &&
 		k[HD_LOOK_SEA_SWELL] > 0.0f && k[HD_LOOK_SEA_SWELL] < 1.0f,
 		"sea ripple: a turn under a right angle, a loss under the whole",
@@ -23408,6 +23408,62 @@ static void water_sea()
 	ok(k[HD_LOOK_SEA_PEAK] > 2.48f && k[HD_LOOK_SEA_PEAK] < 2.50f,
 		"shaft light: the peak the sunlit photograph's, 2.49",
 		(long)(k[HD_LOOK_SEA_PEAK] * 100.0f), 249);
+
+	/* The disc's power from the light's height (HDWaterGlowPowerUnder):
+	 * the photograph's 22.5 degrees in the water lies wider in the air,
+	 * where the disc's cosine is taken - 34.6 degrees on the mean for the
+	 * sea's light 22 degrees up, the power 3.57; straight overhead n times
+	 * across, 30.7 degrees, 4.60. */
+	const float up22 = sinf(22.0f * 0.017453293f);
+	const float sea22 = HDWaterGlowPowerUnder(kHDWaterGlowHalf, up22);
+
+	ok(kHDWaterGlowHalf == 22.5f,
+		"disc power: the photograph's half angle in the water, 22.5", 0, 0);
+	ok(sea22 > 3.52f && sea22 < 3.62f,
+		"disc power: the sea's light 22 degrees up, about 3.57",
+		(long)(sea22 * 100.0f), 357);
+
+	const float top = HDWaterGlowPowerUnder(kHDWaterGlowHalf, 1.0f);
+	const float over = HDWaterGlowPower(asinf(1.333f *
+		sinf(kHDWaterGlowHalf * 0.017453293f)) * 57.29578f);
+
+	ok(top > over - 0.01f && top < over + 0.01f,
+		"disc power: overhead, the ring n times wider all round, 4.60",
+		(long)(top * 100.0f), (long)(over * 100.0f));
+
+	bool wider = true;
+
+	for (int e = 5; e <= 90; e += 5)
+	{
+		const float p = HDWaterGlowPowerUnder(kHDWaterGlowHalf,
+			sinf((float)e * 0.017453293f));
+
+		wider = wider && p > 0.0f && p < HDWaterGlowPower(kHDWaterGlowHalf);
+	}
+
+	ok(wider, "disc power: at every height wider than the water's own 8.75",
+		0, 0);
+	ok(HDWaterGlowPowerUnder(kHDWaterGlowHalf, 0.0f) ==
+		HDWaterGlowPower(kHDWaterGlowHalf) &&
+		HDWaterGlowPowerUnder(kHDWaterGlowHalf, -0.5f) ==
+		HDWaterGlowPower(kHDWaterGlowHalf),
+		"disc power: a light at or under the horizon, the angle as it is",
+		0, 0);
+	ok(HDWaterGlowPowerUnder(0.0f, up22) == 0.0f &&
+		HDWaterGlowPowerUnder(90.0f, up22) == 0.0f,
+		"disc power: no power for a half angle outside 0 to 90", 0, 0);
+
+	/* The strength: the light of the power 8.75 at strength 4 spread to
+	 * the power under the sea's light (the cosine's light over the sky
+	 * one over the power plus 1), 1.88, and the knob a half step under
+	 * it. */
+	const float kept = 4.0f * (sea22 + 1.0f) /
+		(HDWaterGlowPower(kHDWaterGlowHalf) + 1.0f);
+
+	ok(kept > 1.85f && kept < 1.91f && k[HD_LOOK_SEA_DISC] <= kept &&
+		k[HD_LOOK_SEA_DISC] > kept - 0.5f,
+		"disc power: the strength a half step under the light kept, 1.5",
+		(long)(kept * 100.0f), 188);
 }
 
 /* The room whose art is the sea's surface (hd_water_under.h,

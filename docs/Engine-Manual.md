@@ -2916,7 +2916,32 @@ panel; the HD path draws its models two-sided, and there the two panels
 fought for every pixel. A slot whose animations carry it out of its own box
 and fold it flat, without turning a piece within an animation, is drawn
 one-sided now - over the fifteen levels exactly those two door slots
-(`ModelProbe -all -slidecensus`).
+(`ModelProbe -all -slidecensus`). Only the slot's own animations are asked,
+the run from its first to the next object's first: JOBY4's attack sub and
+ANDREA1's `ANIMATING15` name other objects' animations in their state
+changes, and before that bound the rule took them too and drew them
+one-sided - the panel lost nearly all of itself seen from behind.
+
+**The glass of a model.** The classic game draws some faces of an object
+see-through: a face whose effects word has its lowest bit set, or whose
+texture is of the see-through kind, is added onto what lies behind it. The
+remaster's models carry their glass as a part of material 14 - the glass
+material of the room art - in the part's alpha run. The HD path drew that run
+with the alpha test and wrote its depth, which made a solid sheet of it: the
+office cabinets of RICH2 came out an opaque teal panel, the oval doors of
+RICH1 a grey plate with dark holes. Now a triangle of such a part, on a piece
+whose classic mesh has a see-through face, is drawn the way the classic draws
+the face: added to what lies behind it, weighed by the art's own alpha, with
+no depth write, in the same bracket as the glows. A piece the classic draws
+solid keeps its glass material drawn as before - the attack sub's canopy,
+JOBY4's chaff, JOBY5's `GEN_SLOT3` and RICH1's `CLOSED_DOOR5` - and every
+model without such a part draws as it did. Over the fifteen levels the rule
+reaches 14 slot bindings (`ModelProbe -all -alpha`): RICH2's and RICH1's
+`SEARCH_OBJECT1`, RICH1's `DOOR_TYPE2`, `DOOR_TYPE4` and `DOOR_TYPE7`, RICH3's
+`DOOR_TYPE1`, the `DOOR_TYPE4_JOBY3_JOBY5` doors of JOBY3 and JOBY5 (on
+three slots each) and the title's `ANIMATING1_MIP` and `ANIMATING2_MIP`. The
+log's `HDLOG slot=` line ends in `glass=<ranges>`. `ModelProbe -alpha` takes
+one slot apart, `-noglass` draws the picture before the rule.
 
 **Which model a slot asks for** comes from four places, in this order: the
 level's own name table beside it in the remaster's `DATA` folder, which lists
@@ -3307,9 +3332,10 @@ HDLOG frame rooms=17 calls=131 dropped=0 bulbs=0 fog_start=12288 wibble=930
 HDLOG frame objects hd=6 classic=4 baked=3 dropped=0 calls=20 swap_drawn=1
       swap_ignored=0 meshbits=0 clipped_lights=0(level)
 HDLOG slot=33 name=SWAT model=SWAT nodes=15 maxbone=14 cover=15
-      drift=22/114 head=-1 hd=1 reason=ok fit=-1 pocket=0
+      drift=22/114 head=-1 hd=1 reason=ok fit=-1 pocket=0 glass=0
 HDLOG slot=31 name=SAS model=SAS nodes=25 maxbone=14 cover=15
       drift=807/2286 head=-1 hd=0 reason=skeleton_drift fit=2383 pocket=0
+      glass=0
 HDLOG slot=436 name=ANIMATING11 model=- nodes=2 ... hd=0 reason=baked
 HDLOG level=ANDREA1 map=read lines=42 baked_slots=14
 HDLOG level=ANDREA1 swap slot=469 name=CYBORG kind=hitman_stages

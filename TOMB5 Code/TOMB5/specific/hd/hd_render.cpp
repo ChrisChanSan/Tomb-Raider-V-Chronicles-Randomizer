@@ -21811,19 +21811,13 @@ namespace
 
 	void marble_room_state();
 
-	/* The sky into a plane's mirror, after its rooms: the sky groups'
-	 * opaque pass in the depth slice the frame's sky takes (HDRenderSky),
-	 * so it fills only what no room covers; centred on the eye and turned
-	 * as the view is - a noted room's matrix with the view, its move left
-	 * out - under the mirror's projection and clip, without fog or bulbs,
-	 * as the frame's sky is drawn (hd_level.cpp, HDFrameSky). The view and
-	 * the frame's light come back after it. Not the alpha pass, the band
-	 * and the clouds over the dome: at the eye of a room open to the sky
-	 * it changed 167 pixels of 518,400 by more than 8 of 255 against the
-	 * opaque pass alone, for 0.8 ms more of the GPU at 2,560 x 1,440 (the
-	 * record, TOMB5 Code/MODIFICATIONS.md). */
-	const float kMarbleSkyMinZ = 0.996f;	// HDRenderSky's HD_SKY_MINZ
-
+	/* The sky into a plane's mirror, before its rooms, as the frame draws
+	 * its own (HDRenderSky: its depth slice and its order, the band over
+	 * the dome, every room drawn after it in front): centred on the eye
+	 * and turned as the view is (a noted room's matrix with the view, its
+	 * move left out), under the mirror's projection, clip and scissor,
+	 * without fog or bulbs, as hd_level.cpp's HDFrameSky draws the frame's
+	 * sky. The view and the frame's light come back after it. */
 	void marble_sky(const std::vector<const MarbleDraw*>& noted)
 	{
 		const MarbleDraw* any = 0;
@@ -21855,18 +21849,7 @@ namespace
 		apply_frame_lighting(&sky);
 		marble_scissor();
 		g_marble_replay = true;
-		D3DVIEWPORT9 rows = {}, slice;
-
-		g_device->GetViewport(&rows);
-		slice = rows;
-		slice.MinZ = kMarbleSkyMinZ;
-		slice.MaxZ = 1.0f;
-		g_device->SetViewport(&slice);
-
-		for (int g = g_room_groups; g < (int)g_groups.size(); g++)
-			HDRenderRoomMask(g, (const D3DMATRIX*)turn, 0, HD_PASS_OPAQUE);
-
-		g_device->SetViewport(&rows);
+		HDRenderSky((const D3DMATRIX*)turn);
 		g_marble_replay = false;
 		HDRenderScissorOff();
 		std::memcpy(g_view, keepView, sizeof(keepView));
@@ -23064,18 +23047,17 @@ void HDRenderMarbleDraw(HDWetModelDraw draw, const void* projection,
 		const std::vector<HDMarbleOverRoom> planeRooms =
 			marble_plane_rooms(layer, overRooms, noted, clip);
 
-		const int left = marble_replay(clip);
-
-		g_marble_stats.over += marble_replay_over(planeRooms, noted, clip,
-			&g_marble_stats.over_culled, i ? 0 : g_marble_stats.over_out);
-
-		// The sky behind the rooms, where the plane's view holds one under it.
+		// The sky first, where the plane's view holds a room under it.
 		if (g_marble_sky && marble_sees_open(planeRooms, noted, clip))
 		{
 			marble_sky(noted);
 			g_marble_sky_planes++;
 		}
 
+		const int left = marble_replay(clip);
+
+		g_marble_stats.over += marble_replay_over(planeRooms, noted, clip,
+			&g_marble_stats.over_culled, i ? 0 : g_marble_stats.over_out);
 		g_marble_stats.calls += g_draw_calls - callsBefore;
 		g_marble_rows_list[(size_t)i * kMarbleRowWidth + 8] =
 			(float)(g_draw_calls - callsBefore);

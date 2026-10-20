@@ -344,12 +344,14 @@
  *                     shafts - right after the sky and before the rooms,
  *                     at HDWaterLookKnobs' numbers, its GPU time printed
  *                     and its line ending in `reach`: the water rooms'
- *                     lowest floor and the last sheet's box
+ *                     lowest floor and the last sheet's box, and `peak`:
+ *                     the bound of the shafts' light under the sheet and
+ *                     the cells' mean light it is taken over
  *     -underlookknobs <disc shafts underside reach power cell floor deep len
  *                     waves rim seadisc seashafts seaunderside sheet ripple
  *                     patches art seapower seaturn seaswell seamargin
- *                     searagged seafog seaplane>
- *                     the same with these twenty-five numbers in place of
+ *                     searagged seafog seaplane seapeak>
+ *                     the same with these twenty-six numbers in place of
  *                     the engine's (strengths, the surface light's reach,
  *                     the disc's power, the shafts' cell size, the noise's
  *                     floor, their reach under the surface, the march's
@@ -364,13 +366,17 @@
  *                     level's water, the way its ragged edge comes in
  *                     over, the share of the fog along it, and 1 for the
  *                     extinction counted up to the sheet's plane, 0 up to
- *                     the stand-in's surface)
+ *                     the stand-in's surface; last the most the shafts'
+ *                     light under the sheet reaches in a pixel, in times
+ *                     the cells' mean light over the same samples, 0 for
+ *                     no bound)
  *     -sea art|look|sheet
  *                     the same at the engine's numbers but for one part:
  *                     art the art of the sea's surface at its own weight
  *                     and no sheet (the look's three strengths and power
  *                     the first ones, the extinction up to the stand-in's
- *                     surface); look the look without the sheet or the art;
+ *                     surface, no bound on the shafts); look the look
+ *                     without the sheet or the art;
  *                     sheet the sheet alone, the art out and the look's
  *                     three strengths 0
  *     -underlookset <disc shafts underside reach power cell floor deep len>
@@ -2905,6 +2911,7 @@ static bool UnderArg(int argc, char** argv, int* at)
 			k[HD_LOOK_ART] = 1.0f;
 			k[HD_LOOK_SEA_POWER] = k[HD_LOOK_POWER];
 			k[HD_LOOK_SEA_PLANE] = 0.0f;
+			k[HD_LOOK_SEA_PEAK] = 0.0f;
 		}
 		else if (!strcmp(part, "look"))
 			k[HD_LOOK_SHEET] = 0.0f;
@@ -21469,7 +21476,7 @@ static int ProbeMain(int argc, char** argv)
 			"%ldx%ld, knobs %.2f %.2f %.2f %.0f %.0f %.0f %.2f %.0f %.0f "
 			"%.0f %.2f, sea %.2f %.2f %.2f %.3f %.2f %.2f %.2f, power "
 			"%.2f, break %.3f %.2f, edge %.2f %.0f %.2f %.0f, reach %.0f "
-			"%.0f %.0f %.0f %.0f\n", drawn ?
+			"%.0f %.0f %.0f %.0f, peak %.2f %.4f\n", drawn ?
 			"drawn" : skyDrew ? "NOT drawn (no deep "
 			"look, no -hdwater 1 or no frame under the water)" :
 			"NOT drawn (no sky)",
@@ -21478,7 +21485,8 @@ static int ProbeMain(int argc, char** argv)
 			k[16], k[17], k[HD_LOOK_SEA_POWER], k[HD_LOOK_SEA_TURN],
 			k[HD_LOOK_SEA_SWELL], k[HD_LOOK_SEA_MARGIN],
 			k[HD_LOOK_SEA_RAGGED], k[HD_LOOK_SEA_FOG], k[HD_LOOK_SEA_PLANE],
-			reach[0], reach[1], reach[2], reach[3], reach[4]);
+			reach[0], reach[1], reach[2], reach[3], reach[4],
+			k[HD_LOOK_SEA_PEAK], HDWaterShaftMean(k[HD_LOOK_FLOOR], 128, 4));
 	}
 
 	/* The scene: one room, or a room and the neighbours -with names, drawn

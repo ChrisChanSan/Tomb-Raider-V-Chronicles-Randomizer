@@ -3959,6 +3959,26 @@ carries the tables.
     `power`, `break`, `edge` and `reach`, `HDRenderWaterSeaKnobs` before the one
     bracket, `HDRenderWaterSheetReach`; `ModernTest.cpp`, `water_sea`) - the tool's
     switches for the round's rules and 27 checks of their pure functions. OWN.
+343. **The shafts' light under the sea's sheet held to the photograph's peak**
+    (`hd_water_under.h`, `HDWaterShaftBound`, `HDWaterShaftMean`, `HDWaterShaftHash`,
+    `HD_LOOK_SEA_PEAK`; `hd_water_look.hlsl`, `LookPS`; `hd_render.cpp`,
+    `water_look_constants`) - the look's march of the shafts under the sheet held to
+    2.49 times the light the cells' mean gives over the same samples' weights. PICTURE
+    (the sunlit photograph of a sea from below supplied as a look reference, not in
+    the repository, measured as numbers only: its peak 2.49 times its open water's
+    median luma, 395's number). DATA: the cells' mean light, taken from the cells'
+    hash itself (`CellHash`, this project's) over 128 by 128 cells and 4 by 4 places
+    each above the noise's floor of 0.62: 0.0537, a lit cell 18.6 times it. OWN: the
+    bound, after the owner's word of 2026-10-20 that the sun in JOBY4 is still far too
+    strong; at the eye of his play test (tick 20,282, room 123, 26.5 degrees up)
+    245,208 of 3,686,400 pixels at 2,560 x 1,440 were burnt to white by the shafts, at
+    10 of 30 clocks 2 seconds apart, none after at any clock, and the dive's eyes stay
+    in their band (RoomProbe, `MODIFICATIONS.md`, the sea seen from below, Round 11).
+344. **RoomProbe's `seapeak` knob and ModernTest's shaft checks**
+    (`Preparation/Tools/Diagnose/RoomProbe.cpp`, `-underlookknobs` with twenty-six
+    numbers, `-sea art` without the bound, the `-underlook` line's `peak`;
+    `ModernTest.cpp`, `water_sea`) - the tool's switch for the bound and 11 checks of
+    its pure functions. OWN.
 
 ## Credited, but not contained here
 

@@ -10839,6 +10839,169 @@ now, where the classic adds a blue pane.
 **Commits.** `2247f199` (the glass), `eb605543` (the pocket's bound), `312ef5a4` (the
 tools and ModernTest), and this entry's.
 
+#### Round 2: the glass added once, one-sided, at its own opacity
+2026-10-20
+
+**What.** The glass of an HD model is added as much as the classic adds its see-through
+face, and no more. Three rules from the data, in `hd_object_rules.h` and the model build
+(`hd_model.cpp`): a range of glass every triangle of which has a glass triangle of its
+node facing against it is drawn one-sided (`HDTrmTrianglesFaceAgainst`, `Range::sided`,
+the draw's glass step; `HDMatrixMirrors` turns the culled winding under a reflection); a
+triangle of the additive run that copies a glass triangle of its node and page is left out
+while its node draws glass (`HDTrmTriangleCopies`, `Range::copy`, `Range::dropped`); and
+the glass is added times its part's own opacity, `param[1]` (`HDGlassOpacity`, through
+`D3DRS_BLENDFACTOR`). The model shader is untouched. RICH2's office cabinet, which added a
+milky sheet, now adds what the classic's band asks; RICH1's oval doors are as they were.
+The `HDLOG slot=` line ends in `oneside= copies= opacity= factor=`; `ModelProbe -alpha`
+measures the glass against the classic's band, ModernTest holds the rules (16 checks).
+
+**Why.** The owner, 2026-10-20, after playing the build of Oct 20 2026 21:33:40, with a
+picture of RICH2's cabinet from this build and a comparison picture: "Wir muessen noch
+viel mehr clear werden." - we must become much more clear. And of RICH1's oval doors after
+Round 1: "Rich1 ist top." The comparison picture is used as a band of numbers.
+
+**Measured, before any change.** The classic, RICH2's `SEARCH_OBJECT1` (slot 164), doors
+on nodes 1 and 2: 12 see-through faces each, six a side on mirrored texture corners; the
+classic draws a face one-sided, so one face adds at a pixel - its texel times its light,
+ONE / ONE. Its texels at full light (the level's 32-bit pages): 22,752, luma mean 84.6,
+tenth 40.2, half 70.2, nine tenths 109.2. The `.TRM` (`SEARCH_OBJECT1_RICH2`), per door:
+
+| part, run | material, `param` | triangles | page | faces | texels' luma times alpha at full light |
+|---|---|---|---|---|---|
+| 2, alpha (the glass) | 14, (8, 1, 0, 0) | 12 | 3068, alpha mean 205 | -z, the pane, z -257 | mean 54.5, tenth 46.4, half 54.1, nine tenths 63.1 |
+| 2, alpha (the glass) | 14, (8, 1, 0, 0) | 12 | 10054, alpha 255 | +z, a sheet 11 units behind | mean 79.9, tenth 43.0, half 71.0, nine tenths 130.1 |
+| 0, additive | 0, (0, 0, 0, 0) | 24 | 3068 | -z, the pane twice, z -258 | each as the pane |
+
+So at a pixel of the front the HD path added four layers where the classic adds one: the
+pane, the inward sheet seen through the two-sided draw, and the pane twice more in the
+additive run - about 243 at full light, against the classic's 84.6. Not one layer is
+brighter than the classic's face; the layers are the cause. The sheet paints the frame
+page's drawing over the whole door at alpha 1: from the front it is the inside of the
+door, and the classic has its own face for that side.
+
+At his eyes (Round 1's in-room method, ModelProbe `-withrooms -shadowroom`, the items at
+their places, 1,280 x 720, the item lit at the tool's full light; the background is a
+scratch build of the same source that draws neither the glass nor its copies):
+
+| eye | glass pixels | added over the background (mean, tenth, half, nine tenths) | luma spread over them: background, glass |
+|---|---|---|---|
+| RICH2 room 48, tick 905953 | 67,389 | 189.9, 157.3, 194.5, 219.2 | 29.5, 9.1 |
+| RICH2 room 85, tick 938562 | 83,188 | 190.5, 149.6, 192.8, 228.9 | 33.5, 13.0 |
+| RICH1 room 15, tick 239828 | 47,270 | 16.2, 12.1, 15.8, 20.0 | 11.3, 12.7 |
+
+The comparison picture as numbers: through the glass luma 78, 58 and 35 in three panes
+against the wall beside the cabinet at 84 and 55 - the glass adds nothing above the
+marble's own spread; a dark-green bottle 53 (tenth 22), the skull 56 (tenth 22), the door
+bar 99. This build's picture: through the glass 248, 246 and 195, against the wall at 98
+and 76; the bottle 241, the skull 218, the door bar 232.
+
+The 14 bindings of Round 1, at full light (luma of the texels; `ModelProbe -all -alpha`
+and a scratch reader of the glass runs):
+
+| binding | classic (tenth, half, nine tenths) | the glass's texels | layers seen at a pixel before | `param[1]` |
+|---|---|---|---|---|
+| JOBY3, JOBY5 48, 286, 290 (`DOOR_TYPE4_JOBY3_JOBY5`) | 142.4 (36 texels) | 68.1, 87.2, 98.8 | 2 (a pane each way on one another) | 0.125 |
+| RICH1 164 (`SEARCH_OBJECT1_RICH1`) | 22.1, 33.5, 143.3 | 12.9, 19.1, 25.0 | 1 (+y only) | 0.1 |
+| RICH1 286 (`DOOR_TYPE2_RICH1`) | 19.9, 22.5, 27.0 | 3.1, 3.5, 4.0 | 1 or 2 (spread 99 to 173 degrees) | 0.1 |
+| RICH1 290 (`DOOR_TYPE4_RICH1`) | 80.0, 180.0, 191.3 | 15.6, 25.6, 33.8 | 1 (+y only) | 1 |
+| RICH1 296 (`DOOR_TYPE7_RICH1`) | 2.9, 14.7, 194.7 | 6.1, 6.6, 21.1 | 2 (each way) | 0.1 |
+| RICH2 164 (the cabinet) | 40.2, 70.2, 109.2 | 45.7, 59.5, 101.0 | 4 (above) | 1 |
+| RICH3 284 (`DOOR_TYPE1_RICH3`) | 2.9, 14.7, 194.7 | 40.0, 56.3, 227.2 | 2 (each way) | 0.1 |
+| TITLE 417, 419 (`ANIMATING1_MIP`, `ANIMATING2_MIP`) | 40.2, 70.0, 109.2; 40.3, 70.2, 114.1 | 43.0, 71.0, 130.1 | 2 (each way) | 0.1 |
+
+**The rule from the data.** The classic adds one face at a pixel and the classic is the
+measure. (1) Two glass triangles of a node face against each other when their normals
+stand more than 135 degrees apart - halfway between the two sides of one pane and two
+faces at a box's corner; over the 14 bindings every partner meets at exactly 180, except
+RICH1's `DOOR_TYPE2`, whose range spreads from 99 to 173 degrees. A range of glass every
+triangle of which has such a partner is drawn one-sided, the side turned away from the eye
+culled as the classic culls it (`D3DCULL_CCW`, the winding that keeps a `.TRM`'s outside,
+`HD_MODEL_CULL_BACK`; `D3DCULL_CW` under a matrix with a negative determinant). A range
+with one triangle that has none stays two-sided, so no range is cut for the rule: a single
+pane is seen from both sides, as RICH1's oval doors' are. (2) An additive run triangle on
+a glass node whose three corners have a glass triangle's texture coordinates, each within
+a 32nd of that triangle's longest edge, on the same page, is the glass again; it is left
+out while its node draws glass. The cabinet's copies lie one unit behind its pane (a 319th
+of the edge); its pane and sheet, 11 units apart, stay two surfaces. (3) The part's
+`param[1]`, where it lies in (0, 1), weighs the glass - the weight the room art's additive
+pass already gives its material (`MaterialAddWeight`); 0.125 on the JOBY doors, 0.1 on six
+bindings, 1 on RICH1's oval doors and RICH2's cabinet. (4) The classic's band as a
+ceiling, `HDGlassBandFactor` (the top of the glass's band held to the top of the
+classic's, both times the same light): measured, it is 1 on all 14 bindings once (1) to
+(3) are in, so the object path, which holds no page's texels, applies none.
+
+**Decisions.** The opacity goes into the blend state (`D3DRS_BLENDFACTOR`, the source
+weighed by it, rounded to 255 steps) and not into a shader constant: the model shader and
+its two `.inc` stay byte for byte, and the shadow's cast and receive draws, which never
+draw the glass, need nothing. A card without `D3DPBLENDCAPS_BLENDFACTOR` adds the glass
+whole, and the log's `factor=` says 1. The sides are a range's own (every triangle has a
+partner), not a triangle's, so the build cuts no range for them and every model's ranges,
+draw calls and build hash stay as they were. The copies are a range of their own in the
+additive run - the cabinet's are its whole additive run on the door, so no range is cut
+there either. No number of a room, a level or a slot is in the rules. Not gone below the
+classic's band: the comparison picture asks for less than the classic adds, and no data of
+the level or the model gives a smaller weight for the cabinet (its `param[1]` is 1).
+
+**Checked.** At his eyes, before against after (`85449c17`'s ModelProbe against this
+round's, the same scratch background):
+
+| eye | changed pixels | added over the background after (mean, tenth, half, nine tenths) | luma spread over the glass after |
+|---|---|---|---|
+| RICH2 room 48 | 67,249, all glass | 53.6, 46.1, 53.2, 61.8 (was 189.9) | 29.7 (background 29.5) |
+| RICH2 room 85 | 82,930, all glass | 53.8, 46.1, 53.5, 61.9 (was 190.5) | 34.0 (background 33.5) |
+| RICH1 room 15, the eight doors | 56 | 16.2, 12.1, 15.8, 20.0, as before | 12.7, as before |
+| RICH1 room 15 with rooms 44 to 47 | 56 | 26.2, 18.2, 26.5, 33.3, as before | 37.5, as before |
+
+The cabinet now adds 54 at full light, inside the classic's band (40.2 to 109.2), and the
+bottles, the stand and the skull keep the contrast they have with no glass in front. The
+oval doors (slot 290) are byte-identical; the 56 changed pixels in room 15 lie in a 6 x 12
+patch (x 580 to 585, y 319 to 330) where `DOOR_TYPE2`'s pane, page 16140, adds over the
+oval door's: 3 to 7 levels lower per channel (luma 3.0 to 6.0), its part's opacity 0.1.
+The pictures with the glass left out (`-noglass`), before against after, are
+byte-identical at all four eyes. The slot views (`-slot`, 1,024 x 1,024, from the front
+and from behind, against `85449c17`; every changed pixel is a glass pixel, and `-noglass`
+is byte-identical in all 20):
+
+| binding | changed pixels, front / behind | green channel's change over magenta |
+|---|---|---|
+| JOBY3 and JOBY5 286 (48 and 290 the same model and node) | 74,316 / 77,221 | -166.7 |
+| RICH1 164 | 0 / 0 (its glass faces up) | 0 |
+| RICH1 286 | 6,711 / 97 | -3.5 / -3.8 |
+| RICH1 290 | 0 / 0 | 0 |
+| RICH1 296 | 213,910 / 213,910 | -19.6 |
+| RICH2 164 | 222,925 / 113,787 | -153.6 / -167.5 |
+| RICH3 284 | 275,380 / 275,329 | -126.5 |
+| TITLE 417 and 419 | 346,326 / 373,370 | -141.8 / -141.6 |
+
+After, at full light (`ModelProbe -all -alpha`, the glass's band times its opacity): the
+JOBY doors 8.5, 10.9, 12.4; RICH1 164 1.3, 1.9, 2.5; RICH1 286 0.3, 0.3, 0.4; RICH1 290
+15.6, 25.6, 33.8; RICH1 296 0.6, 0.7, 2.1; RICH2 164 45.7, 59.5, 101.0 in one layer; RICH3
+284 3.9, 5.5, 22.5; the title's two 4.3, 7.1, 13.0 - every one under the classic's nine
+tenths, `band=1.000`, and one-sided on the JOBY doors, RICH1 296, RICH2 164, RICH3 284 and
+the title's two. The binder census (`ModelProbe -all`) is byte for byte the same over the
+fifteen levels, the model build's hash too, and `-all -alpha`'s output the same up to the
+alpha lines' new end. Byte-identical to the RoomProbe of `85449c17`: the classic views
+(`hd_build` 0, 6 of 6), the six HD views, the census eyes with `hd_water` 0 and 1 (15 of
+15 each), the fifteen parity cameras with `hd_water` 0 and 1. The nine scripts exit 0;
+ModernTest 16,058 checks (16,042 and 16 new), MenuTest 44,917, InterpTest 754, LipsTest
+299 with the scratch object folder and 272 without, 0 failed.
+
+**Left.** Not seen in the game, and the tool lights the cabinet at full light; in the game
+its light is the room's. The comparison picture adds nothing over the marble; the cabinet
+adds 54 at full light, the classic's own band - a fainter glass than the classic's would
+need a weight the data does not give. The door bars of the cabinet are its opaque frame
+(part 0, page 10054, its triangles' texels 80 to 218 at full light), outside the glass;
+they were 232 in this build's picture, 99 in the comparison's. The sheet on page 10054
+that paints the frame at alpha 1 is drawn only from inside the cabinet now; on the title's
+two `ANIMATING*_MIP` and RICH3's door the frame painted at alpha 1 in the glass page is
+added at a tenth. No per-face gate by the texture's alpha: on the cabinet it would have
+drawn the inward sheet solid over the whole door. A mod's glass brighter than the
+classic's band would not be held: the object path has no page's texels, the page cache's
+file would have to hand them over. JOBY2's windows (Round 1's Left) are untouched.
+
+**Commits.** `6f5594fc` (the rules and the draw), `00c1a43b` (the tools and ModernTest),
+and this part's.
+
 ### HD models for the pickups: the EXTRA prefix, a mod's own inventory model, and lying on the floor
 2026-09-08 - 2026-09-15
 

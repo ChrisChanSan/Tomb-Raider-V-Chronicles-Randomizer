@@ -4032,6 +4032,74 @@ carries the tables.
     `ToolPocketOf`'s bound). OWN.
 409. **ModernTest's glass and walk checks** (`Preparation/Tools/Diagnose/
     ModernTest.cpp`, `object_rules`, 20 checks). OWN.
+343. **The glass's two sides** (`specific/hd/hd_object_rules.h`,
+    `HDTrmTrianglesFaceAgainst`, `HDMatrixMirrors`; `hd_model.cpp`,
+    `glass_sides_and_copies`, `Range::sided`, the draw's glass step) - a
+    range of glass every triangle of which has a glass triangle of its node
+    facing against it is drawn one-sided, the winding turned away from the
+    eye culled, the other one under a mirrored matrix. CLASSIC: TR5 culls
+    back faces in software, per polygon (`specific/output.cpp`; the note at
+    `HDModelCull`, `hd_model.h`), and a pane seen from both sides carries a
+    face for each: RICH2's cabinet doors 12 see-through faces each, six a
+    side on mirrored texture corners. DATA (a scratch reader of the `.TRM`
+    glass runs, and `ModelProbe -alpha`): the cabinet door's glass run is a
+    pane of 12 triangles facing -z on page 3068 and a sheet of 12 facing +z
+    on page 10054, 11 units behind; the JOBY doors' 6 and 6 lie on one
+    another; over the 14 bindings every glass triangle with a partner meets
+    it at exactly 180 degrees, except RICH1's `DOOR_TYPE2`, whose range
+    spreads 99 to 173 and stays two-sided, and RICH1's oval doors, all
+    facing +y. NUMBER: 135 degrees, halfway between the two sides of a pane
+    (180) and two faces meeting at a box's corner (90). TEXTBOOK: a
+    reflection's matrix has a negative determinant and turns the winding.
+    OWN: the per-range test, so no range is cut for it.
+344. **A copy of the glass left out** (`hd_object_rules.h`,
+    `HDTrmTriangleCopies`, `HD_TRM_COPY_SHARE`; `hd_model.cpp`,
+    `Range::copy` and `Range::dropped`, `HDModelSetGlassNodes`) - an
+    additive run triangle on the glass's node and page whose three corners
+    have the glass triangle's texture coordinates within a 32nd of its
+    longest edge is not drawn while its node draws glass. CLASSIC: the
+    see-through face is added once. DATA: RICH2's cabinet carries its pane
+    in part 0's additive run (material 0) twice, 24 triangles a door, one
+    unit behind the glass run's pane on the same texture corners; no other
+    of the 14 bindings has an additive run on a glass node. NUMBER: a 32nd
+    of the edge, 10 units at those triangles (longest edge 319): the copies
+    lie a 319th off, and the door's pane and sheet, 11 units apart, stay
+    two surfaces.
+345. **The glass weighed by its opacity** (`hd_object_rules.h`,
+    `HDGlassOpacity`, `HD_TRM_PARAM_OPACITY` 1, `HDGlassOpacityByte`;
+    `hd_model.cpp`, `Range::opacity`, `g_blend_factor`, the glass step's
+    blend factor) - the glass is added times its part's `param[1]` where
+    that lies in (0, 1), through `D3DRS_BLENDFACTOR` with
+    `D3DBLEND_BLENDFACTOR` as the source factor, rounded to 255 steps; a
+    card without `D3DPBLENDCAPS_BLENDFACTOR` adds it whole. DATA: `param[1]`
+    over the 14 bindings 0.125 (the JOBY doors), 0.1 (RICH1's
+    `SEARCH_OBJECT1`, `DOOR_TYPE2`, `DOOR_TYPE7`, RICH3's `DOOR_TYPE1`, the
+    title's two) and 1 (RICH1's `DOOR_TYPE4`, RICH2's cabinet); the room
+    art's additive pass weighs its material by it (`hd_render.cpp`,
+    `MaterialAddWeight`). TEXTBOOK: Direct3D 9's blend factor. OWN: the
+    weight in the blend state, so the model shader and its bytecode stay
+    as they were; the shadow's cast and receive draws never draw the glass.
+346. **The classic's band as the glass's ceiling, measured**
+    (`hd_object_rules.h`, `HDGlassBandFactor`; `ModelProbe -alpha`'s
+    `band=`) - the factor that would hold the top of the glass's band to
+    the top of the classic's. CLASSIC: the see-through face adds its texel
+    times its light and reads no alpha (`specific/polyinsert.cpp`, case 2).
+    DATA: the bands at full light (the record's table); after entries 343
+    to 345 the factor is 1 on all 14 bindings, so the object path, which
+    holds no page's texels, applies none. OWN: the nine tenths as the
+    band's top, as the room glass's rounds read it.
+347. **The slot line's glass counts** (`hd_object.cpp`, the `HDLOG slot=`
+    line's end `oneside= copies= opacity= factor=`; `hd_model.cpp` and
+    `hd_model.h`, `HDModelGlassCounts`, `HDModelGlassCount`). OWN.
+348. **ModelProbe's glass bands** (`Preparation/Tools/Diagnose/
+    ModelProbe.cpp`: `ToolBand`, `ToolTexelsOf`, `ToolClassicBand`,
+    `ToolGlassBand`, `PrintAlpha`'s two lines and the census line's end) -
+    the classic's see-through texels read off the level's 32-bit page block
+    (the `.TRC`'s first compressed block, its sizes at byte 10), the glass's
+    off its pages through the engine's BC7 decoder. OWN.
+349. **ModernTest's glass checks** (`Preparation/Tools/Diagnose/
+    ModernTest.cpp`, `object_rules`, 16 checks: the sides, the copies, the
+    opacity, the band and the mirror). OWN.
 
 ## Credited, but not contained here
 

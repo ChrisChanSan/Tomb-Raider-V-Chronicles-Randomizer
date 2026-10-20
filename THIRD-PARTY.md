@@ -3959,6 +3959,38 @@ carries the tables.
     `power`, `break`, `edge` and `reach`, `HDRenderWaterSeaKnobs` before the one
     bracket, `HDRenderWaterSheetReach`; `ModernTest.cpp`, `water_sea`) - the tool's
     switches for the round's rules and 27 checks of their pure functions. OWN.
+401. **The table of looks by page** (`hd_debris_rules.h`, `HDGlassLook`,
+    `kHDGlassLooks`, `HDGlassLookOf`; `hd_render.cpp`, `AddGlass`) - a page
+    the table names is glass in every texel for the additive run of its
+    material 14 parts, added whole whatever clear texels it marks, as entry
+    339's whole glass is. Its one line, page 15074, ANDREA1's arched windows
+    (statics 50, 66 and 68). DATA: the page marks 0.12 % of its texels clear
+    (HdAdd, the page through the engine's resolvers), so the clear-texel
+    bound kept their alpha and they added 3.0 levels at the eyes where the
+    classic's glass adds 14.2 (band 7.2 to 28.9, GlassHue); added whole 7.9
+    to 8.1 (RoomProbe `-glow -addmat 14`). OWN: the table keyed by page, as
+    the sheen's page table is (`hd_gloss_pages.h`), the owner's order of
+    2026-10-20 ("Andrea1 das Glas lass dem mal ein gruenen Teint geben").
+402. **The table's hue on the classic's saturation** (`hd_debris_rules.h`,
+    `HDGlassTintHue`; `hd_render.cpp`, `HDRenderGlassTint`) - the tint a
+    draw call takes from the classic glass at its place (entry 366) turned
+    to the table's hue, its HSV saturation and its luma kept. TEXTBOOK: the
+    HSV hexcone (hue, saturation, value to red, green, blue). DATA: the
+    classic glass at the panes hue 201, saturation 0.57; the art's texels
+    there hue 197 to 203; no green in either (the record's table). OWN: the
+    hue 120 for the owner's "gruen" - his look decision of 2026-10-20 - and
+    the saturation the classic's, the luma the art's add.
+403. **A piece on a page of the table flies whole and tinted** (`hd_debris.h`,
+    the piece's glass and look) - a piece's triangle on such a page is the
+    additive run's whole glass and its look (entry 367) turns to the
+    table's hue. PICTURE (RoomProbe `-debris 198:2` against `-smash 198:2`):
+    at the break the pieces add 18.1 levels, hue 123, saturation 0.58,
+    where they added 3.0 at hue 189. OWN, the owner's order above.
+404. **RoomProbe's `look` column and ModernTest's `glass_look`**
+    (`Preparation/Tools/Diagnose/RoomProbe.cpp`, the `-glasshue` line's
+    end and summary; `ModernTest.cpp`, `glass_look`, 17 checks, and the
+    glass split's and hue's tables with a page column) - OWN, this
+    project's tools.
 
 ## Credited, but not contained here
 

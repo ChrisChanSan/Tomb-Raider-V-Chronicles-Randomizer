@@ -10014,6 +10014,130 @@ to c82) is not this part's file.
 
 **Commits.** `38ce5756` (the shade's channels, with ModernTest), and the records'.
 
+#### Round 6: ANDREA1's arched panes as glass, green
+2026-10-20
+
+**What.** ANDREA1's arched windows (statics 50, 66 and 68 in rooms 198 and 201 and their
+flip twins 200 and 203, page 15074) are drawn as the classic draws its glass: their
+additive run is added whole, as the bridge's is, and they take a tint. The tint is green,
+a look chosen for these panes: a keyed line of a table of looks by page in
+`hd_debris_rules.h`, as the sheen's page table holds the marble's pages. The pieces of
+the one that breaks (static 50) fly whole and green as well. Every other glass is drawn
+as before.
+
+**Why.** The owner, 2026-10-20, after playing the build of 2026-10-19 05:06:37:
+"Andrea2/rich2 sind ok. Andrea1 das Glas lass dem mal ein gruenen Teint geben." - ANDREA2
+and RICH2 are fine; ANDREA1, give the glass a green tint. Two days before, on Round 4's
+question about the arched panes, he had said they could take the blue too ("Ja die
+koennen auch die blaue Farbe bekommen"); the newer word counts.
+
+**Measured, before any change.** Why the panes were not the classic's glass: page 15074
+marks 0.12 % of its texels clear (alpha 0; 40.27 % partial, 59.61 % opaque, 512 x 512),
+so `AddGlass` kept the texels' alpha (Round 4's fix pass: the clear-texel bound that
+keeps the lamp glass from going white), and a hue reaches only glass the room draw
+draws as the classic's (Round 5). The seven draw calls are material 14's additive runs,
+`param[1]` 0.818: a 26-triangle part (no clear texel under it; 24 triangles partial and
+2 opaque by their texels' mean) and a 210-triangle part (1,220 clear texels under it,
+every triangle partial) in each of the four groups but 203, which has the small one
+only. What the classic adds at their place (GlassHue, Round 5's census) and what the art
+holds there (HdAdd, Round 4's scratch tool, the page through the engine's resolvers):
+
+| at the panes | red | green | blue | hue | sat | green over red |
+|---|---|---|---|---|---|---|
+| the classic texels (statics 50, 66, 68; 220 faces in ANDREA1) | 19.1 | 35.6 | 44.5 | 201 | 0.57 | 1.86 |
+| the classic's light (static 50's shade `0x318c` times the prelight) | 96 | 96 | 96 | - | 0 | 1.00 |
+| the classic's add, by area (band 7.2, 11.6, 28.9) | 8.6 | 16.0 | 19.9 | 201 | 0.57 | 1.86 |
+| the art's texels, the 210-triangle part (alpha 89.9) | 9.1 | 27.1 | 38.0 | 203 | 0.76 | 2.98 |
+| the art's texels, the 26-triangle part (alpha 148.0) | 6.9 | 45.6 | 61.4 | 197 | 0.89 | 6.62 |
+| the art's baked light, first corner, colour 1 (four parts) | 15.0 to 33.0 | 13.7 to 31.8 | 12.0 to 31.6 | 8 to 34 | - | 0.91 to 0.96 |
+| the art's baked light, colour 2 | 21.7 to 27.8 | 13.1 to 16.6 | 9.5 to 11.5 | 17 to 20 | - | 0.59 to 0.60 |
+| today's add over black, room 198, Round 1's eye | 0.9 | 3.8 | 4.1 | 186 | 0.79 | 4.2 |
+
+Green leads red in every texel set, but blue leads green: the classic's glass and the
+art's glass are blue-cyan (hue 197 to 203), the light grey or warm. No green is in the
+data; the green is the owner's. The art's add at the panes, the material 14 run alone
+over black (`-glow -addmat 14`, 960 x 540, `-time 3`, `-sky`, the walk's rooms), is 3.0
+levels where the classic adds 14.2, under the band's tenth (7.2).
+
+**The rule** (`hd_debris_rules.h`, "the looks chosen by page": `HDGlassLook`,
+`kHDGlassLooks`, `HDGlassLookOf`, `HDGlassTintHue`; `hd_render.cpp`, `AddGlass` and
+`HDRenderGlassTint`; `hd_debris.h`, a piece's glass). A page of the table is glass in
+every texel for the additive run: `AddGlass` adds its material 14 parts whole (weight 1,
+`gPass.z` -1, no alpha), whatever clear texels the page marks. Its tint, the classic
+glass's hue at the place as Round 5 computes it, turns to the table's hue with its HSV
+saturation and its luma kept (`HDGlassTintHue`), so the strength is still the art's and
+the saturation the classic's; only the hue is the table's. Where the classic adds
+nothing at the place the tint stays zero. A piece's triangle on such a page is the
+whole glass too, and its look (the static's classic hue times the band's gain,
+`HDGlassShardGain`) turns the same way. The table holds one line: page 15074, 120
+degrees. No room or level number is in the code; the page is the key, as in
+`hd_gloss_pages.h`. No shader line changes: the room shader's `gTint` select carries
+the turned tint as it carries the classic's.
+
+**Decisions.** The hue 120, HSV's green, for "gruen"; the saturation the classic's at
+the place (0.57), as Round 5's rule makes the classic's the glass's; the luma kept, so
+the panes keep the art's strength, now added whole. The table is keyed by page and not
+by static or room, so a page's glass looks the same wherever it is drawn and the
+breaking pane's pieces read the same line. A look the owner decides goes into the
+table, recorded as his decision (the ledger, OWN).
+
+**Measured, after.** RoomProbe of `76046dae` against the round's, the material 14 run
+over black at the ANDREA1 eyes: Round 4's three, and two of the owner's from his log of
+2026-10-20 in room 198 (tick 23587, 49883, -2484, 36483 to 49771, -2451, 36288; tick
+23467, 51157, -3532, 36514 to 50554, -2688, 36243). Pixels before / after:
+
+| eye | pixels | before: add, luma (tenth, half, nine tenths), hue, sat | after |
+|---|---|---|---|
+| room 198, Round 1's eye | 152,615 / 157,920 | 0.9, 3.8, 4.1; 3.0 (0.7, 2.0, 6.9); 186; 0.79 | 4.5, 10.5, 4.5; 8.0 (5.3, 7.9, 11.3); 120; 0.58 |
+| room 198, after the shot's eye | 129,140 / 133,398 | 0.8, 3.7, 4.0; 2.9 (0.7, 2.0, 6.3); 186; 0.80 | 4.5, 10.6, 4.5; 8.1 (5.3, 7.9, 11.3); 120; 0.58 |
+| room 201 | 183,343 / 183,811 | 1.2, 3.1, 4.2; 2.7 (0.7, 1.7, 6.1); 201; 0.72 | 4.4, 10.3, 4.4; 7.9 (5.8, 7.5, 10.7); 120; 0.57 |
+| tick 23587 | 221,508 / 230,035 | 1.0, 3.8, 4.3; 3.0 (0.7, 2.1, 6.9); 188; 0.76 | 4.4, 10.4, 4.4; 7.9 (5.3, 7.5, 10.7); 120; 0.58 |
+| tick 23467 | 7,389 / 7,571 | 0.7, 2.4, 2.6; 1.9 (0.7, 1.4, 3.8); 188; 0.74 | 3.8, 9.1, 3.8; 6.9 (4.8, 6.5, 9.7); 120; 0.58 |
+
+The panes add 7.9 to 8.1 levels on average (6.9 at the far eye), inside the classic's
+band (7.2 to 28.9, its mean 14.2), green at the classic's saturation. In the whole
+picture the change is the panes' pixels alone (133,398 to 229,956 at the full eyes, at
+most 13 to 21 levels a channel). RoomProbe `-glasshue`: the seven draw calls now `whole
+1`, tint 0.557 to 0.562, 1.308 to 1.312, the same (from 0.597 to 0.603, 1.124 to 1.126,
+1.404 to 1.407); every other line of the fifteen levels byte-identical; 190 draw calls
+may be glass, 43 take a hue, 33 reach the picture (26 before). The break of static 50
+(`-debris 198:2` against the shot static without pieces, `-smash 198:2`): at the break,
+life 0, the pieces add 18.1 levels (9.1, 18.6, 28.3), hue 123, saturation 0.58, where
+they added 3.0 (hue 189); at life 12 13.2 to 15.5; inside the band's top. RoomProbe
+`-pieceslook` ends each static's line in `look` and `flies`, the hue the table gives a
+paired material 14 part's page and the tint its pieces fly with: static 50's three lines
+read `look 120 flies 0.562 1.308 0.562`, every other static of the fifteen levels `look
+-1` and its classic tint; the lines before the new end byte-identical.
+
+**Checked.** `76046dae` against the round's, both RoomProbe: the classic views
+(`hd_build` 0) 7 of 7, the census eyes 15 of 15 with `hd_water` 0 and 15 of 15 with 1,
+the 15 parity cameras 15 of 15 and 15 of 15, the six HD views 6 of 6 and 6 of 6,
+byte-identical; ANDREA2's window at Round 4's eight eyes 8 of 8, the bridge's two (with
+`-glow`) 6 of 6 files; Round 4's 74 census eyes 74 of 74 (four of the base's first
+pictures were broken renders, JOBY3 149 and 164, JOBY5 10 and 14 - rendered again, the
+base and the round's agree 4 of 4); the 107 additive census eyes 100 of 107, the seven
+others ANDREA1's 15074 parts (8,780 to 482,693 pixels, at most 14 to 19); the tint's 40
+eyes 33 of 40 (the same seven); the break pictures, classic and HD, 55 of 77 each
+against the base, the 22 others the two ANDREA1 break eyes, whose other panes are in
+view; the pieces' commit against the rule's: classic 77 of 77, HD 57 of 77, the 20
+others ANDREA1's pieces in flight. `hd_marble`, `hd_vis` and `hd_fog` untouched (no line
+of theirs changed). The nine builds exit 0 (the engine's `PCtomb5 built Oct 20 2026
+19:56:33`, md5 `eff61ccb4b6d273b53b2117b50c713af`); ModernTest 16,022 checks (17 new,
+the `glass_look` group), MenuTest 44,917, InterpTest 754, LipsTest 299 with the
+comparison `.OBJ` folder and 272 without (by hand with the classic `cutseq.bin`), 0
+failed.
+
+**Left.** Not seen in the game. Green is the table's 120 degrees at the classic's
+saturation; a yellower or bluer green is one number in the table. The panes added whole
+sit low in the classic's band (8.0 against its mean 14.2); their strength is the art's.
+The 1,220 clear texels under each large part are added now as well. JOBY2's windows
+(the owner's message about the animatings carrying the missing wall's texture) are not
+this part's.
+
+**Commits.** `52ac97f8` (the rule and the table), `641f8ba1` (the pieces), `53fdd9b2`
+(RoomProbe and ModernTest), the records', and the fix pass's (the manual's strength
+sentence, the table's comment, `-pieceslook`'s end).
+
 ### The pieces of a broken static in HD (#222)
 2026-10-18
 

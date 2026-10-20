@@ -1858,14 +1858,22 @@ it.
   panes whose texture is glass in every texel. These are added the way the
   original adds its glass, whole, so the bridge's panes show as a pale band
   between its rails as they do in the original. Glass whose texture marks
-  its own clear places - ANDREA1's arched windows, the lamp glass of the
-  VCI offices - keeps the strength its texture gives it.
+  its own clear places - the lamp glass of the VCI offices - keeps the
+  strength its texture gives it. ANDREA1's arched windows are the exception
+  the engine names by their texture page: their texture marks a few clear
+  texels, yet they are added whole like the bridge, so they are no longer a
+  faint film: their strength is that of the Remaster's art, inside the range
+  of the original's panes there but at its low end.
   The glass the engine draws as the original draws its glass takes the colour
   of the original's glass at the same place, at its own strength: ANDREA2's
   barred window has blue panes again, the VCI bridge's glass is green, and
   the windows of RICH1 and RICH3 take the near-grey or the cyan of the
   original's panes there. Where the original has no glass at the place - the
   street lanterns, the glass on a table - the Remaster's colour stays.
+  ANDREA1's arched windows are tinted green, a look chosen for them: the
+  original's panes there are blue, as is the Remaster's art, and the green
+  keeps the original's strength of colour and the panes' own brightness. The
+  shards of the one that breaks fly green as well.
 - **Marble floors reflect.** The Remaster builds the polished floors of the
   VCI building - the RICH2 lobby and the halls around it, the cut scene that
   follows it and rooms of the title flyby - as a floor that is slightly

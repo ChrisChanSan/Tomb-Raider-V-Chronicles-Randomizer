@@ -14106,23 +14106,36 @@ namespace probestatics
 			return;
 
 		HDGlassTintInfo info;
-		int n = 0;
+		int n = 0, looks = 0;
 
+		/* And the table of looks (HDGlassLookOf): the hue a page takes in
+		 * place of the classic's, -1 for a page the table does not name. */
 		for (; HDRenderGlassTintInfo(n, &info); n++)
+		{
+			const HDGlassLook* look = HDGlassLookOf(info.page);
+
+			looks += look ? 1 : 0;
 			printf("glasshue: %s group %d pass %d page %d tris %d blend %.4f "
 				"split %d whole %d classic faces %d area %.0f colour %.1f %.1f "
-				"%.1f tint %.3f %.3f %.3f %.0f\n", stem, info.group, info.pass,
-				info.page, info.triangles, info.blend, info.split ? 1 : 0,
-				info.whole ? 1 : 0, info.faces, info.area, info.colour[0],
-				info.colour[1], info.colour[2], info.tint[0], info.tint[1],
-				info.tint[2], info.tint[3]);
+				"%.1f tint %.3f %.3f %.3f %.0f look %.0f\n", stem, info.group,
+				info.pass, info.page, info.triangles, info.blend,
+				info.split ? 1 : 0, info.whole ? 1 : 0, info.faces, info.area,
+				info.colour[0], info.colour[1], info.colour[2], info.tint[0],
+				info.tint[1], info.tint[2], info.tint[3],
+				look ? look->hue : -1.0f);
+		}
 
 		printf("glasshue: %s classic faces %d, %d draw calls that may be "
-			"glass, %d take a hue\n", stem, (int)faces.size(), n, tinted);
+			"glass, %d take a hue, %d on a page of the table of looks\n", stem,
+			(int)faces.size(), n, tinted, looks);
 	}
 
 	/* -pieceslook: every shatterable static the art pairs with its parts
-	 * (as DebrisPrepare pairs them), its parts and its glass pieces' look. */
+	 * (as DebrisPrepare pairs them), its parts and its glass pieces' look.
+	 * A paired material 14 part whose group holds an additive glass run on
+	 * a page of the table of looks (HDGlassLookOf, -glasshue's look column)
+	 * flies in the table's hue, as hd_debris.h turns its pieces; the line
+	 * ends in that hue, or -1, and the tint the pieces fly with. */
 	static void PiecesLook(const char* stem)
 	{
 		if (!g_pieces_look || !Load(stem))
@@ -14136,6 +14149,7 @@ namespace probestatics
 				continue;
 
 			int parts = 0;
+			float hue = -1.0f;
 
 			for (int p = 0; p < HDRenderDestructibleCount(); p++)
 			{
@@ -14156,6 +14170,17 @@ namespace probestatics
 					printf("pieceslook: %s static %d:%d slot %d part group %d "
 						"material 0x%04x\n", stem, s.room, s.mesh, s.slot,
 						group, material);
+
+					HDGlassTintInfo info;
+
+					for (int n = 0; (material & 0xFFu) == 14u &&
+						HDRenderGlassTintInfo(n, &info); n++)
+					{
+						const HDGlassLook* look = HDGlassLookOf(info.page);
+
+						if (info.group == group && info.pass == 2 && look)
+							hue = look->hue;
+					}
 				}
 			}
 
@@ -14165,10 +14190,20 @@ namespace probestatics
 			if (!GlassPieceLook(s, tint, &gain, band, &faces))
 				continue;
 
+			float flies[4];
+
+			if (hue >= 0.0f)
+				HDGlassTintHue(tint, hue, flies);
+			else
+				for (int i = 0; i < 4; i++)
+					flies[i] = tint[i];
+
 			printf("pieceslook: %s static %d:%d slot %d parts %d classic glass "
 				"faces %d band %.0f %.0f %.0f tint %.3f %.3f %.3f %.0f gain "
-				"%.3f\n", stem, s.room, s.mesh, s.slot, parts, faces, band[0],
-				band[1], band[2], tint[0], tint[1], tint[2], tint[3], gain);
+				"%.3f look %.0f flies %.3f %.3f %.3f\n", stem, s.room, s.mesh,
+				s.slot, parts, faces, band[0], band[1], band[2], tint[0],
+				tint[1], tint[2], tint[3], gain, hue, flies[0], flies[1],
+				flies[2]);
 		}
 	}
 
@@ -17929,9 +17964,13 @@ static int ProbeMain(int argc, char** argv)
 		printf("       -smashpiece <n>   destructible piece n hidden, in any "
 			"group; repeatable\n");
 		printf("       -glasshue   every draw call drawn as the classic's "
-			"glass may be: the classic faces at its place and its hue\n");
+			"glass may be: the classic faces at its place and its hue,\n");
+		printf("                    and the hue the table of looks gives its "
+			"page (-1 none)\n");
 		printf("       -pieceslook   every shatterable static the art pairs: "
-			"its parts and its glass pieces' look\n");
+			"its parts and its glass pieces' look,\n");
+		printf("                    the table's hue (-1 none) and the tint "
+			"they fly with\n");
 		printf("       -statics new|old   the classic statics a frame of this "
 			"picture draws, flat, and with new the statics' pieces\n");
 		printf("       -piece <room>:<mesh>   with -statics new, only that "

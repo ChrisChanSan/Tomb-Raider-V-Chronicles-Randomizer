@@ -499,6 +499,90 @@ inline void HDGlassTintOf(const float* sum, float* out)
 	out[3] = 1.0f;
 }
 
+/* The looks chosen by page: a hue for a page's glass that is chosen and
+ * not measured, one line a page, as the sheen's page table names its pages
+ * (hd_gloss_pages.h). A page number is a file name in the install's one TEX
+ * folder, so a line holds in every level that wears the page; no room and
+ * no level is named.
+ *
+ * The additive run of a material 14 part on a page of the table is glass
+ * in every texel, whatever clear texels the page marks: it is added whole
+ * (AddGlass, hd_render.cpp, and the pieces, hd_debris.h). Its tint turns to
+ * the table's hue (HDGlassTintHue): the saturation stays the classic
+ * glass's at its place and the strength the art's add, so only the hue is
+ * the table's. Where the classic adds nothing at the place the tint stays
+ * zero and the glass keeps the art's colour, as every other glass does.
+ *
+ * Page 15074, ANDREA1's arched windows (statics 50, 66 and 68): the page
+ * marks 0.12 % of its texels clear (alpha 0), so the clear-texel bound would
+ * keep the texels' alpha and leave the panes a faint film below the classic
+ * glass's band at the place; added whole they fall inside that band. The
+ * classic's glass there is blue (hue 201, saturation 0.57) and so is the
+ * art's (hue 197 to 203); neither holds green. The green is the table's. */
+struct HDGlassLook
+{
+	int page;	// the page's number, its file name in the TEX folder
+	float hue;	// the HSV hue in degrees: 0 red, 120 green, 240 blue
+};
+
+// Kept sorted by page number.
+static const HDGlassLook kHDGlassLooks[] =
+{
+	// page hue
+	// ANDREA1: the arched windows' panes, statics 50, 66 and 68, green
+	{ 15074, 120.0f }
+};
+
+// The look the table holds for a page, or 0.
+inline const HDGlassLook* HDGlassLookOf(int page)
+{
+	const int count = (int)(sizeof(kHDGlassLooks) / sizeof(kHDGlassLooks[0]));
+
+	for (int i = 0; i < count; i++)
+		if (kHDGlassLooks[i].page == page)
+			return &kHDGlassLooks[i];
+
+	return 0;
+}
+
+/* A tint turned to `hue` in degrees: its HSV saturation (the largest
+ * channel's lead over the smallest, over the largest) and its luma kept,
+ * w kept. A tint of w 0 - no classic glass at the place - stays as it is,
+ * and `out` may be `in`. */
+inline void HDGlassTintHue(const float* in, float hue, float* out)
+{
+	const float luma = HDGlassLuma(in);
+	const float hi = fmaxf(in[0], fmaxf(in[1], in[2]));
+	const float lo = fminf(in[0], fminf(in[1], in[2]));
+
+	if (!(in[3] > 0.0f) || !(luma > 1.0e-6f) || !(hi > 0.0f))
+	{
+		for (int i = 0; i < 4; i++)
+			out[i] = in[i];
+
+		return;
+	}
+
+	const float s = (hi - lo) / hi;
+	const float h = (hue - 360.0f * floorf(hue / 360.0f)) / 60.0f;
+	const int sector = (int)h % 6;
+	const float f = h - floorf(h);
+	const float p = 1.0f - s, q = 1.0f - s * f, t = 1.0f - s * (1.0f - f);
+	const float hsv[6][3] =
+	{
+		{ 1.0f, t, p }, { q, 1.0f, p }, { p, 1.0f, t },
+		{ p, q, 1.0f }, { t, p, 1.0f }, { 1.0f, p, q }
+	};
+	const float* rgb = hsv[sector];
+	const float scale = luma / HDGlassLuma(rgb);
+	const float w = in[3];
+
+	for (int i = 0; i < 3; i++)
+		out[i] = rgb[i] * scale;
+
+	out[3] = w;
+}
+
 /* Whether the texel (tx, ty) of a page `w` by `h` lies on a face whose
  * `corners` corners stand at `uv` (0 to 1): its centre inside the polygon
  * or on an edge, every cross product of one sign or zero. */

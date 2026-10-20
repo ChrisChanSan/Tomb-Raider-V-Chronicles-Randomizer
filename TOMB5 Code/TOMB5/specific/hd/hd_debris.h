@@ -815,18 +815,26 @@ void HDDebrisNote(int slot, int face, long x, long y, long z)
 		 * part's look on it. */
 		const int slot = tri.page >= 0 ? HDPageCacheSlotOf(tri.page) : -1;
 		const int alphaMin = HDPageCacheSlotAlphaMin(slot);
+		/* A page the table of looks names is glass in every texel and
+		 * takes the table's hue, as in the room draw (HDGlassLookOf,
+		 * HDGlassTintHue): the pieces show what the pane showed. */
+		const HDGlassLook* page_look = HDGlassLookOf(tri.page);
 
 		fly.glass = slot < 0 ? GLASS_NONE :
 			tri.kind == HD_DEBRIS_GLASS && fly.see < 1.0f &&
 			HDGlassFramePage(alphaMin,
 				HDPageCacheSlotCutoutPermille(slot)) ? GLASS_HALVES :
 			tri.kind == HD_DEBRIS_GLOW && (art.material & 0xFFu) == 14u &&
-			HDGlassWholePage(alphaMin) ? GLASS_WHOLE : GLASS_NONE;
+			(HDGlassWholePage(alphaMin) || page_look) ? GLASS_WHOLE :
+			GLASS_NONE;
 
 		for (int i = 0; i < 4; i++)
 			fly.look[i] = fly.glass != GLASS_NONE &&
 				ref.art * 4 + 3 < (int)g_art_look.size() ?
 				g_art_look[(size_t)ref.art * 4 + i] : 0.0f;
+
+		if (page_look && fly.glass == GLASS_WHOLE)
+			HDGlassTintHue(fly.look, page_look->hue, fly.look);
 
 		s.tris.push_back(fly);
 	}

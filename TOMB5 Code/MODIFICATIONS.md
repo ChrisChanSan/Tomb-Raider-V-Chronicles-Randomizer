@@ -10103,7 +10103,11 @@ most 13 to 21 levels a channel). RoomProbe `-glasshue`: the seven draw calls now
 may be glass, 43 take a hue, 33 reach the picture (26 before). The break of static 50
 (`-debris 198:2` against the shot static without pieces, `-smash 198:2`): at the break,
 life 0, the pieces add 18.1 levels (9.1, 18.6, 28.3), hue 123, saturation 0.58, where
-they added 3.0 (hue 189); at life 12 13.2 to 15.5; inside the band's top.
+they added 3.0 (hue 189); at life 12 13.2 to 15.5; inside the band's top. RoomProbe
+`-pieceslook` ends each static's line in `look` and `flies`, the hue the table gives a
+paired material 14 part's page and the tint its pieces fly with: static 50's three lines
+read `look 120 flies 0.562 1.308 0.562`, every other static of the fifteen levels `look
+-1` and its classic tint; the lines before the new end byte-identical.
 
 **Checked.** `76046dae` against the round's, both RoomProbe: the classic views
 (`hd_build` 0) 7 of 7, the census eyes 15 of 15 with `hd_water` 0 and 15 of 15 with 1,
@@ -10131,7 +10135,8 @@ The 1,220 clear texels under each large part are added now as well. JOBY2's wind
 this part's.
 
 **Commits.** `52ac97f8` (the rule and the table), `641f8ba1` (the pieces), `53fdd9b2`
-(RoomProbe and ModernTest), and the records'.
+(RoomProbe and ModernTest), the records', and the fix pass's (the manual's strength
+sentence, the table's comment, `-pieceslook`'s end).
 
 ### The pieces of a broken static in HD (#222)
 2026-10-18

@@ -1861,8 +1861,9 @@ it.
   its own clear places - the lamp glass of the VCI offices - keeps the
   strength its texture gives it. ANDREA1's arched windows are the exception
   the engine names by their texture page: their texture marks a few clear
-  texels, yet they are added whole like the bridge, so they are as bright as
-  the original's panes there and no longer a faint film.
+  texels, yet they are added whole like the bridge, so they are no longer a
+  faint film: their strength is that of the Remaster's art, inside the range
+  of the original's panes there but at its low end.
   The glass the engine draws as the original draws its glass takes the colour
   of the original's glass at the same place, at its own strength: ANDREA2's
   barred window has blue panes again, the VCI bridge's glass is green, and

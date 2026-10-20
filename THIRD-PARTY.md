@@ -3966,7 +3966,9 @@ carries the tables.
     2.49 times the light the cells' mean gives over the same samples' weights. PICTURE
     (the sunlit photograph of a sea from below supplied as a look reference, not in
     the repository, measured as numbers only: its peak 2.49 times its open water's
-    median luma, 395's number). DATA: the cells' mean light, taken from the cells'
+    median luma, 395's number, taken as the most the term may stand over its own
+    typical; the picture's own peak over its median is another number, measured
+    apart). DATA: the cells' mean light, taken from the cells'
     hash itself (`CellHash`, this project's) over 128 by 128 cells and 4 by 4 places
     each above the noise's floor of 0.62: 0.0537, a lit cell 18.6 times it. OWN: the
     bound, after the owner's word of 2026-10-20 that the sun in JOBY4 is still far too
@@ -3979,6 +3981,27 @@ carries the tables.
     numbers, `-sea art` without the bound, the `-underlook` line's `peak`;
     `ModernTest.cpp`, `water_sea`) - the tool's switch for the bound and 11 checks of
     its pure functions. OWN.
+345. **The disc's power under the sea's sheet from the light's height**
+    (`hd_water_under.h`, `HDWaterGlowPowerUnder`, `kHDWaterGlowHalf`,
+    `HD_LOOK_SEA_POWER` 0, `HD_LOOK_SEA_DISC` 1.5; `hd_render.cpp`,
+    `water_look_constants`, `HDRenderWaterDiscPower`) - the disc's cosine is taken in
+    the air, so the photograph's 22.5 degrees in the water (395's number) is carried
+    out through the surface: the mean angle in the air of the ways 22.5 degrees round
+    the light's way in the water that leave through the window, at the light's height
+    (34.6 degrees, the power 3.57, for the sea's light 22 degrees up). TEXTBOOK:
+    Snell's law of refraction, n 1.333 as the shader's; the cosine's power over the
+    sky, 2 pi over the power plus 1. DATA: the light's direction the look already
+    carries (`gLookSun`). PICTURE: 395's photograph. OWN: the strength - the light of
+    395's power 8.75 at strength 4 spread to the power 3.57 (1.88), then the largest
+    half step down that keeps every eye under the sheet in its band (1.5; 1.75 leaves
+    one eye under), after the owner's word of 2026-10-20 that the sun in JOBY4 is
+    still far too strong; at his eye the glow halves 135 to 147 pixels out at 960 wide
+    (129 before) against the photograph's 178 (RoomProbe, `MODIFICATIONS.md`, the sea
+    seen from below, Round 11).
+346. **RoomProbe's `disc` numbers and ModernTest's disc checks**
+    (`Preparation/Tools/Diagnose/RoomProbe.cpp`, the `-underlook` line's `disc`, the
+    `seapower` knob's 0; `ModernTest.cpp`, `water_sea`) - the power the look drew with
+    and its strength printed, and 7 checks of `HDWaterGlowPowerUnder`. OWN.
 
 ## Credited, but not contained here
 

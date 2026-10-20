@@ -19743,11 +19743,13 @@ the art of room 19 and its glow part out with `-drop 19`; the look off; the band
 | the sky band | 0 | 0 | - |
 
 (A channel at 255: 1,043,503 pixels at 2,560 x 1,440, 28 per cent - his quarter.) The
-white area is the shafts', not the sun's: the disc adds at most 9 of luma. In the
-photograph's terms (960 wide, luma smoothed over 6 pixels, rings over the open water
-only, the open water the pixels `-drop 19` leaves black): the peak 255 against an open
-water's median of 211, 1.21 times it, the glow halving 184 pixels out, a tenth at 271,
-falling by at most 2.9 a pixel - broad, but the whole open water burnt with it (the
+white area is the shafts', not the sun's: the disc adds at most 9 of luma. The rows are
+drawn through `-underlookknobs` with the disc's power typed as 8.7484, the engine's
+8.74843: the first row is 14 and 3 burnt pixels over the default picture's 245,208 and
+60,942. In the photograph's terms (960 wide, luma smoothed over 6 pixels, rings over the
+open water only, the open water the pixels `-drop 19` leaves black): the peak 255 against
+an open water's median of 211, 1.21 times it, the glow halving 184 pixels out, a tenth at
+271, falling by at most 2.9 a pixel - broad, but the whole open water burnt with it (the
 photograph: 178, 326, 2.7, its peak 2.49 times its median).
 
 *Cause.* The march of the shafts follows the light's way back up from each of its
@@ -19771,93 +19773,162 @@ his eye looks up toward the light from room 123 where the cells over it along th
 are lit at a third of the clocks. The eye's pitch, the sun's elevation, the hull and the
 look's fallback room are not the cause.
 
-*Rule* (`hd_water_under.h`, `HDWaterShaftHash`, `HDWaterShaftMean`,
-`HDWaterShaftBound`, `HD_LOOK_SEA_PEAK`; `hd_water_look.hlsl`, `LookPS`; `hd_render.cpp`,
+*Rule* (`hd_water_under.h`, `HDWaterShaftHash`, `HDWaterShaftMean`, `HDWaterShaftBound`,
+`HD_LOOK_SEA_PEAK`; `hd_water_look.hlsl`, `LookPS`; `hd_render.cpp`,
 `water_look_constants`): under the sheet the march's sum is held to 2.49 times the light
-the cells' mean would give over the same samples' own weights (the reach under the
-surface and the extinction along the eye ray) - the sunlit photograph's peak over its
-open water's median, the most the sea's light in a pixel reaches over its typical. The
-cells' mean is the hash's own (`HDWaterShaftMean`, 128 by 128 cells, 4 by 4 places each,
-at the noise's floor: 0.0537), taken once per floor. A dark or partly lit patch keeps
-its own light and its pattern; off the sheet both constants are 0 and the sum is as it
-was, its products in the old order, so every picture without the sheet stays byte for
-byte (a first version that multiplied the two weights first moved one channel of one
-pixel by 1 at four eyes, the one over the basin among them; the order was put back).
-The disc, the waves, the edge and the plane of round 10 are kept: none is the cause.
+the cells' mean would give over the same samples' own weights (the reach under the surface
+and the extinction along the eye ray) - the sunlit photograph's peak over its open water's
+median, taken as the most the term may stand over its own typical. The bound holds the
+term, not the picture: the picture's own peak over its median is another number, measured
+apart (below). The cells' mean is the hash's own (`HDWaterShaftMean`, 128 by 128 cells, 4
+by 4 places each, at the noise's floor: 0.0537), taken once per floor. A dark or partly
+lit patch keeps its own light and its pattern; off the sheet both constants are 0 and the
+sum is as it was, its products in the old order, so every picture without the sheet stays
+byte for byte (a first version that multiplied the two weights first moved one channel of
+one pixel by 1 at four eyes, the one over the basin among them; the order was put back).
+The waves, the edge and the plane of round 10 are kept: none is the cause. The disc's
+power is corrected (*The disc's angle*, below).
 
 RoomProbe's `-underlookknobs` takes twenty-six numbers, the last the bound (0: none);
 `-sea art` takes it off with the rest of the sheet; the `-underlook` line ends in
 `peak`, the bound and the cells' mean (`peak 2.49 0.0537`).
 
-**Measured.** His eye, before / after (the tool of the last commit against `76046dae`'s):
+*The glow's form over the clock.* At `-time 3` alone the bound's glow at his eye looked
+only a little narrow. Over the clock (`-time` 0 to 58 seconds, step 2, 960 x 540; the
+photograph's form with rings over the open water only, `water11/fix/form.py` in the
+work folder) the picture has two states as the cells over the eye along the light
+drift: lit at 8 of the 30 clocks (0 to 14 seconds) and dark at 22. With the bound and
+round 10's disc, lit: the peak over the median 2.05 to 2.61, half 109 to 135 pixels, a
+tenth 226 to 248, the steepest fall 2.16 to 2.70 a pixel; dark: 2.61 to 3.38, half 35
+to 126, a tenth 85 to 220, fall 1.79 to 3.69 - in the dark state the window's glow
+stands over unlit water as a spot (the photograph: 2.49, 178, 326, 2.7).
+
+*The disc's angle* (`hd_water_under.h`, `HDWaterGlowPowerUnder`, `kHDWaterGlowHalf`,
+`HD_LOOK_SEA_POWER`, `HD_LOOK_SEA_DISC`; `hd_render.cpp`, `water_look_constants`,
+`HDRenderWaterDiscPower`). Taken term by term at his eye (`-time 3`, 1,280 x 720), the
+glow without the disc halves 159 pixels out, a tenth at 270, falling by 2.64 at most;
+with it 129, 235 and 2.88: the disc narrows the glow. Round 10 took the photograph's
+22.5 degrees - an angle in the picture, under the water - as the angle of the disc's
+cosine, but the shader takes that cosine between the eye's ray out through the surface
+and the light: an angle in the air. Out of the water a way's angle from the light grows
+n times across the plane of the light and more along it, so the disc halved 89 to 102
+pixels out at the four eyes the disc is in (W1, W2, U65, K1211; 960 x 540, the disc's
+own light, the picture less the one without it), half the photograph's 178. The rule
+from the data: the disc's power is the one that halves at the mean angle in the air of
+the ways 22.5 degrees round the light's way in the water that leave through the window
+(Snell, n 1.333 as the shader's; 360 ways), at the light's own height, which the look
+carries (`gLookSun`): 34.6 degrees for the sea's light 22 degrees up, the power 3.57
+(straight overhead 30.7 degrees, 4.60). `HD_LOOK_SEA_POWER` 0 asks for it, any other
+number stays a power (`-sea art` keeps 600); it is taken once per height of the light.
+The disc's own glow now halves 117 to 135 pixels out at the four eyes; the window's rim,
+4.5 degrees under a light 22 degrees up, cuts the rest. The strength: the power 8.75 at
+round 10's strength 4 carries a light of 4 over 9.75 (a cosine's power over the sky goes
+as 2 pi over the power plus 1), the power 3.57 the same light at 1.88; the largest half
+step down from it that keeps every eye in its band is 1.5 (1.88 and 1.75 take N1's
+spread to 0.048, under its band's 0.049; 1.5 keeps it at 0.049).
+
+RoomProbe's `-underlook` line ends in `disc`, the power the look drew with under the
+sheet and its strength there (`disc 3.57 1.50`).
+
+**Measured.** His eye, before / after (the tools of the last commit against
+`76046dae`'s):
 
 | | 2,560 x 1,440 | 1,280 x 720 | clocks, 480 x 270 |
 |---|---|---|---|
 | burnt to 255 of luma | 245,208 / 0 | 60,942 / 0 | at 10 of 30 / at 0 of 30 |
-| a channel at 255 | 1,043,503 / 208,271 | 260,476 / 51,754 | - |
-| mean luma | 95.6 / 62.7 | 95.5 / 62.7 | 34.2 to 96.5 / 34.2 to 62.7 |
+| a channel at 255 | 1,043,503 / 215,357 | 260,476 / 53,568 | - |
+| mean luma | 95.6 / 62.7 | 95.5 / 62.6 | 34.2 to 96.5 / 33.9 to 62.6 |
 
-In the photograph's terms at 1,280 x 720, `-time 3` (at the brightest clock, 2, in
-brackets): peak 255.0 / 220.0 (255.0 / 220.2), open water's median 211.1 / 107.8
-(212.6 / 107.7), the peak over it 1.21 / 2.04 (1.20 / 2.04; the photograph 2.49), half
-184 / 129 pixels (205 / 126; 178), a tenth 271 / 235 (287 / 240; 326), the steepest fall
-2.93 / 2.88 a pixel (2.83 / 2.81; 2.7). The glow is a little narrower than the
-photograph's and as steep; the white is gone at every clock.
+In the photograph's terms, `-time 3` (at the brightest clock, 2, in brackets), at 1,280 x
+720: peak 255.0 / 213.5 (255.0 / 213.7), open water's median 211.1 / 108.0 (212.6 /
+107.4), the peak over it 1.21 / 1.98 (1.20 / 1.99; the photograph 2.49), half 184 / 147
+pixels (205 / 135; 178), a tenth 271 / 284 (287 / 262; 326), the steepest fall 2.93 / 2.23
+a pixel (2.83 / 2.35; 2.7); at 2,560 x 1,440, `-time 3`: the peak over the median 1.98,
+half 135, a tenth 271, fall 2.90 (the bound with round 10's disc: 2.04, 129, 235, 2.72).
+Over the clock (960 x 540, as above), lit: the peak over the median 1.99 to 2.42, half 117
+to 149, a tenth 227 to 293, fall 1.59 to 2.88; dark: 2.38 to 3.35, half 29 to 121, a tenth
+59 to 219, fall 1.11 to 3.88 (the extremes at the clocks where the patches change, 14 to
+16 and 28 to 30 seconds). Inside the photograph's band - the peak over the median at most
+2.49 and the fall at most 2.7 - at 14 of the 30 clocks against 6; over the clock the
+median half 102 pixels against 71, a tenth 203 against 151, the peak over the median 2.49
+against 3.20 (`water11/fix/clkcount.py`).
 
-Round 10's 30 eyes, `-time 3`: 8 pictures change (E216 123,198 pixels, K450 86,069, L3
-29,857, N1 12,750, T23995 90,843, U65 33,978, W1 117,016, W2 38,509), 22 are the same
-byte for byte; the sheet alone, the pictures without the look and the open sets 30 of 30
-each. The band (round 10's form, the art's region of before), the rows that move:
+Round 10's 30 eyes, `-time 3`: 18 pictures change (E1 5 pixels, E216 163,907, G628
+70,841, G630 76,366, G631 78,696, K1211 79,711, K330 2,001, K450 86,069, K611 28,746, L3
+61,091, N1 120,563, T23995 132,535, T24484 14,437, U45 64,108, U65 340,916, U85 254,591,
+W1 240,305, W2 170,080), 12 are the same byte for byte; the sheet alone, the pictures
+without the look and the open sets 30 of 30 each. The band (round 10's form, the art's
+region of before), the rows that move:
 
 | eye | luma | spread (band) | of before | carry |
 |---|---|---|---|---|
-| E216 | 99.1 / 97.4 | 0.033 / 0.034 (0.025-0.055) | 0.79 / 0.82 | 1.53 / 1.53 |
+| E216 | 99.1 / 98.4 | 0.033 / 0.034 (0.025-0.055) | 0.79 / 0.82 | 1.53 / 1.63 |
+| K1211 | 70.4 / 65.0 | 0.086 / 0.083 (0.082-0.181) | 0.63 / 0.61 | 3.67 / 2.57 |
 | K450 | 78.9 / 70.2 | 0.038 / 0.044 (0.031-0.067) | 0.75 / 0.87 | 2.06 / 1.75 |
-| L3 | 97.1 / 94.1 | 0.036 / 0.038 (0.025-0.056) | 0.86 / 0.91 | 3.10 / 3.01 |
-| T23995 | 74.5 / 72.5 | 0.038 / 0.040 (0.029-0.064) | 0.79 / 0.82 | 3.02 / 2.91 |
-| U65 | 82.6 / 82.5 | 0.032 / 0.032 (0.023-0.050) | 0.83 / 0.84 | 3.41 / 3.41 |
-| W1 | 108.7 / 106.9 | 0.043 / 0.044 (0.035-0.077) | 0.75 / 0.76 | 4.30 / 4.30 |
+| L3 | 97.1 / 96.8 | 0.036 / 0.038 (0.025-0.056) | 0.86 / 0.90 | 3.10 / 3.24 |
+| N1 | 75.3 / 77.8 | 0.050 / 0.049 (0.049-0.107) | 0.62 / 0.60 | 1.80 / 2.06 |
+| T23995 | 74.5 / 73.5 | 0.038 / 0.040 (0.029-0.064) | 0.79 / 0.82 | 3.02 / 3.08 |
+| U65 | 82.6 / 82.4 | 0.032 / 0.029 (0.023-0.050) | 0.83 / 0.77 | 3.41 / 2.81 |
+| U85 | 87.8 / 87.1 | 0.048 / 0.047 (0.044-0.096) | 0.66 / 0.65 | 2.76 / 2.30 |
+| W1 | 108.7 / 96.7 | 0.043 / 0.042 (0.035-0.077) | 0.75 / 0.72 | 4.30 / 3.30 |
+| W2 | 97.1 / 85.9 | 0.051 / 0.051 (0.047-0.104) | 0.64 / 0.64 | 4.13 / 3.11 |
 
-(Round 10 / this round.) 27 of 27 eyes with the art's region inside their band, as
-before. Over 15 clocks no eye of the 30 burns (U85 at 3 before), U85's mean luma 85.0 to
-127.0 (85.0 to 151.3 before), the eyes facing the light a little darker at their
-brightest clocks (E216 76.0 against 89.0, T24484 48.3 against 71.3, L3 44.3 against
-53.7) and the same at their darkest.
+(Round 10 / this round; G628, G630, G631, K611, T24484 and U45 move in the carry alone,
+by 0.01 to 0.08.) 27 of 27 eyes with the art's region inside their band, as before. Over
+15 clocks (0 to 56 seconds, step 4, 480 x 270) no eye of the 30 burns (U85 at 3 before),
+U85's mean luma 84.2 to 128.4 (85.0 to 151.3 before), the eyes facing the light darker at
+their brightest clocks (E216 76.3 against 89.0, T24484 48.3 against 71.3, L3 44.8 against
+53.7, W1 70.9 against 83.5) and the same at their darkest.
 
-**Decisions.** The bound is the photograph's number, the mean the hash's own; no place,
-room or level decides it. Tried first and dropped, each measured: the strength alone
-(12 keeps the 27 in band at `-time 3` but his eye burns at 5 of 30 clocks, up to 790
-pixels at 480 x 270; 6 burns at none, but K185's spread falls to 0.55 of before, under
-its band); the cells' mean in place of the samples where the march's track crosses less
-than a cell, toward the light (4,023 pixels of 921,600 changed, the burnt ones from
-55,176 to 51,153 - not the cause, taken out); the shafts' pattern giving way to the
-cells' mean with the light's way down by the extinction (a share of 1, 1/4 and 1/32 of
-sigma_s: the mean lights the pictures drawn at a dark clock, 19, 19 and 23 of 27 in
-band). The bound leaves a dark or partly lit patch alone, so the pictures the band was
-set on keep their light.
+**Decisions.** The bound is the photograph's number, the mean the hash's own, the disc's
+power the photograph's angle carried out through the surface at the light's own height; no
+place, room or level decides them. The bound is not a measured step: 3 and 4 burn at no
+clock either, at his eye or at E216, L3, T24484 and U85 (30 clocks, 480 x 270, the disc's
+power typed as 3.57), and only lift the lit pictures (his eye's brightest mean luma 62.6,
+68.1 and 77.4). Tried first and dropped, each measured: the strength alone (12 keeps the
+27 in band at `-time 3` but his eye burns at 5 of 30 clocks, up to 790 pixels at 480 x
+270; 6 burns at none, but K185's spread falls to 0.55 of before, under its band); the
+cells' mean in place of the samples where the march's track crosses less than a cell,
+toward the light (4,023 pixels of 921,600 changed, the burnt ones from 55,176 to 51,153 -
+not the cause, taken out); the shafts' pattern giving way to the cells' mean with the
+light's way down by the extinction (a share of 1, 1/4 and 1/32 of sigma_s: the mean lights
+the pictures drawn at a dark clock, 19, 19 and 23 of 27 in band); the cells' mean in place
+of the hash under the sheet altogether, which takes the flip out (his eye at a steady mean
+luma of 45.5 at every clock, the peak over the median 2.77 to 2.85): 19 of 27 in band at
+the sheet's strength of 24 and 22 of 27 at 12 (G3, K1211, K185, N1 and W2 under), as the
+band was set at one clock where most of the eyes' cells along the light are dark. The
+bound leaves a dark or partly lit patch alone, so the pictures the band was set on keep
+their light. The disc at the power 3.57 and strength 4 lifts its own peak over the power
+600's at all four eyes (U65 161.8 against 146.1); at 1.88 and 1.75 N1 leaves its band.
 
 **Checked.** With the tools of the last commit against `76046dae`'s: the classic path 6 of
 6; the fifteen cameras 15 of 15 with `hd_water` 0 and 1, marble floors off and on; the six
-HD views 6 of 6; the pond 36 of 36, the canal 4 of 4, the tank views 5 of 5, the band and
-his RICH2 eyes with `hd_water` 0, 0 with the marble and 1, 48 of 48 each; RICH3's room 190
-6 of 6 with each key; the other levels' under views and JOBY4's air room 7 of 7 with each
-key; round 9's eight JOBY4 eyes and six edge eyes with `hd_water` 0 14 of 14; `-sea art`
-at the eight dive eyes 8 of 8; the `WATERLOG` sweep 268 of 268 lines identical; the
+HD views 6 of 6; the census eyes (each level's room 0, `-sky`) 15 of 15 with `hd_water` 0
+and 1; the pond 36 of 36, the canal 4 of 4, the tank views 5 of 5, the band and his RICH2
+eyes with `hd_water` 0, 0 with the marble and 1, 48 of 48 each; RICH3's room 190 6 of 6
+with each key; the other levels' under views and JOBY4's air room 7 of 7 with each key;
+round 9's eight JOBY4 eyes and six edge eyes with `hd_water` 0 14 of 14; `-sea art` at
+the eight dive eyes 8 of 8; the `WATERLOG` sweep 268 of 268 lines identical; the
 `-undertick` walk's `room=`, `rooms=`, `listed=` and `carried=` 66 of 66. ModernTest
-16,016 checks with 11 new in `water_sea`, MenuTest 44,917, InterpTest 754, LipsTest 299
+16,023 checks with 18 new in `water_sea`, MenuTest 44,917, InterpTest 754, LipsTest 299
 with round 163's `.OBJ` folder and 272 without (`cutseq.bin` given by hand), 0 failed;
 the engine and all nine tools build. `LookPS` 452 slots of 512 (446 before).
 
-**Left.** Not seen in the game yet. The glow toward the light is a little narrower than
-the photograph's (half 129 against 178 pixels) and its blue channel still meets 255 over
-5.6 per cent of his picture (28 before); the luma does not. The shafts still flip with
-the clock between their lit and dark patches at the eye's depth, now between a mean
-luma of 34 and 63 at his eye (34 and 97 before) - the march reads a few cells of the
-surface for the whole picture; spreading the shafts with the depth would change the
-band the 27 eyes were set on. The probe draws no Lara, no objects and no hull.
+**Left.** Not seen in the game yet. The glow toward the light is still narrower than the
+photograph's (half 135 to 147 against 178 pixels, a tenth 262 to 284 against 326), and
+at 2,560 x 1,440 it falls by 2.90 at most against 2.7; its blue channel meets 255 over
+5.8 per cent of his picture (28 before); the luma does not. The shafts still flip with
+the clock between their lit and dark patches at the eye's depth, at his eye between a
+mean luma of 34 and 63 (34 and 97 before) - the march reads a few cells of the surface
+for the whole picture. In the dark state the window's glow stands over unlit water with
+a peak up to 3.35 times the open water's median, over the photograph's 2.49. Taking
+the flip out moves 5 to 8 of the 27 eyes out of the band, which was set at one clock;
+which state the dive should hold is an open question. The probe draws no Lara, no
+objects and no hull.
 
 **Commits.** `2c6b8952` (the bound; its subject is 73 characters, one over the rule, and
-stays), `b9cd78b5` (RoomProbe's knob and ModernTest), and these records.
+stays), `b9cd78b5` (RoomProbe's knob and ModernTest), `b478303c` (the disc's power from
+the light's height, the tool's `disc` and 7 checks), and these records.
 
 ### The marble floors' mirror (#205)
 2026-10-16

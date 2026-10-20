@@ -2947,9 +2947,33 @@ model without such a part draws as it did. Over the fifteen levels the rule
 reaches 14 slot bindings (`ModelProbe -all -alpha`): RICH2's and RICH1's
 `SEARCH_OBJECT1`, RICH1's `DOOR_TYPE2`, `DOOR_TYPE4` and `DOOR_TYPE7`, RICH3's
 `DOOR_TYPE1`, the `DOOR_TYPE4_JOBY3_JOBY5` doors of JOBY3 and JOBY5 (on
-three slots each) and the title's `ANIMATING1_MIP` and `ANIMATING2_MIP`. The
-log's `HDLOG slot=` line ends in `glass=<ranges>`. `ModelProbe -alpha` takes
-one slot apart, `-noglass` draws the picture before the rule.
+three slots each) and the title's `ANIMATING1_MIP` and `ANIMATING2_MIP`.
+
+The glass is added as much as the classic adds it, and no more. The classic
+adds one face at a pixel: it draws a face one-sided, and a pane seen from
+both sides has a face for each side. A model's glass built the same way - a
+pane and, facing against it, a sheet for the other side - is drawn one-sided
+too, so the side turned away from the eye no longer adds its texels on top;
+a pane with nothing facing against it, such as the spokes' panes of RICH1's
+oval doors, is still seen from both sides. Where a model's additive run
+carries the glass's pane again, on the same texture and the same place, that
+copy is left out while the glass is drawn: RICH2's cabinet doors had their
+pane in it twice. And the glass drawn one-sided is added times the opacity
+the model's own material gives it, as the room art's additive material is: a
+tenth on RICH1's `DOOR_TYPE7`, RICH3's door and the title's two, an eighth on
+the JOBY doors, whole on RICH2's cabinet. A single sheet seen from both sides
+keeps its texture's own alpha as its only weight: RICH1's cabinet and its
+`DOOR_TYPE2`, a tenth by their material, already add less than the classic
+there, and RICH1's eight doors look as they did. RICH2's cabinet front, which
+added a milky sheet of about 190 levels
+of brightness, now adds about 54 at full light - inside what the classic's
+own see-through faces add there - and the bottles and the skull behind it
+keep the contrast they have with no glass. The `HDLOG slot=` line ends in
+`glass=<ranges> oneside=<ranges> copies=<left out>/<copies> opacity=
+factor=`, the factor being the smallest weight a drawn glass range gets (its
+opacity one-sided, 1 two-sided), or 1 on a card that cannot weigh a blend by a
+factor. `ModelProbe -alpha` takes one slot apart and measures it
+against the classic's band, `-noglass` draws the picture before the rule.
 
 **Which model a slot asks for** comes from four places, in this order: the
 level's own name table beside it in the remaster's `DATA` folder, which lists

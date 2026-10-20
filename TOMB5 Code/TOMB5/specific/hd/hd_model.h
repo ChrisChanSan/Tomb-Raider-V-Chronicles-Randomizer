@@ -930,9 +930,34 @@ int HDModelCutRanges(int slot);
  * them out. 0 takes every mark off again. Returns how many
  * ranges it marked. HDModelGlassRanges returns how many glass material
  * ranges the model's alpha run has and, in `blended`, how many of them are
- * marked. Both 0 for a slot with no model. */
+ * marked. Both 0 for a slot with no model.
+ *
+ * The glass is added one-sided where a layer of its node faces against it,
+ * a copy of it in the additive run is left out while its node draws glass,
+ * and one-sided it is added times its part's opacity (hd_object_rules.h,
+ * HDGlassWeight). Those come
+ * from the file at the build; HDModelGlassCounts says, for the marks the
+ * last HDModelSetGlassNodes set, how many glass ranges are drawn
+ * (`blended`) and how many of them one-sided (`sided`), how many additive
+ * ranges are copies of the glass (`copies`) and how many are left out
+ * (`dropped`), the smallest opacity of a drawn glass range (`opacity`, 1
+ * with none) and the smallest factor the draw adds a drawn glass range with
+ * (`factor`: HDGlassWeight, or 1 on a card without a blend factor). All
+ * zero and 1 for a slot with
+ * no model. */
+struct HDModelGlassCount
+{
+	int blended;
+	int sided;
+	int copies;
+	int dropped;
+	float opacity;
+	float factor;
+};
+
 int HDModelSetGlassNodes(int slot, unsigned int nodes);
 int HDModelGlassRanges(int slot, int* blended);
+void HDModelGlassCounts(int slot, HDModelGlassCount* out);
 int HDModelPageCount(int slot);
 int HDModelPage(int slot, int at);		// .DDS number
 

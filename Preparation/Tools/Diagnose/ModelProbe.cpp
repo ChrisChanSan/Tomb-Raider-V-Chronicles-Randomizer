@@ -719,9 +719,18 @@
  *                         whether the node is see-through; per part, run
  *                         and node of the .TRM its material, parameters,
  *                         triangles and what the HD path draws them as
- *                         (opaque, alpha test, additive, glass). With -all
- *                         one `alpha` line per bound slot with a
- *                         see-through node or a glass range: the census.
+ *                         (opaque, alpha test, additive, glass), how many
+ *                         glass ranges are one-sided, how many additive
+ *                         ranges copy the glass and are left out, the
+ *                         part's opacity and the factor the glass is
+ *                         added with, and at full light the classic's
+ *                         see-through texels' luma band (tenth, half,
+ *                         nine tenths) beside the glass's (its texels'
+ *                         luma times alpha times the opacity) and the
+ *                         factor the classic's band would hold it to. With
+ *                         -all one `alpha` line per bound slot with a
+ *                         see-through node or a glass range: the census,
+ *                         the bands, opacity, factor and band at its end.
  *     -noglass            the glass rule left off: the before picture, for
  *                         -slot and for the -shadowitem models alike.
  *     -animframe <anim> <key>
@@ -859,6 +868,8 @@ char tomb5_hd_install_tr3[260];
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_model_cut.h"
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_trl.h"
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_shadow.h"
+#include "../../../TOMB5 Code/TOMB5/specific/hd/hd_scan.h"
+#include "../../../TOMB5 Code/TOMB5/specific/bc7.h"
 
 #pragma comment(lib, "d3d9.lib")
 #pragma comment(lib, "psapi.lib")
@@ -2519,6 +2530,317 @@ static unsigned int ToolSeeThroughNodes(const Tr5Level& level, int slot,
 	return mask;
 }
 
+/* A band of what a glass adds at full light: how many texels, and the luma
+ * at their tenth, half and nine tenths. */
+struct ToolBand
+{
+	int texels = 0;
+	float p10 = 0, p50 = 0, p90 = 0;
+};
+
+static ToolBand ToolBandOf(std::vector<float>& v)
+{
+	ToolBand band;
+
+	if (v.empty())
+		return band;
+
+	std::sort(v.begin(), v.end());
+	band.texels = (int)v.size();
+	band.p10 = v[(size_t)(0.1 * (v.size() - 1))];
+	band.p50 = v[(size_t)(0.5 * (v.size() - 1))];
+	band.p90 = v[(size_t)(0.9 * (v.size() - 1))];
+	return band;
+}
+
+/* Every texel centre of a page `w` x `h` inside the triangle (ax, ay),
+ * (bx, by), (cx, cy) in texel units; the nearest texel when none is. */
+template <typename Take>
+static void ToolTexelsOf(float ax, float ay, float bx, float by, float cx,
+	float cy, long w, long h, Take take)
+{
+	const float x0 = (std::min)(ax, (std::min)(bx, cx));
+	const float x1 = (std::max)(ax, (std::max)(bx, cx));
+	const float y0 = (std::min)(ay, (std::min)(by, cy));
+	const float y1 = (std::max)(ay, (std::max)(by, cy));
+	const float area = (bx - ax) * (cy - ay) - (cx - ax) * (by - ay);
+	long found = 0;
+
+	for (long y = y0 < 0 ? 0 : (long)y0; y <= (long)y1 && y < h; y++)
+		for (long x = x0 < 0 ? 0 : (long)x0; x <= (long)x1 && x < w; x++)
+		{
+			const float px = x + 0.5f, py = y + 0.5f;
+			const float e0 = (bx - ax) * (py - ay) - (px - ax) * (by - ay);
+			const float e1 = (cx - bx) * (py - by) - (px - bx) * (cy - by);
+			const float e2 = (ax - cx) * (py - cy) - (px - cx) * (ay - cy);
+
+			if (area >= 0 ? (e0 >= 0 && e1 >= 0 && e2 >= 0)
+				: (e0 <= 0 && e1 <= 0 && e2 <= 0))
+			{
+				take(x, y);
+				found++;
+			}
+		}
+
+	if (!found)
+	{
+		long x = (long)((ax + bx + cx) / 3), y = (long)((ay + by + cy) / 3);
+
+		take(x < 0 ? 0 : x >= w ? w - 1 : x, y < 0 ? 0 : y >= h ? h - 1 : y);
+	}
+}
+
+/* What the classic adds through the see-through faces of the nodes in
+ * `see` at full light: each face's texels on the level's 32-bit page, their
+ * luma - the classic adds the texel times its light, ONE / ONE, and reads no
+ * alpha for it (specific/polyinsert.cpp, case 2). */
+static ToolBand ToolClassicBand(const Tr5Level& level, int slot, int nodes,
+	unsigned int see)
+{
+	const std::vector<uint8_t>& bytes = level.debugBytes();
+	std::vector<float> lumas;
+	ToolBand none;
+
+	if (!see || bytes.size() < 18)
+		return none;
+
+	static const Tr5Level* s_level = 0;
+	static std::vector<unsigned char> s_tex32;
+
+	if (s_level != &level)
+	{
+		unsigned int sizes[2];
+
+		memcpy(sizes, &bytes[10], 8);
+		s_tex32.assign(sizes[0], 0);
+
+		uLongf length = sizes[0];
+
+		if (18 + (size_t)sizes[1] > bytes.size() || uncompress(s_tex32.data(),
+			&length, &bytes[18], sizes[1]) != Z_OK)
+			s_tex32.clear();
+
+		s_level = &level;
+	}
+
+	const int pages = (int)(s_tex32.size() / 0x40000);
+	Tr5Level::MoveableInfo info;
+	size_t texAt = 0;
+	int32_t texCount = 0;
+
+	if (!pages || !level.moveableInfo(slot, info) ||
+		!level.debugTexinfoBlock(texAt, texCount))
+		return none;
+
+	auto word = [&](size_t p) -> int
+	{
+		short s = 0;
+
+		if (p + 2 <= bytes.size())
+			memcpy(&s, &bytes[p], 2);
+
+		return s;
+	};
+
+	for (int node = 0; node < nodes && node < 32 && node < info.nmeshes;
+		node++)
+	{
+		size_t at = 0;
+
+		if (!(see & (1u << node)) ||
+			!level.debugMeshAt(info.meshIndex + node, at))
+			continue;
+
+		const int verts = word(at + 10) & 0xFF;
+		size_t p = at + 12 + (size_t)verts * 6;
+		const int normals = word(p);
+
+		p += 2 + (size_t)verts * (normals >= 0 ? 6 : 2);
+
+		for (int kind = 0; kind < 2; kind++)
+		{
+			const int faces = word(p);
+			const int corners = kind == 0 ? 4 : 3;
+
+			p += 2;
+
+			for (int f = 0; f < faces && p + corners * 2 + 4 <= bytes.size();
+				f++)
+			{
+				const int tex = word(p + corners * 2) & 0x7FFF;
+				const int effects = word(p + corners * 2 + 2) & 0xFFFF;
+
+				p += (size_t)corners * 2 + 4;
+
+				if (tex >= texCount)
+					continue;
+
+				const size_t info40 = texAt + (size_t)tex * 40;
+				const int drawtype = word(info40) & 0xFFFF;
+				const int page = word(info40 + 2) & 0x7FFF;
+
+				if (!HDClassicFaceSeeThrough(effects, drawtype) ||
+					page >= pages)
+					continue;
+
+				float uv[4][2];
+
+				for (int k = 0; k < 4; k++)
+				{
+					const size_t corner = info40 + 6 + 4 * (size_t)k;
+
+					uv[k][0] = (float)((word(corner) & 0xFFFF) >> 8);
+					uv[k][1] = (float)((word(corner + 2) & 0xFFFF) >> 8);
+				}
+
+				auto take = [&](long x, long y)
+				{
+					const unsigned char* t = &s_tex32[(size_t)page * 0x40000 +
+						(size_t)y * 1024 + (size_t)x * 4];
+
+					lumas.push_back(0.299f * t[2] + 0.587f * t[1] +
+						0.114f * t[0]);
+				};
+
+				ToolTexelsOf(uv[0][0], uv[0][1], uv[1][0], uv[1][1], uv[2][0],
+					uv[2][1], 256, 256, take);
+
+				if (corners == 4)
+					ToolTexelsOf(uv[0][0], uv[0][1], uv[2][0], uv[2][1],
+						uv[3][0], uv[3][1], 256, 256, take);
+			}
+		}
+	}
+
+	return ToolBandOf(lumas);
+}
+
+/* What the HD glass of a model adds at full light, per texel of its glass
+ * triangles on the nodes in `see`: the page's luma times its alpha, as the
+ * glass step adds it, times the part's opacity when `weighed`. The pages
+ * are read out of the install's TEX folder, or a sibling game's. */
+static ToolBand ToolGlassBand(const HDTrmModel& trm, const std::string& root5,
+	unsigned int see, bool weighed)
+{
+	std::map<int, std::vector<unsigned long>> pixels;
+	std::map<int, std::pair<long, long>> shape;
+	std::vector<float> adds;
+
+	auto page_of = [&](int page) -> const std::vector<unsigned long>&
+	{
+		if (pixels.count(page))
+			return pixels[page];
+
+		std::vector<unsigned long>& px = pixels[page];
+		const std::string bundle = ParentOf(root5);
+		const std::string roots[3] = { root5, bundle + "\\4", bundle + "\\6" };
+
+		for (const std::string& root : roots)
+		{
+			char path[1024];
+
+			HDScanPagePath(root.c_str(), page, path, sizeof(path));
+
+			FILE* f = fopen(path, "rb");
+
+			if (!f)
+				continue;
+
+			std::vector<unsigned char> file;
+
+			fseek(f, 0, SEEK_END);
+			file.resize((size_t)ftell(f));
+			fseek(f, 0, SEEK_SET);
+			fread(file.data(), 1, file.size(), f);
+			fclose(f);
+
+			long w = 0, h = 0;
+			const char* why = 0;
+			unsigned long* decoded = BC7DecodeDDS(file.data(),
+				(unsigned long)file.size(), 8192, &w, &h, &why);
+
+			if (decoded)
+			{
+				px.assign(decoded, decoded + (size_t)w * h);
+				shape[page] = std::make_pair(w, h);
+				free(decoded);
+			}
+
+			break;
+		}
+
+		return px;
+	};
+
+	for (int part = 0; part < trm.parts; part++)
+	{
+		const HDTrmPart& p = trm.part[part];
+
+		if (p.material != HD_TRM_MATERIAL_GLASS)
+			continue;
+
+		const float opacity = weighed
+			? HDGlassOpacity(p.param[HD_TRM_PARAM_OPACITY]) : 1.0f;
+
+		for (unsigned int i = 0; i + 2 < p.alpha; i += 3)
+		{
+			const unsigned int at = p.opaqueEnd + i;
+
+			if (at + 2 >= (unsigned int)trm.indices)
+				break;
+
+			int weight[256] = { 0 };
+			int best = 0;
+
+			for (int c = 0; c < 3; c++)
+			{
+				const HDTrmVertex& v = trm.vertex[trm.index[at + c]];
+
+				weight[v.bone[0]] += v.weight[0];
+				weight[v.bone[1]] += v.weight[1];
+				weight[v.bone[2]] += v.weight[2];
+			}
+
+			for (int b = 1; b < 256; b++)
+				if (weight[b] > weight[best])
+					best = b;
+
+			if (!HDTrmTriangleIsGlass(HD_TRM_RUN_ALPHA, p.material, best, see))
+				continue;
+
+			const HDTrmVertex& a = trm.vertex[trm.index[at]];
+			const HDTrmVertex& b = trm.vertex[trm.index[at + 1]];
+			const HDTrmVertex& c = trm.vertex[trm.index[at + 2]];
+
+			if (a.layer < 1 || a.layer > trm.textures)
+				continue;
+
+			const int page = (int)trm.texture[a.layer - 1];
+			const std::vector<unsigned long>& px = page_of(page);
+
+			if (px.empty())
+				continue;
+
+			const long w = shape[page].first, h = shape[page].second;
+
+			ToolTexelsOf(a.u / 255.0f * w, a.v / 255.0f * h,
+				b.u / 255.0f * w, b.v / 255.0f * h,
+				c.u / 255.0f * w, c.v / 255.0f * h, w, h,
+				[&](long x, long y)
+				{
+					const unsigned long t = px[(size_t)y * w + x];
+					const float luma = 0.299f * ((t >> 16) & 255) +
+						0.587f * ((t >> 8) & 255) + 0.114f * (t & 255);
+
+					adds.push_back(luma * (float)(t >> 24) / 255.0f *
+						opacity);
+				});
+		}
+	}
+
+	return ToolBandOf(adds);
+}
+
 /* -alpha: a slot's model taken apart for the glass rule. Per node of the
  * classic tree its faces - how many, how many see-through by the effects
  * word, by the draw type - and per run of every .TRM part on every node the
@@ -2535,13 +2857,51 @@ static void PrintAlpha(const Tr5Level& level, const std::string& root5,
 	int blended = 0;
 	const int glass = HDModelGlassRanges(slot, &blended);
 
+	/* The classic's band and the glass's, what the glass is added times
+	 * and what the classic's band would hold it to on top
+	 * (hd_object_rules.h, HDGlassBandFactor): read only for a slot whose
+	 * glass is drawn. */
+	HDModelGlassCount count;
+	ToolBand classicBand, glassBand;
+	float bandFactor = 1.0f;
+
+	HDModelGlassCounts(slot, &count);
+
+	if (blended)
+	{
+		HDTrmModel bandTrm;
+		const char* bandWhy = 0;
+		const std::string bandPath = name ? TrmPath(root5, name)
+			: std::string();
+
+		memset(&bandTrm, 0, sizeof(bandTrm));
+		classicBand = ToolClassicBand(level, slot, nodes, see);
+
+		if (!bandPath.empty() &&
+			HDTrmLoad(bandPath.c_str(), &bandTrm, &bandWhy))
+		{
+			// Weighed as the draw weighs it: by the opacity where the
+			// model's drawn glass is added times it (HDGlassWeight).
+			glassBand = ToolGlassBand(bandTrm, root5, see,
+				count.factor < 1.0f);
+			HDTrmFree(&bandTrm);
+		}
+
+		bandFactor = HDGlassBandFactor(classicBand.p90, glassBand.p90);
+	}
+
 	if (brief)
 	{
 		if (see || glass)
 			printf("  alpha slot=%d name=%s model=%s see_through=0x%X "
-				"glass_ranges=%d drawn_as_glass=%d\n", slot,
+				"glass_ranges=%d drawn_as_glass=%d classic=%.1f/%.1f/%.1f "
+				"glass=%.1f/%.1f/%.1f opacity=%.3f factor=%.3f band=%.3f "
+				"oneside=%d copies=%d/%d\n", slot,
 				HDSlotName(slot) ? HDSlotName(slot) : "?", name ? name : "-",
-				see, glass, blended);
+				see, glass, blended, classicBand.p10, classicBand.p50,
+				classicBand.p90, glassBand.p10, glassBand.p50, glassBand.p90,
+				count.opacity, count.factor, bandFactor, count.sided,
+				count.dropped, count.copies);
 		return;
 	}
 
@@ -2639,6 +2999,15 @@ static void PrintAlpha(const Tr5Level& level, const std::string& root5,
 	}
 
 	printf("  glass ranges %d, drawn as glass %d\n", glass, blended);
+	printf("  drawn as glass: %d one-sided; additive copies of the glass %d, "
+		"left out %d; opacity %.3f, added times %.3f\n", count.sided,
+		count.copies, count.dropped, count.opacity, count.factor);
+	printf("  at full light, luma: classic see-through texels %d, tenth "
+		"%.1f half %.1f nine tenths %.1f; the glass %d, tenth %.1f half %.1f "
+		"nine tenths %.1f; the classic's band holds it to %.3f\n",
+		classicBand.texels, classicBand.p10, classicBand.p50, classicBand.p90,
+		glassBand.texels, glassBand.p10, glassBand.p50, glassBand.p90,
+		bandFactor);
 	HDTrmFree(&trm);
 }
 

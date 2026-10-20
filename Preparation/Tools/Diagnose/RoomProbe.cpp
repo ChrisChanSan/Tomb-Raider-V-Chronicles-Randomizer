@@ -722,6 +722,19 @@
  *                     engine's, where not given). The marble: line's over
  *                     is how many were drawn into each mirror, summed, and
  *                     culled how many lay wholly outside the mirror's view.
+ *     -marblewalk n   each plane's own walk (HDRenderMarbleWalk): from
+ *                     the drawn rooms holding its faces out through every
+ *                     portal to n portals, each room its mirrored view
+ *                     can show drawn into its mirror (3, the engine's,
+ *                     where not given; 0 the frame's list and the rooms
+ *                     over alone, the measure of a room that comes and
+ *                     goes in a mirror with the frame's list).
+ *     -marblesky 0|1  the HD sky drawn first, as the frame draws it,
+ *                     into a mirror whose view holds a room under the
+ *                     sky (HDRenderMarbleSky; 1, the engine's, where not
+ *                     given; the sky's groups need -rooms), and one
+ *                     marblesky line: the planes of the frame that drew
+ *                     it, of those drawn.
  *     -marbletarget <path>  the mirror's target as the frame's last
  *                     mirrored plane left it, written to <path> (two rows
  *                     a row of the frame, turned in x; -marbleslots picks
@@ -10781,6 +10794,11 @@ int HDRenderMarblePlaneRows(const float** rows);
 void HDRenderMarbleTread(int units);
 // -marbleleast s: the least share of the screen a plane shows.
 void HDRenderMarbleLeast(float share);
+// -marblewalk n: a plane's own walk to n portals.
+void HDRenderMarbleWalk(int portals);
+// -marblesky 0|1: the sky drawn into the mirrors, and the planes that did.
+void HDRenderMarbleSky(bool on);
+int HDRenderMarbleSkyPlanes();
 // -marbleslopes: the level's sloped planes, one line each (ProbeMarble).
 int HDRenderMarbleSlopeRows(const float** rows);
 static bool g_marble_slopes = false;
@@ -10982,6 +11000,24 @@ static bool MarbleArg(int argc, char** argv, int* at)
 	{
 		HDRenderMarbleCracks(true);
 		g_marble_cracks = true;
+		return true;
+	}
+
+	/* -marblewalk n: each plane's own walk from the rooms holding its faces
+	 * to n portals, the rooms its view can show drawn into its mirror
+	 * (HDRenderMarbleWalk). */
+	if (!strcmp(a, "-marblewalk") && more)
+	{
+		HDRenderMarbleWalk(atoi(argv[++*at]));
+		return true;
+	}
+
+	/* -marblesky 0|1: the sky drawn into a mirror whose view holds a room
+	 * under the sky (HDRenderMarbleSky; 1, the engine's, where not given).
+	 */
+	if (!strcmp(a, "-marblesky") && more)
+	{
+		HDRenderMarbleSky(atoi(argv[++*at]) != 0);
 		return true;
 	}
 
@@ -11630,6 +11666,9 @@ static void ProbeMarble(const void* projection)
 		s.water, s.opaque, s.heights, ms, first, s.spread, s.rising,
 		s.copies, s.copies_water, s.buried, s.joined, s.slopes,
 		s.over, s.over_culled);
+	// How many of the frame's mirrors drew the sky (HDRenderMarbleSky).
+	printf("marblesky: planes %d of %d drawn\n", HDRenderMarbleSkyPlanes(),
+		s.drawn);
 
 	/* -marblecracks: each open edge of a mirror face, and the totals - the
 	 * edges closed, the open ones by their gap (under 1 unit, 1 to 4, 4 to

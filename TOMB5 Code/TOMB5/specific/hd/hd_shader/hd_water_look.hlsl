@@ -70,11 +70,17 @@
  *                          the sheet's ragged edge comes in, in units, y
  *                          the share the shafts' own noise lights the
  *                          sheet by, z the share of the fog along the
- *                          sheet (HDWaterSheetFog)
+ *                          sheet (HDWaterSheetFog), w the cells' mean
+ *                          light of the shafts (HDWaterShaftMean; 0 off
+ *                          the sheet)
  * c218        gLookBreak  the sheet's ripple broken per cell (SeaRipple):
  *                          x one over the cells' size, y the largest turn
  *                          of a cell's rows in radians, z the largest share
- *                          of their height a cell loses */
+ *                          of their height a cell loses, w the most the
+ *                          shafts' light reaches in a pixel in times the
+ *                          cells' mean light over the same samples
+ *                          (HDWaterShaftBound, hd_water_under.h; 0 off
+ *                          the sheet: no bound) */
 float4 gLookAxis[3] : register(c200);
 float4 gLookPix : register(c203);
 float4 gLookEye : register(c204);
@@ -260,6 +266,7 @@ float4 LookPS(float2 vpos : VPOS) : COLOR0
 	const float jitter = CellHash(vpos.xxxx, vpos.yyyy, second).x;
 	const float step = far / 24.0f;
 	float sum = 0.0f;
+	float weights = 0.0f;
 
 	[loop]
 	for (int k = 0; k < 24; k++)
@@ -270,7 +277,16 @@ float4 LookPS(float2 vpos : VPOS) : COLOR0
 
 		sum += LookShaft(at, gLookGain.w) * exp(-under / gLookShaft.z) *
 			exp(-s * gLookSigma.w);
+		weights += exp(-under / gLookShaft.z) * exp(-s * gLookSigma.w);
 	}
+
+	/* Under the sheet the march's samples meet the surface within a few
+	 * cells, and the whole picture's shafts take those cells' hash: held
+	 * to gLookBreak.w times the cells' mean light (gLookEdge.w) over the
+	 * same samples (HDWaterShaftBound, hd_water_under.h); off the sheet
+	 * both are 0 and the sum stays as it is. */
+	if (gLookBreak.w > 0.0f)
+		sum = min(sum, gLookBreak.w * gLookEdge.w * weights);
 
 	col += gLookLight.rgb * gLookGain.y * phase * sum * step /
 		gLookShaft.w;

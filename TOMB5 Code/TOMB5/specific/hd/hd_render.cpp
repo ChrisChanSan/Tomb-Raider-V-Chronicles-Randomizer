@@ -19487,8 +19487,9 @@ namespace
 	 * strength, ripple, clear zone, ragged edge's way, patches and fog,
 	 * and the disc's power and the disc's, the shafts' and the underside's
 	 * strengths there in place of the others, and the ripple's cells
-	 * broken (the shafts' cells, the turn and the height share); all 0
-	 * without it. `knobs` in the order of HDWaterLookKnobs. */
+	 * broken (the shafts' cells, the turn and the height share), and the
+	 * shafts' light held to a peak over the cells' mean (HDWaterShaftBound);
+	 * all 0 without it. `knobs` in the order of HDWaterLookKnobs. */
 	void water_look_constants(const WaterLook& look, const float* view,
 		float persp, float centreX, float centreY, float eyeX, float eyeZ,
 		float depth, const float* sigma, const float* light,
@@ -19562,6 +19563,22 @@ namespace
 			0.0f;
 		c[73] = knobs[HD_LOOK_SEA_TURN];
 		c[74] = knobs[HD_LOOK_SEA_SWELL];
+
+		/* The shafts' light held to a peak over the cells' mean light
+		 * (HDWaterShaftBound): the mean over 128 by 128 cells, 4 by 4
+		 * places each, kept for the floor it was taken at, and the peak;
+		 * both 0 for no bound. */
+		static float s_floor = -1.0f, s_mean = 0.0f;
+
+		if (s_floor != knobs[HD_LOOK_FLOOR])
+		{
+			s_floor = knobs[HD_LOOK_FLOOR];
+			s_mean = HDWaterShaftMean(s_floor, 128, 4);
+		}
+
+		c[71] = knobs[HD_LOOK_SEA_PEAK] > 0.0f ? s_mean : 0.0f;
+		c[75] = knobs[HD_LOOK_SEA_PEAK] > 0.0f ? knobs[HD_LOOK_SEA_PEAK] :
+			0.0f;
 	}
 
 	/* The look's draws of the whole picture, added to it, the shaders and

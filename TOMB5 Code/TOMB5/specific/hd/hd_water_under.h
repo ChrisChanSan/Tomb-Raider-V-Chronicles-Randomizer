@@ -221,7 +221,9 @@ inline bool HDWetGivesWay(int y, const int* planeY, int drawn, int count,
  * it (HDWaterSheetFog; 0: none), and whether the extinction counts the way
  * up to the sheet's plane where no sheet of the level lies over the eye's
  * room and the eye is under the stand-in's surface (1) or to the
- * stand-in's surface (0; HDWaterUnderSeaDepth). */
+ * stand-in's surface (0; HDWaterUnderSeaDepth); last, the most the
+ * shafts' light under the sheet may reach in a pixel, in times their mean
+ * light over the same way (HDWaterShaftBound; 0: no bound). */
 enum
 {
 	HD_LOOK_DISC, HD_LOOK_SHAFTS, HD_LOOK_UNDERSIDE, HD_LOOK_REACH,
@@ -230,8 +232,93 @@ enum
 	HD_LOOK_SEA_UNDERSIDE, HD_LOOK_SHEET, HD_LOOK_RIPPLE, HD_LOOK_PATCHES,
 	HD_LOOK_ART, HD_LOOK_SEA_POWER, HD_LOOK_SEA_TURN, HD_LOOK_SEA_SWELL,
 	HD_LOOK_SEA_MARGIN, HD_LOOK_SEA_RAGGED, HD_LOOK_SEA_FOG,
-	HD_LOOK_SEA_PLANE, HD_LOOK_KNOBS
+	HD_LOOK_SEA_PLANE, HD_LOOK_SEA_PEAK, HD_LOOK_KNOBS
 };
+
+/* The shafts at the eye's depth (hd_water_look.hlsl, LookPS). The march
+ * follows the light's way back up from each of its samples to the surface,
+ * and a value noise of the cells' hash there says whether a shaft passes
+ * (LookShaft). Every sample of the march lies about as deep as the eye, so
+ * its way back up ends near one point of the surface, the eye's depth
+ * along the light from the eye: the march's 5,000 units of way move that
+ * end by a few cells at most, and the whole picture's shafts are those few
+ * cells' hash - all lit, up to 1 over the cells' mean (18.6 times it at a
+ * floor of 0.62), or all dark, as the cells drift with the clock. Lit, the
+ * shafts at the sheet's strength burn the light toward the sun to white.
+ * The sunlit photograph's brightest is 2.49 times its open water's median:
+ * the sea's light in a pixel reaches at most that many times its typical.
+ * So the shafts' light in a pixel is held to that many times the light the
+ * cells' mean gives over the same samples; a dark or a partly lit patch
+ * keeps its own light and its pattern.
+ *
+ * HDWaterShaftHash: the cells' hash, hd_room.hlsl's CellHash (its first
+ * number) for one cell, 0 to 1.
+ *
+ * HDWaterShaftMean: the mean of LookShaft's light over the hash's cells -
+ * `cells` by `cells` of them from cell 0, `places` by `places` points in
+ * each, the smoothstep blend of the four corners' hash, above `floor`
+ * only, squared. 0 for no cells or a floor of 1 or more.
+ *
+ * HDWaterShaftBound: the march's sum `sum` held to `peak` times the cells'
+ * mean light `mean` times the sum of the samples' own weights `weights`
+ * (the reach under the surface and the extinction along the eye ray); the
+ * sum as it is for a peak of 0 or less. */
+inline float HDWaterShaftHash(float i, float j)
+{
+	const float a0 = i * (422.0f / 4096.0f) + j * (1531.0f / 4096.0f);
+	const float b0 = j * (481.0f / 4096.0f) + i * (965.0f / 4096.0f);
+	const float a = a0 - floorf(a0);
+	const float b = b0 - floorf(b0);
+	const float h = a * (b + 3.71f) * 7.13f + b;
+
+	return h - floorf(h);
+}
+
+inline float HDWaterShaftMean(float floor, int cells, int places)
+{
+	if (cells <= 0 || places <= 0 || floor >= 1.0f)
+		return 0.0f;
+
+	double sum = 0.0;
+
+	for (int i = 0; i < cells; i++)
+		for (int j = 0; j < cells; j++)
+		{
+			const float h00 = HDWaterShaftHash((float)i, (float)j);
+			const float h10 = HDWaterShaftHash((float)i + 1.0f, (float)j);
+			const float h01 = HDWaterShaftHash((float)i, (float)j + 1.0f);
+			const float h11 = HDWaterShaftHash((float)i + 1.0f,
+				(float)j + 1.0f);
+
+			for (int p = 0; p < places; p++)
+				for (int q = 0; q < places; q++)
+				{
+					const float fx = (p + 0.5f) / places;
+					const float fz = (q + 0.5f) / places;
+					const float sx = fx * fx * (3.0f - 2.0f * fx);
+					const float sz = fz * fz * (3.0f - 2.0f * fz);
+					const float v = (h00 + (h10 - h00) * sx) * (1.0f - sz) +
+						(h01 + (h11 - h01) * sx) * sz;
+					float a = (v - floor) / (1.0f - floor);
+
+					a = a < 0.0f ? 0.0f : a > 1.0f ? 1.0f : a;
+					sum += a * a;
+				}
+		}
+
+	return (float)(sum / ((double)cells * cells * places * places));
+}
+
+inline float HDWaterShaftBound(float sum, float weights, float mean,
+	float peak)
+{
+	if (peak <= 0.0f)
+		return sum;
+
+	const float most = peak * mean * weights;
+
+	return sum < most ? sum : most;
+}
 
 /* The power of the cosine to the light whose glow falls to half its peak
  * `halfDeg` degrees from the light's direction: cos^p(half) = 1/2. The
@@ -328,7 +415,17 @@ inline float HDWaterGlowPower(float halfDeg)
  * plane (HDWaterUnderSeaDepth) an eye 68 units under the stand-in's surface
  * sees the rooms over its horizon in the water's colour, hue 199 against
  * the water's 200 and 0.8 of luma apart (counted to the stand-in hue 188,
- * 7.7 apart). */
+ * 7.7 apart).
+ *
+ * The shafts' light in a pixel under the sheet is held to 2.49 times the
+ * light the cells' mean gives over the same samples (HDWaterShaftBound),
+ * the sunlit photograph's peak over its open water's median. From an eye
+ * of the dive looking 26 degrees up toward the light the march's samples
+ * meet the surface within a few cells; while those were lit the shafts
+ * burnt a quarter of the picture to white (245,208 of 3,686,400 pixels at
+ * 2,560 x 1,440 at 255 of luma; at 10 of 30 clocks 2 seconds apart). Held,
+ * none burns at any clock, the open water's median is 108 and the
+ * picture's peak 2.04 times it, and the dive's eyes stay in their band. */
 inline void HDWaterLookKnobs(float* knobs)
 {
 	knobs[HD_LOOK_DISC] = 0.2f;
@@ -356,6 +453,7 @@ inline void HDWaterLookKnobs(float* knobs)
 	knobs[HD_LOOK_SEA_RAGGED] = 4096.0f;
 	knobs[HD_LOOK_SEA_FOG] = 0.03125f;
 	knobs[HD_LOOK_SEA_PLANE] = 1.0f;
+	knobs[HD_LOOK_SEA_PEAK] = 2.49f;
 }
 
 /* The sea's surface seen from below in the art's place (hd_render.cpp,

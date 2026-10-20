@@ -45,8 +45,11 @@
  *                 255 is the classic's whole veil) and a transmittance
  *                 T = exp(-tau). The pixel becomes dst * T + colour (1 - T):
  *                 for a thin veil that is the classic's dst (1 - tau) +
- *                 colour tau, and 1 - T never exceeds tau, so the fog adds
- *                 no more light than the classic's haze at the same column.
+ *                 colour tau, and 1 - T never exceeds tau.
+ *   the strength  the density times HDFogStrength, the bulb's own factor:
+ *                 its densest line veils black by HD_FOG_TOP in its colour,
+ *                 the top of the look's band (the pass, hd_render.cpp,
+ *                 fog_take; the shader takes the density as it is given).
  *   the breath    the density times 1 - HD_FOG_BREATH * n, n a value noise
  *                 of hashed lattice points (HDFogHash) over cells of
  *                 HD_FOG_CELL radii, anchored in the world and rising by
@@ -309,3 +312,103 @@ inline float HDFogRayTau(const float dir[3], const float c[3], float rad,
 
 	return HDFogTau(d, rad, column);
 }
+
+/* The density at a point rho radii from a bulb's centre (rho under 1),
+ * without the breath: d * HD_FOG_PEAK * (1 - rho^2), as the pass
+ * integrates it; 0 at the rim and outside. */
+inline float HDFogDensity(float d, float rho)
+{
+	return rho < 1.0f ? d * HD_FOG_PEAK * (1.0f - rho * rho) : 0.0f;
+}
+
+/* A point's distance from a bulb's centre, in radii (both in the same
+ * space). */
+inline float HDFogRho(const float p[3], const float c[3], float rad)
+{
+	const float x = p[0] - c[0], y = p[1] - c[1], z = p[2] - c[2];
+
+	return rad > 0.0f ? sqrtf(x * x + y * y + z * z) / rad : 2.0f;
+}
+
+/* The top of the look's band, in 0..1 of luma: the most a bulb's body and
+ * the art's mist add over the picture under them. */
+#define HD_FOG_TOP		(33.0f / 255.0f)
+// The most a bulb's densest line may veil, whatever its colour.
+#define HD_FOG_VEIL_MOST	0.5f
+/* The art's mist's weight in the additive pass (HDFogArtWeight): the top
+ * over the most the mist adds at 1 (94.3 of 255 at the 95th percentile of
+ * its pixels, the brightest of the eyes measured), so it adds the top. */
+#define HD_FOG_ART_WEIGHT	0.35f
+
+/* The body's strength: the factor on the density that makes the veil of
+ * the bulb's densest line - the column 2 r d through its centre - add
+ * HD_FOG_TOP over black in the bulb's own colour (r, g, b 0..1): the veil
+ * HD_FOG_TOP over the colour's luma, at most HD_FOG_VEIL_MOST, as
+ * 1 - exp(-S 2 r d / 255). Above 1 for a bulb fainter than the top, below
+ * for a brighter one; 1 where the bulb has no colour or no column. */
+inline float HDFogStrength(float d, float rad, float r, float g, float b)
+{
+	const float luma = 0.299f * r + 0.587f * g + 0.114f * b;
+	const float peak = HDFogClassicPeak(d, rad) / 255.0f;
+
+	if (!(luma > 0.0f) || !(peak > 0.0f))
+		return 1.0f;
+
+	float veil = HD_FOG_TOP / luma;
+
+	if (veil > HD_FOG_VEIL_MOST)
+		veil = HD_FOG_VEIL_MOST;
+
+	return -logf(1.0f - veil) / peak;
+}
+
+/* The cell of a coat's test (hd_render.cpp, fog_add_coat), in world
+ * units: a corner of an additive range lies on its group's surface when a
+ * surface corner falls in its cell or one of the 26 around it. */
+#define HD_FOG_COAT_CELL	16
+
+/* The most of a mist's corners that may lie on its group's surface (its
+ * coat, fog_add_coat): a sheet standing in the air shares next to none
+ * of the walls' corners, a layer laid over the walls most of them. */
+#define HD_FOG_ART_COAT		0.1f
+
+/* The art's mist: an additive part of the flow material (`flow`) whose
+ * page drifts on both axes (su, sv, page units a second) and which stands
+ * in the air - its coat (0..1, -1 not asked) under HD_FOG_ART_COAT. Every
+ * water flow of the fifteen levels scrolls along one axis, its stream;
+ * the mist drifts askew. A layer drifting askew over a wall is a wash of
+ * the wall's light, not mist, and keeps its own weight. */
+inline bool HDFogArtMist(bool flow, float su, float sv, float coat)
+{
+	return flow && su != 0.0f && sv != 0.0f && coat >= 0.0f &&
+		coat < HD_FOG_ART_COAT;
+}
+
+// The mist's additive weight, for its own weight `base` (1 for the flow).
+inline float HDFogArtWeight(float base)
+{
+	return base * HD_FOG_ART_WEIGHT;
+}
+
+/* RoomProbe's numbers of an additive range (hd_render.cpp,
+ * fog_add_weight): its group, its .TRG part (a book's, -1 for any other),
+ * its material, its box's centre in the world and in view space and its
+ * half sizes, the bulb of the bracket the centre lies in (-1 for none) and
+ * its rho, the range's own weight and the weight drawn, its swing, its
+ * scroll and its coat (-1 where none is asked). */
+struct HDFogArtPart
+{
+	int group, part, material, bulb;
+	float world[3], view[3], half[3];
+	float rho, base, weight, period, scroll[2], coat;
+};
+
+/* level 0: the ranges the last bracket that asked the additive pass drew,
+ * one entry per draw; 1: every additive range of the level, with its own
+ * weight. Writes at most `max` into `out` (which may be 0) and returns
+ * how many there are. Defined in hd_render.cpp. */
+int HDRenderFogArt(HDFogArtPart* out, int max, int level);
+// RoomProbe's -fogartweight: w for the art's mist, -1 the rule.
+void HDRenderFogArtProbe(float weight);
+// RoomProbe's -fogstrength: s for every bulb's body, -1 the rule.
+void HDRenderFogStrengthProbe(float strength);

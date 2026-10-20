@@ -1460,6 +1460,15 @@ namespace
 		int bookCount = 0;
 		int bookPhase = 0;
 		int bookPart = -1;
+		/* An additive range's box, its corners' least and most x, y, z in
+		 * its group's own coordinates, for RoomProbe's view of the art
+		 * against the fog bulbs (fog_add_weight); zero for a range of the
+		 * other two passes. Not in the key: it follows from the triangles. */
+		float addBox[6] = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
+		/* An additive flow range's share of corners on its group's own
+		 * surface (fog_add_coat), 0..1; -1 for every other range. Not in
+		 * the key: it follows from the triangles. */
+		float addCoat = -1.0f;
 		/* The gloss of this draw call - the .TRG material's own strength and
 		 * exponent, 0 for every part that names none. One pixel shader
 		 * constant, hence part of the sort key. */
@@ -3748,8 +3757,225 @@ namespace
 	bool g_fog_taken = false;
 	int g_fog_index[HD_MAX_BULBS];
 
+	/* The art the additive pass draws, against the bulbs: every bulb of the
+	 * bracket in view space (fog_take), the room in hand's own coordinates
+	 * in view space and its group (fog_note), and the ranges as drawn -
+	 * this bracket's, and the last bracket's that asked the additive pass -
+	 * for RoomProbe -fogart. g_fog_art_probe is RoomProbe's -fogartweight:
+	 * one weight for every range the rule weighs, or -1 for the rule. */
+	HDFogBulb g_fog_all[HD_MAX_BULBS];
+	int g_fog_all_count = 0;
+	float g_fog_room[16];
+	int g_fog_room_group = -1;
+	std::vector<HDFogArtPart> g_fog_art_now;
+	std::vector<HDFogArtPart> g_fog_art_last;
+	float g_fog_art_probe = -1.0f;
+	// RoomProbe's -fogstrength: one strength for every bulb, -1 the rule.
+	float g_fog_strength = -1.0f;
+
+	/* One triangle of an additive range into the range's box (HDRange::
+	 * addBox), its corners in the group's own coordinates; the range's
+	 * first triangle (count 0) starts the box. */
+	void fog_add_note(HDRange& range, const trf::remaster::Trg& trg,
+		unsigned int first)
+	{
+		bool seen = range.count != 0;
+
+		for (unsigned int k = 0; k < 3; k++)
+		{
+			const unsigned int index = trg.indices[first + k];
+
+			if (index >= trg.vertices.size())
+				continue;
+
+			const trf::remaster::TrgVertex& v = trg.vertices[index];
+			const float p[3] = { (float)v.x, (float)v.y, (float)v.z };
+
+			for (int i = 0; i < 3; i++)
+			{
+				if (!seen || p[i] < range.addBox[i])
+					range.addBox[i] = p[i];
+
+				if (!seen || p[i] > range.addBox[i + 3])
+					range.addBox[i + 3] = p[i];
+			}
+
+			seen = true;
+		}
+	}
+
+	/* A corner's cell of HD_FOG_COAT_CELL units, packed into one key; the
+	 * shift keeps every coordinate of a group, and one cell beyond, at or
+	 * above 0, so the division floors. */
+	unsigned long long fog_coat_key(int x, int y, int z)
+	{
+		const int s = HD_FOG_COAT_CELL;
+		const unsigned long long cx = (x + 32768 + s) / s;
+		const unsigned long long cy = (y + 32768 + s) / s;
+		const unsigned long long cz = (z + 32768 + s) / s;
+
+		return (cx << 26) | (cy << 13) | cz;
+	}
+
+	/* The coat of a group's additive flow ranges (HDRange::addCoat): the
+	 * share of a range's corners that lie on the group's own surface - a
+	 * corner of its opaque or alpha triangles in the corner's cell or one
+	 * of the 26 around it. A layer laid over the walls shares their
+	 * corners; a sheet standing in the air shares next to none (hd_fog.h,
+	 * HDFogArtMist). `sorted` is the group's index run the ranges name. */
+	void fog_add_coat(HDGroup& group, const trf::remaster::Trg& trg,
+		const trf::remaster::TrgGroup& source,
+		const std::vector<unsigned int>& sorted)
+	{
+		bool asked = false;
+
+		for (const HDRange& r : group.pass[2])
+			asked = asked || r.material == HD_TRG_MATERIAL_FLOW;
+
+		if (!asked)
+			return;
+
+		std::vector<unsigned long long> surface;
+
+		for (const trf::remaster::TrgPart& part : source.parts)
+			for (int pass = 0; pass < 2; pass++)
+			{
+				const trf::remaster::TrgPart::Pass& run = part.pass[pass];
+
+				for (unsigned int k = 0; k < run.count; k++)
+				{
+					const size_t at = (size_t)run.start + k;
+					const unsigned int index = at < trg.indices.size() ?
+						trg.indices[at] : 0xFFFFFFFFu;
+
+					if (index >= trg.vertices.size())
+						continue;
+
+					const trf::remaster::TrgVertex& v = trg.vertices[index];
+
+					surface.push_back(fog_coat_key(v.x, v.y, v.z));
+				}
+			}
+
+		std::sort(surface.begin(), surface.end());
+		surface.erase(std::unique(surface.begin(), surface.end()),
+			surface.end());
+
+		const int s = HD_FOG_COAT_CELL;
+
+		for (HDRange& r : group.pass[2])
+		{
+			if (r.material != HD_TRG_MATERIAL_FLOW)
+				continue;
+
+			unsigned int on = 0, all = 0;
+
+			for (unsigned int k = 0; k < r.count; k++)
+			{
+				const size_t at = (size_t)r.start + k;
+				const unsigned int index = at < sorted.size() ? sorted[at] :
+					0xFFFFFFFFu;
+
+				if (index >= trg.vertices.size())
+					continue;
+
+				const trf::remaster::TrgVertex& v = trg.vertices[index];
+				bool hit = false;
+
+				for (int n = 0; n < 27 && !hit; n++)
+					hit = std::binary_search(surface.begin(), surface.end(),
+						fog_coat_key(v.x + (n % 3 - 1) * s,
+						v.y + (n / 3 % 3 - 1) * s, v.z + (n / 9 - 1) * s));
+
+				on += hit ? 1u : 0u;
+				all++;
+			}
+
+			r.addCoat = all ? (float)on / (float)all : 0.0f;
+		}
+	}
+
+	/* An additive range's weight in the bracket (draw_pass). The art's
+	 * mist - a flow part whose page drifts on both axes and which stands
+	 * in the air (hd_fog.h, HDFogArtMist) - is drawn at HDFogArtWeight
+	 * with hd_fog 1; every other range, and every range with hd_fog 0, at
+	 * its own weight (MaterialAddWeight). While RoomProbe asks the pass's
+	 * numbers (HDRenderFogProbe) and the bracket holds bulbs, the range is
+	 * noted with the densest bulb its box's centre lies in; the room's
+	 * matrix is fog_note's, so a range of another group is not. */
+	float fog_add_weight(const HDRange& range, int group)
+	{
+		const float base = range.addWeight;
+		const bool mist = HDFogArtMist(range.material == HD_TRG_MATERIAL_FLOW,
+			range.scrollU, range.scrollV, range.addCoat);
+		const float weight = !g_fog_on || !mist ? base :
+			g_fog_art_probe >= 0.0f ? g_fog_art_probe : HDFogArtWeight(base);
+
+		if (!g_fog_timing || group != g_fog_room_group || !g_fog_all_count)
+			return weight;
+
+		const float* box = range.addBox;
+		const float* m = g_fog_room;
+		const float local[3] = { 0.5f * (box[0] + box[3]),
+			0.5f * (box[1] + box[4]), 0.5f * (box[2] + box[5]) };
+		float c[3];
+
+		for (int i = 0; i < 3; i++)
+			c[i] = local[0] * m[i] + local[1] * m[4 + i] +
+				local[2] * m[8 + i] + m[12 + i];
+
+		HDFogArtPart part = {};
+		const size_t o = (size_t)group * 2;
+
+		part.group = group;
+		part.part = range.bookPart;
+		part.material = range.material;
+		part.period = range.addPeriod;
+		part.scroll[0] = range.scrollU;
+		part.scroll[1] = range.scrollV;
+		part.bulb = -1;
+		part.rho = 1.0f;
+		part.base = base;
+		part.weight = weight;
+		part.coat = range.addCoat;
+
+		float most = 0.0f;
+
+		for (int j = 0; j < g_fog_all_count; j++)
+		{
+			const HDFogBulb& b = g_fog_all[j];
+			const float centre[3] = { b.x, b.y, b.z };
+			const float r = HDFogRho(c, centre, b.rad);
+			const float dense = HDFogDensity(b.density, r);
+
+			if (r < 1.0f && (part.bulb < 0 || dense > most))
+			{
+				part.bulb = j;
+				part.rho = r;
+				most = dense;
+			}
+		}
+
+		for (int i = 0; i < 3; i++)
+		{
+			part.view[i] = c[i];
+			part.half[i] = 0.5f * (box[i + 3] - box[i]);
+			part.world[i] = local[i];
+		}
+
+		if (o + 1 < g_group_origin.size())
+		{
+			part.world[0] += g_group_origin[o];
+			part.world[2] += g_group_origin[o + 1];
+		}
+
+		g_fog_art_now.push_back(part);
+		return weight;
+	}
+
 	/* The bracket's bulbs: each one whose sphere reaches the screen is
-	 * kept for the pass and its density in the upload `bulbs` (c40, eight
+	 * kept for the pass, its density times its strength (hd_fog.h,
+	 * HDFogStrength), and its density in the upload `bulbs` (c40, eight
 	 * floats a bulb) set to 0. Nothing with hd_fog 0 or without the depth
 	 * texture, so the upload stays as it was.
 	 *
@@ -3776,6 +4002,14 @@ namespace
 		g_fog_due = false;
 		g_fog_placed = false;
 
+		// Every bulb of the bracket, for the additive art's ranges.
+		g_fog_all_count = 0;
+		g_fog_room_group = -1;
+		g_fog_art_now.clear();
+
+		for (int j = 0; f && f->bulbs && j < count && j < HD_MAX_BULBS; j++)
+			g_fog_all[g_fog_all_count++] = f->bulbs[j];
+
 		if (!f || !g_fog_on || !g_depth_texture ||
 			!HDRenderWaterSheetsBuilt() || count <= 0)
 			return;
@@ -3796,7 +4030,9 @@ namespace
 				continue;
 
 			g_fog_index[g_fog_count] = j;
-			g_fog_bulb[g_fog_count++] = b;
+			g_fog_bulb[g_fog_count] = b;
+			g_fog_bulb[g_fog_count++].density *= g_fog_strength >= 0.0f ?
+				g_fog_strength : HDFogStrength(b.density, b.rad, b.r, b.g, b.b);
 			bulbs[j * 8 + 7] = 0.0f;
 		}
 
@@ -3807,11 +4043,19 @@ namespace
 	 * at the bracket's end, and the first room of the bracket places the
 	 * breath in the world (its matrix's rows are the world's axes in view
 	 * space; the eye in its own coordinates plus its origin is the eye in
-	 * the world). */
+	 * the world). And, for RoomProbe's numbers, the room's own coordinates
+	 * in view space, for its additive art (fog_add_weight). */
 	void fog_note(int group, const D3DMATRIX* world, unsigned int passes)
 	{
 		if (passes & HD_PASS_ADDITIVE)
 			g_fog_due = true;
+
+		if (g_fog_timing && g_fog_all_count && (passes & HD_PASS_ADDITIVE))
+		{
+			multiply(world ? (const float*)world : kIdentity, g_view,
+				g_fog_room);
+			g_fog_room_group = group;
+		}
 
 		if (!g_fog_count || g_fog_placed || group < 0 ||
 			group >= g_room_groups)
@@ -3861,6 +4105,11 @@ namespace
 	{
 		const bool due = g_fog_due;
 
+		// The additive art of a bracket that asked the additive pass.
+		if (due)
+			g_fog_art_last.swap(g_fog_art_now);
+
+		g_fog_art_now.clear();
 		g_fog_due = false;
 		g_fog_taken = false;	// the next bracket takes its bulbs anew
 		g_fog_last = HDFogLast();
@@ -4166,6 +4415,69 @@ void HDRenderFogProbe(int timing, int draws)
 {
 	g_fog_timing = timing != 0;
 	g_fog_draws = draws != 0;
+}
+
+int HDRenderFogArt(HDFogArtPart* out, int max, int level)
+{
+	int n = 0;
+
+	if (!level)
+	{
+		for (size_t i = 0; i < g_fog_art_last.size(); i++, n++)
+			if (out && n < max)
+				out[n] = g_fog_art_last[i];
+
+		return n;
+	}
+
+	for (size_t g = 0; g < g_groups.size(); g++)
+		for (const HDRange& r : g_groups[g].pass[2])
+		{
+			if (out && n < max)
+			{
+				HDFogArtPart& p = out[n];
+				const size_t o = g * 2;
+
+				p = HDFogArtPart();
+				p.group = (int)g;
+				p.part = r.bookPart;
+				p.material = r.material;
+				p.period = r.addPeriod;
+				p.scroll[0] = r.scrollU;
+				p.scroll[1] = r.scrollV;
+				p.bulb = -1;
+				p.rho = 1.0f;
+				p.base = r.addWeight;
+				p.weight = r.addWeight;
+				p.coat = r.addCoat;
+
+				for (int i = 0; i < 3; i++)
+				{
+					p.world[i] = 0.5f * (r.addBox[i] + r.addBox[i + 3]);
+					p.half[i] = 0.5f * (r.addBox[i + 3] - r.addBox[i]);
+				}
+
+				if (o + 1 < g_group_origin.size())
+				{
+					p.world[0] += g_group_origin[o];
+					p.world[2] += g_group_origin[o + 1];
+				}
+			}
+
+			n++;
+		}
+
+	return n;
+}
+
+void HDRenderFogArtProbe(float weight)
+{
+	g_fog_art_probe = weight;
+}
+
+void HDRenderFogStrengthProbe(float strength)
+{
+	g_fog_strength = strength;
 }
 
 namespace
@@ -8779,6 +9091,10 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 
 				const unsigned int first = tris[i].first;
 
+				// An additive range's box (HDRange::addBox), for the bulbs.
+				if (pass == 2)
+					fog_add_note(range, trg, first);
+
 				/* The remaster's water art (HDRange::artTris): horizontal,
 				 * and material 16 or marked at every corner. */
 				{
@@ -9018,6 +9334,9 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 
 		for (int k = 0; k < 5; k++)
 			o.glossPartsBy[k] += group_parts[k];
+
+		// The additive flow ranges' coat, for the art's mist.
+		fog_add_coat(group, trg, source, sorted);
 
 		/* The occupancy, sorted and made unique once the group's three
 		 * passes have been walked - a query is a binary search from here on,
@@ -11253,8 +11572,9 @@ namespace
 			}
 
 			// The glass is added whole, as the classic adds it (AddGlass).
+			// The art's mist takes the fog's weight (fog_add_weight).
 			const float want_weight = additive_pass && !add_glass ?
-				range.addWeight : 1.0f;
+				fog_add_weight(range, (int)(&group - &g_groups[0])) : 1.0f;
 			const float want_period = additive_pass ? range.addPeriod : 0.0f;
 
 			if (add_dirty || add[0] != want_weight || add[2] != want_period)

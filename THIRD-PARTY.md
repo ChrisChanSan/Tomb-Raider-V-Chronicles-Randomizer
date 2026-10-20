@@ -4032,6 +4032,62 @@ carries the tables.
     `ToolPocketOf`'s bound). OWN.
 409. **ModernTest's glass and walk checks** (`Preparation/Tools/Diagnose/
     ModernTest.cpp`, `object_rules`, 20 checks). OWN.
+410. **The mill's lumps are the flow material's drifting parts** (`MODIFICATIONS.md`,
+    "Volumetric fog from the fog bulbs", Round 2; nothing in the code) - the
+    additive parts of material 1 in ANDY3's groups 10, 15 and 17, 24,576 triangles,
+    page drifting at 0.02, 0.01, drawn at weight 1; not the book 3,273, which is the
+    rain rings on the water. Corrects 364. PICTURE (RoomProbe `-addmat 15` and
+    `-addmat 1` at the eye of the owner's picture, found among his logged eyes).
+    DATA (TrgProbe `-all -mat 1`; RoomProbe `-fogart` at the fifteen levels).
+411. **The art's mist: the flow material drifting on both axes, in the air**
+    (`specific/hd/hd_fog.h`, `HDFogArtMist`; `hd_render.cpp`, `fog_add_weight`,
+    `draw_pass`'s weight) - an additive part of material 1 whose scroll is non-zero in
+    u and in v and whose coat (entry 418) lies under a tenth. DATA (the fifteen levels'
+    additive flow parts: ANDY3's mill, the title's sand and ANDREA2's and ANDREA3's
+    tunnel washes drift on both axes, every water flow along one; the washes' coats
+    0.967 and 0.398 at least, the mill's and the sand's 0.009 at most). PICTURE
+    (RoomProbe at the mill, two eyes of the title and one of each tunnel). OWN: the
+    criterion.
+412. **The band's top, 33 of 255** (`hd_fog.h`, `HD_FOG_TOP`) - the 95th percentile
+    of the comparison picture's wisps over the ground under them (a grey opening of
+    1/26 of the picture's height), its median 13.6. PICTURE (the owner's comparison
+    picture, measured and not kept). OWN: the opening, the percentile.
+413. **The mist's weight, 0.35** (`hd_fog.h`, `HD_FOG_ART_WEIGHT`, `HDFogArtWeight`) -
+    the top over the most the mist adds at weight 1, 94.3 at the 95th percentile of
+    its pixels at the brightest of three eyes of ANDY3's mill (83.9 and 91.2 at the
+    others). PICTURE (RoomProbe `-fogartweight 1` against `-addmat 999` at the three
+    eyes; the title's sand at two eyes, 52.9 and 81.4 at 1, 19.7 and 31.2 at the
+    weight). OWN: one weight for every mist.
+414. **The body's strength** (`hd_fog.h`, `HDFogStrength`, `HD_FOG_VEIL_MOST`;
+    `hd_render.cpp`, `fog_take`) - each bulb's density times S, with 1 - exp(-S 2 r
+    d / 255) the top over the luma of the bulb's colour, at most a veil of one half;
+    ANDY3's bulbs 1.66. CLASSIC: 2 r d, the chord through the centre (`drawroom.cpp`).
+    OWN: the anchor on the densest line over black, the cap of one half a free
+    choice. PICTURE (RoomProbe at seven eyes of ANDY3: the most 17.6 to 29.9, all
+    under the top).
+415. **The additive ranges' boxes and their listing** (`hd_render.cpp`, `HDRange::
+    addBox`, `fog_add_note`, `fog_add_weight`, `HDRenderFogArt`; `hd_fog.h`,
+    `HDFogArtPart`, `HDFogDensity`, `HDFogRho`) - each additive range's box in its
+    group's coordinates, and while RoomProbe asks the pass's numbers the ranges drawn
+    with the densest bulb their centre lies in. OWN.
+416. **The pass's numbers in the log** (`hd_level.cpp`, the HDLOG frame line's
+    `fog_taken=` and `fog_drawn=`; `tomb5/tomb5.cpp`, the settings line's `hd_fog=`) -
+    the bulbs the glow bracket's pass took and the quads it drew (`HDRenderFogLast`),
+    and the key as read. OWN.
+417. **RoomProbe's `-fogart` (`-fogbook`), `-fogartweight` and `-fogstrength`, the
+    strength on the `fogbulb` line, and ModernTest's `fog_art`**
+    (`Preparation/Tools/Diagnose/RoomProbe.cpp`, namespace `probefog`;
+    `ModernTest.cpp`) - the level's additive ranges against its bulbs and the frame's
+    with their weights and coats, each rule switched off by picture; 18 checks of the
+    strength, the mist, its coat and the listing's arithmetic. OWN, this project's
+    tools.
+418. **The coat of an additive flow range** (`hd_render.cpp`, `HDRange::addCoat`,
+    `fog_add_coat`, `fog_coat_key`; `hd_fog.h`, `HD_FOG_COAT_CELL`, `HD_FOG_ART_COAT`) -
+    the share of the range's corners with a corner of its group's opaque or alpha
+    triangles in their 16-unit cell or one of the 26 around it; a range under a tenth
+    stands in the air. DATA (RoomProbe `-fogart` at the fifteen levels: the parts in the
+    air 0.009 at most, the washes over walls 0.398 at least; at 64-unit cells the gap
+    closes, 0.333 against 0.514). OWN: the test, the cell, the bound.
 
 ## Credited, but not contained here
 

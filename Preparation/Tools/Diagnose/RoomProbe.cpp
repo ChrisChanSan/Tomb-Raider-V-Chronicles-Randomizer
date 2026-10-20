@@ -334,6 +334,19 @@
  *     -fogpass 0      the bulbs the pass would draw leave the shaders' haze
  *                     and the pass is not drawn: the picture to hold
  *                     against the one without bulbs
+ *     -fogart         (and -fogbulbs; -fogbook says the same) the level's
+ *                     additive ranges - the art the additive pass draws -
+ *                     each with its material,
+ *                     its box in the world, its weight, swing and scroll
+ *                     and the level's bulbs its centre lies in; after the
+ *                     picture the ranges the frame drew, each with the
+ *                     bulb it lies in, its rho, its own weight and the
+ *                     weight drawn (hd_render.cpp, fog_add_weight)
+ *     -fogartweight <w>  the art's mist (hd_fog.h, HDFogArtMist) drawn at
+ *                     the weight w instead of the rule's (with hd_fog 1)
+ *     -fogstrength <s>  every bulb's body at the strength s instead of the
+ *                     rule's (hd_fog.h, HDFogStrength); 1 is the column
+ *                     of the classic's chord through the centre
  *     -underwater     the room carries ROOM_UNDERWATER and the camera is in
  *                     it: the WaterTable darkening on the colour and the
  *                     screen wobble on the position.
@@ -8408,6 +8421,7 @@ namespace probefog
 	static int g_profile = -1;		// -fogprofile <bulb>
 	static int g_key = -1;			// -hdfog 0|1, -1 not given
 	static int g_pass = 1;			// -fogpass 0: the haze out, no pass
+	static bool g_art = false;		// -fogart
 	static std::vector<Bulb> g_level;
 	static float g_origin[3] = { 0, 0, 0 };
 	// The level's number of each entry of g_bulbs; -1 for a -bulb.
@@ -8429,6 +8443,27 @@ namespace probefog
 		{
 			g_profile = atoi(argv[++*at]);
 			g_list = true;
+			return true;
+		}
+
+		if (!strcmp(a, "-fogart") || !strcmp(a, "-fogbook"))
+		{
+			g_art = true;
+			g_list = true;
+			return true;
+		}
+
+		if (!strcmp(a, "-fogartweight") && more)
+		{
+			HDRenderFogArtProbe((float)atof(argv[++*at]));
+			return true;
+		}
+
+		// -fogstrength <s>: every bulb's body at the strength s (1 the
+		// classic's column), instead of the rule's (HDFogStrength).
+		if (!strcmp(a, "-fogstrength") && more)
+		{
+			HDRenderFogStrengthProbe((float)atof(argv[++*at]));
 			return true;
 		}
 
@@ -8676,11 +8711,12 @@ namespace probefog
 
 			printf("fogbulb %2d room %3d world %7.0f %7.0f %7.0f radius %5.0f "
 				"den %8.1f -> %5.2f d %.9g colour %.9g %.9g %.9g ambient "
-				"%08lX water %d eye %6.0f %s\n", b.index, b.room, b.x, b.y,
-				b.z, b.rad, b.denRaw, b.den, b.d, b.r, b.g, b.b,
-				(unsigned long)b.ambient, (b.flags & 1) ? 1 : 0, b.dist,
+				"%08lX water %d eye %6.0f %s strength %.4f\n", b.index,
+				b.room, b.x, b.y, b.z, b.rad, b.denRaw, b.den, b.d, b.r, b.g,
+				b.b, (unsigned long)b.ambient, (b.flags & 1) ? 1 : 0, b.dist,
 				b.taken ? "taken" : b.underSheet ? "under a sheet" :
-				b.dist >= 20480.0f ? "beyond 20480" : "past the 16");
+				b.dist >= 20480.0f ? "beyond 20480" : "past the 16",
+				HDFogStrength(b.d, b.rad, b.r, b.g, b.b));
 		}
 
 		if (g_profile >= 0 && g_profile < (int)g_level.size())
@@ -8712,6 +8748,81 @@ namespace probefog
 				last.eye[0], last.eye[1], last.eye[2], last.axes[0],
 				last.axes[1], last.axes[2], last.axes[3], last.axes[4],
 				last.axes[5], last.axes[6], last.axes[7], last.axes[8]);
+	}
+
+	/* -fogart: the level's additive ranges - the art the additive pass
+	 * draws - each with its material, its box in the world, its own weight,
+	 * swing and scroll and the level's bulbs its box's centre lies in (rho,
+	 * the distance over the radius); and after the picture the ones the
+	 * frame drew, one line per group, material and box, with the bulb of
+	 * the frame it lies in (its level number), the rho, the range's own
+	 * weight and the weight drawn. */
+	static void Art()
+	{
+		if (!g_art)
+			return;
+
+		const int all = HDRenderFogArt(0, 0, 1);
+		std::vector<HDFogArtPart> parts((size_t)(all > 0 ? all : 1));
+
+		HDRenderFogArt(parts.data(), all, 1);
+		printf("-fogart: the level holds %d additive range(s)\n", all);
+
+		for (int i = 0; i < all; i++)
+		{
+			const HDFogArtPart& p = parts[(size_t)i];
+			std::string in;
+
+			for (const Bulb& b : g_level)
+			{
+				const float c[3] = { b.x, b.y, b.z };
+				const float rho = HDFogRho(p.world, c, b.rad);
+				char one[48];
+
+				if (rho >= 1.0f)
+					continue;
+
+				sprintf(one, " %d(%.2f)", b.index, rho);
+				in += one;
+			}
+
+			printf("fogart group %3d part %3d mat %2d world %7.0f %7.0f %7.0f "
+				"half %5.0f %5.0f %5.0f weight %.4f swing %.2f scroll %.4f "
+				"%.4f coat %.3f bulbs%s\n", p.group, p.part, p.material,
+				p.world[0], p.world[1], p.world[2], p.half[0], p.half[1],
+				p.half[2], p.base, p.period, p.scroll[0], p.scroll[1], p.coat,
+				in.empty() ? " none" : in.c_str());
+		}
+
+		const int drawn = HDRenderFogArt(0, 0, 0);
+		std::vector<HDFogArtPart> frame((size_t)(drawn > 0 ? drawn : 1));
+		std::vector<std::string> seen;
+
+		HDRenderFogArt(frame.data(), drawn, 0);
+
+		for (int i = 0; i < drawn; i++)
+		{
+			const HDFogArtPart& p = frame[(size_t)i];
+			char key[96];
+
+			sprintf(key, "%d %d %.0f %.0f %.0f", p.group, p.material,
+				p.world[0], p.world[1], p.world[2]);
+
+			if (std::find(seen.begin(), seen.end(), std::string(key)) !=
+				seen.end())
+				continue;
+
+			seen.push_back(key);
+			printf("fogartframe group %3d mat %2d world %7.0f %7.0f %7.0f view "
+				"%8.1f %8.1f %8.1f bulb %2d rho %.3f weight %.4f -> %.4f\n",
+				p.group, p.material, p.world[0], p.world[1], p.world[2],
+				p.view[0], p.view[1], p.view[2], p.bulb >= 0 &&
+				p.bulb < HD_MAX_BULBS ? g_slot[p.bulb] : -1, p.rho, p.base,
+				p.weight);
+		}
+
+		printf("-fogart: the frame drew %d additive range(s) (%d draws)\n",
+			(int)seen.size(), drawn);
 	}
 
 	// One -gpu run's pass time.
@@ -21798,6 +21909,7 @@ static int ProbeMain(int argc, char** argv)
 	HDRenderFrameEnd();
 	g_device->EndScene();
 	probefog::Report("the picture");
+	probefog::Art();
 
 	/* The frame's time on the processor from its BeginScene to the GPU's
 	 * end - what a first water frame's wait for the driver adds to

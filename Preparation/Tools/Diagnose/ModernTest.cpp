@@ -104,7 +104,8 @@
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_water_under.h"
 // The sky band's closed poles (sky_cap).
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_sky_cap.h"
-// The fog bulbs' body: the span, the column, the veil, the breath (fog_body).
+// The fog bulbs' body: the span, the column, the veil, the breath (fog_body),
+// the strength and the art's mist (fog_art).
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_fog.h"
 // The springs: the table, the file's key, the hashed clock (spring_*).
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_spring.h"
@@ -26505,6 +26506,105 @@ static void fog_body()
 		"fog: a sphere beside the frame has no rectangle", 0, 0);
 }
 
+/* The fog's strength and the art's mist (hd_fog.h): a bulb's densest line
+ * veils black by the band's top in its own colour, at most half; the mist
+ * is the flow material drifting on both axes, weighed down to the top. The
+ * bulbs of ANDY3's mill (radius 1,312, d 1/71.75, colour 134, 168, 148),
+ * of ANDREA2's canal (radius 5,152, d 1/71.75, colour 207, 255, 223) and
+ * ANDY1's dark one (colour 40, 68, 48). */
+static void fog_art()
+{
+	printf("the fog's strength and the art's mist\n");
+
+	const float d = 1.0f / 71.75f;
+	const float mill[3] = { 134.0f / 255.0f, 168.0f / 255.0f, 148.0f / 255.0f };
+	const float canal[3] = { 207.0f / 255.0f, 1.0f, 223.0f / 255.0f };
+	const float dark[3] = { 40.0f / 255.0f, 68.0f / 255.0f, 48.0f / 255.0f };
+	auto luma = [](const float* c)
+	{
+		return 0.299f * c[0] + 0.587f * c[1] + 0.114f * c[2];
+	};
+	// The light the densest line adds over black, 0..255, at strength s.
+	auto over = [&](float rad, const float* c, float s)
+	{
+		const float tau = s * HDFogClassicPeak(d, rad) / 255.0f;
+
+		return 255.0f * luma(c) * (1.0f - HDFogTransmit(tau));
+	};
+
+	const float sMill = HDFogStrength(d, 1312.0f, mill[0], mill[1], mill[2]);
+
+	ok(fabsf(over(1312.0f, mill, sMill) - 33.0f) < 0.01f,
+		"fog art: the mill's densest line adds the top, 33 of 255",
+		(long)(over(1312.0f, mill, sMill) * 100.0f), 3300);
+	ok(sMill > 1.6f && sMill < 1.7f,
+		"fog art: the mill's bulbs are raised, 1.6 to 1.7 times",
+		(long)(sMill * 1000.0f), 1660);
+	ok(over(1312.0f, mill, 1.0f) < 33.0f,
+		"fog art: the classic's column alone stays under the top",
+		(long)over(1312.0f, mill, 1.0f), 33);
+
+	const float sCanal = HDFogStrength(d, 5152.0f, canal[0], canal[1],
+		canal[2]);
+
+	ok(sCanal < 1.0f && fabsf(over(5152.0f, canal, sCanal) - 33.0f) < 0.01f,
+		"fog art: a bright wide bulb is lowered to the top",
+		(long)(over(5152.0f, canal, sCanal) * 100.0f), 3300);
+
+	const float sDark = HDFogStrength(d, 1920.0f, dark[0], dark[1], dark[2]);
+	const float veilDark = 1.0f - HDFogTransmit(sDark *
+		HDFogClassicPeak(d, 1920.0f) / 255.0f);
+
+	ok(fabsf(veilDark - HD_FOG_VEIL_MOST) < 1e-5f,
+		"fog art: a bulb darker than the top veils half at most",
+		(long)(veilDark * 1e5f), (long)(HD_FOG_VEIL_MOST * 1e5f));
+	ok(HDFogStrength(d, 1312.0f, 0.0f, 0.0f, 0.0f) == 1.0f &&
+		HDFogStrength(0.0f, 1312.0f, mill[0], mill[1], mill[2]) == 1.0f,
+		"fog art: no colour or no column keeps the strength at 1", 0, 0);
+
+	/* The mist and the water: ANDY3's mill (coat 0.000), its river,
+	 * JOBY2, another material; the walls' washes of ANDREA2 (coat 0.967)
+	 * and ANDREA3 (0.398) and the title's cards (0.009). */
+	ok(HDFogArtMist(true, 0.02f, 0.01f, 0.0f),
+		"fog art: the mill's flow drifting askew is mist", 1, 1);
+	ok(!HDFogArtMist(true, 0.0f, -2.5f, 0.0f) &&
+		!HDFogArtMist(true, -0.3f, 0.0f, 0.0f),
+		"fog art: a flow along one axis is water, not mist", 0, 0);
+	ok(!HDFogArtMist(false, 0.08f, 0.08f, 0.0f),
+		"fog art: no other material is mist", 0, 0);
+	ok(!HDFogArtMist(true, 0.08f, 0.08f, 0.967f),
+		"fog art: a layer over the walls drifting askew is no mist", 0, 0);
+	ok(!HDFogArtMist(true, 0.08f, 0.08f, 0.398f),
+		"fog art: a layer on four in ten wall corners is no mist", 0, 0);
+	ok(HDFogArtMist(true, 0.07f, 0.07f, 0.009f) &&
+		HDFogArtMist(true, 0.1f, 0.1f, 0.0f),
+		"fog art: cards in the air drifting askew are mist", 1, 1);
+	ok(!HDFogArtMist(true, 0.02f, 0.01f, HD_FOG_ART_COAT) &&
+		HDFogArtMist(true, 0.02f, 0.01f, HD_FOG_ART_COAT - 0.001f),
+		"fog art: the coat's bound itself is a coat", 0, 0);
+	ok(!HDFogArtMist(true, 0.02f, 0.01f, -1.0f),
+		"fog art: a range whose coat was not asked is no mist", 0, 0);
+	ok(HD_FOG_ART_COAT > 0.009f && HD_FOG_ART_COAT < 0.398f,
+		"fog art: the bound lies between the cards and the washes",
+		(long)(HD_FOG_ART_COAT * 1000.0f), 100);
+	ok(fabsf(HDFogArtWeight(1.0f) - 0.35f) < 1e-6f &&
+		fabsf(94.3f * HDFogArtWeight(1.0f) - 33.0f) < 0.01f,
+		"fog art: the mist's weight puts its 94.3 at the top",
+		(long)(HDFogArtWeight(1.0f) * 1000.0f), 350);
+
+	// The density and the distance the art's listing reads.
+	const float at[3] = { 1312.0f, 0.0f, 0.0f };
+	const float centre[3] = { 0.0f, 0.0f, 0.0f };
+
+	ok(fabsf(HDFogDensity(d, 0.0f) - HD_FOG_PEAK * d) < 1e-7f &&
+		HDFogDensity(d, 1.0f) == 0.0f &&
+		fabsf(HDFogDensity(d, 0.5f) - 0.75f * HD_FOG_PEAK * d) < 1e-7f,
+		"fog art: the density 1.5 d at the centre, none at the rim", 0, 0);
+	ok(fabsf(HDFogRho(at, centre, 1312.0f) - 1.0f) < 1e-6f &&
+		HDFogRho(at, centre, 0.0f) > 1.0f,
+		"fog art: a point on the rim is one radius out", 0, 0);
+}
+
 /* A keyframe for the pocket walk: box, offset, and one rotation word per
  * node of a two-node slot. */
 struct PocketKey
@@ -26963,6 +27063,7 @@ int main()
 	marble_every();
 	debris_pieces();
 	fog_body();
+	fog_art();
 	object_rules();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);

@@ -727,10 +727,11 @@ void init_tomb5_stuff()
 	 * with (hd_enable, the HD textures row: 1 HD, 0 classic) and the build
 	 * gate (hd_build: 0 builds nothing HD, any other value builds a level's
 	 * HD data whenever an installation is found) and the rooms an HD frame
-	 * draws (hd_vis: 1 the visibility path, 0 the portal walk). */
-	Log("HDLOG settings hd_enable=%d hd_build=%lu hd_vis=%lu",
+	 * draws (hd_vis: 1 the visibility path, 0 the portal walk) and the fog
+	 * bulbs' own pass (hd_fog: 1 drawn, 0 the shaders' haze). */
+	Log("HDLOG settings hd_enable=%d hd_build=%lu hd_vis=%lu hd_fog=%d",
 		tomb5.hd_enable ? 1 : 0, (unsigned long)tomb5.hd_build,
-		(unsigned long)tomb5.hd_vis);
+		(unsigned long)tomb5.hd_vis, HDRenderFogOn());
 }
 
 void save_new_tomb5_settings()

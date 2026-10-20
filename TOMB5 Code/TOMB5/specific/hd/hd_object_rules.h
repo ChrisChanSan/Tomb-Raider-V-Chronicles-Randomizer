@@ -48,7 +48,12 @@
  * is not - it has folded into one plane. Its items are drawn one-sided,
  * as the classic draws them (HDPocketSide). The fold is what limits the
  * rule to the case that fights: a slot whose geometry never folds keeps
- * the HD path's two-sided draw, which an open model needs.
+ * the HD path's two-sided draw, which an open model needs. The walk keeps
+ * to the slot's own animations, the run from its first to the next
+ * object's first (HDPocketAnimEnd): a slot's state change may name an
+ * animation of another object - JOBY4's ATTACK_SUB, two animations of
+ * one keyframe each, links to four of its neighbours' - and their
+ * keyframes say nothing about this slot's place.
  *
  * THE GLASS. The classic draws a face see-through when its effects word
  * has bit 0 set or its texture's draw type is 2 (specific/output.cpp,
@@ -169,10 +174,33 @@ inline bool HDSlidesIntoPocket(bool leaves, bool folds, bool turns)
  * five; a slot past this many is no door. */
 #define HD_POCKET_ANIMS			64
 
+/* Where a slot's own animations end: the smallest first animation of any
+ * other object that lies past this slot's `first`, out of `starts`, the
+ * first animation of every loaded object; -1 when none lies past it (the
+ * level's last object, whose run the file's count ends). */
+inline int HDPocketAnimEnd(int first, const int* starts, int count)
+{
+	int end = -1;
+
+	for (int i = 0; i < count; i++)
+		if (starts[i] > first && (end < 0 || starts[i] < end))
+			end = starts[i];
+
+	return end;
+}
+
+/* Whether animation `anim` is one of the slot's own: from its `first` up
+ * to `end`, or without an upper bound when `end` is -1. */
+inline bool HDPocketAnimOwn(int anim, int first, int end)
+{
+	return anim >= first && (end < 0 || anim < end);
+}
+
 /* The walk over the animations a slot can play: its first, and every one
- * a jump or a state change links to. The rest is the first animation's
- * first keyframe. A keyframe is the frame's words: six of box, three of
- * offset, then the nodes' rotations; a turn is a rotation word that
+ * of its own (HDPocketAnimOwn) a jump or a state change links to. The rest
+ * is the first animation's first keyframe. A keyframe is the frame's
+ * words: six of box, three of offset, then the nodes' rotations; a turn
+ * is a rotation word that
  * differs from the same word of its own animation's first keyframe - the
  * rotations exactly as the level holds them, no angle measured.
  *
@@ -183,7 +211,8 @@ inline bool HDSlidesIntoPocket(bool leaves, bool folds, bool turns)
  * ranges[]; ModelProbe out of the .TRC - the same walk over the same
  * words. */
 template <typename Frames, typename Links>
-inline bool HDSlotSlidesIntoPocket(int first, Frames frames, Links links)
+inline bool HDSlotSlidesIntoPocket(int first, int end, Frames frames,
+	Links links)
 {
 	int queue[HD_POCKET_ANIMS];
 	int queued = 0;
@@ -224,7 +253,7 @@ inline bool HDSlotSlidesIntoPocket(int first, Frames frames, Links links)
 
 		for (int l = 0; l < count; l++)
 		{
-			bool known = linked[l] < 0;
+			bool known = !HDPocketAnimOwn(linked[l], first, end);
 
 			for (int q = 0; q < queued && !known; q++)
 				known = queue[q] == linked[l];
@@ -235,6 +264,13 @@ inline bool HDSlotSlidesIntoPocket(int first, Frames frames, Links links)
 	}
 
 	return HDSlidesIntoPocket(leaves, folds, turns);
+}
+
+/* The walk with no end known: every link the slot names is followed. */
+template <typename Frames, typename Links>
+inline bool HDSlotSlidesIntoPocket(int first, Frames frames, Links links)
+{
+	return HDSlotSlidesIntoPocket(first, -1, frames, links);
 }
 
 /* Which side of a pocket slot's triangles is drawn: HD_POCKET_BOTH for a

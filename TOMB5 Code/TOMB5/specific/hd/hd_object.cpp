@@ -1077,7 +1077,19 @@ namespace
 			return count;
 		};
 
-		return HDSlotSlidesIntoPocket(objects[slot].anim_index, frames, links);
+		/* The slot's own animations end where the next object's begin:
+		 * the first animation of every other loaded object. */
+		int starts[NUMBER_OBJECTS];
+		int count = 0;
+
+		for (int s = 0; s < NUMBER_OBJECTS; s++)
+			if (s != slot && objects[s].loaded && objects[s].anim_index >= 0)
+				starts[count++] = objects[s].anim_index;
+
+		const int first = objects[slot].anim_index;
+
+		return HDSlotSlidesIntoPocket(first,
+			HDPocketAnimEnd(first, starts, count), frames, links);
 	}
 
 	/* ---------------------------------------------------------- the light -- */

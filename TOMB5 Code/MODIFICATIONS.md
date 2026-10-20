@@ -7326,6 +7326,197 @@ there, and no rule of this round reaches a frame that lists no lid.
 `d7d27e58` (the forest lids), the records, `4abe27f5` (the lids open the sky, the verdict
 in `hd_vis.h`) and the records of the sky.
 
+**Round 15: the window's reveal, the catwalk (2026-10-20).** The owner played round 14
+and wrote, put into English: "JOBY2, the windows are a thing of their own: the ANIMATINGs
+carry the texture for the missing wall" ("Joby2 die Fenster sind wieder was eigenes die
+Animatings tragen die Textur fuer die fehlende Wand"); asked whether the baked reveal
+should be drawn in front again as the classic draws its ANIMATING, "yes, but he must take
+care. In places there are already textures there that the ANIMATING would bring again.
+Then we have a texture fight again" ("Ja, er muss aber aufpassen. Teilweise sind da
+jetzt schon Texturen, die das Animating wieder mitliefern wuerde. Dann haben wir wieder
+einen Texturenkampf"); and of RICH1, with a picture, "that is the catwalk from room 72;
+two textures seem to lie on top of each other there. When I move the camera they
+alternate and flicker" ("Rich1 das ist der Catwalk aus Raum 72, da scheinen wieder 2
+Texturen uebereinander zu liegen. Wenn ich die Kamera bewege wechseln die sich ab und
+flackern"); RICH1 otherwise "top". His pictures (the window from inside room 146 with
+the sniper behind the hole, his trview view of room 146's window wall, the window from
+above, the catwalk from above with Lara on its green lattice) and his log of the build
+of Oct 19 2026 05:06:37: the eyes are the log's CAMLOG lines (JOBY2 ticks 1044390,
+1047453 and 1079875, frames 18936, 19028 and 19468; RICH1 ticks 405250 to 467047), room
+19's window round 14's own eye (reference pictures supplied for this project, not in the
+repository).
+
+**JOBY2's windows: who draws which surface** (measured before any change). The window is
+slot 444 `ANIMATING15`, items 173 (into room 19) and 174 (into room 21), a `DUMMY` of the
+level's `.MAP`: the item draws nothing, room 146's art carries the window, 262 triangles
+in each item's box. Item 174's box is x 24,544 to 25,088, y -7,680 to -5,120, z 33,792
+to 35,840 - it stands in room 21, the sniper room behind the window, whose 12 classic
+faces are its floor, ceiling and side walls (tile 2550 of page 5: 160 of 256 texels
+black, 96 at alpha 0) and its far wall (tile 2551, black), the window side a portal into
+room 146. The classic mesh is 544 units deep, its glass at the far end; the art's glass
+stands 264 units in, its reveal running from the facade to the glass. Room 146 is drawn
+HD, its classic faces never; rooms 19 and 21 are drawn classic (hollow groups). A
+scratch reader of the `.TRG` and the `.TRC` with `hd_cover.h`'s tests, per surface of
+item 174's window (room 19's is the same turned, 89, 24 and 260 triangles):
+
+| Surface | room 146's art (page, triangles, stand kind at room 21) | room 21's classic faces | the `DUMMY`'s mesh | drawn before | after |
+|---|---|---|---|---|---|
+| glass blocks, x 24,832 to 24,848 | page 12062, material 3 (cut-out), 127 on no face (kind 2), 1 lying on a side wall (kind 1) | none - the portal | glass at the box's far end | the art | the art |
+| reveal, ceiling y -7,680, x 24,576 to 24,848 | page 437, 32, whole on faces 1 and 5 (kind 1) | the ceiling, the same plane | the reveal's top | room 21's black and clear tile | the art in front |
+| reveal, side walls z 33,792 and 35,840, down to y -5,883 | page 437, 28 and 29, whole on faces 2, 3, 6, 7 (kind 1) | the side walls, the same plane | the reveal's sides | room 21's tile | the art in front |
+| reveal, side walls y -5,883 to -5,629 | page 437, 4 and 3, reaching 3 units past the floor (kind 0) | the side walls, the same plane | the reveal's sides | room 21's tile (the art pushed back) | the art in front |
+| sill, inner slope x 24,681 to 24,848 | page 437, 16, reaching onto floor faces 0 and 4 (kind 0) | the floor, under it | the sill | the art (pushed back, in front of the floor all the same) | the art in front |
+| sill, outer slope, and the side walls above it, x 24,576 to 24,681 | page 437, 16 and 6, on no face of room 21 | none | the sill | the art | the art |
+| wooden frame and facade round the opening, x 24,576 | pages 416 and 433, room 146's own art | none | the frame | the art | the art |
+| the broken-out hole | none | the far wall, and floor, ceiling and sides behind the glass | none | the classic: black, the sniper | the classic |
+
+Two of them draw in one plane at the reveal's top and sides: room 146's art and room 21's
+faces, exactly coplanar (y -7,680, z 33,792 and 35,839.5 against 35,840). That is the
+texture fight he warns of. The stand rule left that art out (kind 1) or pushed it back
+(kind 0), so there was no fight, but the faces' black and clear tile stood where the
+classic shows the object's brick and wood - the missing wall. The classic mesh is never
+drawn (`DUMMY`), so it brings nothing again; and the sill and frame, which the art
+already draws, keep their one drawer.
+
+*The ties* (pixels that change when a surface is pushed by 1/20,000 of its distance,
+RoomProbe's new `-ties` for the classic faces against the art and `-push 146` at plus
+and minus for room 146's art against everything, counted where a channel moves by more
+than 8), at 1,280 x 720, before, with the reveal drawn in place with its group (the new
+`-nofront plain`, the way that fights), and with the rule:
+
+| Eye | classic faces: before / in place / rule | group 146: before / in place / rule | pixels the rule changes |
+|---|---:|---:|---:|
+| tick 1044390, frame 18936 (22,936, -6,875, 35,743) | 10 / 13,864 / 10 | 20 / 16,160 / 21 | 18,507 |
+| tick 1047453, frame 19028 (23,040, -7,040, 35,540) | 21 / 20,894 / 10 | 21 / 21,135 / 16 | 31,941 |
+| tick 1079875, frame 19468 (24,146, -6,434, 36,241) | 5 / 28,917 / 6 | 13 / 28,926 / 15 | 28,930 |
+| room 19's window (17,000, -6,200, 29,500) | 24 / 20,785 / 24 | 36 / 20,797 / 36 | 20,889 |
+
+At 2,560 x 1,440, in the same order: the classic faces 40 / 51,703 / 42, 68 / 83,330 /
+50, 18 / 115,603 / 23 and 62 / 83,070 / 63; group 146 66 / 64,761 / 75, 75 / 81,163 / 59,
+45 / 115,631 / 50 and 118 / 83,126 / 120; the rule changes 73,950, 127,787, 115,664 and
+83,521 pixels. The few more of group 146 after the rule (up to 9) are seams along the
+front draw's edges, where its triangles meet the art drawn in place.
+
+Drawn in place the reveal fights the classic faces on its whole area; in front it leaves
+the 5 to 36 pixels of seams there were before. The pixels that change are the reveal's
+and the lower sill's, from the probe's flat grey of the classic faces (in the game the
+black and clear tile) to the art's brick and wood.
+
+*The rule from the data* (`hd_cover.h`, `HDStandItemBox`, `HDStandBoxHolds`,
+`HDStandBoxFind`, `HDStandRangeBaked`, `HDStandDrawBaked`, `HDStandFrontMatrix`;
+`hd_level.cpp`, `BuildBakedBoxes`, `BuildStandRanges`, `DecideStand`). The boxes of the
+level's items whose slot the `.MAP` calls `DUMMY` (the map's own word, never a donor slot,
+never Lara's, as `hd_object.cpp` names baked slots), each out of the object's first
+frame's bounds at the item's place, its yaw in quarter turns. A stand range is that
+object's art when every triangle of its (group, holder, kind) - kind 1 lying on the
+holder's faces whole, kind 0 reaching onto them, asked again with `HDCoverTriOnFaces` as
+the renderer tagged them - stands in such a box by its centroid; one triangle outside is
+the room's own surface, which the stand rule keeps answering. On the visibility path,
+where the frame lists the holder, draws its classic faces and would leave such a range
+out or push it back, the range is drawn in front instead: in its own group's window, with
+its group's lighting, or in the holder's window when the group is not listed, its
+`view * world` scaled towards the eye by `HD_STAND_PUSH` (a five-hundredth of the
+distance, the stand rule's measured back push), so it lands on the same pixels nearer;
+its group leaves it out. A relief range (kind 2) and every other answer stay as they were;
+the old path (`hd_vis` 0) answers as before. One surface, one drawer: the art in front
+wins every pixel it shares with the face under it, the item is not drawn, and the
+classic draws what the art does not carry - the hole and the room behind it. Over the
+fifteen levels (RoomProbe's new `-standlist` over the vanilla `.TRC`s; 404 `DUMMY` item
+boxes, 150 stand ranges) the rule takes four ranges, JOBY2's two windows, 226 triangles,
+and no range anywhere has some of its triangles in a box and not all:
+
+| Level | holder | group | item | ranges (kind, triangles) |
+|---|---:|---:|---:|---|
+| JOBY2 | 21 | 146 | 174 | 0, 23; 1, 90 |
+| JOBY2 | 19 | 146 | 173 | 0, 24; 1, 89 |
+| the other fourteen | - | - | - | none (ANDREA2 10, ANDY1 8, ANDY3 36, RICH2 37, RICHCUT2 19, TITLE 30 ranges, no triangle in a box) |
+
+`HDLOG stand_baked level= boxes= ranges= tris=` says it per level with `-log`.
+
+**RICH1's catwalk in room 72** (his picture; the cause, nothing built). Rooms 69, 70 and
+72 stand over one another in one footprint (y -2,048 to -768, -3,072 to -2,048, -4,352
+to -3,072), all drawn HD, no classic room in view. The catwalk's green lattice lies in the
+plane y -3,072 between rooms 72 and 70 and is in both groups' art: group 72 has 144
+triangles there (page 978, material 6, the cut-out) facing up into room 72 and 36 more at
+y -3,071 facing down, group 70 has 108 facing down into room 70; no triangle of the one
+is a copy of the other's (0 of group 70's 171 there), every one in the same plane. The
+renderer draws cut-out ranges two-sided (`hd_render.cpp`, `RangeCulls`: a cut-out is a
+card seen from both sides), so from above group 70's lattice is drawn from behind in the
+plane of group 72's: two textures in one place, which wins changing with the eye. Ties at
+1,280 x 720 (`-push 70` and `-push 72`), the picture's eye and two more on the catwalk,
+and one from room 70 below it:
+
+| Eye (tick, eye, target) | group 70 | group 72 | both | group 69 |
+|---|---:|---:|---:|---:|
+| 427250 (21,108, -4,097, 45,617) to (21,005, -3,390, 44,968), his picture | 134,399 | 134,393 | 134,389 | 0 |
+| 417250 (20,816, -4,059, 45,479) | 139,966 | 139,778 | 139,770 | 128 |
+| 405250 (20,981, -4,080, 41,608) | 86,066 | 86,067 | 86,060 | 0 |
+| 467047 in room 70 (26,520, -3,330, 43,725) | 34,958 | 31,923 | 31,275 | 3,684 |
+
+At 2,560 x 1,440, in the same order: group 70 542,323, 564,719, 349,039 and 137,356;
+group 72 542,325, 562,661, 349,051 and 124,325; both 542,296, 562,633, 349,027 and
+122,045; group 69 11, 1,798, 1 and 15,311. Nothing classic is in these pictures
+(`-ties` finds no classic face), and this round's probe draws them as the head's, to the
+byte: the catwalk is the same before and after this round.
+
+With the cut-out ranges drawn one-sided as the opaque ones (a scratch build of the probe,
+not in the repository) the ties fall to 1 and 8, 2 and 8, 2 and 5, 3 and 10 at the four
+eyes: from above only group 72's lattice is drawn, from below only group 70's - each
+group models the side seen from its own room. That picture changes by 110,502, 136,801,
+78,916 and 15,257 pixels, the lattice darker from above than the mix of the two copies.
+The rule belongs in the renderer's cull of the ranges (`hd_render.cpp`, `RangeCulls`), a
+file of no part of this round, so it is not built: a cut-out range whose triangles have a
+coplanar copy facing the other way in another group's art would be drawn one-sided; the
+rest of the cut-outs (flags, leaves, railings drawn as one card) as before.
+
+**Checked.** The engine and all nine tools build from the last code commit; ModernTest
+16,069 checks (27 more than the head: the item boxes, the box test, the range verdict,
+the answers, the front matrix), MenuTest 44,917, InterpTest 754, LipsTest 299 with the
+`.OBJ` folder and 272 without (the cutseq file named by hand), 0 failed; the shaders and
+their `.inc` untouched. The probe of this round against the head's (`85449c17`): every
+picture of the sweep the head's to the byte on both paths (the sets below draw no
+`-stand`, the only place the rule reaches the probe), and the window's pictures with
+`-nofront` the head's to the byte at all four eyes.
+
+| Set | views | fight head / new | changed new against head | `hd_vis` 0 to the byte |
+|---|---:|---:|---:|---:|
+| 22 places (2,560 x 1,440) | 22 | 778,490 / 778,490 | 0 in 0 | 22 |
+| 131 sweep (1,280 x 720) | 131 | 234,685 / 234,685 | 0 in 0 | 131 |
+| 16 mass views | 16 | 308,471 / 308,471 | 0 in 0 | 16 |
+| 32 earlier views | 32 | 36,815 / 36,815 | 0 in 0 | 32 |
+| owner's 20 places | 20 | 177,877 / 177,877 | 0 in 0 | 20 |
+| the tower's swing (8) | 8 | 10,594 / 10,594 | 0 in 0 | 8 |
+| RICH2's lift ride (40) | 40 | 73,896 / 73,896 | 0 in 0 | 40 |
+| RICH2's fine walk (12) | 12 | 56,787 / 56,787 | 0 in 0 | - |
+| RICH2's shaft, frame 61,830 | 1 | 10,552 / 10,552 | 0 in 0 | - |
+| J33's 9 views | 9 | 5,121 / 5,121 | 0 in 0 | - |
+| the video's 32 views | 32 | 2,754 / 2,754 | 0 in 0 | - |
+| trview 151, 152 | 2 | 2,355 / 2,355 | 0 in 0 | - |
+
+Every picture of every set, both of each view's eye and its step, is the head's to the
+byte on the visibility path; the owner set of 99 (198 pictures), round 11's sixteen
+places (32), round 12's three, round 13's three and round 14's nine places at both sizes
+with `hd_vis` 0 too. The classic views (`hd_build` 0, 6 of 6), the six HD views, the
+census eyes with `hd_water` 0 and 1 (15 of 15 each) and the fifteen parity cameras with
+`hd_water` 0 and 1 (15 of 15 each): the head's to the byte. On the old path the windows'
+pictures with `-stand` are the head's to the byte at all four eyes (`hd_vis` 0). The
+pictures that change are the windows' four of the table above, at both sizes, and no
+other; `hd_water`, `hd_marble` and `hd_fog` are not touched.
+
+The engine of the last code commit: `PCtomb5.exe` built Oct 20 2026 22:48:03, md5
+`303099b314e946f5ad8e5108399b5a77`.
+
+**Left.** Not seen in the game. RICH1's catwalk: the one-sided draw of the doubled
+cut-out is the renderer's (`RangeCulls`) - measured above, not built. At tick 467047
+group 69 ties on 3,684 pixels under the catwalk, not looked into. The front draw's
+lighting reads the scaled matrix: the art there may shade by a part in five hundred
+differently from the same art drawn with its group. The census is over the vanilla
+`.TRC`s; a randomized level that moves a `DUMMY` item or puts another model in its slot
+changes it (a donor slot is never baked).
+
+**Commits.** `6bd49260` (the rule and its checks), `1d7500d8` (RoomProbe's rule,
+`-standlist`, `-ties`, `-push`, the tools' README), and the records.
+
 ### A classic room covered by another group's art is drawn as that art
 2026-10-04
 

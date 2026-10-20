@@ -4032,6 +4032,64 @@ carries the tables.
     `ToolPocketOf`'s bound). OWN.
 409. **ModernTest's glass and walk checks** (`Preparation/Tools/Diagnose/
     ModernTest.cpp`, `object_rules`, 20 checks). OWN.
+343. **The art of a `DUMMY` item in front of a classic room's faces**
+    (`hd_cover.h`, `HDStandDrawBaked`; `hd_level.cpp`, `BuildStandRanges`,
+    `DecideStand`) - on the visibility path a stand range that is such an
+    object's art, which the stand rule would leave out or push back while
+    the room is listed and its faces drawn, is drawn in front of them, in
+    its group's window or the holder's, and its group leaves it out.
+    CLASSIC: the classic path draws an item's mesh after the room's faces
+    (items after rooms), the object over the room. DATA: JOBY2's slot 444
+    `ANIMATING15` is a `DUMMY` of the level's `.MAP`; room 146's art holds
+    262 triangles in each of items 173's and 174's boxes; the reveal and
+    sill lie in rooms 19 and 21 on faces of tile 2550 (160 of 256 texels
+    black, 96 at alpha 0), exactly in their planes (y -7,680, z 33,792 and
+    35,839.5 against 35,840). PICTURE: drawn in place with its group the
+    reveal ties with the faces on 13,864 to 28,917 pixels at 1,280 x 720
+    at the four eyes, in front on 5 to 24 as before (RoomProbe `-ties`).
+    OWN: the rule on the visibility path only, the old path unchanged.
+344. **A `DUMMY` item's box** (`hd_cover.h`, `HDStandItemBox`,
+    `HDStandBoxHolds`, `HDStandBoxFind`; `hd_level.cpp`, `BuildBakedBoxes`)
+    - the object's first frame's bounds at the item's place, its yaw in the
+    nearest quarter turn, a triangle in it by its centroid, the box's faces
+    included; the slots the `.MAP` calls `DUMMY`, never a donor slot or
+    Lara's. DATA: `hd_object.cpp`'s baked slots (the map's own word, the
+    donor and Lara exceptions); items 173 and 174 at yaw 0 and -16,384
+    (RoomProbe `-standlist`), their boxes holding the art's 262 triangles
+    each (the binder census of the glass round). OWN: the quarter turn.
+345. **All of a range's triangles in boxes** (`hd_cover.h`,
+    `HDStandRangeBaked`) - one triangle outside keeps the range the room's
+    own surface. DATA: RoomProbe `-standlist` over the fifteen vanilla
+    `.TRC`s - 404 `DUMMY` item boxes, 150 stand ranges, four ranges wholly
+    in boxes (JOBY2 146 at holders 21 and 19, 226 triangles), no range with
+    some triangles in a box and not all. OWN.
+346. **The front push, a five-hundredth of the distance** (`hd_cover.h`,
+    `HDStandFrontMatrix`; `hd_level.cpp`, `DecideStand`) - the view * world
+    matrix scaled towards the eye by `HD_STAND_PUSH`. DATA: `HD_STAND_PUSH`
+    is the stand rule's back push, measured in its own entry; the scale
+    about the eye keeps every pixel's place (the tie measure of ModelProbe
+    `-itempush`, entry 375). OWN: the same fraction the other way.
+347. **The tie measure of a room** (RoomProbe `-ties`, `-push`) - a
+    surface moved by 1/20,000 of its distance either way, the pixels that
+    change by more than 8 counted. THIRD (this project): the doors' tie
+    measure of the round that drew them one-sided (ModelProbe
+    `-itempush`). OWN: the classic faces' count with the stencil of
+    `-coincide`, the shift grown with the distance.
+348. **RICH1's catwalk, measured** (no code) - the lattice between rooms 72
+    and 70 is in both groups' art in the plane y -3,072, each facing its
+    own room, and the renderer draws cut-out ranges two-sided
+    (`hd_render.cpp`, `RangeCulls`). DATA: group 72 144 triangles and group
+    70 108 of page 978, material 6, none a copy of the other. PICTURE: ties
+    134,399, 139,966, 86,066 and 34,958 pixels at 1,280 x 720 at the four
+    eyes (`-push 70`), 1 to 3 with the cut-out ranges one-sided in a
+    scratch build. OWN: the one-sided draw left to the round that holds the
+    renderer.
+349. **RoomProbe's baked rule and switches** (`Preparation/Tools/Diagnose/
+    RoomProbe.cpp`: `-standlist`, `-ties`, `-push`, `-nofront`,
+    `-nofront plain`; `CountBaked`, `RangeBaked`, `ListStand`,
+    `ScaleAboutEye`, `TieArg`). OWN.
+350. **ModernTest's baked checks** (`Preparation/Tools/Diagnose/
+    ModernTest.cpp`, `stand_baked`, 27 checks). OWN.
 
 ## Credited, but not contained here
 

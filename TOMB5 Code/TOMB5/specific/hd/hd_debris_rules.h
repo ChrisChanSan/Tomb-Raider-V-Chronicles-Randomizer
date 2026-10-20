@@ -514,10 +514,9 @@ inline void HDGlassTintOf(const float* sum, float* out)
  * zero and the glass keeps the art's colour, as every other glass does.
  *
  * Page 15074, ANDREA1's arched windows (statics 50, 66 and 68): the page
- * marks 0.12 % of its texels clear (alpha 0), so the clear-texel bound kept
- * the texels' alpha and the panes added 3.0 levels on average where the
- * classic's glass adds 14.2. Added whole they add about 8, inside the
- * classic's band (7.2 to 28.9 from the tenth to the nine tenths). The
+ * marks 0.12 % of its texels clear (alpha 0), so the clear-texel bound would
+ * keep the texels' alpha and leave the panes a faint film below the classic
+ * glass's band at the place; added whole they fall inside that band. The
  * classic's glass there is blue (hue 201, saturation 0.57) and so is the
  * art's (hue 197 to 203); neither holds green. The green is the table's. */
 struct HDGlassLook

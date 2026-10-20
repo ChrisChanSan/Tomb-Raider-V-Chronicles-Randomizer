@@ -29843,11 +29843,13 @@ the rim against the reference, the mirror, the classic rooms counted twice by th
 densest line veils black by 33 of 255 in the bulb's own colour (`hd_fog.h`,
 `HDFogStrength`), so ANDY3's bulbs are 1.66 times as thick as the first round drew them
 and a bright wide bulb is thinned to the same top. The mottled lumps of the mill are the
-art's own mist - the `.TRG`'s additive flow parts whose page drifts on both axes - and
-with `hd_fog` 1 they are drawn at the weight 0.35 instead of 1 (`HDFogArtMist`,
-`HDFogArtWeight`), as faint fog. The HDLOG frame line ends with `fog_taken=` and
-`fog_drawn=`, the settings line with `hd_fog=`. RoomProbe: `-fogart` (or `-fogbook`),
-`-fogartweight`, `-fogstrength`, the strength at the end of each `fogbulb` line;
+art's own mist - the `.TRG`'s additive flow parts whose page drifts on both axes and which
+stand in the air, next to none of their corners on the room's own surface - and with
+`hd_fog` 1 they are drawn at the weight 0.35 instead of 1 (`HDFogArtMist`,
+`HDFogArtWeight`, `fog_add_coat`), as faint fog; so is the title's drifting sand. The
+HDLOG frame line ends with `fog_taken=` and `fog_drawn=`, the settings line with
+`hd_fog=`. RoomProbe: `-fogart` (or `-fogbook`), `-fogartweight`, `-fogstrength`, the
+strength at the end of each `fogbulb` line and the coat on each `fogart` line;
 ModernTest's group `fog_art`.
 
 **Why.** The owner, 2026-10-20, after playing the build of 2026-10-19 05:06:37, with a
@@ -29905,10 +29907,11 @@ Against the bulbs (RoomProbe `-fogart`; the gap from a bulb's centre to the box)
 | 11 | 46,592, 5,376, 49,664 | 1,312 | 3,613, outside | 8,630, outside |
 
 No part's centre lies in a sphere: of ANDY3's 66 additive ranges none; of the fifteen
-levels' (RoomProbe `-fogart` at each) the ones whose centre does are glows, decals, water
-surfaces and flows, two books (ANDY2's rain rings, ANDREA3's of 0.025 s) and the title's
-mist. The rule the order proposed - the bulb's density for a part in a sphere,
-the page time elsewhere - would change no pixel of the mill.
+levels' (RoomProbe `-fogart` at each; JOBY4 holds two additive ranges and no flow part)
+the ones whose centre does are glows, decals, water surfaces and flows, two books (ANDY2's
+rain rings, ANDREA3's of 0.025 s) and the title's mist. The rule the order proposed - the
+bulb's density for a part in a sphere, the page time elsewhere - would change no pixel of
+the mill.
 
 The mist's light at three eyes (its picture against the one with no additive art; luma
 0..255 at the median, the 95th percentile and the most; the hue and chroma of its mean
@@ -29946,6 +29949,34 @@ ANDY3: his eye, round 1's M1, E1 to E3 and I8, the logged C3):
 | E3 (room 38) | 14.6, 11.6, 5.87 | 22.3, 18.6, 9.28 |
 | I8 (inside bulb 8) | 10.9, 7.7, 3.21 | 17.6, 13.7, 5.55 |
 
+At his eye the raised body is a near-even lift over the whole screen: its median 7.3 and
+mean 8.4 lie under the comparison's median of 13.6, only its 95th percentile (18.6) lies
+in the band. Whether that reads as fog in the game is open until the next play test.
+
+**Measured: what else drifts askew.** Of the fifteen levels' additive flow parts four
+groups' pages drift on both axes. Each range's coat - the share of its corners with a
+corner of its group's opaque or alpha triangles in their 16-unit cell or one of the 26
+around it (`fog_add_coat`; RoomProbe `-fogart`) - and the light the art adds over the
+picture with no additive art (luma 0..255, median, 95th percentile, most; without
+bulbs, `hd_fog` 1):
+
+| Level, groups | Drift | Ranges | Coat | Coat, 64-unit cells | At weight 1 | At the rule |
+|---|---|---:|---|---|---|---|
+| ANDY3 10, 15, 17 (the mill) | 0.02, 0.01 | 3 | 0.000 to 0.001 | 0.000 to 0.009 | his eye 21.7, 83.9, 169.2 | 8.8, 29.8, 59.1 |
+| TITLE 61, 68, 71, 104, 105 | 0.07, 0.07 and 0.1, 0.1 | 31 | 0.000 to 0.009 | 0.000 to 0.333 | T1 8.4, 52.9, 187.5; T2 33.6, 81.4, 168.5 | T1 4.1, 19.7, 119.1; T2 11.7, 31.2, 63.4 |
+| ANDREA2 70, 204 | 0.08, 0.08 | 31 | 0.967 to 1.000 | 0.967 to 1.000 | 32.2, 73.9, 165.6 | the base's, 0 pixels differ |
+| ANDREA3 70 | 0.08, 0.08 | 1 | 0.398 | 0.514 | 65.4, 91.0, 210.3 | the base's, 0 pixels differ |
+
+The pictures say the same: ANDY3's parts are lumps hanging over the hill and round the
+crane; the title's are thin cards of sand blowing over the dunes by the pyramid, some in
+the level's sand-coloured bulbs 14 and 15 (rooms 61 and 71); ANDREA2's and ANDREA3's
+are a golden wash laid over the walls of a tunnel (ANDREA2's planes lie on the sectors'
+edges, 512 by 640 units each), the walls' own light and not something in the air. The
+eyes: T1 room 71 at 28,400, -700, 73,200 towards 28,800, -700, 86,000; T2 room 68 at
+30,000, -900, 80,000 towards 27,500, -500, 92,000; ANDREA2 room 70 at 44,000, -1,500,
+27,136 towards 50,000, -1,200, 27,136; ANDREA3 room 70 at 56,000, 7,000, 69,632 towards
+62,000, 7,400, 69,632.
+
 **The rule from the data.** The band's top is the comparison picture's: 33 of 255, the
 95th percentile of its wisps over the ground under them (`HD_FOG_TOP`). The body: each
 bulb's density times S, the factor that makes its densest line - the column 2 r d through
@@ -29953,41 +29984,50 @@ its centre - veil black by the top in the bulb's colour, 1 - exp(-S 2 r d / 255)
 255 over the colour's luma, at most a veil of one half (`HDFogStrength`,
 `HD_FOG_VEIL_MOST`); taken in `fog_take`, the shader unchanged. ANDY3's bulbs (radius
 1,312, d 1/71.75, colour 134, 168, 148, luma 0.61): S 1.66. The mist: of the fifteen
-levels' additive flow parts the ones whose page drifts on both axes - ANDY3's mill
-(0.02, 0.01), ANDREA2's groups 70 and 204 and ANDREA3's group 70 (0.08, 0.08), the
-title's groups 61, 68, 71, 104 and 105 (0.07, 0.07 and 0.1, 0.1) - every water flow
+levels' additive flow parts the ones whose page drifts on both axes - every water flow
 scrolls along one axis (0, -2.5 the mill's river, 0, -1.5 the waterfalls, -0.3, 0
-JOBY2's); with `hd_fog` 1 these are drawn at 0.35 (`HD_FOG_ART_WEIGHT`), the top over
-the most the mist adds at 1, 94.3 at the 95th percentile at the brightest of the three
-eyes. Where a bulb's body is drawn, the mist and everything else inside the sphere lie
-under its veil: the pass comes after the additive pass, so no fog is added to the fog's
-own light twice. The breath stays the first round's hash. No room or level number in
-the code.
+JOBY2's) - and whose coat lies under a tenth (`HD_FOG_ART_COAT`): ANDY3's mill (coat 0.001
+at most) and the title's sand (0.009 at most); ANDREA2's and ANDREA3's washes (0.967 and
+0.398 at least) keep their weight. With `hd_fog` 1 the mist is drawn at 0.35
+(`HD_FOG_ART_WEIGHT`), the top over the most the mist adds at 1, 94.3 at the 95th
+percentile at the brightest of the three eyes of the mill. Where a bulb's body is drawn,
+the mist and everything else inside the sphere lie under its veil: the pass comes after
+the additive pass, so no fog is added to the fog's own light twice. The breath stays the
+first round's hash. No room or level number in the code.
 
 **Decisions.** The mist is weighed down and not tied to the bulbs: none of its parts lies
 in a sphere, the mill's mist group 10 meets no sphere at all, and a weight per bulb would
-make one cloud of the same art two strengths. The criterion is the material and its
-drift, both the level's data; a part with a swing or of another material keeps its
-weight. The weight is one number for every mist: the three eyes' 95th percentiles lie
-within 12 per cent of each other. The body's strength is per bulb, from its own radius,
-density and colour, so the band's top holds for every bulb; it raises the faint ones and
-lowers the bright ones (ANDREA2's canal bulbs, TITLE's). The veil's cap of one half is a
-free choice for a bulb darker than the top (ANDY1's one dark bulb, 40, 68, 48), whose
-veil could otherwise never reach it. The median of the mist (8.8 to 9.8) stays under the
-comparison's (13.6): the art's lumps hold more of their light at their cores, and the
-weight is set by the top. The edge is the art's own and no weight changes it (0.023 to
-0.025 of the height against the comparison's 0.015 and his game picture's 0.014 to
-0.020). The log lines are at the end of the existing frame and settings lines; the
-frame line's is in `hd_level.cpp`, the one line outside the fog's files.
+make one cloud of the same art two strengths. The criterion is the material, its drift and
+its coat, all the level's data; a part with a swing or of another material keeps its
+weight. The coat is asked at the walls' own corners (a 16-unit cell): there the parts in
+the air share 0.009 at most and the washes 0.398 at least, and the bound of a tenth lies
+in that gap; at 64-unit cells the gap closes (the title's 0.333, ANDREA3's 0.514), so the
+coarser cell is not the test. The title's sand is weighed as mist: it is the same art,
+cards drifting askew in the air in and by the level's fog bulbs, and its 95th percentiles
+at 1 (52.9, 81.4) come down to 19.7 and 31.2, under the top. That change was not asked
+for; it is named for the next look at the title. The weight is one number for every mist:
+the three eyes' 95th percentiles lie within 12 per cent of each other. The body's strength
+is per bulb, from its own radius, density and colour, so the band's top holds for every
+bulb; it raises the faint ones and lowers the bright ones (ANDREA2's canal bulbs,
+TITLE's). The veil's cap of one half is a free choice for a bulb darker than the top
+(ANDY1's one dark bulb, 40, 68, 48), whose veil could otherwise never reach it. The median
+of the mist (8.8 to 9.8) stays under the comparison's (13.6): the art's lumps hold more of
+their light at their cores, and the weight is set by the top. The edge is the art's own
+and no weight changes it (0.023 to 0.025 of the height against the comparison's 0.015 and
+his game picture's 0.014 to 0.020). The log lines are at the end of the existing frame and
+settings lines; the frame line's is in `hd_level.cpp`, the one line outside the fog's
+files.
 
 **Checked.** The nine scripts `be`, `broom`, `btrg`, `bmodel`, `bmap`, `bmt`, `bmenu`,
-`bit` and `blips` build with exit 0; ModernTest 16,017 checks (12 new in `fog_art`: the
+`bit` and `blips` build with exit 0; ModernTest 16,023 checks (18 new in `fog_art`: the
 mill's densest line at the top, its bulbs raised 1.6 to 1.7 times, the classic column
 under the top, a bright wide bulb lowered to it, a dark one at half a veil, no colour or
-no column at 1, the mist askew, a flow along one axis not, no other material, the mist's
-weight, the density and the rho), MenuTest 44,917, InterpTest 754, LipsTest 299 with the
-`.OBJ` folder and 272 without (the cutseq file named by hand), 0 failed each.
-`PCtomb5 built Oct 20 2026 20:40:20`, md5 `11fe6461ce1aada962d4f51d9b75c1d7`.
+no column at 1, the mist askew, a flow along one axis not, no other material, a wash
+over the walls not, a layer on four in ten wall corners not, cards in the air, the coat's
+bound, a coat not asked, the bound between the cards and the washes, the mist's weight,
+the density and the rho), MenuTest 44,917, InterpTest 754, LipsTest 299 with the `.OBJ`
+folder and 272 without (the cutseq file named by hand), 0 failed each.
+`PCtomb5 built Oct 20 2026 22:01:36`, md5 `7adec986b43142cd50a42b3099503bd5`.
 The parity, the base's tool (`76046dae`) against this round's at 960 x 540, round 209's
 sets with `-surfacealways` (79 pictures: the six classic views and JOBY4's 229 eye with
 `-classiconly`, the census eyes, the fifteen parity cameras and the six HD views, the last
@@ -30001,7 +30041,14 @@ two), and these change: ANDY3's HD view 17, the mill, by the mist alone (64,017 
 without bulbs, 62,646 with them and `hd_water` 0, its picture with `-fogartweight 1` the
 base's) and with the body as well (233,019, two quads, `hd_water` 1); ANDY3's HD view 34,
 the river under the wheelhouse (90,661, two quads); the census eyes of ANDY3 (720, two
-quads) and RICH3 (2,322, three quads).
+quads) and RICH3 (2,322, three quads). The coat changed none of these sets: their 424
+pictures are byte for byte those of the rule without it (`1aeb0707`'s tool), and
+`hd_fog` 0 with the frame's bulbs is the base's again in 37 of 37. Outside the sets,
+at 1280 x 720 without bulbs: the tunnel eyes of ANDREA2 and ANDREA3 are the base's
+with `hd_fog` 1 (0 pixels differ), the title's T1 and T2 change by the sand alone
+(437,679 and 316,255 pixels, every one darker), his eye at the mill is the picture
+of the rule without the coat byte for byte, and with `hd_fog` 0 all five are the
+base's.
 
 **Left.** The order's book rule - the rain rings (book 3,273) at the bulb's density in a
 sphere - is not built: the rain rings are not the lumps, and they lie in bulbs 1 and 2's
@@ -30011,10 +30058,14 @@ fade in the room shader's additive pass (`hd_room.hlsl`), outside this round's f
 Two bulbs seen through each other add both veils, so a pixel behind two overlapping
 spheres can pass the top; none of the seven eyes shows it. The first round's ledger
 entry on the lumps (book 3,273) is corrected by this round's. The game is not run: the
-next log's frame line names the pass's bulbs and quads.
+next log's frame line names the pass's bulbs and quads, and the next play test says
+whether the body reads as fog. The title's sand drawn at the mist's weight was not asked
+for and waits for a look.
 
 **Commits.** `99e6176e` (the log lines), `c528477f` (the art's mist), `c099314e` (the
-body's strength), `56567bf1` (RoomProbe and ModernTest) and this record.
+body's strength), `56567bf1` (RoomProbe and ModernTest), `1aeb0707` (the record),
+`1892d0ac` (the mist in the air alone: the coat, its listing and checks) and this record's
+fix.
 
 ## 3. Randomizer changes since Beta 1.0
 

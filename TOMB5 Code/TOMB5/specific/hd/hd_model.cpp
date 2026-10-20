@@ -97,6 +97,19 @@ namespace
 		// with no depth write. Set per level by HDModelSetGlassNodes, on
 		// glass ranges whose node the classic draws see-through.
 		bool blend = false;
+		// A glass range every triangle of which has a glass layer of its
+		// node facing against it: drawn as glass, one-sided
+		// (hd_object_rules.h, HDTrmTrianglesFaceAgainst). Set at the build.
+		bool sided = false;
+		// What the glass is added times: its part's opacity
+		// (HDGlassOpacity), 1 for every other range. Set at the build.
+		float opacity = 1.0f;
+		// An additive run range that copies a glass triangle of its node
+		// and page (HDTrmTriangleCopies). Set at the build.
+		bool copy = false;
+		// A copy whose node draws glass: left out, the glass draws it.
+		// Set per level by HDModelSetGlassNodes.
+		bool dropped = false;
 	};
 
 	/* One material, named by page.
@@ -303,6 +316,9 @@ namespace
 	const int kJointBudget = 32;
 
 	IDirect3DDevice9* g_device = 0;
+	// Whether the card weighs a source by D3DRS_BLENDFACTOR; without it the
+	// glass is added whole.
+	bool g_blend_factor = false;
 	IDirect3DVertexShader9* g_vs = 0;
 	IDirect3DPixelShader9* g_ps = 0;
 	IDirect3DVertexDeclaration9* g_decl = 0;
@@ -1043,6 +1059,119 @@ namespace
 		count[2] = part.additive;
 	}
 
+	/* The glass's sides, its copies and its opacity, per triangle
+	 * (hd_object_rules.h: HDTrmTrianglesFaceAgainst, HDTrmTriangleCopies,
+	 * HDGlassOpacity), on the file's own bind pose: `sided` 1 where a
+	 * glass triangle has a glass triangle of its node facing against it,
+	 * `copy` 1 where an additive run triangle copies a glass triangle of
+	 * its node and page, `opacity` the glass triangle's part's. A model
+	 * with no glass material alpha run leaves after the first loop. */
+	void glass_sides_and_copies(const HDTrmModel& trm,
+		const std::vector<int>& page, const std::vector<int>& node,
+		std::vector<unsigned char>& sided, std::vector<unsigned char>& copy,
+		std::vector<float>& opacity)
+	{
+		std::vector<int> glass;		// the glass's triangle numbers
+		std::vector<int> added;		// the additive run's
+
+		for (int p = 0; p < trm.parts; p++)
+		{
+			unsigned int start[3], count[3];
+
+			part_runs(trm.part[p], start, count);
+
+			const bool glassMaterial =
+				trm.part[p].material == HD_TRM_MATERIAL_GLASS;
+			const float weight =
+				HDGlassOpacity(trm.part[p].param[HD_TRM_PARAM_OPACITY]);
+
+			for (int run = HD_TRM_RUN_ALPHA; run <= HD_TRM_RUN_ADDITIVE; run++)
+			{
+				if (run == HD_TRM_RUN_ALPHA && !glassMaterial)
+					continue;
+
+				for (unsigned int i = 0; i + 2 < count[run]; i += 3)
+				{
+					const unsigned int at = start[run] + i;
+
+					if (at + 2 >= (unsigned int)trm.indices)
+						continue;
+
+					const int t = (int)(at / 3);
+
+					if (run == HD_TRM_RUN_ALPHA)
+					{
+						glass.push_back(t);
+						opacity[(size_t)t] = weight;
+					}
+					else
+						added.push_back(t);
+				}
+			}
+		}
+
+		if (glass.empty())
+			return;
+
+		// The corners of triangle t, their texture coordinates and normal.
+		auto corners = [&trm](int t, float* at, unsigned char* uv)
+		{
+			for (int k = 0; k < 3; k++)
+			{
+				const HDTrmVertex& v = trm.vertex[trm.index[t * 3 + k]];
+
+				at[k * 3 + 0] = v.x;
+				at[k * 3 + 1] = v.y;
+				at[k * 3 + 2] = v.z;
+				uv[k * 2 + 0] = v.u;
+				uv[k * 2 + 1] = v.v;
+			}
+		};
+
+		auto normal = [](const float* at, float* n)
+		{
+			const float e[3] = { at[3] - at[0], at[4] - at[1], at[5] - at[2] };
+			const float f[3] = { at[6] - at[0], at[7] - at[1], at[8] - at[2] };
+
+			n[0] = e[1] * f[2] - e[2] * f[1];
+			n[1] = e[2] * f[0] - e[0] * f[2];
+			n[2] = e[0] * f[1] - e[1] * f[0];
+		};
+
+		std::vector<float> place(glass.size() * 9), facing(glass.size() * 3);
+		std::vector<unsigned char> uvs(glass.size() * 6);
+
+		for (size_t g = 0; g < glass.size(); g++)
+		{
+			corners(glass[g], &place[g * 9], &uvs[g * 6]);
+			normal(&place[g * 9], &facing[g * 3]);
+		}
+
+		for (size_t g = 0; g < glass.size(); g++)
+		{
+			unsigned char& mark = sided[(size_t)glass[g]];
+
+			for (size_t h = 0; h < glass.size() && !mark; h++)
+				if (node[(size_t)glass[g]] == node[(size_t)glass[h]] &&
+					HDTrmTrianglesFaceAgainst(&facing[g * 3], &facing[h * 3]))
+					mark = 1;
+		}
+
+		for (const int a : added)
+		{
+			float at[9];
+			unsigned char uv[6];
+
+			corners(a, at, uv);
+
+			for (size_t g = 0; g < glass.size() && !copy[(size_t)a]; g++)
+				if (node[(size_t)a] == node[(size_t)glass[g]] &&
+					page[(size_t)a] == page[(size_t)glass[g]] &&
+					HDTrmTriangleCopies(&place[g * 9], &uvs[g * 6], at, uv))
+					copy[(size_t)a] = 1;
+		}
+	}
+
 	// How many of a model's opaque ranges the alpha test runs on - for the
 	// level's log line.
 	int cut_ranges(const Model& model)
@@ -1735,6 +1864,22 @@ namespace
 		std::vector<unsigned char> glass_of_triangle(page_of_triangle.size(),
 			0);
 
+		/* The glass's sides, its copies in the additive run and its
+		 * opacity, per triangle (glass_sides_and_copies). A copy and an
+		 * opacity keep their triangles in ranges of their own, the sides
+		 * are a range's own when all its triangles have them; a model
+		 * without glass has all three at 0, 0 and 1, and its ranges come
+		 * out as before. */
+		std::vector<unsigned char> sided_of_triangle(page_of_triangle.size(),
+			0);
+		std::vector<unsigned char> copy_of_triangle(page_of_triangle.size(),
+			0);
+		std::vector<float> opacity_of_triangle(page_of_triangle.size(),
+			1.0f);
+
+		glass_sides_and_copies(trm, page_of_triangle, node_of_triangle,
+			sided_of_triangle, copy_of_triangle, opacity_of_triangle);
+
 		for (int pass = 0; pass < 3; pass++)
 		{
 			std::vector<int> triangles;	// triangle numbers of this pass
@@ -1814,6 +1959,8 @@ namespace
 			int node = -2;
 			int cutNow = -1;
 			int glassNow = -1;
+			int copyNow = -1;
+			float opacityNow = -1.0f;
 
 			/* A glass triangle and another of the same page and node get
 			 * a range each. The sort is not keyed on it: over the .TRM
@@ -1827,9 +1974,14 @@ namespace
 				const int on = node_of_triangle[(size_t)triangle];
 				const int cutHere = cut_of_triangle[(size_t)triangle];
 				const int glassHere = glass_of_triangle[(size_t)triangle];
+				const int copyHere = pass == HD_TRM_RUN_ADDITIVE
+					? copy_of_triangle[(size_t)triangle] : 0;
+				const float opacityHere = glassHere
+					? opacity_of_triangle[(size_t)triangle] : 1.0f;
 
 				if (here != page || on != node || cutHere != cutNow ||
-					glassHere != glassNow)
+					glassHere != glassNow || copyHere != copyNow ||
+					opacityHere != opacityNow)
 				{
 					if (range.count)
 						model.pass[pass].push_back(range);
@@ -1844,11 +1996,23 @@ namespace
 					range.cut = cutHere != 0;
 					range.glass = glassHere != 0;
 					range.blend = false;
+					range.sided = glassHere != 0;
+					range.opacity = opacityHere;
+					range.copy = copyHere != 0;
+					range.dropped = false;
 					page = here;
 					node = on;
 					cutNow = cutHere;
 					glassNow = glassHere;
+					copyNow = copyHere;
+					opacityNow = opacityHere;
 				}
+
+				/* A glass range is one-sided when every triangle in it has
+				 * a layer facing against it; one without keeps the range
+				 * two-sided, so a range is never cut for it. */
+				if (!sided_of_triangle[(size_t)triangle])
+					range.sided = false;
 
 				indices.push_back(trm.index[(size_t)triangle * 3 + 0]);
 				indices.push_back(trm.index[(size_t)triangle * 3 + 1]);
@@ -2912,10 +3076,25 @@ namespace
 			 * are put back as the step found them. */
 			DWORD glassSrc = D3DBLEND_ONE, glassDest = D3DBLEND_ZERO;
 
+			/* And per range its sides and its weight (hd_object_rules.h):
+			 * a range with a glass layer facing against it culls the
+			 * winding turned away from the eye - the other winding under a
+			 * mirrored matrix - unless the whole draw culls already; a
+			 * range whose part's opacity is under 1 is added times it,
+			 * through the blend factor. Both are put back after the step.
+			 * The cull and the factor each draw holds now, -1 for none
+			 * set: the draw's own cull and a whole add. */
+			const DWORD glassOutside = HDMatrixMirrors(nodeMatrix)
+				? D3DCULL_CW : D3DCULL_CCW;
+			DWORD glassFactor = 0xFFFFFFFF;
+			int glassCullNow = -1;
+			int glassByteNow = -1;
+
 			if (glassStep)
 			{
 				g_device->GetRenderState(D3DRS_SRCBLEND, &glassSrc);
 				g_device->GetRenderState(D3DRS_DESTBLEND, &glassDest);
+				g_device->GetRenderState(D3DRS_BLENDFACTOR, &glassFactor);
 				g_device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
 				g_device->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
 				g_device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ONE);
@@ -2931,9 +3110,10 @@ namespace
 			{
 				const Range& first = model.pass[pass][i];
 
-				// The glass in its own step and only there.
+				// The glass in its own step and only there, and a copy of
+				// the glass left out where its node draws glass.
 				if (!(nodeMask & (1u << (first.node & 31))) ||
-					first.blend != glassStep)
+					first.blend != glassStep || first.dropped)
 				{
 					i++;
 					continue;
@@ -2954,7 +3134,10 @@ namespace
 					if (more.pageSlot != first.pageSlot ||
 						more.start != start + count ||
 						!(nodeMask & (1u << (more.node & 31))) ||
-						more.cut != first.cut || more.blend != first.blend)
+						more.cut != first.cut || more.blend != first.blend ||
+						more.dropped != first.dropped || (first.blend &&
+						(more.sided != first.sided ||
+						more.opacity != first.opacity)))
 						break;
 
 					count += more.count;
@@ -3005,6 +3188,34 @@ namespace
 					}
 				}
 
+				if (glassStep)
+				{
+					const int cullHere = first.sided && cull ==
+						HD_MODEL_CULL_NONE ? (int)glassOutside : -1;
+					const int byteHere = g_blend_factor
+						? (int)HDGlassOpacityByte(first.opacity) : 255;
+
+					if (cullHere != glassCullNow)
+					{
+						g_device->SetRenderState(D3DRS_CULLMODE, cullHere >= 0
+							? (DWORD)cullHere : D3DCULL_NONE);
+						glassCullNow = cullHere;
+					}
+
+					if (byteHere != glassByteNow)
+					{
+						g_device->SetRenderState(D3DRS_SRCBLEND, byteHere < 255
+							? D3DBLEND_BLENDFACTOR : D3DBLEND_ONE);
+
+						if (byteHere < 255)
+							g_device->SetRenderState(D3DRS_BLENDFACTOR,
+								D3DCOLOR_ARGB(byteHere, byteHere, byteHere,
+									byteHere));
+
+						glassByteNow = byteHere;
+					}
+				}
+
 				g_device->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0,
 					0, (UINT)model.vertices, start, count / 3);
 
@@ -3018,11 +3229,20 @@ namespace
 				g_device->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
 			}
 
-			// The blend factors as the step found them.
+			// The blend factors and the cull as the step found them.
 			if (glassStep)
 			{
 				g_device->SetRenderState(D3DRS_SRCBLEND, glassSrc);
 				g_device->SetRenderState(D3DRS_DESTBLEND, glassDest);
+
+				if (glassByteNow >= 0 && glassByteNow < 255)
+					g_device->SetRenderState(D3DRS_BLENDFACTOR, glassFactor);
+
+				if (glassCullNow >= 0)
+					g_device->SetRenderState(D3DRS_CULLMODE,
+						cull == HD_MODEL_CULL_CW ? D3DCULL_CW
+						: cull == HD_MODEL_CULL_CCW ? D3DCULL_CCW
+						: D3DCULL_NONE);
 			}
 		}
 
@@ -3088,6 +3308,13 @@ bool HDModelInit(IDirect3DDevice9* device, const char** why)
 	}
 
 	g_device = device;
+
+	{
+		D3DCAPS9 caps;
+
+		g_blend_factor = SUCCEEDED(device->GetDeviceCaps(&caps)) &&
+			(caps.SrcBlendCaps & D3DPBLENDCAPS_BLENDFACTOR) != 0;
+	}
 
 	static const D3DVERTEXELEMENT9 elements[] =
 	{
@@ -5210,7 +5437,48 @@ int HDModelSetGlassNodes(int slot, unsigned int nodes)
 			model.blendRanges++;
 	}
 
+	/* A copy of the glass in the additive run is left out where its node
+	 * draws glass: the glass is that face, added once. */
+	for (Range& range : model.pass[HD_TRM_RUN_ADDITIVE])
+		range.dropped = range.copy && HDTrmTriangleIsGlass(HD_TRM_RUN_ALPHA,
+			HD_TRM_MATERIAL_GLASS, range.node, nodes);
+
 	return model.blendRanges;
+}
+
+void HDModelGlassCounts(int slot, HDModelGlassCount* out)
+{
+	if (!out)
+		return;
+
+	memset(out, 0, sizeof(*out));
+	out->opacity = 1.0f;
+	out->factor = 1.0f;
+
+	const Model* model = find(g_models, slot);
+
+	if (!model)
+		return;
+
+	for (const Range& range : model->pass[HD_TRM_RUN_ALPHA])
+	{
+		if (!range.blend)
+			continue;
+
+		out->blended++;
+		out->sided += range.sided ? 1 : 0;
+
+		if (range.opacity < out->opacity)
+			out->opacity = range.opacity;
+	}
+
+	for (const Range& range : model->pass[HD_TRM_RUN_ADDITIVE])
+	{
+		out->copies += range.copy ? 1 : 0;
+		out->dropped += range.dropped ? 1 : 0;
+	}
+
+	out->factor = g_blend_factor ? out->opacity : 1.0f;
 }
 
 int HDModelGlassRanges(int slot, int* blended)

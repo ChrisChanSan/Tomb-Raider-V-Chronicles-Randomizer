@@ -66,7 +66,11 @@
  * the page's own alpha as the HD additive pass weighs its texels, with
  * no depth write and after everything solid. A node the classic draws
  * solid keeps its .TRM part as it was, whatever the material: the
- * classic is the measure of what is meant to be seen through. */
+ * classic is the measure of what is meant to be seen through. It is the
+ * measure of how much as well: the classic adds one face at a pixel, so
+ * glass with a layer facing against it is drawn one-sided and a copy of
+ * the glass in the additive run is not drawn beside it; and the part's
+ * own opacity weighs what the glass adds. */
 
 /* The fewest single-weight vertices a node needs to be measured: the bind
  * drift's own working set (hd_model.cpp) uses the same count. */
@@ -337,4 +341,143 @@ inline bool HDTrmTriangleIsGlass(int run, unsigned int material, int node,
 		return false;
 
 	return (nodes & (1u << node)) != 0;
+}
+
+/* The glass's two sides. The classic draws a see-through face one-sided -
+ * TR5 culls back faces in software (specific/output.cpp) - and a pane seen
+ * from both sides carries a face for each side. A .TRM glass built the
+ * same way, a triangle with a glass triangle of its node facing against
+ * it, has a layer for each side as well; drawn two-sided, the layer turned
+ * away from the eye adds its texels on top of the one facing it. A range
+ * of glass every triangle of which has such a layer is drawn one-sided,
+ * as the classic draws its face. A glass triangle that nothing faces
+ * against is a single pane seen from both sides, and its range keeps the
+ * two-sided draw. Two triangles face against each other when their
+ * normals stand more than 135 degrees apart: halfway between the two sides
+ * of one pane (180) and two faces meeting at a box's corner (90), which
+ * are no layers of one another. `a` and `b` are the two triangles'
+ * normals, of any length; a zero normal faces against nothing. */
+inline bool HDTrmTrianglesFaceAgainst(const float* a, const float* b)
+{
+	const float dot = a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+	const float aa = a[0] * a[0] + a[1] * a[1] + a[2] * a[2];
+	const float bb = b[0] * b[0] + b[1] * b[1] + b[2] * b[2];
+
+	return dot < 0.0f && dot * dot > 0.5f * aa * bb;
+}
+
+/* A copy of a glass triangle. A .TRM's additive run can carry the glass's
+ * own pane again - the same page, the same texture corners, the same place
+ * to within a unit - and the additive pass adds it on top of the glass,
+ * where the classic adds the face once. Triangle `b` copies triangle `a`
+ * when every corner of `b` has a corner of `a` with the same texture
+ * coordinate (u and v, a byte each, as the file stores them) lying within
+ * HD_TRM_COPY_SHARE of `a`'s longest edge: far below the size of any pane
+ * and far above the rounding of a file's float coordinates. Three floats a
+ * corner for the places, two bytes a corner for the texture coordinates;
+ * the page is the caller's to compare. */
+#define HD_TRM_COPY_SHARE		(1.0f / 32.0f)
+
+inline bool HDTrmTriangleCopies(const float* a, const unsigned char* uvA,
+	const float* b, const unsigned char* uvB)
+{
+	float longest = 0.0f;
+
+	for (int k = 0; k < 3; k++)
+	{
+		const float* p = a + k * 3;
+		const float* q = a + ((k + 1) % 3) * 3;
+		const float dx = p[0] - q[0], dy = p[1] - q[1], dz = p[2] - q[2];
+		const float edge = dx * dx + dy * dy + dz * dz;
+
+		if (edge > longest)
+			longest = edge;
+	}
+
+	if (!(longest > 0.0f))
+		return false;
+
+	const float reach = HD_TRM_COPY_SHARE * HD_TRM_COPY_SHARE * longest;
+
+	for (int k = 0; k < 3; k++)
+	{
+		bool found = false;
+
+		for (int j = 0; j < 3 && !found; j++)
+		{
+			if (uvB[k * 2] != uvA[j * 2] || uvB[k * 2 + 1] != uvA[j * 2 + 1])
+				continue;
+
+			const float dx = b[k * 3] - a[j * 3];
+			const float dy = b[k * 3 + 1] - a[j * 3 + 1];
+			const float dz = b[k * 3 + 2] - a[j * 3 + 2];
+
+			found = dx * dx + dy * dy + dz * dz <= reach;
+		}
+
+		if (!found)
+			return false;
+	}
+
+	return true;
+}
+
+/* The glass's opacity: the part's material carries it in param[1], 0.1 to
+ * 1 over the glass parts the HD objects bind, and the room art's additive
+ * pass already weighs its material by it (hd_render.cpp,
+ * MaterialAddWeight). The glass is added weighed by it. A value outside
+ * (0, 1) - 0, missing, not a number, or 1 itself - weighs 1: the glass as
+ * the classic adds it. */
+#define HD_TRM_PARAM_OPACITY		1
+
+inline float HDGlassOpacity(float param)
+{
+	if (!(param > 0.0f) || !(param < 1.0f))
+		return 1.0f;
+
+	return param;
+}
+
+/* The opacity as the blend factor's byte (D3DRS_BLENDFACTOR), rounded to
+ * the nearest of its 255 steps, 0 to 255. */
+inline unsigned int HDGlassOpacityByte(float opacity)
+{
+	if (!(opacity > 0.0f))
+		return 0;
+
+	if (!(opacity < 1.0f))
+		return 255;
+
+	return (unsigned int)(opacity * 255.0f + 0.5f);
+}
+
+/* The classic's band as the ceiling of the glass: the factor that holds
+ * what the glass adds - the top of its band, the texels' luma times their
+ * alpha times the opacity - under the top of the band the classic's
+ * see-through faces of the same node add, their texels' luma. Both are
+ * times the same light (the additive pass clamps the light as the classic's
+ * colour byte does), so the factor holds at any light. 1 when the glass
+ * adds no more, or when either band is empty. ModelProbe (-alpha) measures
+ * it: over the glass the shipped levels bind it is 1 once the sides, the
+ * copies and the opacity are applied, so the object path, which holds no
+ * page's texels, applies none. */
+inline float HDGlassBandFactor(float classicTop, float glassTop)
+{
+	if (!(classicTop > 0.0f) || !(glassTop > classicTop))
+		return 1.0f;
+
+	return classicTop / glassTop;
+}
+
+/* Whether a node matrix mirrors - a reflection: the determinant of its
+ * turn is negative, and the winding that faces the eye is the other one.
+ * Sixteen floats, the turn in the first three of the first three rows. */
+inline bool HDMatrixMirrors(const float* m)
+{
+	const float det =
+		m[0] * (m[5] * m[10] - m[6] * m[9]) -
+		m[1] * (m[4] * m[10] - m[6] * m[8]) +
+		m[2] * (m[4] * m[9] - m[5] * m[8]);
+
+	return det < 0.0f;
 }

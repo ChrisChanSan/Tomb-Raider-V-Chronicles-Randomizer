@@ -2500,6 +2500,9 @@ static void ObjectLevelBuild(const char* installRoot, const char* stem,
 		 * clean. */
 		const int glass = HDModelSetGlassNodes(slot, verdict.hd
 			? see_through_nodes_of(slot, wanted[i].nodes) : 0);
+		HDModelGlassCount glassCount;
+
+		HDModelGlassCounts(slot, &glassCount);
 
 		if (verdict.hd)
 			g_hd_slots++;
@@ -2514,13 +2517,14 @@ static void ObjectLevelBuild(const char* installRoot, const char* stem,
 
 		Log("HDLOG slot=%d name=%s model=%s nodes=%d maxbone=%d cover=%d "
 			"drift=%.0f/%.0f head=%d hd=%d reason=%s fit=%.0f pocket=%d "
-			"glass=%d",
+			"glass=%d oneside=%d copies=%d/%d opacity=%.3f factor=%.3f",
 			slot, HDSlotName(slot) ? HDSlotName(slot) : "?",
 			HDModelName(slot) ? HDModelName(slot) : "-", wanted[i].nodes,
 			verdict.maxBone, covered, verdict.drift, verdict.worst,
 			HDModelHasHead(slot) ? HDModelHeadNode(slot) : -1,
 			(int)verdict.hd, verdict.why, verdict.fit, (int)verdict.pocket,
-			glass);
+			glass, glassCount.sided, glassCount.dropped, glassCount.copies,
+			glassCount.opacity, glassCount.factor);
 	}
 
 	Log("HDLOG level=%s objects hd=%d classic=%d baked=%d (of %d loaded "

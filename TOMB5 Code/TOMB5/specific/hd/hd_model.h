@@ -717,11 +717,12 @@ int HDModelDrawCalls();		// since the last HDModelFrameBegin
  * projection's place; HDRenderShadowCastEnd puts the frame's registers back.
  *
  * HDModelCastDraw draws the opaque and the alpha-tested pass, never the
- * additive one, with the alpha test of each range as HDModelDraw has it,
- * with no head cut and double sided. `head` draws the slot's separate face
- * instead of its body. False when the model is not there or no cast has
- * begun. HDModelCastEnd closes the cast, before HDRenderShadowCastEnd.
- * HDModelCastCalls counts the draw calls since HDModelCastBegin. */
+ * additive one nor the glass (HDModelSetGlassNodes), with the alpha test of
+ * each range as HDModelDraw has it, with no head cut and double sided.
+ * `head` draws the slot's separate face instead of its body. False when
+ * the model is not there or no cast has begun. HDModelCastEnd closes the
+ * cast, before HDRenderShadowCastEnd. HDModelCastCalls counts the draw
+ * calls since HDModelCastBegin. */
 bool HDModelCastReady();
 void HDModelCastBegin(const float* castClip);
 void HDModelCastEnd();
@@ -748,9 +749,10 @@ int HDModelCastCalls();
  * HDRenderShadowModelsEnd, which puts the shaders back.
  *
  * HDModelReceiveDraw draws the opaque and the alpha-tested pass, never the
- * additive one, with the alpha test of each range and the arguments of the
- * solid draw it repeats: HDModelDraw's for the body (`head` false), and
- * HDModelDrawHead's for the slot's separate face (`head` true, `soft` 0).
+ * additive one nor the glass, with the alpha test of each range and the
+ * arguments of the solid draw it repeats: HDModelDraw's for the body
+ * (`head` false), and HDModelDrawHead's for the slot's separate face
+ * (`head` true, `soft` 0).
  * The two maps' blocks are the caller's (HDRenderShadowModelsBlocks). False
  * when the model is not there or no receive has begun. HDModelReceiveCalls
  * counts the draw calls since HDModelReceiveBegin. */
@@ -917,6 +919,20 @@ int HDModelIndices(int slot);
 int HDModelRanges(int slot);
 // Of those, the opaque ranges drawn with the alpha test (hd_model_cut.h).
 int HDModelCutRanges(int slot);
+
+/* The glass of a slot's model (hd_object_rules.h, HDTrmTriangleIsGlass).
+ * HDModelSetGlassNodes takes the nodes whose classic mesh has a see-through
+ * face, a bit per node, and marks the model's glass material ranges of the
+ * alpha run on those nodes to be drawn as glass: HDModelDraw draws them in
+ * the bracket that draws the additive pass, before it, added to what lies
+ * behind them and weighed by the page's own alpha, as the additive pass
+ * draws, with no depth write; the shadow's cast and receive draws leave
+ * them out. 0 takes every mark off again. Returns how many
+ * ranges it marked. HDModelGlassRanges returns how many glass material
+ * ranges the model's alpha run has and, in `blended`, how many of them are
+ * marked. Both 0 for a slot with no model. */
+int HDModelSetGlassNodes(int slot, unsigned int nodes);
+int HDModelGlassRanges(int slot, int* blended);
 int HDModelPageCount(int slot);
 int HDModelPage(int slot, int at);		// .DDS number
 

@@ -987,6 +987,52 @@ namespace
 		return HDSkeletonFitWorst(trm, trmCount, mesh, meshCount, count);
 	}
 
+	/* The nodes whose classic mesh has a see-through face (hd_object_rules.h,
+	 * the glass), a bit per node: node n's mesh is mesh_vtxbuf[mesh_index +
+	 * 2n], its quads six words each and its triangles five, the texture
+	 * word and the effects word last, as phd_PutPolygons reads them. */
+	unsigned int see_through_nodes_of(int slot, int nodes)
+	{
+		if (!mesh_vtxbuf || !textinfo || slot < 0 || slot >= NUMBER_OBJECTS ||
+			!objects[slot].loaded)
+			return 0;
+
+		const OBJECT_INFO& object = objects[slot];
+		int count = nodes < HD_OBJ_NODES ? nodes : HD_OBJ_NODES;
+		unsigned int mask = 0;
+
+		if (count > object.nmeshes)
+			count = object.nmeshes;
+
+		for (int node = 0; node < count; node++)
+		{
+			const int at = object.mesh_index + node * 2;
+
+			if (at < 0 || at >= num_level_meshes || !mesh_vtxbuf[at])
+				continue;
+
+			const MESH_DATA* mesh = mesh_vtxbuf[at];
+
+			for (int f = 0; mesh->gt4 && f < mesh->ngt4; f++)
+			{
+				const short* quad = mesh->gt4 + f * 6;
+
+				mask = HDSeeThroughNodes(mask, node, HDClassicFaceSeeThrough(
+					quad[5], textinfo[quad[4] & 0x7FFF].drawtype));
+			}
+
+			for (int f = 0; mesh->gt3 && f < mesh->ngt3; f++)
+			{
+				const short* tri = mesh->gt3 + f * 5;
+
+				mask = HDSeeThroughNodes(mask, node, HDClassicFaceSeeThrough(
+					tri[4], textinfo[tri[3] & 0x7FFF].drawtype));
+			}
+		}
+
+		return mask;
+	}
+
 	/* Whether a slot slides into a pocket (hd_object_rules.h): the walk
 	 * over its animations, read out of anims[] - the frame pointer, the
 	 * rate in the interpolation's low byte and the keyframe's size in words
@@ -2436,6 +2482,13 @@ static void ObjectLevelBuild(const char* installRoot, const char* stem,
 		if (verdict.hd)
 			verdict.pocket = pocket_of(slot) ? 1 : 0;
 
+		/* The glass: the material 14 alpha run on a node the classic draws
+		 * see-through is drawn as glass (hd_object_rules.h); every other
+		 * model's mark is taken off, so a level built after another starts
+		 * clean. */
+		const int glass = HDModelSetGlassNodes(slot, verdict.hd
+			? see_through_nodes_of(slot, wanted[i].nodes) : 0);
+
 		if (verdict.hd)
 			g_hd_slots++;
 		else if (!verdict.baked)
@@ -2448,12 +2501,14 @@ static void ObjectLevelBuild(const char* installRoot, const char* stem,
 				covered++;
 
 		Log("HDLOG slot=%d name=%s model=%s nodes=%d maxbone=%d cover=%d "
-			"drift=%.0f/%.0f head=%d hd=%d reason=%s fit=%.0f pocket=%d",
+			"drift=%.0f/%.0f head=%d hd=%d reason=%s fit=%.0f pocket=%d "
+			"glass=%d",
 			slot, HDSlotName(slot) ? HDSlotName(slot) : "?",
 			HDModelName(slot) ? HDModelName(slot) : "-", wanted[i].nodes,
 			verdict.maxBone, covered, verdict.drift, verdict.worst,
 			HDModelHasHead(slot) ? HDModelHeadNode(slot) : -1,
-			(int)verdict.hd, verdict.why, verdict.fit, (int)verdict.pocket);
+			(int)verdict.hd, verdict.why, verdict.fit, (int)verdict.pocket,
+			glass);
 	}
 
 	Log("HDLOG level=%s objects hd=%d classic=%d baked=%d (of %d loaded "

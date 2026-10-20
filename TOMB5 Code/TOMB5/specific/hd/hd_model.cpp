@@ -26,6 +26,7 @@
 #include "hd_classic.h"		// the donor game's own frame 0
 #include "hd_mods.h"		// a mod's model beats the install's
 #include "hd_model_cut.h"	// which opaque triangles are cut out
+#include "hd_object_rules.h"	// which alpha run triangles are glass
 #include "hd_trm.h"
 #include "hd_trl.h"		// a face's track files, its map and its deform
 
@@ -89,6 +90,13 @@ namespace
 		// the range wears a cut-out material on a page whose low alpha is
 		// holes (hd_model_cut.h).
 		bool cut = false;
+		// An alpha run range of the glass material (hd_object_rules.h,
+		// HD_TRM_MATERIAL_GLASS), set at the build.
+		bool glass = false;
+		// Drawn as glass: added to what lies behind, with the glows and
+		// with no depth write. Set per level by HDModelSetGlassNodes, on
+		// glass ranges whose node the classic draws see-through.
+		bool blend = false;
 	};
 
 	/* One material, named by page.
@@ -212,6 +220,8 @@ namespace
 		// `vertices`, except under the page cut.
 		int vertexSeen = 0;
 		int nodes = 0;				// classic nmeshes
+		// How many alpha run ranges are drawn as glass (Range::blend).
+		int blendRanges = 0;
 		int nodeVertices[32] = { 0 };
 		unsigned int covered = 0;		// bit per node with geometry
 
@@ -1718,6 +1728,13 @@ namespace
 		 * before it builds a single model. */
 		std::vector<unsigned char> cut_of_triangle(page_of_triangle.size(), 0);
 
+		/* One byte per triangle: 1 where the alpha run's part wears the
+		 * glass material (hd_object_rules.h). Which of them are drawn as
+		 * glass is the level's to say (HDModelSetGlassNodes); the build
+		 * only keeps them apart from the others in their own ranges. */
+		std::vector<unsigned char> glass_of_triangle(page_of_triangle.size(),
+			0);
+
 		for (int pass = 0; pass < 3; pass++)
 		{
 			std::vector<int> triangles;	// triangle numbers of this pass
@@ -1730,6 +1747,8 @@ namespace
 
 				const bool cutMaterial = pass == 0 &&
 					HDTrmMaterialCuts(trm.part[p].material);
+				const bool glassMaterial = pass == HD_TRM_RUN_ALPHA &&
+					trm.part[p].material == HD_TRM_MATERIAL_GLASS;
 
 				for (unsigned int i = 0; i + 2 < count[pass]; i += 3)
 				{
@@ -1755,6 +1774,9 @@ namespace
 						cut_of_triangle[(size_t)(at / 3)] = key >= 0 &&
 							HDPageCacheSlotHoles(HDPageCacheSlotOf(key)) ? 1 : 0;
 					}
+
+					if (glassMaterial)
+						glass_of_triangle[(size_t)(at / 3)] = 1;
 
 					triangles.push_back((int)(at / 3));
 				}
@@ -1791,15 +1813,23 @@ namespace
 			int page = -2;
 			int node = -2;
 			int cutNow = -1;
+			int glassNow = -1;
 
+			/* A glass triangle and another of the same page and node get
+			 * a range each. The sort is not keyed on it: over the .TRM
+			 * files of both installs no part's alpha run shares a page
+			 * and a node with another material's (ModelProbe -alpha), so
+			 * the ranges of every model come out as they did before. */
 			for (size_t i = 0; i < triangles.size(); i++)
 			{
 				const int triangle = triangles[i];
 				const int here = page_of_triangle[(size_t)triangle];
 				const int on = node_of_triangle[(size_t)triangle];
 				const int cutHere = cut_of_triangle[(size_t)triangle];
+				const int glassHere = glass_of_triangle[(size_t)triangle];
 
-				if (here != page || on != node || cutHere != cutNow)
+				if (here != page || on != node || cutHere != cutNow ||
+					glassHere != glassNow)
 				{
 					if (range.count)
 						model.pass[pass].push_back(range);
@@ -1812,9 +1842,12 @@ namespace
 					range.page = here;
 					range.node = on;
 					range.cut = cutHere != 0;
+					range.glass = glassHere != 0;
+					range.blend = false;
 					page = here;
 					node = on;
 					cutNow = cutHere;
+					glassNow = glassHere;
 				}
 
 				indices.push_back(trm.index[(size_t)triangle * 3 + 0]);
@@ -2790,14 +2823,27 @@ namespace
 			g_device->SetRenderState(D3DRS_CULLMODE,
 				cull == HD_MODEL_CULL_CW ? D3DCULL_CW : D3DCULL_CCW);
 
-
-		for (int pass = 0; pass < 3; pass++)
+		/* Four steps over the three passes. The third is the glass of the
+		 * alpha run (HDModelSetGlassNodes), drawn with the glows: in the
+		 * bracket that draws the additive pass, just before it, after
+		 * everything solid has written its depth. A model without glass
+		 * skips it at its first test. */
+		for (int step = 0; step < 4; step++)
 		{
+			const int pass = step < 2 ? step : step - 1;
+			const bool glassStep = step == 2;
+
 			/* The frame draws its solid work and its glows in two brackets,
 			 * and this is where a bracket leaves out what is not its own.
 			 * HD_PASS_ALL, which the diagnostic tool asks for, lets all three
 			 * through and this line costs a test. */
-			if (!(g_pass_mask & (1u << pass)))
+			if (glassStep)
+			{
+				if (model.blendRanges <= 0 ||
+					!(g_pass_mask & (HD_PASS_ADDITIVE | HD_PASS_BLEND)))
+					continue;
+			}
+			else if (!(g_pass_mask & (1u << pass)))
 				continue;
 
 			if (model.pass[pass].empty())
@@ -2819,6 +2865,17 @@ namespace
 				cut && cut->on > 0.0f ? 1.0f : 0.0f,
 				pass == 2 ? 0.0f : 1.0f
 			};
+
+			/* The glass as the additive pass draws its texels: no alpha
+			 * test, the light clamped and the texel weighed by its alpha,
+			 * no overbright add (hd_model.hlsl, gPass). A texel at a
+			 * quarter of its alpha adds a quarter of itself. */
+			if (glassStep)
+			{
+				constants[0] = 0.0f;
+				constants[1] = 1.0f;
+				constants[3] = 0.0f;
+			}
 
 			g_device->SetPixelShaderConstantF(4, constants, 1);
 
@@ -2849,6 +2906,22 @@ namespace
 				g_device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ONE);
 			}
 
+			/* The glass, added as the classic adds its see-through faces
+			 * (ONE / ONE, specific/polyinsert.cpp, case 2), with no depth
+			 * write: what lies behind it shows through. The blend factors
+			 * are put back as the step found them. */
+			DWORD glassSrc = D3DBLEND_ONE, glassDest = D3DBLEND_ZERO;
+
+			if (glassStep)
+			{
+				g_device->GetRenderState(D3DRS_SRCBLEND, &glassSrc);
+				g_device->GetRenderState(D3DRS_DESTBLEND, &glassDest);
+				g_device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+				g_device->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+				g_device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ONE);
+				g_device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ONE);
+			}
+
 			/* The ranges, merged back together. They come off in (page, node)
 			 * order and their index runs are contiguous, so a run of visible
 			 * neighbours that share a page is ONE draw call. With mesh_bits
@@ -2858,7 +2931,9 @@ namespace
 			{
 				const Range& first = model.pass[pass][i];
 
-				if (!(nodeMask & (1u << (first.node & 31))))
+				// The glass in its own step and only there.
+				if (!(nodeMask & (1u << (first.node & 31))) ||
+					first.blend != glassStep)
 				{
 					i++;
 					continue;
@@ -2879,7 +2954,7 @@ namespace
 					if (more.pageSlot != first.pageSlot ||
 						more.start != start + count ||
 						!(nodeMask & (1u << (more.node & 31))) ||
-						more.cut != first.cut)
+						more.cut != first.cut || more.blend != first.blend)
 						break;
 
 					count += more.count;
@@ -2937,10 +3012,17 @@ namespace
 				i = next;
 			}
 
-			if (pass == 2)
+			if (pass == 2 || glassStep)
 			{
 				g_device->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
 				g_device->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
+			}
+
+			// The blend factors as the step found them.
+			if (glassStep)
+			{
+				g_device->SetRenderState(D3DRS_SRCBLEND, glassSrc);
+				g_device->SetRenderState(D3DRS_DESTBLEND, glassDest);
 			}
 		}
 
@@ -4639,7 +4721,8 @@ bool HDModelCastDraw(int slot, bool head, const float* nodeMatrix, int nodeCount
 		{
 			const Range& first = ranges[i];
 
-			if (!(nodeMask & (1u << (first.node & 31))))
+			// The glass is drawn with the glows and is no solid surface.
+			if (!(nodeMask & (1u << (first.node & 31))) || first.blend)
 			{
 				i++;
 				continue;
@@ -4654,7 +4737,8 @@ bool HDModelCastDraw(int slot, bool head, const float* nodeMatrix, int nodeCount
 				const Range& more = ranges[next];
 
 				if (more.pageSlot != first.pageSlot || more.start != start + count ||
-					!(nodeMask & (1u << (more.node & 31))) || more.cut != first.cut)
+					!(nodeMask & (1u << (more.node & 31))) ||
+					more.cut != first.cut || more.blend)
 					break;
 
 				count += more.count;
@@ -4790,7 +4874,8 @@ bool HDModelReceiveDraw(int slot, bool head, const float* nodeMatrix, int nodeCo
 		{
 			const Range& first = ranges[i];
 
-			if (!(nodeMask & (1u << (first.node & 31))))
+			// The glass is drawn with the glows and is no solid surface.
+			if (!(nodeMask & (1u << (first.node & 31))) || first.blend)
 			{
 				i++;
 				continue;
@@ -4805,7 +4890,8 @@ bool HDModelReceiveDraw(int slot, bool head, const float* nodeMatrix, int nodeCo
 				const Range& more = ranges[next];
 
 				if (more.pageSlot != first.pageSlot || more.start != start + count ||
-					!(nodeMask & (1u << (more.node & 31))) || more.cut != first.cut)
+					!(nodeMask & (1u << (more.node & 31))) ||
+					more.cut != first.cut || more.blend)
 					break;
 
 				count += more.count;
@@ -5102,6 +5188,44 @@ int HDModelCutRanges(int slot)
 	const Model* model = find(g_models, slot);
 
 	return model ? cut_ranges(*model) : 0;
+}
+
+int HDModelSetGlassNodes(int slot, unsigned int nodes)
+{
+	const std::map<int, Model>::iterator at = g_models.find(slot);
+
+	if (at == g_models.end())
+		return 0;
+
+	Model& model = at->second;
+
+	model.blendRanges = 0;
+
+	for (Range& range : model.pass[HD_TRM_RUN_ALPHA])
+	{
+		range.blend = range.glass && HDTrmTriangleIsGlass(HD_TRM_RUN_ALPHA,
+			HD_TRM_MATERIAL_GLASS, range.node, nodes);
+
+		if (range.blend)
+			model.blendRanges++;
+	}
+
+	return model.blendRanges;
+}
+
+int HDModelGlassRanges(int slot, int* blended)
+{
+	const Model* model = find(g_models, slot);
+	int glass = 0;
+
+	if (blended)
+		*blended = model ? model->blendRanges : 0;
+
+	if (model)
+		for (const Range& range : model->pass[HD_TRM_RUN_ALPHA])
+			glass += range.glass ? 1 : 0;
+
+	return glass;
 }
 
 int HDModelPageCount(int slot)

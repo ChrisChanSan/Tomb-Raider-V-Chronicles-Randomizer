@@ -14,7 +14,7 @@
 
 #include <math.h>
 
-/* Two rules of the HD object path, as pure functions, so that the engine,
+/* Three rules of the HD object path, as pure functions, so that the engine,
  * ModelProbe and ModernTest judge by the same lines.
  *
  * THE SKELETON FIT. The bind drift (hd_model.h, HDModelBindDrift) compares
@@ -48,7 +48,20 @@
  * is not - it has folded into one plane. Its items are drawn one-sided,
  * as the classic draws them (HDPocketSide). The fold is what limits the
  * rule to the case that fights: a slot whose geometry never folds keeps
- * the HD path's two-sided draw, which an open model needs. */
+ * the HD path's two-sided draw, which an open model needs.
+ *
+ * THE GLASS. The classic draws a face see-through when its effects word
+ * has bit 0 set or its texture's draw type is 2 (specific/output.cpp,
+ * the item path). A .TRM sorts the see-through part of a model into its
+ * alpha run with material 14, the material the room art's glass carries;
+ * the HD path drew that run with the alpha test and the depth write, as
+ * a solid sheet. A triangle of a material 14 alpha run on a node whose
+ * classic mesh has a see-through face is drawn with the classic's blend
+ * for that face, added to what lies behind it (ONE / ONE), weighed by
+ * the page's own alpha as the HD additive pass weighs its texels, with
+ * no depth write and after everything solid. A node the classic draws
+ * solid keeps its .TRM part as it was, whatever the material: the
+ * classic is the measure of what is meant to be seen through. */
 
 /* The fewest single-weight vertices a node needs to be measured: the bind
  * drift's own working set (hd_model.cpp) uses the same count. */
@@ -243,4 +256,49 @@ inline HDPocketSideRule HDPocketSide(bool pocket, bool mirrored)
 		return HD_POCKET_BOTH;
 
 	return mirrored ? HD_POCKET_INSIDE : HD_POCKET_OUTSIDE;
+}
+
+/* The material a .TRM part's glass carries: the room art's glass material
+ * (hd_render.cpp, HD_TRG_MATERIAL_DECAL), the same number in a .TRM. */
+#define HD_TRM_MATERIAL_GLASS		14
+
+/* The runs of a .TRM part, in their order: the opaque, the alpha and the
+ * additive run (hd_trm.h). */
+#define HD_TRM_RUN_OPAQUE		0
+#define HD_TRM_RUN_ALPHA		1
+#define HD_TRM_RUN_ADDITIVE		2
+
+/* Whether the classic draws a face see-through: its effects word (the word
+ * behind its texture word) has bit 0 set, or its texture's draw type is 2.
+ * Either sends the face down the item path's additive branch
+ * (specific/output.cpp, phd_PutPolygons; polyinsert.cpp, case 2). */
+inline bool HDClassicFaceSeeThrough(int effects, int drawtype)
+{
+	return (effects & 1) != 0 || drawtype == 2;
+}
+
+/* A node mask with `node` set when the face is see-through; nodes past 31
+ * are not counted, the joint palette's own limit. */
+inline unsigned int HDSeeThroughNodes(unsigned int mask, int node,
+	bool seeThrough)
+{
+	if (!seeThrough || node < 0 || node > 31)
+		return mask;
+
+	return mask | (1u << node);
+}
+
+/* Whether a .TRM triangle is drawn as glass: it lies in its part's alpha
+ * run, the part's material is the glass material, and the classic mesh of
+ * its node has a see-through face (`nodes`, HDSeeThroughNodes). */
+inline bool HDTrmTriangleIsGlass(int run, unsigned int material, int node,
+	unsigned int nodes)
+{
+	if (run != HD_TRM_RUN_ALPHA || material != HD_TRM_MATERIAL_GLASS)
+		return false;
+
+	if (node < 0 || node > 31)
+		return false;
+
+	return (nodes & (1u << node)) != 0;
 }

@@ -20266,6 +20266,14 @@ namespace
 	std::vector<std::vector<int> > g_marble_over;
 	std::vector<std::vector<int> > g_marble_beside;
 	int g_marble_over_depth = 3;
+	/* How many portals a plane's own walk goes out from the rooms holding
+	 * its faces (marble_plane_rooms, hd_marble_math.h's HDMarbleWalk); 0
+	 * none, RoomProbe's -marblewalk 0. Three: on the walks measured
+	 * (RoomProbe at each change of the frame's list, the mirror on and
+	 * off), the mirror's own change falls from 7,126 pixels at none to
+	 * 5,188 at one portal, 778 at two and 362 at three; the record has
+	 * the walks and the cost (TOMB5 Code/MODIFICATIONS.md). */
+	int g_marble_walk = 3;
 	/* Which group draws which room now (HDRenderMarbleRooms: the level's
 	 * table, which a flip map changes; none in RoomProbe, room n drawn by
 	 * group n), and its length. */
@@ -21625,6 +21633,37 @@ namespace
 		return culled;
 	}
 
+	/* A room over's matrix (HDMarbleOverRooms): the drawn room's it was
+	 * found from (`via`), moved by the two rooms' origins; `under` takes
+	 * that drawn room's note. False where either is missing. */
+	bool marble_over_world(const HDMarbleOverRoom& o,
+		const std::vector<const MarbleDraw*>& noted, D3DMATRIX* world,
+		const MarbleDraw** under)
+	{
+		*under = o.via >= 0 && (size_t)o.via < noted.size() ?
+			noted[(size_t)o.via] : 0;
+
+		if (!*under || (size_t)o.group * 2 + 1 >= g_group_origin.size() ||
+			(size_t)o.via * 2 + 1 >= g_group_origin.size())
+			return false;
+
+		const float off[2] =
+		{
+			g_group_origin[(size_t)o.group * 2] -
+				g_group_origin[(size_t)o.via * 2],
+			g_group_origin[(size_t)o.group * 2 + 1] -
+				g_group_origin[(size_t)o.via * 2 + 1]
+		};
+
+		*world = (*under)->world;
+
+		for (int k = 0; k < 4; k++)
+			world->m[3][k] += off[0] * (*under)->world.m[0][k] +
+				off[1] * (*under)->world.m[2][k];
+
+		return true;
+	}
+
 	/* The rooms over (HDMarbleOverRooms), each drawn whole into the plane's
 	 * mirror with the matrix and the light of the drawn room it was found
 	 * from, moved by the two rooms' origins - unless its box lies wholly
@@ -21644,25 +21683,11 @@ namespace
 
 		for (const HDMarbleOverRoom& o : over)
 		{
-			const MarbleDraw* under = o.via >= 0 &&
-				(size_t)o.via < noted.size() ? noted[(size_t)o.via] : 0;
+			const MarbleDraw* under = 0;
+			D3DMATRIX world;
 
-			if (!under || (size_t)o.group * 2 + 1 >= g_group_origin.size() ||
-				(size_t)o.via * 2 + 1 >= g_group_origin.size())
+			if (!marble_over_world(o, noted, &world, &under))
 				continue;
-
-			const float off[2] =
-			{
-				g_group_origin[(size_t)o.group * 2] -
-					g_group_origin[(size_t)o.via * 2],
-				g_group_origin[(size_t)o.group * 2 + 1] -
-					g_group_origin[(size_t)o.via * 2 + 1]
-			};
-			D3DMATRIX world = under->world;
-
-			for (int k = 0; k < 4; k++)
-				world.m[3][k] += off[0] * under->world.m[0][k] +
-					off[1] * under->world.m[2][k];
 
 			const bool out = marble_box_out(o.group, world, clip);
 			const size_t at = (size_t)(&o - &over[0]);
@@ -21684,6 +21709,60 @@ namespace
 		HDRenderScissorOff();
 		g_marble_replay = false;
 		return drawn;
+	}
+
+	/* The rooms a plane's mirror draws whole: the rooms over (`over`,
+	 * HDMarbleOverRooms) and, to g_marble_walk portals, the plane's own walk
+	 * (HDMarbleWalk) from the drawn rooms holding its faces - each room
+	 * the frame did not draw whose box the plane's view (marble_box_out,
+	 * `clip` the mirror's in clip space) can show, with the matrix and
+	 * light of the room it was found from. The frame's drawn rooms are
+	 * walked through and drawn as the frame noted them (marble_replay). */
+	std::vector<HDMarbleOverRoom> marble_plane_rooms(const MarbleLayer& layer,
+		const std::vector<HDMarbleOverRoom>& over,
+		const std::vector<const MarbleDraw*>& noted, const float* clip)
+	{
+		std::vector<HDMarbleOverRoom> rooms = over;
+
+		if (g_marble_walk <= 0)
+			return rooms;
+
+		const auto drawn = [&](int g)
+		{
+			return g >= 0 && (size_t)g < noted.size() && noted[(size_t)g];
+		};
+		std::vector<int> start;
+		std::vector<char> listed((size_t)g_room_groups, 0);
+
+		for (const std::pair<const int, float>& r : layer.rooms)
+			if (drawn(r.first))
+				start.push_back(r.first);
+
+		for (const HDMarbleOverRoom& o : over)
+			if (o.group >= 0 && o.group < g_room_groups)
+				listed[(size_t)o.group] = 1;
+
+		std::vector<HDMarbleOverRoom> walk;
+
+		HDMarbleWalk(g_marble_over, g_marble_beside, g_marble_room_group,
+			g_marble_room_count, g_room_groups, start, g_marble_walk,
+			[&](int g, int via)
+			{
+				const MarbleDraw* under = 0;
+				D3DMATRIX world;
+
+				if (drawn(g))
+					return !marble_box_out(g, noted[(size_t)g]->world, clip);
+
+				return marble_over_world({ g, via }, noted, &world, &under) &&
+					!marble_box_out(g, world, clip);
+			}, walk);
+
+		for (const HDMarbleOverRoom& w : walk)
+			if (!drawn(w.group) && !listed[(size_t)w.group])
+				rooms.push_back(w);
+
+		return rooms;
 	}
 
 	// The room path's shaders and stream, as the bracket sets them.
@@ -22231,6 +22310,12 @@ int HDRenderMarbleCrackRows(const float** rows, int* closed)
 		*closed = g_crack_closed;
 
 	return (int)(g_crack_rows.size() / 7);
+}
+
+// RoomProbe's -marblewalk n: a plane's own walk, n portals out.
+void HDRenderMarbleWalk(int portals)
+{
+	g_marble_walk = portals < 0 ? 0 : portals;
 }
 
 void HDRenderMarbleOverDepth(int depth)
@@ -22852,9 +22937,12 @@ void HDRenderMarbleDraw(HDWetModelDraw draw, const void* projection,
 			(int)g_marble_desc.Height, g_marble_rect);
 
 		const int callsBefore = g_draw_calls;
+		const std::vector<HDMarbleOverRoom> planeRooms =
+			marble_plane_rooms(layer, overRooms, noted, clip);
+
 		const int left = marble_replay(clip);
 
-		g_marble_stats.over += marble_replay_over(overRooms, noted, clip,
+		g_marble_stats.over += marble_replay_over(planeRooms, noted, clip,
 			&g_marble_stats.over_culled, i ? 0 : g_marble_stats.over_out);
 		g_marble_stats.calls += g_draw_calls - callsBefore;
 		g_marble_rows_list[(size_t)i * kMarbleRowWidth + 8] =

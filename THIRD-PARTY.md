@@ -3638,6 +3638,49 @@ carries the tables.
     namespace `probefog`; `ModernTest.cpp`) - the level's bulbs and the frame's, one
     bulb's radial profile, the key, the haze out without the pass, the pass's GPU
     time; the rule's pure functions checked. OWN, this project's tools.
+343. **The mill's lumps are the flow material's drifting parts** (`MODIFICATIONS.md`,
+    "Volumetric fog from the fog bulbs", Round 2; nothing in the code) - the
+    additive parts of material 1 in ANDY3's groups 10, 15 and 17, 24,576 triangles,
+    page drifting at 0.02, 0.01, drawn at weight 1; not the book 3,273, which is the
+    rain rings on the water. Corrects 364. PICTURE (RoomProbe `-addmat 15` and
+    `-addmat 1` at the eye of the owner's picture, found among his logged eyes).
+    DATA (TrgProbe `-all -mat 1`; RoomProbe `-fogart` at the fifteen levels).
+344. **The art's mist: the flow material drifting on both axes** (`specific/hd/hd_fog.h`,
+    `HDFogArtMist`; `hd_render.cpp`, `fog_add_weight`, `draw_pass`'s weight) - an
+    additive part of material 1 whose scroll is non-zero in u and in v. DATA (the
+    fifteen levels' additive flow parts: the mist of ANDY3, ANDREA2, ANDREA3 and the
+    title drifts on both axes, every water flow along one). OWN: the criterion.
+345. **The band's top, 33 of 255** (`hd_fog.h`, `HD_FOG_TOP`) - the 95th percentile
+    of the comparison picture's wisps over the ground under them (a grey opening of
+    1/26 of the picture's height), its median 13.6. PICTURE (the owner's comparison
+    picture, measured and not kept). OWN: the opening, the percentile.
+346. **The mist's weight, 0.35** (`hd_fog.h`, `HD_FOG_ART_WEIGHT`, `HDFogArtWeight`) -
+    the top over the most the mist adds at weight 1, 94.3 at the 95th percentile of
+    its pixels at the brightest of three eyes of ANDY3's mill (83.9 and 91.2 at the
+    others). PICTURE (RoomProbe `-fogartweight 1` against `-addmat 999` at the three
+    eyes). OWN: one weight for every mist.
+347. **The body's strength** (`hd_fog.h`, `HDFogStrength`, `HD_FOG_VEIL_MOST`;
+    `hd_render.cpp`, `fog_take`) - each bulb's density times S, with 1 - exp(-S 2 r
+    d / 255) the top over the luma of the bulb's colour, at most a veil of one half;
+    ANDY3's bulbs 1.66. CLASSIC: 2 r d, the chord through the centre (`drawroom.cpp`).
+    OWN: the anchor on the densest line over black, the cap of one half a free
+    choice. PICTURE (RoomProbe at seven eyes of ANDY3: the most 17.6 to 29.9, all
+    under the top).
+348. **The additive ranges' boxes and their listing** (`hd_render.cpp`, `HDRange::
+    addBox`, `fog_add_note`, `fog_add_weight`, `HDRenderFogArt`; `hd_fog.h`,
+    `HDFogArtPart`, `HDFogDensity`, `HDFogRho`) - each additive range's box in its
+    group's coordinates, and while RoomProbe asks the pass's numbers the ranges drawn
+    with the densest bulb their centre lies in. OWN.
+349. **The pass's numbers in the log** (`hd_level.cpp`, the HDLOG frame line's
+    `fog_taken=` and `fog_drawn=`; `tomb5/tomb5.cpp`, the settings line's `hd_fog=`) -
+    the bulbs the glow bracket's pass took and the quads it drew (`HDRenderFogLast`),
+    and the key as read. OWN.
+350. **RoomProbe's `-fogart` (`-fogbook`), `-fogartweight` and `-fogstrength`, the
+    strength on the `fogbulb` line, and ModernTest's `fog_art`**
+    (`Preparation/Tools/Diagnose/RoomProbe.cpp`, namespace `probefog`;
+    `ModernTest.cpp`) - the level's additive ranges against its bulbs and the frame's
+    with their weights, each rule switched off by picture; 12 checks of the strength,
+    the mist and the listing's arithmetic. OWN, this project's tools.
 
 366. **The glass takes the hue of the classic glass at its place**
     (`hd_debris_rules.h`, "the glass's look": `HDGlassFace`,

@@ -2958,17 +2958,21 @@ a pane with nothing facing against it, such as the spokes' panes of RICH1's
 oval doors, is still seen from both sides. Where a model's additive run
 carries the glass's pane again, on the same texture and the same place, that
 copy is left out while the glass is drawn: RICH2's cabinet doors had their
-pane in it twice. And the glass is added times the opacity the model's own
-material gives it, as the room art's additive material is: a tenth on RICH1's
-cabinet and its `DOOR_TYPE2` and `DOOR_TYPE7`, RICH3's door and the title's
-two, an eighth on the JOBY doors, whole on RICH2's cabinet and RICH1's oval
-doors. RICH2's cabinet front, which added a milky sheet of about 190 levels
+pane in it twice. And the glass drawn one-sided is added times the opacity
+the model's own material gives it, as the room art's additive material is: a
+tenth on RICH1's `DOOR_TYPE7`, RICH3's door and the title's two, an eighth on
+the JOBY doors, whole on RICH2's cabinet. A single sheet seen from both sides
+keeps its texture's own alpha as its only weight: RICH1's cabinet and its
+`DOOR_TYPE2`, a tenth by their material, already add less than the classic
+there, and RICH1's eight doors look as they did. RICH2's cabinet front, which
+added a milky sheet of about 190 levels
 of brightness, now adds about 54 at full light - inside what the classic's
 own see-through faces add there - and the bottles and the skull behind it
 keep the contrast they have with no glass. The `HDLOG slot=` line ends in
 `glass=<ranges> oneside=<ranges> copies=<left out>/<copies> opacity=
-factor=`, the factor being the opacity, or 1 on a card that cannot weigh a
-blend by a factor. `ModelProbe -alpha` takes one slot apart and measures it
+factor=`, the factor being the smallest weight a drawn glass range gets (its
+opacity one-sided, 1 two-sided), or 1 on a card that cannot weigh a blend by a
+factor. `ModelProbe -alpha` takes one slot apart and measures it
 against the classic's band, `-noglass` draws the picture before the rule.
 
 **Which model a slot asks for** comes from four places, in this order: the

@@ -4068,8 +4068,9 @@ carries the tables.
 345. **The glass weighed by its opacity** (`hd_object_rules.h`,
     `HDGlassOpacity`, `HD_TRM_PARAM_OPACITY` 1, `HDGlassOpacityByte`;
     `hd_model.cpp`, `Range::opacity`, `g_blend_factor`, the glass step's
-    blend factor) - the glass is added times its part's `param[1]` where
-    that lies in (0, 1), through `D3DRS_BLENDFACTOR` with
+    blend factor) - the one-sided glass (entries 343 and 350) is added
+    times its part's `param[1]` where that lies in (0, 1), through
+    `D3DRS_BLENDFACTOR` with
     `D3DBLEND_BLENDFACTOR` as the source factor, rounded to 255 steps; a
     card without `D3DPBLENDCAPS_BLENDFACTOR` adds it whole. DATA: `param[1]`
     over the 14 bindings 0.125 (the JOBY doors), 0.1 (RICH1's
@@ -4098,8 +4099,22 @@ carries the tables.
     (the `.TRC`'s first compressed block, its sizes at byte 10), the glass's
     off its pages through the engine's BC7 decoder. OWN.
 349. **ModernTest's glass checks** (`Preparation/Tools/Diagnose/
-    ModernTest.cpp`, `object_rules`, 16 checks: the sides, the copies, the
-    opacity, the band and the mirror). OWN.
+    ModernTest.cpp`, `object_rules`, 21 checks: the sides, the copies, the
+    opacity, the weight, the band and the mirror). OWN.
+350. **The opacity on the one-sided glass only** (`hd_object_rules.h`,
+    `HDGlassWeight`; `hd_model.cpp`, the glass step's blend factor and its
+    restore, `HDModelGlassCounts`' `factor`; `ModelProbe.cpp`, the glass
+    band weighed as the draw weighs it) - a range drawn one-sided (entry
+    343) is added times its opacity (entry 345), a two-sided range whole,
+    the page's alpha its only weight; the step puts the blend factor back
+    whenever it wrote it. DATA (`ModelProbe -all -alpha`, the slot views
+    and the eyes): the two-sided glass under 1 is RICH1's `SEARCH_OBJECT1`
+    and `DOOR_TYPE2`, both at 0.1, adding 12.9 to 25.0 and 3.1 to 4.0
+    unweighed, under the tenths of their classic bands (22.1 and 19.9);
+    weighed, `DOOR_TYPE2`'s pane went down by 2.94 to 7.00 luma in 56
+    pixels at RICH1's eye in room 15, over the oval doors. OWN: the
+    one-sided range as the glass whose layers stacked, so the weight lands
+    where the cause was.
 
 ## Credited, but not contained here
 

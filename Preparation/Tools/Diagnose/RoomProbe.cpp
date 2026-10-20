@@ -463,6 +463,22 @@
  *                     HDStandDrawFaces). Prints `stand:` lines per holder
  *                     and range. Needs -roombox, which hands the renderer
  *                     the faces as hd_level.cpp's BuildStandFaces does.
+ *                     With -vis 1 a range of a DUMMY item's art the room
+ *                     keeps its faces under is drawn in front of them
+ *                     (hd_cover.h, HDStandDrawBaked): `-> in front of the
+ *                     faces`. -nofront answers without that rule, -nofront
+ *                     plain draws that art in place with its group.
+ *     -standlist      every stand range of the level, its holder, kind,
+ *                     faces, triangles, how many stand in a DUMMY item's
+ *                     box and the verdict (`standlist:` lines), then the
+ *                     boxes. Needs -roombox.
+ *     -ties [n]       the pixels at which a -classicroom face lies within
+ *                     1/n (20000) of its distance of the art in front of
+ *                     it: a `ties:` line.
+ *     -push classic|<g> <f>   the classic faces or group g's art moved
+ *                     along the line of sight by f of their distance (f > 0
+ *                     away): two pictures at +f and -f differ where that
+ *                     surface ties in depth with another.
  *     -standreceive   -stand, and after the clear phase the projected
  *                     shadow's receive of each range drawn in a holder's
  *                     window (HDRenderRoomShadowStand), counted with an
@@ -4144,6 +4160,90 @@ struct StandDrawProbe
 };
 
 static std::vector<StandDrawProbe> g_stand_draws;
+
+/* -ties [n]: the pixels at which a classic face of -classicroom lies within
+ * 1/n of its distance from the eye of the art in front of it (n 20000 when
+ * not given) - the place a frame that draws both fights over, counted as
+ * -coincide counts it, with a shift that grows with the distance as the
+ * depth buffer's step does. Printed as a `ties:` line.
+ * -push classic|<group> <f>: the classic faces, or that group's art, drawn
+ * moved along the line of sight by f of their distance (f > 0 away from the
+ * eye, f < 0 towards it): two pictures at +f and -f differ exactly where
+ * the pushed surface ties in depth with another one.
+ * -standlist: every stand range of the level with its holder, its kind, its
+ * triangles and how many of them stand in the box of an item whose slot the
+ * level's .MAP calls DUMMY (hd_cover.h, HDStandDrawBaked), and the items.
+ * -nofront: the -stand answers without the baked rule, as before it;
+ * -nofront plain: the art of the baked rule drawn in place with its group
+ * instead, the way that fights the classic faces in one plane. */
+static long g_ties_den = 0;
+static double g_push_classic = 0.0;
+static std::map<int, double> g_push_group;
+static double g_push_eye[3] = { 0.0, 0.0, 0.0 };
+static bool g_stand_list = false;
+static int g_no_front = 0;
+// The boxes of the items of DUMMY slots, with their item and slot.
+static std::vector<HDStandBox> g_baked_boxes;
+static std::vector<int> g_baked_items;
+static std::vector<int> g_baked_slots;
+
+static bool TieArg(int argc, char** argv, int* at)
+{
+	const char* a = argv[*at];
+
+	if (!strcmp(a, "-ties"))
+	{
+		g_ties_den = 20000;
+
+		if (*at + 1 < argc && argv[*at + 1][0] != '-')
+			g_ties_den = atol(argv[++*at]);
+
+		if (g_ties_den <= 0)
+			g_ties_den = 20000;
+	}
+	else if (!strcmp(a, "-push") && *at + 2 < argc)
+	{
+		const char* what = argv[++*at];
+		const double f = atof(argv[++*at]);
+
+		if (!strcmp(what, "classic"))
+			g_push_classic = f;
+		else
+			g_push_group[atoi(what)] = f;
+	}
+	else if (!strcmp(a, "-standlist"))
+		g_stand_list = true;
+	else if (!strcmp(a, "-nofront"))
+	{
+		g_no_front = 1;
+
+		if (*at + 1 < argc && !strcmp(argv[*at + 1], "plain"))
+		{
+			g_no_front = 2;
+			++*at;
+		}
+	}
+	else
+		return false;
+
+	return true;
+}
+
+/* A world matrix (row vectors) moved on by a scale of `scale` about the eye
+ * of -push (g_push_eye, in the seed's frame): every point stays on its line
+ * of sight and lands on the same pixel. */
+static void ScaleAboutEye(D3DMATRIX& m, double scale)
+{
+	float* f = &m._11;
+
+	for (int row = 0; row < 3; row++)
+		for (int col = 0; col < 3; col++)
+			f[row * 4 + col] = (float)(f[row * 4 + col] * scale);
+
+	for (int col = 0; col < 3; col++)
+		f[12 + col] = (float)(f[12 + col] * scale +
+			(1.0 - scale) * g_push_eye[col]);
+}
 
 /* -clipgroup <group> <l,t,r,b>: one group drawn inside a scissor rectangle
  * and every other group drawn whole.
@@ -7892,6 +7992,24 @@ static bool DrawOneGroup(int group, const D3DMATRIX* world,
 	 * the triangles the cut took out at build time. */
 	if (g_hdm && HDMarkersRoomTouched(group))
 		return false;
+
+	// -push <group>: the group's art moved along the line of sight.
+	D3DMATRIX pushed;
+	const std::map<int, double>::const_iterator push = g_push_group.find(group);
+
+	if (push != g_push_group.end())
+	{
+		if (world)
+			pushed = *world;
+		else
+		{
+			memset(&pushed, 0, sizeof(pushed));
+			pushed._11 = pushed._22 = pushed._33 = pushed._44 = 1.0f;
+		}
+
+		ScaleAboutEye(pushed, 1.0 + push->second);
+		world = &pushed;
+	}
 
 	if (group == g_tround_group)
 	{
@@ -12718,6 +12836,163 @@ static bool StandCovered(int h, int* carrier = 0)
 	return StandState(h, carrier) == HD_STAND_ROOM_COVERED;
 }
 
+/* The baked rule's count (hd_level.cpp, BuildStandRanges): per (group,
+ * holder, kind) of the HD groups' tagged triangles - kind 0 or 1 asked again
+ * with HDCoverTriOnFaces on the holder's faces, as the renderer asked it -
+ * how many there are and how many stand in the box of an item of a DUMMY
+ * slot (g_baked_boxes), and which items those are. A range is the art of
+ * such objects when all of its key's triangles are in boxes and its key's
+ * ranges hold exactly those triangles (HDStandRangeBaked). */
+struct BakedCount
+{
+	int total;
+	int inBoxes;
+	std::set<int> items;
+};
+
+static std::map<long long, BakedCount> g_baked_count;
+static bool g_baked_counted = false;
+
+static long long BakedKey(int g, int h, int kind)
+{
+	return ((long long)g << 32) | ((long long)h << 2) | (long long)kind;
+}
+
+static void CountBaked()
+{
+	if (g_baked_counted)
+		return;
+
+	g_baked_counted = true;
+
+	for (int i = 0; i < HDRenderStandTriangleCount(); i++)
+	{
+		HDCoverTri tri;
+		int h = -1;
+
+		if (!HDRenderStandTriangleAt(i, &tri, &h) || h < 0 ||
+			!StandGroupHD(tri.group))
+			continue;
+
+		const HDStandHolder* holder = 0;
+
+		for (const HDStandHolder& one : g_stand_holders_built)
+			if (one.room == h)
+				holder = &one;
+
+		if (!holder || holder->faceCount <= 0)
+			continue;
+
+		const int kind = HDCoverTriOnFaces(tri, &g_stand_faces_built[(size_t)
+			holder->firstFace], holder->faceCount, HD_COVER_REACH) ? 1 : 0;
+		BakedCount& c = g_baked_count[BakedKey(tri.group, h, kind)];
+		const int box = g_baked_boxes.empty() ? -1 :
+			HDStandBoxFind(&g_baked_boxes[0], (int)g_baked_boxes.size(), tri);
+
+		c.total++;
+
+		if (box >= 0)
+		{
+			c.inBoxes++;
+			c.items.insert(g_baked_items[(size_t)box]);
+		}
+	}
+}
+
+static bool RangeBaked(int g, const HDStandRange& range,
+	const BakedCount** count = 0)
+{
+	if (count)
+		*count = 0;
+
+	if (range.kind == 2)
+		return false;
+
+	CountBaked();
+
+	const std::map<long long, BakedCount>::const_iterator it =
+		g_baked_count.find(BakedKey(g, range.holder, range.kind));
+
+	if (it == g_baked_count.end())
+		return false;
+
+	if (count)
+		*count = &it->second;
+
+	int sum = 0;
+
+	for (int j = 0; j < HDRenderGroupStandRanges(g); j++)
+	{
+		HDStandRange one;
+
+		if (HDRenderGroupStandRange(g, j, &one) && one.holder == range.holder &&
+			one.kind == range.kind)
+			sum += one.triangles;
+	}
+
+	return sum == it->second.total &&
+		HDStandRangeBaked(it->second.inBoxes, it->second.total);
+}
+
+/* -standlist: every stand range of every HD group, its holder, kind, faces,
+ * triangles, the count above and the verdict, and the DUMMY items it lies in;
+ * then the boxes. */
+static void ListStand()
+{
+	if (!g_stand_list)
+		return;
+
+	int ranges = 0, baked = 0, bakedTris = 0;
+
+	for (int g = 0; g < HDRenderGroupCount(); g++)
+	{
+		if (!StandGroupHD(g))
+			continue;
+
+		for (int j = 0; j < HDRenderGroupStandRanges(g); j++)
+		{
+			HDStandRange range;
+			const BakedCount* count = 0;
+
+			if (!HDRenderGroupStandRange(g, j, &range))
+				continue;
+
+			const bool is = RangeBaked(g, range, &count);
+
+			printf("standlist: group %d range %d holder %d kind %d faces %d "
+				"tris %d key_tris %d in_boxes %d baked %d items", g, j,
+				range.holder, range.kind, range.faces, range.triangles,
+				count ? count->total : 0, count ? count->inBoxes : 0,
+				is ? 1 : 0);
+
+			if (count)
+				for (int item : count->items)
+					printf(" %d", item);
+
+			printf("\n");
+			ranges++;
+
+			if (is)
+			{
+				baked++;
+				bakedTris += range.triangles;
+			}
+		}
+	}
+
+	for (size_t i = 0; i < g_baked_boxes.size(); i++)
+	{
+		const HDStandBox& box = g_baked_boxes[i];
+
+		printf("standlist: box item %d slot %d x %.0f..%.0f y %.0f..%.0f z "
+			"%.0f..%.0f\n", g_baked_items[i], g_baked_slots[i], box.lo[0],
+			box.hi[0], box.lo[1], box.hi[1], box.lo[2], box.hi[2]);
+	}
+
+	printf("standlist: %d range(s), %d baked with %d triangle(s), %d DUMMY "
+		"item box(es)\n", ranges, baked, bakedTris, (int)g_baked_boxes.size());
+}
+
 /* -stand: every stand range of every group answered as DecideStand
  * (hd_level.cpp) answers it, with the -classicroom rooms as the listed
  * holders and the seed and the -with groups, less -skipgroup, as the listed
@@ -12768,8 +13043,20 @@ static void PrepareStand(int seed)
 			const int state = holderListed ? StandState(range.holder, &carrier) :
 				HD_STAND_ROOM_CLASSIC;
 			const bool covered = state == HD_STAND_ROOM_COVERED;
-			const HDStandAnswer answer = HDStandDrawFaces(holderListed, listed(g),
-				state, carrier == g, range.kind, range.faces);
+			// And the baked rule, unless -nofront.
+			HDStandAnswer answer = HDStandDrawBaked(HDStandDrawFaces(
+				holderListed, listed(g), state, carrier == g, range.kind,
+				range.faces), holderListed, range.kind, !g_no_front &&
+				g_vis_option && RangeBaked(g, range));
+
+			// -nofront plain: that art in place, with its group.
+			if (g_no_front == 2 && g_vis_option && holderListed &&
+				answer.classic && range.kind != 2 && RangeBaked(g, range))
+			{
+				answer.withArt = listed(g);
+				answer.inHolder = false;
+				answer.behind = false;
+			}
 
 			HDRenderStandWith(g, j, answer.behind && answer.withArt ? HD_STAND_BEHIND
 				: answer.withArt ? HD_STAND_WITH : HD_STAND_OUT);
@@ -12783,13 +13070,15 @@ static void PrepareStand(int seed)
 				printf("stand: group %d range %d holder %d kind %d tris %d "
 					"listed %d covered %d -> %s faces %d state %d\n", g, j,
 					range.holder, range.kind, range.triangles, listed(g) ? 1 : 0,
-					covered ? 1 : 0, answer.behind && answer.withArt ?
+					covered ? 1 : 0, answer.front ? "in front of the faces" :
+					answer.behind && answer.withArt ?
 					"with its group, pushed back" : answer.withArt ? "with its group"
 					: answer.inHolder && answer.behind ?
 					"in the holder's window, pushed back" : answer.inHolder ?
 					"in the holder's window" : "left out", range.faces, state);
 
-			if (!answer.inHolder || g >= (int)g_stand_rooms_built.size() ||
+			if (!(answer.inHolder || answer.front) ||
+				g >= (int)g_stand_rooms_built.size() ||
 				seed < 0 || seed >= (int)g_stand_rooms_built.size())
 				continue;
 
@@ -12806,6 +13095,11 @@ static void PrepareStand(int seed)
 			draw.group = g;
 			draw.index = j;
 			draw.behind = answer.behind;
+
+			// In front: pulled towards the eye as hd_level.cpp's front draw.
+			if (answer.front)
+				ScaleAboutEye(draw.world, 1.0 - HD_STAND_PUSH);
+
 			g_stand_draws.push_back(draw);
 			inHolder++;
 		}
@@ -12890,8 +13184,18 @@ static void StandReceiveCount(const HDRoomLighting* lighting)
 static void DrawStandInHolders(const HDRoomLighting* lighting, unsigned int passes)
 {
 	for (const StandDrawProbe& draw : g_stand_draws)
-		HDRenderRoomStand(draw.group, &draw.world, lighting, passes, draw.index,
+	{
+		// -push <group>: its ranges drawn here moved with it.
+		D3DMATRIX world = draw.world;
+		const std::map<int, double>::const_iterator push =
+			g_push_group.find(draw.group);
+
+		if (push != g_push_group.end())
+			ScaleAboutEye(world, 1.0 + push->second);
+
+		HDRenderRoomStand(draw.group, &world, lighting, passes, draw.index,
 			draw.behind);
+	}
 }
 
 /* The static meshes - -statictable, -statics, -static and -staticsonly.
@@ -15813,10 +16117,10 @@ static void DrawClassicFaces(const char* stem, int seed, const float* view,
 	g_device->SetRenderState(D3DRS_CLIPPING, TRUE);
 
 	/* The faces, `shift` units along the line of sight towards the eye
-	 * (negative: away from it). */
+	 * (negative: away from it); with `relative`, `shift` of their distance. */
 	const std::vector<Vtx>* set = faces;
 
-	const auto draw = [&](double shift)
+	const auto draw = [&](double shift, bool relative)
 	{
 		for (int sided = 0; sided < 2; sided++)
 		{
@@ -15834,9 +16138,11 @@ static void DrawClassicFaces(const char* stem, int seed, const float* view,
 					if (length <= 0.0)
 						continue;
 
-					v.x += (float)(d[0] / length * shift);
-					v.y += (float)(d[1] / length * shift);
-					v.z += (float)(d[2] / length * shift);
+					const double by = relative ? shift * length : shift;
+
+					v.x += (float)(d[0] / length * by);
+					v.y += (float)(d[1] / length * by);
+					v.z += (float)(d[2] / length * by);
 				}
 
 			g_device->SetRenderState(D3DRS_CULLMODE, sided ? D3DCULL_NONE : D3DCULL_CCW);
@@ -15894,7 +16200,11 @@ static void DrawClassicFaces(const char* stem, int seed, const float* view,
 
 	/* The faces first, then the statics, each counted on its own against
 	 * the art alone: the second set is counted before the first is drawn. */
-	for (int which = 0; which < 2 && g_coincide > 0.0; which++)
+	// -ties: the same count with a shift of 1/n of each corner's distance.
+	const bool ties = g_ties_den > 0;
+	const double within = ties ? 1.0 / (double)g_ties_den : g_coincide;
+
+	for (int which = 0; which < 2 && (g_coincide > 0.0 || ties); which++)
 	{
 		set = which ? statics : faces;
 
@@ -15914,12 +16224,12 @@ static void DrawClassicFaces(const char* stem, int seed, const float* view,
 		g_device->SetRenderState(D3DRS_STENCILFUNC, D3DCMP_ALWAYS);
 		g_device->SetRenderState(D3DRS_STENCILREF, 1);
 		g_device->SetRenderState(D3DRS_STENCILPASS, D3DSTENCILOP_REPLACE);
-		draw(g_coincide);
+		draw(within, ties);
 
 		// Still in front of it from `units` further away: not within, 2.
 		g_device->SetRenderState(D3DRS_STENCILFUNC, D3DCMP_EQUAL);
 		g_device->SetRenderState(D3DRS_STENCILPASS, D3DSTENCILOP_INCR);
-		draw(-g_coincide);
+		draw(-within, ties);
 
 		// The pixels at stencil `ref`, counted; -1 without an occlusion query.
 		const auto count = [&](DWORD ref) -> long
@@ -15966,7 +16276,7 @@ static void DrawClassicFaces(const char* stem, int seed, const float* view,
 			g_device->SetRenderState(D3DRS_STENCILMASK, 0x3);
 			g_device->SetRenderState(D3DRS_STENCILWRITEMASK, 0x4);
 			g_device->SetRenderState(D3DRS_STENCILPASS, D3DSTENCILOP_REPLACE);
-			draw(0.0);
+			draw(0.0, false);
 			g_device->SetRenderState(D3DRS_STENCILMASK, 0xFF);
 			g_device->SetRenderState(D3DRS_STENCILWRITEMASK, 0xFF);
 			artWins = count(1);
@@ -15979,6 +16289,12 @@ static void DrawClassicFaces(const char* stem, int seed, const float* view,
 
 		if (shared < 0)
 			printf("coincide: this device has no occlusion query - no count\n");
+		else if (ties)
+			printf("ties%s: %ld pixel(s) of %ld at which a classic %s lies "
+				"within 1/%ld of its distance of the art, %ld of them the "
+				"art's\n",
+				which ? " statics" : "", shared, width * height,
+				which ? "static" : "face", g_ties_den, artWins);
 		else if (!which)
 			printf("coincide: %ld pixel(s) of %ld at which a classic face lands "
 				"within %.0f units of the art, %ld of them the art's\n", shared,
@@ -15997,12 +16313,13 @@ static void DrawClassicFaces(const char* stem, int seed, const float* view,
 
 	g_device->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
 	set = faces;
-	draw(0.0);
+	// -push classic: the faces moved along the line of sight.
+	draw(-g_push_classic, true);
 	set = statics;
-	draw(0.0);
+	draw(0.0, false);
 	set = faces;
 
-	if (g_coincide > 0.0 && g_coincide_mark)
+	if ((g_coincide > 0.0 || ties) && g_coincide_mark)
 	{
 		// Yellow where the two share a place (1 and 5), red where the art
 		// wins it (1).
@@ -17948,6 +18265,14 @@ static int ProbeMain(int argc, char** argv)
 			"-classicroom rooms listed,\n");
 		printf("                the seed and -with groups the listed art "
 			"(needs -roombox)\n");
+		printf("       -nofront [plain]   -stand without the DUMMY rule; "
+			"plain: its art in place\n");
+		printf("       -standlist   the stand ranges and the DUMMY item boxes "
+			"they lie in\n");
+		printf("       -ties [n]   classic faces within 1/n of the art's "
+			"depth, counted\n");
+		printf("       -push classic|<g> <f>   faces or group g moved by f of "
+			"their distance\n");
 		printf("       -standreceive   -stand, and the shadow receive of each range "
 			"drawn in a holder's\n");
 		printf("                window counted at its own depth and at the other "
@@ -18129,6 +18454,9 @@ static int ProbeMain(int argc, char** argv)
 			continue;
 
 		if (probefog::Arg(argc, argv, &at))
+			continue;
+
+		if (TieArg(argc, argv, &at))
 			continue;
 
 		// -calltrace, -lumaat and -gpuall, for the same limit.
@@ -19841,6 +20169,57 @@ static int ProbeMain(int argc, char** argv)
 				printf("-roombox: %d rooms with %d classic faces handed in for "
 					"the stand ranges\n", (int)g_stand_holders_built.size(),
 					(int)g_stand_faces_built.size());
+
+				/* -stand and -standlist: the boxes of the items whose slot
+				 * the level's .MAP calls DUMMY, as hd_level.cpp's
+				 * BuildBakedBoxes makes them (a donor slot and Lara's never
+				 * count). The map is read for this and given back when no
+				 * one had read it before. */
+				g_baked_boxes.clear();
+				g_baked_items.clear();
+				g_baked_slots.clear();
+
+				if (g_stand_rule || g_stand_list)
+				{
+					const bool had = HDMapLevel() &&
+						!_stricmp(HDMapLevel(), stem);
+					const bool mapRead = had || HDMapLoadForLevel(root, stem);
+
+					for (int i = 0; mapRead && i < level.itemCount(); i++)
+					{
+						Tr5Item it;
+						HDBindKind kind = HD_BIND_NONE;
+						bool fromMap = false;
+						int16_t bounds[6];
+
+						if (!level.getItem(i, it))
+							continue;
+
+						const int slot = it.objectNumber;
+
+						HDBindSlot(root, slot, &kind, &fromMap, 0);
+
+						if (kind != HD_BIND_DUMMY || !fromMap ||
+							HDSlotIsLara(slot) || HDMarkersDonorOfSlot(slot) ||
+							!level.frameBounds(slot, bounds))
+							continue;
+
+						const short b[6] = { bounds[0], bounds[1], bounds[2],
+							bounds[3], bounds[4], bounds[5] };
+
+						g_baked_boxes.push_back(HDStandItemBox(b, it.x, it.y,
+							it.z, it.yRot));
+						g_baked_items.push_back(i);
+						g_baked_slots.push_back(slot);
+					}
+
+					if (!had && mapRead)
+						HDMapFree();
+
+					printf("-roombox: %d item(s) of DUMMY slots, their boxes "
+						"handed in for the baked rule (map %s)\n",
+						(int)g_baked_boxes.size(), mapRead ? "read" : "none");
+				}
 			}
 
 			LoadTimeStep(stem, "stand");
@@ -21429,9 +21808,15 @@ static int ProbeMain(int argc, char** argv)
 			over);
 	}
 
+	// The eye -push and the front draws of -stand scale about.
+	g_push_eye[0] = cx;
+	g_push_eye[1] = cy;
+	g_push_eye[2] = cz;
+
 	// -stand: the frame's answers for the stand ranges, before the bracket;
 	// -statics new: the statics' pieces.
 	PrepareStand(room);
+	ListStand();
 	probestatics::PreparePieces(stem, room);
 
 	LARGE_INTEGER frameStart;

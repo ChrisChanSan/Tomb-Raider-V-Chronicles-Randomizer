@@ -8788,9 +8788,9 @@ namespace probefog
 
 			printf("fogart group %3d part %3d mat %2d world %7.0f %7.0f %7.0f "
 				"half %5.0f %5.0f %5.0f weight %.4f swing %.2f scroll %.4f "
-				"%.4f bulbs%s\n", p.group, p.part, p.material, p.world[0],
-				p.world[1], p.world[2], p.half[0], p.half[1], p.half[2],
-				p.base, p.period, p.scroll[0], p.scroll[1],
+				"%.4f coat %.3f bulbs%s\n", p.group, p.part, p.material,
+				p.world[0], p.world[1], p.world[2], p.half[0], p.half[1],
+				p.half[2], p.base, p.period, p.scroll[0], p.scroll[1], p.coat,
 				in.empty() ? " none" : in.c_str());
 		}
 

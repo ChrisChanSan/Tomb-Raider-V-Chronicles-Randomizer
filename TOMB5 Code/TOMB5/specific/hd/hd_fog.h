@@ -362,13 +362,26 @@ inline float HDFogStrength(float d, float rad, float r, float g, float b)
 	return -logf(1.0f - veil) / peak;
 }
 
+/* The cell of a coat's test (hd_render.cpp, fog_add_coat), in world
+ * units: a corner of an additive range lies on its group's surface when a
+ * surface corner falls in its cell or one of the 26 around it. */
+#define HD_FOG_COAT_CELL	16
+
+/* The most of a mist's corners that may lie on its group's surface (its
+ * coat, fog_add_coat): a sheet standing in the air shares next to none
+ * of the walls' corners, a layer laid over the walls most of them. */
+#define HD_FOG_ART_COAT		0.1f
+
 /* The art's mist: an additive part of the flow material (`flow`) whose
- * page drifts on both axes (su, sv, page units a second). Every water flow
- * of the fifteen levels scrolls along one axis, its stream; the mist
- * drifts askew. */
-inline bool HDFogArtMist(bool flow, float su, float sv)
+ * page drifts on both axes (su, sv, page units a second) and which stands
+ * in the air - its coat (0..1, -1 not asked) under HD_FOG_ART_COAT. Every
+ * water flow of the fifteen levels scrolls along one axis, its stream;
+ * the mist drifts askew. A layer drifting askew over a wall is a wash of
+ * the wall's light, not mist, and keeps its own weight. */
+inline bool HDFogArtMist(bool flow, float su, float sv, float coat)
 {
-	return flow && su != 0.0f && sv != 0.0f;
+	return flow && su != 0.0f && sv != 0.0f && coat >= 0.0f &&
+		coat < HD_FOG_ART_COAT;
 }
 
 // The mist's additive weight, for its own weight `base` (1 for the flow).
@@ -381,13 +394,13 @@ inline float HDFogArtWeight(float base)
  * fog_add_weight): its group, its .TRG part (a book's, -1 for any other),
  * its material, its box's centre in the world and in view space and its
  * half sizes, the bulb of the bracket the centre lies in (-1 for none) and
- * its rho, the range's own weight and the weight drawn, its swing and its
- * scroll. */
+ * its rho, the range's own weight and the weight drawn, its swing, its
+ * scroll and its coat (-1 where none is asked). */
 struct HDFogArtPart
 {
 	int group, part, material, bulb;
 	float world[3], view[3], half[3];
-	float rho, base, weight, period, scroll[2];
+	float rho, base, weight, period, scroll[2], coat;
 };
 
 /* level 0: the ranges the last bracket that asked the additive pass drew,

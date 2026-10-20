@@ -26425,13 +26425,31 @@ static void fog_art()
 		HDFogStrength(0.0f, 1312.0f, mill[0], mill[1], mill[2]) == 1.0f,
 		"fog art: no colour or no column keeps the strength at 1", 0, 0);
 
-	// The mist and the water: ANDY3's mill, its river, JOBY2, a glow.
-	ok(HDFogArtMist(true, 0.02f, 0.01f),
+	/* The mist and the water: ANDY3's mill (coat 0.000), its river,
+	 * JOBY2, another material; the walls' washes of ANDREA2 (coat 0.967)
+	 * and ANDREA3 (0.398) and the title's cards (0.009). */
+	ok(HDFogArtMist(true, 0.02f, 0.01f, 0.0f),
 		"fog art: the mill's flow drifting askew is mist", 1, 1);
-	ok(!HDFogArtMist(true, 0.0f, -2.5f) && !HDFogArtMist(true, -0.3f, 0.0f),
+	ok(!HDFogArtMist(true, 0.0f, -2.5f, 0.0f) &&
+		!HDFogArtMist(true, -0.3f, 0.0f, 0.0f),
 		"fog art: a flow along one axis is water, not mist", 0, 0);
-	ok(!HDFogArtMist(false, 0.08f, 0.08f),
+	ok(!HDFogArtMist(false, 0.08f, 0.08f, 0.0f),
 		"fog art: no other material is mist", 0, 0);
+	ok(!HDFogArtMist(true, 0.08f, 0.08f, 0.967f),
+		"fog art: a layer over the walls drifting askew is no mist", 0, 0);
+	ok(!HDFogArtMist(true, 0.08f, 0.08f, 0.398f),
+		"fog art: a layer on four in ten wall corners is no mist", 0, 0);
+	ok(HDFogArtMist(true, 0.07f, 0.07f, 0.009f) &&
+		HDFogArtMist(true, 0.1f, 0.1f, 0.0f),
+		"fog art: cards in the air drifting askew are mist", 1, 1);
+	ok(!HDFogArtMist(true, 0.02f, 0.01f, HD_FOG_ART_COAT) &&
+		HDFogArtMist(true, 0.02f, 0.01f, HD_FOG_ART_COAT - 0.001f),
+		"fog art: the coat's bound itself is a coat", 0, 0);
+	ok(!HDFogArtMist(true, 0.02f, 0.01f, -1.0f),
+		"fog art: a range whose coat was not asked is no mist", 0, 0);
+	ok(HD_FOG_ART_COAT > 0.009f && HD_FOG_ART_COAT < 0.398f,
+		"fog art: the bound lies between the cards and the washes",
+		(long)(HD_FOG_ART_COAT * 1000.0f), 100);
 	ok(fabsf(HDFogArtWeight(1.0f) - 0.35f) < 1e-6f &&
 		fabsf(94.3f * HDFogArtWeight(1.0f) - 33.0f) < 0.01f,
 		"fog art: the mist's weight puts its 94.3 at the top",

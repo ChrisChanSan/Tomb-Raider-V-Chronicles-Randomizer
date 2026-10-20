@@ -846,6 +846,10 @@ inline bool HDCoverTriOnFaces(const HDCoverTri& tri, const HDCoverFace* faces,
  *   inHolder  the stand range inside the room's own portal window, with its
  *             group's matrix and lighting
  *   behind    withArt, pushed back in depth (HD_STAND_PUSH, hd_render.h)
+ *   front     the stand range alone, pulled towards the eye by the same
+ *             fraction, in its group's window when that group is listed and
+ *             in the room's window when it is not - only for the art of an
+ *             object the art carries (HDStandDrawBaked below); never here
  *
  * While the room is listed its place comes from exactly one source: a
  * covered room is drawn as its carrier's art - all of the carrier's stand
@@ -869,6 +873,7 @@ struct HDStandAnswer
 	bool withArt;
 	bool inHolder;
 	bool behind;
+	bool front;
 };
 
 inline HDStandAnswer HDStandDraw(bool holderListed, bool artListed, bool covered,
@@ -881,6 +886,7 @@ inline HDStandAnswer HDStandDraw(bool holderListed, bool artListed, bool covered
 	out.withArt = artListed && (!holderListed || drawnAs || !onFaces);
 	out.inHolder = holderListed && drawnAs && !artListed;
 	out.behind = out.withArt && out.classic && grazes && !onFaces;
+	out.front = false;
 	return out;
 }
 
@@ -922,7 +928,144 @@ inline HDStandAnswer HDStandDrawFaces(bool holderListed, bool artListed, int sta
 	out.inHolder = holderListed && drawnAs && !artListed;
 	out.behind = holderListed && (out.withArt || out.inHolder) && kind != 2 &&
 		(!drawnAs || (faces & HD_STAND_FACES_KEPT) != 0);
+	out.front = false;
 	return out;
+}
+
+/* The art of an object the level's art carries, on a classic room's faces.
+ *
+ * A slot the level's .MAP calls DUMMY draws nothing as an item: its object
+ * is baked into the room art (hd_object.cpp), and the art inside the item's
+ * box is the object. Where that art lies on the faces of a room drawn
+ * classic, the classic path draws the object's mesh after the room, over
+ * those faces, while the answers above leave the art out (lying on the
+ * faces whole) or draw it behind them (reaching onto them) - the object
+ * loses that part of its surface and the room's own texture shows there
+ * instead. Measured at a glass block window whose item is such an object:
+ * its reveal and sill lie in the sniper room behind it, 90 triangles whole
+ * on that room's walls and ceiling, 23 reaching onto its floor and walls,
+ * every one of them inside the item's box, and the room's faces there wear
+ * a tile that is black or clear in every texel.
+ *
+ * So a stand range whose triangles all stand in the box of such an item is
+ * drawn as the classic draws the object: in front of the room's faces
+ * (`front`), in every frame that draws those faces and would otherwise
+ * leave the range out or push it back. One surface, one drawer: the art in
+ * front wins every pixel it shares with the face under it, by HD_STAND_PUSH
+ * of its distance, and nothing else draws the object - the item is not
+ * drawn. A range the frame already draws in place, a frame that does not
+ * list the room, and a relief range in the box on no face (kind 2) answer
+ * as above. Asked on the visibility path only (hd_level.cpp, DecideStand):
+ * the old path answers as before. */
+struct HDStandBox
+{
+	double lo[3];
+	double hi[3];
+};
+
+/* An item's box in world units out of its object's first frame's bounds
+ * (x0, x1, y0, y1, z0, z1, item-relative), its place and its yaw, turned
+ * in quarter turns as the level places such objects: a quarter of
+ * 0x4000 units of yaw, the nearest one. */
+inline HDStandBox HDStandItemBox(const short bounds[6], long x, long y, long z,
+	short yRot)
+{
+	const int quarter = ((unsigned short)(yRot + 0x2000) >> 14) & 3;
+	const double x0 = bounds[0], x1 = bounds[1], z0 = bounds[4], z1 = bounds[5];
+	double rx0 = x0, rx1 = x1, rz0 = z0, rz1 = z1;
+
+	if (quarter == 1)
+	{
+		rx0 = z0; rx1 = z1; rz0 = -x1; rz1 = -x0;
+	}
+	else if (quarter == 2)
+	{
+		rx0 = -x1; rx1 = -x0; rz0 = -z1; rz1 = -z0;
+	}
+	else if (quarter == 3)
+	{
+		rx0 = -z1; rx1 = -z0; rz0 = x0; rz1 = x1;
+	}
+
+	HDStandBox box;
+
+	box.lo[0] = (double)x + rx0;
+	box.hi[0] = (double)x + rx1;
+	box.lo[1] = (double)y + bounds[2];
+	box.hi[1] = (double)y + bounds[3];
+	box.lo[2] = (double)z + rz0;
+	box.hi[2] = (double)z + rz1;
+	return box;
+}
+
+// Does the box hold the triangle - its centroid, the box's faces included?
+inline bool HDStandBoxHolds(const HDStandBox& box, const HDCoverTri& tri)
+{
+	for (int k = 0; k < 3; k++)
+	{
+		const double c = (double)tri.a[k] +
+			((double)tri.e1[k] + (double)tri.e2[k]) / 3.0;
+
+		if (c < box.lo[k] || c > box.hi[k])
+			return false;
+	}
+
+	return true;
+}
+
+// The first of `count` boxes that holds the triangle, -1 for none.
+inline int HDStandBoxFind(const HDStandBox* boxes, int count,
+	const HDCoverTri& tri)
+{
+	for (int i = 0; i < count; i++)
+		if (HDStandBoxHolds(boxes[i], tri))
+			return i;
+
+	return -1;
+}
+
+/* A range is the art of such objects when every one of its `triangles`
+ * stands in one of their boxes (`inBoxes` of them); one triangle outside
+ * is the room's own surface, which the answers above keep. */
+inline bool HDStandRangeBaked(int inBoxes, int triangles)
+{
+	return triangles > 0 && inBoxes >= triangles;
+}
+
+/* The answer for a range of such art (`baked`): an answer of HDStandDraw or
+ * HDStandDrawFaces turned to `front` where the room is listed, its classic
+ * faces are drawn, the range stands on them (kind 0 or 1) and the answer
+ * leaves it out or pushes it back; every other answer as it came. */
+inline HDStandAnswer HDStandDrawBaked(HDStandAnswer answer, bool holderListed,
+	int kind, bool baked)
+{
+	answer.front = false;
+
+	if (!baked || !holderListed || !answer.classic || kind == 2)
+		return answer;
+
+	if ((answer.withArt || answer.inHolder) && !answer.behind)
+		return answer;
+
+	answer.withArt = false;
+	answer.inHolder = false;
+	answer.behind = false;
+	answer.front = true;
+	return answer;
+}
+
+/* A view * world matrix (row vectors, row-major) pulled towards the eye by
+ * `push` of every point's distance: the eye is the origin of view space, so
+ * the point moves along its own line of sight and lands on the same pixel,
+ * nearer by that fraction. The renderer's HD_STAND_PUSH pushes back by the
+ * same fraction through the projection. */
+inline void HDStandFrontMatrix(float* m, float push)
+{
+	const float scale = 1.0f - push;
+
+	for (int row = 0; row < 4; row++)
+		for (int col = 0; col < 3; col++)
+			m[row * 4 + col] *= scale;
 }
 
 /* Which art draws the place of a static mesh (hd_render.cpp,

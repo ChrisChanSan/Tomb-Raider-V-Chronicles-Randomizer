@@ -14351,6 +14351,127 @@ static void stand_part()
 		a.withArt, 0);
 }
 
+/* stand_baked: the art of an object the level's art carries (hd_cover.h,
+ * HDStandDrawBaked). An item's box out of its first frame's bounds, place and
+ * yaw in quarter turns (HDStandItemBox) - JOBY2's two ANIMATING15 windows,
+ * items 173 and 174, whose boxes RoomProbe -standlist prints; a triangle in
+ * a box by its centroid, the box's faces included (HDStandBoxHolds,
+ * HDStandBoxFind); a range is such art when all of its triangles are in
+ * boxes (HDStandRangeBaked); the answer turned to `front` exactly where the
+ * room is listed, its faces drawn and the range on them left out or pushed
+ * back; and the front matrix keeps a point on its pixel, nearer by
+ * HD_STAND_PUSH of its distance (HDStandFrontMatrix). */
+static void stand_baked()
+{
+	const short window[6] = { -1536, 512, -2048, 512, -1024, -480 };
+	HDStandBox box = HDStandItemBox(window, 16896, -5632, 27136, 0);
+
+	ok(box.lo[0] == 15360 && box.hi[0] == 17408 && box.lo[2] == 26112 &&
+		box.hi[2] == 26656, "baked: item 173's box, yaw 0", (long)box.lo[0],
+		15360);
+	ok(box.lo[1] == -7680 && box.hi[1] == -5120, "baked: its y from the bounds",
+		(long)box.lo[1], -7680);
+	box = HDStandItemBox(window, 24064, -5632, 35328, -16384);
+	ok(box.lo[0] == 24544 && box.hi[0] == 25088 && box.lo[2] == 33792 &&
+		box.hi[2] == 35840, "baked: item 174's box, a quarter turn back",
+		(long)box.lo[0], 24544);
+	const short unit[6] = { 1, 2, 0, 0, 3, 4 };
+	box = HDStandItemBox(unit, 0, 0, 0, 0x4000);
+	ok(box.lo[0] == 3 && box.hi[0] == 4 && box.lo[2] == -2 && box.hi[2] == -1,
+		"baked: a quarter turn on: x from z, z from -x", (long)box.lo[2], -2);
+	box = HDStandItemBox(unit, 0, 0, 0, (short)0x8000);
+	ok(box.lo[0] == -2 && box.hi[0] == -1 && box.lo[2] == -4 && box.hi[2] == -3,
+		"baked: a half turn mirrors both", (long)box.lo[0], -2);
+	box = HDStandItemBox(unit, 0, 0, 0, 0x1FFF);
+	ok(box.lo[0] == 1, "baked: just under an eighth is the nearest quarter, 0",
+		(long)box.lo[0], 1);
+	box = HDStandItemBox(unit, 0, 0, 0, 0x2000);
+	ok(box.lo[0] == 3, "baked: an eighth rounds to the next quarter",
+		(long)box.lo[0], 3);
+
+	const float v[3][3] = { { 0, 0, 0 }, { 30, 0, 0 }, { 0, 0, 30 } };
+	const float origin[3] = { 24576, -7680, 34000 };
+	HDCoverTri tri;
+	HDStandBox boxes[2] = { HDStandItemBox(window, 16896, -5632, 27136, 0),
+		HDStandItemBox(window, 24064, -5632, 35328, -16384) };
+
+	HDCoverMakeTri(v, origin, 146, &tri);
+	ok(HDStandBoxHolds(boxes[1], tri),
+		"baked: a reveal triangle on the box's top", 1, 1);
+	ok(!HDStandBoxHolds(boxes[0], tri),
+		"baked: and not in the other window's box", 0, 0);
+	ok(HDStandBoxFind(boxes, 2, tri) == 1, "baked: found in the second box",
+		HDStandBoxFind(boxes, 2, tri), 1);
+	const float far[3] = { 24576, -7680, 36000 };
+
+	HDCoverMakeTri(v, far, 146, &tri);
+	ok(HDStandBoxFind(boxes, 2, tri) == -1,
+		"baked: past the box's end, in none",
+		HDStandBoxFind(boxes, 2, tri), -1);
+
+	ok(HDStandRangeBaked(90, 90), "baked: 90 of 90 in boxes is the object",
+		1, 1);
+	ok(!HDStandRangeBaked(89, 90), "baked: one outside is the room's own",
+		0, 0);
+	ok(!HDStandRangeBaked(0, 0), "baked: an empty range is none", 0, 0);
+
+	// JOBY2 21 drawn classic and listed, group 146 listed.
+	const int C = HD_STAND_ROOM_CLASSIC;
+	HDStandAnswer a = HDStandDrawBaked(HDStandDrawFaces(true, true, C, false,
+		1, 0), true, 1, true);
+	ok(a.front && !a.withArt && !a.inHolder && a.classic,
+		"baked: the reveal whole on 21's faces drawn in front", a.front, 1);
+	a = HDStandDrawBaked(HDStandDrawFaces(true, true, C, false, 0, 0), true, 0,
+		true);
+	ok(a.front && !a.behind && !a.withArt,
+		"baked: the sill reaching onto them in front, not behind", a.front, 1);
+	a = HDStandDrawBaked(HDStandDrawFaces(true, false, C, false, 1, 0), true, 1,
+		true);
+	ok(a.front, "baked: in front with 146 off the list too", a.front, 1);
+	a = HDStandDrawBaked(HDStandDrawFaces(true, true, C, false, 2, 0), true, 2,
+		true);
+	ok(!a.front && a.withArt,
+		"baked: the glass in the box on no face as before", a.front, 0);
+	a = HDStandDrawBaked(HDStandDrawFaces(false, true, C, false, 1, 0), false,
+		1, true);
+	ok(!a.front && a.withArt && !a.classic,
+		"baked: 21 off the list - the art in place, no classic", a.withArt, 1);
+	a = HDStandDrawBaked(HDStandDrawFaces(true, true, C, false, 1, 0), true, 1,
+		false);
+	ok(!a.front && !a.withArt, "baked: the room's own copy left out as before",
+		a.front, 0);
+	const int V = HD_STAND_ROOM_COVERED;
+
+	a = HDStandDrawBaked(HDStandDrawFaces(true, true, V, true, 1, 0), true, 1,
+		true);
+	ok(!a.front && a.withArt && !a.classic,
+		"baked: a room drawn as its carrier's art answers as before",
+		a.withArt, 1);
+	const int P = HD_STAND_ROOM_PART;
+
+	a = HDStandDrawBaked(HDStandDrawFaces(true, true, P, true, 1,
+		HD_STAND_FACES_COVERED), true, 1, true);
+	ok(!a.front && a.withArt && !a.behind,
+		"baked: the carrier in place on covered faces as before", a.front, 0);
+	a = HDStandDrawBaked(HDStandDrawFaces(true, true, P, true, 1,
+		HD_STAND_FACES_KEPT), true, 1, true);
+	ok(a.front, "baked: the carrier's object on kept faces in front",
+		a.front, 1);
+	a = HDStandDraw(true, true, false, false, true, false);
+	ok(!a.front, "baked: HDStandDraw never answers front", a.front, 0);
+
+	// A view * world that moves the eye 1000 back: a point ahead of it.
+	float m[16] = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 100, 50, 1000, 1 };
+
+	HDStandFrontMatrix(m, 1.0f / 512.0f);
+	const float x = 100.0f * m[0] + m[12], z = m[14];
+	ok(fabs(z - 1000.0 * (1.0 - 1.0 / 512.0)) < 1e-3,
+		"baked: nearer by a 512th of the distance", (long)(z * 1000), 998047);
+	ok(fabs(x / z - 200.0 / 1000.0) < 1e-6, "baked: on the same line of sight",
+		(long)(x / z * 1e6), 200000);
+	ok(m[15] == 1.0f && m[3] == 0.0f, "baked: w untouched", (long)m[15], 1);
+}
+
 static void stand_shadow()
 {
 	const HDCoverFace floor = stand_floor(0.0, 0.0, 1024.0, 0.0);
@@ -26851,6 +26972,7 @@ int main()
 	vis_static_covers();
 	stand_overlap();
 	stand_part();
+	stand_baked();
 	stand_shadow();
 	static_art();
 	static_piece();

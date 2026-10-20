@@ -10248,11 +10248,16 @@ void HDFrameDrawGlow()
 	{
 		g_matrix_checked = true;
 		MatrixCheck(g_frame[0].room, g_frame[0].group, g_frame[0].world, projection);
+
+		// The fog bulbs' own pass in this bracket: bulbs taken, quads drawn.
+		HDFogLast fog;
+
+		HDRenderFogLast(&fog);
 		Log("HDLOG frame rooms=%d calls=%d dropped=%d bulbs=%d fog_start=%.0f "
 			"wibble=%d cam_uw=%d shimmer=%d objects=%d object_calls=%d "
 			"cutout_calls=%d cutout_pages=%d flipbook_calls=%d "
 			"gloss_calls=%d water_calls=%d book_calls=%d clear_calls=%d "
-			"sheen_calls=%d",
+			"sheen_calls=%d fog_taken=%d fog_drawn=%d",
 			g_frame_count, g_frame_room_calls, g_frame_dropped,
 			frame.bulbCount, frame.distanceFogStart, (int)wibble,
 			frame.cameraUnderwater, tomb5.shimmer ? 1 : 0,
@@ -10260,7 +10265,7 @@ void HDFrameDrawGlow()
 			HDRenderCutoutCalls(), HDPageCacheCutoutPages(),
 			HDRenderFlipbookCalls(), HDRenderGlossCalls(),
 			HDRenderWaterCalls(), g_frame_book_calls, g_frame_clear_calls,
-			g_frame_sheen_calls);
+			g_frame_sheen_calls, fog.offered, fog.drawn);
 	}
 
 	/* The followed book, page by page: the first book drawn in the level

@@ -26760,6 +26760,104 @@ static void object_rules()
 			0xFFFFFFFFu), "glass: a node past the palette is not glass",
 			HDTrmTriangleIsGlass(HD_TRM_RUN_ALPHA, 14, 40, 0xFFFFFFFFu), 0);
 	}
+
+	/* The glass's sides: RICH2's cabinet door has its pane facing -z and
+	 * the sheet behind it facing +z; RICH1's DOOR_TYPE2 has panes facing
+	 * -z beside its sides facing +x and -x, a few degrees off the axes. */
+	{
+		const float pane[3] = { 0.0f, 0.0f, -1.0f };
+		const float sheet[3] = { 0.0f, 0.0f, 50.0f };
+		const float side[3] = { -0.99f, 0.0f, 0.1f };
+		const float tilted[3] = { 0.1f, 0.0f, -0.99f };
+		const float zero[3] = { 0.0f, 0.0f, 0.0f };
+
+		ok(HDTrmTrianglesFaceAgainst(pane, sheet) &&
+			HDTrmTrianglesFaceAgainst(sheet, pane),
+			"glass sides: the pane and the sheet behind it face against",
+			HDTrmTrianglesFaceAgainst(pane, sheet), 1);
+		ok(!HDTrmTrianglesFaceAgainst(side, tilted),
+			"glass sides: a box's corner, a few degrees off, does not",
+			HDTrmTrianglesFaceAgainst(side, tilted), 0);
+		ok(!HDTrmTrianglesFaceAgainst(pane, pane),
+			"glass sides: two layers facing the same way do not",
+			HDTrmTrianglesFaceAgainst(pane, pane), 0);
+		ok(!HDTrmTrianglesFaceAgainst(pane, zero) &&
+			!HDTrmTrianglesFaceAgainst(zero, zero),
+			"glass sides: a triangle with no area faces nothing",
+			HDTrmTrianglesFaceAgainst(pane, zero), 0);
+	}
+
+	/* The copies: the cabinet's additive run carries its pane twice, one
+	 * unit behind the glass's own, on the same texture corners. */
+	{
+		const float glass[9] = { -12, -1702, -257, -12, -1917, -257,
+			-248, -1917, -257 };
+		const unsigned char uv[6] = { 5, 253, 5, 180, 125, 180 };
+		const float behind[9] = { -248, -1917, -258, -12, -1702, -258,
+			-12, -1917, -258 };
+		const unsigned char uvBehind[6] = { 125, 180, 5, 253, 5, 180 };
+		const float apart[9] = { -12, -1702, -280, -12, -1917, -280,
+			-248, -1917, -280 };
+		const unsigned char uvOther[6] = { 5, 253, 5, 180, 125, 181 };
+		const float flat[9] = { 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+
+		ok(HDTrmTriangleCopies(glass, uv, behind, uvBehind),
+			"glass copies: the same corners a unit behind, in another order",
+			HDTrmTriangleCopies(glass, uv, behind, uvBehind), 1);
+		ok(!HDTrmTriangleCopies(glass, uv, apart, uv),
+			"glass copies: 23 units behind is another surface",
+			HDTrmTriangleCopies(glass, uv, apart, uv), 0);
+		ok(!HDTrmTriangleCopies(glass, uv, glass, uvOther),
+			"glass copies: one texture corner off is no copy",
+			HDTrmTriangleCopies(glass, uv, glass, uvOther), 0);
+		ok(!HDTrmTriangleCopies(flat, uv, flat, uv),
+			"glass copies: a triangle with no edge copies nothing",
+			HDTrmTriangleCopies(flat, uv, flat, uv), 0);
+	}
+
+	/* The opacity: param[1] of the part's material, 0.125 on the JOBY
+	 * doors, 0.1 on RICH1's DOOR_TYPE2, 1 on RICH2's cabinet. */
+	ok(HDGlassOpacity(0.125f) == 0.125f && HDGlassOpacity(0.1f) == 0.1f,
+		"glass opacity: a part's own value under 1 is taken",
+		(long)(HDGlassOpacity(0.125f) * 1000.0f), 125);
+	ok(HDGlassOpacity(1.0f) == 1.0f && HDGlassOpacity(0.0f) == 1.0f &&
+		HDGlassOpacity(-0.5f) == 1.0f && HDGlassOpacity(3.0f) == 1.0f &&
+		HDGlassOpacity(sqrtf(-1.0f)) == 1.0f,
+		"glass opacity: 1, 0, negative, over 1 or not a number weigh 1",
+		(long)(HDGlassOpacity(0.0f) * 1000.0f), 1000);
+	ok(HDGlassOpacityByte(0.125f) == 32 && HDGlassOpacityByte(0.1f) == 26,
+		"glass opacity: the blend factor's byte is rounded",
+		(long)HDGlassOpacityByte(0.1f), 26);
+	ok(HDGlassOpacityByte(1.0f) == 255 && HDGlassOpacityByte(0.0f) == 0 &&
+		HDGlassOpacityByte(2.0f) == 255,
+		"glass opacity: the byte stays within 0 and 255",
+		(long)HDGlassOpacityByte(2.0f), 255);
+
+	/* The classic's band as the ceiling: the cabinet's glass at the top of
+	 * its band, 101.0, under the classic's 109.2; TITLE's frame page at
+	 * 130.1 whole would be held to 109.2. */
+	ok(HDGlassBandFactor(109.2f, 101.0f) == 1.0f,
+		"glass band: a glass inside the classic's band is not held",
+		(long)(HDGlassBandFactor(109.2f, 101.0f) * 1000.0f), 1000);
+	ok(fabsf(HDGlassBandFactor(109.2f, 130.1f) - 109.2f / 130.1f) < 1e-6f,
+		"glass band: a brighter glass is held to the classic's top",
+		(long)(HDGlassBandFactor(109.2f, 130.1f) * 1000.0f), 839);
+	ok(HDGlassBandFactor(0.0f, 50.0f) == 1.0f &&
+		HDGlassBandFactor(50.0f, 0.0f) == 1.0f,
+		"glass band: an empty band holds nothing",
+		(long)(HDGlassBandFactor(0.0f, 50.0f) * 1000.0f), 1000);
+
+	/* A reflection's matrix turns the winding that faces the eye. */
+	{
+		const float plain[16] = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0,
+			5, 6, 7, 1 };
+		const float mirrored[16] = { -1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0,
+			5, 6, 7, 1 };
+
+		ok(!HDMatrixMirrors(plain) && HDMatrixMirrors(mirrored),
+			"glass sides: a mirrored matrix is told by its determinant",
+			HDMatrixMirrors(mirrored), 1);
+	}
 }
 
 int main()

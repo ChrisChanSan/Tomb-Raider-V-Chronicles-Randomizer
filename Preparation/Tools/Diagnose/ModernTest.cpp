@@ -11128,24 +11128,27 @@ static void glass_split()
 	struct Add
 	{
 		const char* what;
+		int page;
 		int parts;
 		int alphaMin;
 		int whole;
 	};
 
+	/* A page the table of looks names (HDGlassLookOf) is added whole too:
+	 * the arched panes' page 15074 alone. */
 	static const Add adds[] =
 	{
-		{ "RICH2 6 page 1038", 1, 254, 1 },
-		{ "RICH1/RICH3 page 3068", 26, 165, 1 },
-		{ "RICH3 page 3309", 19, 165, 1 },
-		{ "ANDREA1/2 page 11047", 19, 115, 1 },
-		{ "ANDREA1/2 page 13066", 6, 81, 1 },
-		{ "ANDREA1 157 page 16063", 1, 83, 1 },
-		{ "ANDREA1 93 page 16070", 1, 75, 1 },
-		{ "JOBY3/JOBY5/RICH2 bridge page 16103", 13, 100, 1 },
-		{ "RICH2 page 15026", 9, 0, 0 },
-		{ "ANDREA1 arched panes page 15074", 7, 0, 0 },
-		{ "RICH2/RICH3 lamp glass page 15101", 5, 12, 0 }
+		{ "RICH2 6 page 1038", 1038, 1, 254, 1 },
+		{ "RICH1/RICH3 page 3068", 3068, 26, 165, 1 },
+		{ "RICH3 page 3309", 3309, 19, 165, 1 },
+		{ "ANDREA1/2 page 11047", 11047, 19, 115, 1 },
+		{ "ANDREA1/2 page 13066", 13066, 6, 81, 1 },
+		{ "ANDREA1 157 page 16063", 16063, 1, 83, 1 },
+		{ "ANDREA1 93 page 16070", 16070, 1, 75, 1 },
+		{ "JOBY3/JOBY5/RICH2 bridge page 16103", 16103, 13, 100, 1 },
+		{ "RICH2 page 15026", 15026, 9, 0, 0 },
+		{ "ANDREA1 arched panes page 15074", 15074, 7, 0, 1 },
+		{ "RICH2/RICH3 lamp glass page 15101", 15101, 5, 12, 0 }
 	};
 
 	char* render = hd_switch_text("hd_render.cpp");
@@ -11183,7 +11186,8 @@ static void glass_split()
 
 	glass_body(render, "inline bool AddGlass(", body, sizeof(body));
 	ok(!strcmp(body, "returnmaterial==HD_TRG_MATERIAL_DECAL&&"
-		"HDGlassWholePage(HDPageCacheSlotAlphaMin(slot));"),
+		"(HDGlassWholePage(HDPageCacheSlotAlphaMin(slot))||"
+		"HDGlassLookOf(HDPageCachePageOfSlot(slot))!=0);"),
 		"glass split: AddGlass is the rule tested here", 0, 0);
 
 	glass_body(rules, "inline bool HDGlassWholePage(", body, sizeof(body));
@@ -11228,7 +11232,7 @@ static void glass_split()
 	for (size_t i = 0; i < sizeof(adds) / sizeof(adds[0]); i++)
 	{
 		const Add& a = adds[i];
-		const int w = a.alphaMin >= below ? 1 : 0;
+		const int w = a.alphaMin >= below || HDGlassLookOf(a.page) ? 1 : 0;
 		char what[160];
 
 		snprintf(what, sizeof(what), "glass added whole: %s", a.what);
@@ -11239,7 +11243,7 @@ static void glass_split()
 
 	ok(added == 107, "glass added whole: the census's additive glass",
 		added, 107);
-	ok(whole == 86, "glass added whole: the parts added whole", whole, 86);
+	ok(whole == 93, "glass added whole: the parts added whole", whole, 93);
 
 	int n = hd_switch_count(render,
 		"GlassSplits(range.blend, range.clear, range.pageSlot)");
@@ -11446,7 +11450,8 @@ static void glass_hue()
 	n = hd_switch_count(debris, "b.glass == GLASS_HALVES ? 2 : 1;");
 	ok(n == 1, "glass hue: a piece of a frame with glass in two halves", n,
 		1);
-	n = hd_switch_count(debris, "HDGlassWholePage(alphaMin) ? GLASS_WHOLE");
+	n = hd_switch_count(debris,
+		"(HDGlassWholePage(alphaMin) || page_look) ? GLASS_WHOLE");
 	ok(n == 1, "glass hue: a piece of the whole glass added whole", n, 1);
 	n = hd_switch_count(level, "BuildGlassLooks();");
 	ok(n == 1, "glass hue: the level build hands the classic glass", n, 1);
@@ -11465,42 +11470,51 @@ static void glass_hue()
 		int calls;
 		int pass;
 		float blend;
+		int page;
 		int alphaMin;
 		int permille;
 		int classic;
 		int hue;
 	};
 
+	/* The page column: a page the table of looks names (HDGlassLookOf) is
+	 * added whole and takes a hue where the classic adds glass. */
 	static const Family families[] =
 	{
-		{ "ANDREA2 65/132 page 3007, the split", 2, 1, 0.1f, 0, 856, 1, 1 },
-		{ "RICH2 125 page 16103, the bridge", 1, 2, 0, 100, 62, 1, 1 },
-		{ "JOBY3/JOBY5/RICH2 page 16103, no classic glass", 12, 2, 0, 100, 62,
-			0, 0 },
-		{ "RICH2 6 page 1038", 1, 2, 0, 254, 0, 1, 1 },
-		{ "RICH1/RICH3 page 3068 at classic glass", 16, 2, 0, 165, 0, 1, 1 },
-		{ "RICH1/RICH3 page 3068, no classic glass", 10, 2, 0, 165, 0, 0, 0 },
-		{ "RICH3 page 3309, additive, at classic glass", 6, 2, 0, 165, 0, 1,
+		{ "ANDREA2 65/132 page 3007, the split", 2, 1, 0.1f, 3007, 0, 856, 1,
 			1 },
-		{ "RICH3 page 3309, additive, no classic glass", 15, 2, 0, 165, 0, 0,
-			0 },
-		{ "RICH2 page 3309, alpha run at 0.8417, at classic glass", 2, 1,
-			0.8417f, 165, 0, 1, 0 },
-		{ "RICH2 page 3309, alpha run, no classic glass", 7, 1, 0.8417f, 165,
+		{ "RICH2 125 page 16103, the bridge", 1, 2, 0, 16103, 100, 62, 1, 1 },
+		{ "JOBY3/JOBY5/RICH2 page 16103, no classic glass", 12, 2, 0, 16103,
+			100, 62, 0, 0 },
+		{ "RICH2 6 page 1038", 1, 2, 0, 1038, 254, 0, 1, 1 },
+		{ "RICH1/RICH3 page 3068 at classic glass", 16, 2, 0, 3068, 165, 0, 1,
+			1 },
+		{ "RICH1/RICH3 page 3068, no classic glass", 10, 2, 0, 3068, 165, 0,
+			0, 0 },
+		{ "RICH3 page 3309, additive, at classic glass", 6, 2, 0, 3309, 165, 0,
+			1, 1 },
+		{ "RICH3 page 3309, additive, no classic glass", 15, 2, 0, 3309, 165,
 			0, 0, 0 },
-		{ "ANDREA1 arched panes page 15074", 7, 2, 0, 0, 328, 1, 0 },
-		{ "RICH2/RICH3 lamp glass page 15101", 5, 2, 0, 12, 0, 1, 0 },
-		{ "ANDREA1/2 lanterns page 11047", 19, 2, 0, 115, 0, 0, 0 },
-		{ "ANDREA1/2 street lamps page 13066", 6, 2, 0, 81, 0, 0, 0 },
-		{ "ANDREA1 157 page 16063", 1, 2, 0, 83, 0, 0, 0 },
-		{ "ANDREA1 93 page 16070, the glass on a table", 1, 2, 0, 75, 0, 0,
-			0 },
-		{ "RICH2 page 15026", 13, 2, 0, 0, 0, 0, 0 },
-		{ "JOBY3/JOBY5 lamp covers page 10072", 58, 1, 0.1f, 120, 46, 0, 0 },
-		{ "RICH3 46 page 10084, at classic glass", 2, 1, 0.1f, 0, 116, 1, 0 },
-		{ "RICH3 46 page 10084, no classic glass", 3, 1, 0.1f, 0, 116, 0, 0 },
-		{ "JOBY2 52/78 page 16073", 2, 1, 0.1f, 77, 12, 0, 0 },
-		{ "JOBY2 102 page 513", 1, 1, 0.2333f, 254, 0, 1, 0 }
+		{ "RICH2 page 3309, alpha run at 0.8417, at classic glass", 2, 1,
+			0.8417f, 3309, 165, 0, 1, 0 },
+		{ "RICH2 page 3309, alpha run, no classic glass", 7, 1, 0.8417f, 3309,
+			165, 0, 0, 0 },
+		{ "ANDREA1 arched panes page 15074", 7, 2, 0, 15074, 0, 328, 1, 1 },
+		{ "RICH2/RICH3 lamp glass page 15101", 5, 2, 0, 15101, 12, 0, 1, 0 },
+		{ "ANDREA1/2 lanterns page 11047", 19, 2, 0, 11047, 115, 0, 0, 0 },
+		{ "ANDREA1/2 street lamps page 13066", 6, 2, 0, 13066, 81, 0, 0, 0 },
+		{ "ANDREA1 157 page 16063", 1, 2, 0, 16063, 83, 0, 0, 0 },
+		{ "ANDREA1 93 page 16070, the glass on a table", 1, 2, 0, 16070, 75, 0,
+			0, 0 },
+		{ "RICH2 page 15026", 13, 2, 0, 15026, 0, 0, 0, 0 },
+		{ "JOBY3/JOBY5 lamp covers page 10072", 58, 1, 0.1f, 10072, 120, 46,
+			0, 0 },
+		{ "RICH3 46 page 10084, at classic glass", 2, 1, 0.1f, 10084, 0, 116,
+			1, 0 },
+		{ "RICH3 46 page 10084, no classic glass", 3, 1, 0.1f, 10084, 0, 116,
+			0, 0 },
+		{ "JOBY2 52/78 page 16073", 2, 1, 0.1f, 16073, 77, 12, 0, 0 },
+		{ "JOBY2 102 page 513", 1, 1, 0.2333f, 513, 254, 0, 1, 0 }
 	};
 
 	int calls = 0, reach = 0;
@@ -11511,7 +11525,7 @@ static void glass_hue()
 		const bool glass = f.pass == 1 ?
 			f.blend > 0.0f && f.blend < 1.0f &&
 			HDGlassFramePage(f.alphaMin, f.permille) :
-			HDGlassWholePage(f.alphaMin);
+			HDGlassWholePage(f.alphaMin) || HDGlassLookOf(f.page);
 		const int hue = glass && f.classic ? 1 : 0;
 		char what[160];
 
@@ -11524,13 +11538,136 @@ static void glass_hue()
 
 	ok(calls == 190, "glass hue: the draw calls that may be glass", calls,
 		190);
-	ok(reach == 26, "glass hue: the draw calls the hue reaches", reach, 26);
+	ok(reach == 33, "glass hue: the draw calls the hue reaches", reach, 33);
 
 	free(render);
 	free(shader);
 	free(rules);
 	free(debris);
 	free(level);
+}
+
+/* The table of looks (hd_debris_rules.h, HDGlassLookOf, HDGlassTintHue):
+ * a hue chosen for a page's glass, keyed by the page as the sheen's page
+ * table is. Its one line, the arched panes' page 15074, green; no other
+ * page of the census in it; the turn keeps the classic glass's saturation
+ * and the luma of what it turns, the panes' blue (the classic's at their
+ * place, saturation 0.57) coming out green; and the seams that read it -
+ * AddGlass, the room draw's tint and the pieces. */
+static void glass_look()
+{
+	char* render = hd_switch_text("hd_render.cpp");
+	char* debris = hd_switch_text("hd_debris.h");
+	char* rules = hd_switch_text("hd_debris_rules.h");
+	char body[1024];
+	int n;
+
+	ok(render && debris && rules, "glass look: the three texts are read",
+		!!render + !!debris + !!rules, 3);
+
+	const int lines = (int)(sizeof(kHDGlassLooks) / sizeof(kHDGlassLooks[0]));
+	const HDGlassLook* panes = HDGlassLookOf(15074);
+
+	ok(lines == 1, "glass look: the table holds one page", lines, 1);
+	ok(panes && panes->hue == 120.0f, "glass look: the arched panes' page "
+		"15074 takes green, 120 degrees", panes ? (int)panes->hue : -1, 120);
+
+	// Every other page of the census keeps its rule.
+	static const int others[] =
+	{
+		513, 1038, 3007, 3068, 3309, 10072, 10084, 11047, 13066, 15026,
+		15101, 16063, 16070, 16073, 16103
+	};
+	int named = 0;
+
+	for (size_t i = 0; i < sizeof(others) / sizeof(others[0]); i++)
+		named += HDGlassLookOf(others[i]) ? 1 : 0;
+
+	ok(named == 0, "glass look: no other page of the census is named",
+		named, 0);
+
+	glass_body(rules, "inline const HDGlassLook* HDGlassLookOf(", body,
+		sizeof(body));
+	ok(!strcmp(body, "constintcount=(int)(sizeof(kHDGlassLooks)/"
+		"sizeof(kHDGlassLooks[0]));for(inti=0;i<count;i++)"
+		"if(kHDGlassLooks[i].page==page)return&kHDGlassLooks[i];return0;"),
+		"glass look: HDGlassLookOf is the rule tested here", 0, 0);
+
+	/* The panes' tint out of the classic glass at their place (RoomProbe
+	 * -glasshue, group 198's 210 triangles): 0.603, 1.124, 1.404, blue at
+	 * saturation 0.57, turned to green - green leads, red and blue equal,
+	 * the saturation and the luma kept. */
+	const float blue[4] = { 0.603f, 1.124f, 1.404f, 1.0f };
+	float green[4];
+
+	HDGlassTintHue(blue, 120.0f, green);
+
+	const float sat_in = (1.404f - 0.603f) / 1.404f;
+	const float sat_out = (green[1] - green[0]) / green[1];
+
+	ok(green[1] > green[0] && fabsf(green[0] - green[2]) < 1.0e-5f &&
+		green[3] == 1.0f, "glass look: the panes' blue turns green",
+		(int)(green[1] * 1000), 1308);
+	ok(fabsf(green[0] - 0.562f) < 0.001f && fabsf(green[1] - 1.308f) <
+		0.001f, "glass look: the panes' tint is 0.562, 1.308, 0.562",
+		(int)(green[0] * 1000), 562);
+	ok(fabsf(sat_out - sat_in) < 1.0e-4f, "glass look: the classic's "
+		"saturation is kept", (int)(sat_out * 1000), (int)(sat_in * 1000));
+	ok(fabsf(HDGlassLuma(green) - HDGlassLuma(blue)) < 1.0e-4f,
+		"glass look: the luma is kept", (int)(HDGlassLuma(green) * 1000),
+		(int)(HDGlassLuma(blue) * 1000));
+
+	/* A piece's look is the tint times its gain (2.545 at the panes'
+	 * static): the turn keeps that luma too, and a hue of 480 is 120. */
+	float piece[4], wrapped[4];
+
+	for (int i = 0; i < 3; i++)
+		piece[i] = blue[i] * 2.545f;
+
+	piece[3] = 1.0f;
+	HDGlassTintHue(piece, 120.0f, piece);
+	HDGlassTintHue(blue, 480.0f, wrapped);
+	ok(fabsf(HDGlassLuma(piece) - 2.545f) < 1.0e-3f &&
+		fabsf(piece[1] - green[1] * 2.545f) < 1.0e-3f, "glass look: a "
+		"piece's raised look turns in place, its luma kept",
+		(int)(HDGlassLuma(piece) * 1000), 2545);
+	ok(fabsf(wrapped[1] - green[1]) < 1.0e-5f, "glass look: the hue wraps "
+		"at 360", (int)(wrapped[1] * 1000), (int)(green[1] * 1000));
+
+	// No classic glass at the place: the tint stays zero, the art's colour.
+	const float none[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+	float kept[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+
+	HDGlassTintHue(none, 120.0f, kept);
+	ok(kept[0] == 0.0f && kept[1] == 0.0f && kept[3] == 0.0f, "glass look: "
+		"a zero tint stays zero", (int)(kept[1] * 1000), 0);
+
+	// The red and the blue sectors: 0 is red, 240 blue.
+	float red[4], deep[4];
+
+	HDGlassTintHue(blue, 0.0f, red);
+	HDGlassTintHue(blue, 240.0f, deep);
+	ok(red[0] > red[1] && fabsf(red[1] - red[2]) < 1.0e-5f &&
+		deep[2] > deep[0] && fabsf(deep[0] - deep[1]) < 1.0e-5f,
+		"glass look: 0 degrees is red and 240 blue", (int)(red[0] * 100),
+		(int)(deep[2] * 100));
+
+	// The seams that read the table.
+	n = hd_switch_count(render, "HDGlassLookOf(HDPageCachePageOfSlot(slot))");
+	ok(n == 1, "glass look: AddGlass adds the table's pages whole", n, 1);
+	n = hd_switch_count(render,
+		"HDGlassTintHue(range.tint, look->hue, range.tint);");
+	ok(n == 1, "glass look: the room draw's tint takes the table's hue", n,
+		1);
+	n = hd_switch_count(debris, "HDGlassLookOf(tri.page);");
+	ok(n == 1, "glass look: a piece reads its page's line", n, 1);
+	n = hd_switch_count(debris,
+		"HDGlassTintHue(fly.look, page_look->hue, fly.look);");
+	ok(n == 1, "glass look: a piece of the whole glass takes the hue", n, 1);
+
+	free(render);
+	free(debris);
+	free(rules);
 }
 
 /* The build gate and the draw, in the engine's own text. HDEnabled() is
@@ -26598,6 +26735,7 @@ int main()
 	hd_switch_wiring();
 	glass_split();
 	glass_hue();
+	glass_look();
 	hd_build_gate();
 	load_keep();
 	load_mode();

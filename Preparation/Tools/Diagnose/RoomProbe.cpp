@@ -14106,19 +14106,28 @@ namespace probestatics
 			return;
 
 		HDGlassTintInfo info;
-		int n = 0;
+		int n = 0, looks = 0;
 
+		/* And the table of looks (HDGlassLookOf): the hue a page takes in
+		 * place of the classic's, -1 for a page the table does not name. */
 		for (; HDRenderGlassTintInfo(n, &info); n++)
+		{
+			const HDGlassLook* look = HDGlassLookOf(info.page);
+
+			looks += look ? 1 : 0;
 			printf("glasshue: %s group %d pass %d page %d tris %d blend %.4f "
 				"split %d whole %d classic faces %d area %.0f colour %.1f %.1f "
-				"%.1f tint %.3f %.3f %.3f %.0f\n", stem, info.group, info.pass,
-				info.page, info.triangles, info.blend, info.split ? 1 : 0,
-				info.whole ? 1 : 0, info.faces, info.area, info.colour[0],
-				info.colour[1], info.colour[2], info.tint[0], info.tint[1],
-				info.tint[2], info.tint[3]);
+				"%.1f tint %.3f %.3f %.3f %.0f look %.0f\n", stem, info.group,
+				info.pass, info.page, info.triangles, info.blend,
+				info.split ? 1 : 0, info.whole ? 1 : 0, info.faces, info.area,
+				info.colour[0], info.colour[1], info.colour[2], info.tint[0],
+				info.tint[1], info.tint[2], info.tint[3],
+				look ? look->hue : -1.0f);
+		}
 
 		printf("glasshue: %s classic faces %d, %d draw calls that may be "
-			"glass, %d take a hue\n", stem, (int)faces.size(), n, tinted);
+			"glass, %d take a hue, %d on a page of the table of looks\n", stem,
+			(int)faces.size(), n, tinted, looks);
 	}
 
 	/* -pieceslook: every shatterable static the art pairs with its parts
@@ -17929,7 +17938,9 @@ static int ProbeMain(int argc, char** argv)
 		printf("       -smashpiece <n>   destructible piece n hidden, in any "
 			"group; repeatable\n");
 		printf("       -glasshue   every draw call drawn as the classic's "
-			"glass may be: the classic faces at its place and its hue\n");
+			"glass may be: the classic faces at its place and its hue,\n");
+		printf("                    and the hue the table of looks gives its "
+			"page (-1 none)\n");
 		printf("       -pieceslook   every shatterable static the art pairs: "
 			"its parts and its glass pieces' look\n");
 		printf("       -statics new|old   the classic statics a frame of this "

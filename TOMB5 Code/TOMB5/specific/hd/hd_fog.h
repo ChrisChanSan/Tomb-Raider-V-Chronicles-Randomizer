@@ -46,6 +46,10 @@
  *                 T = exp(-tau). The pixel becomes dst * T + colour (1 - T):
  *                 for a thin veil that is the classic's dst (1 - tau) +
  *                 colour tau, and 1 - T never exceeds tau.
+ *   the strength  the density times HDFogStrength, the bulb's own factor:
+ *                 its densest line veils black by HD_FOG_TOP in its colour,
+ *                 the top of the look's band (the pass, hd_render.cpp,
+ *                 fog_take; the shader takes the density as it is given).
  *   the breath    the density times 1 - HD_FOG_BREATH * n, n a value noise
  *                 of hashed lattice points (HDFogHash) over cells of
  *                 HD_FOG_CELL radii, anchored in the world and rising by
@@ -329,10 +333,34 @@ inline float HDFogRho(const float p[3], const float c[3], float rad)
 /* The top of the look's band, in 0..1 of luma: the most a bulb's body and
  * the art's mist add over the picture under them. */
 #define HD_FOG_TOP		(33.0f / 255.0f)
+// The most a bulb's densest line may veil, whatever its colour.
+#define HD_FOG_VEIL_MOST	0.5f
 /* The art's mist's weight in the additive pass (HDFogArtWeight): the top
  * over the most the mist adds at 1 (94.3 of 255 at the 95th percentile of
  * its pixels, the brightest of the eyes measured), so it adds the top. */
 #define HD_FOG_ART_WEIGHT	0.35f
+
+/* The body's strength: the factor on the density that makes the veil of
+ * the bulb's densest line - the column 2 r d through its centre - add
+ * HD_FOG_TOP over black in the bulb's own colour (r, g, b 0..1): the veil
+ * HD_FOG_TOP over the colour's luma, at most HD_FOG_VEIL_MOST, as
+ * 1 - exp(-S 2 r d / 255). Above 1 for a bulb fainter than the top, below
+ * for a brighter one; 1 where the bulb has no colour or no column. */
+inline float HDFogStrength(float d, float rad, float r, float g, float b)
+{
+	const float luma = 0.299f * r + 0.587f * g + 0.114f * b;
+	const float peak = HDFogClassicPeak(d, rad) / 255.0f;
+
+	if (!(luma > 0.0f) || !(peak > 0.0f))
+		return 1.0f;
+
+	float veil = HD_FOG_TOP / luma;
+
+	if (veil > HD_FOG_VEIL_MOST)
+		veil = HD_FOG_VEIL_MOST;
+
+	return -logf(1.0f - veil) / peak;
+}
 
 /* The art's mist: an additive part of the flow material (`flow`) whose
  * page drifts on both axes (su, sv, page units a second). Every water flow
@@ -369,3 +397,5 @@ struct HDFogArtPart
 int HDRenderFogArt(HDFogArtPart* out, int max, int level);
 // RoomProbe's -fogartweight: w for the art's mist, -1 the rule.
 void HDRenderFogArtProbe(float weight);
+// RoomProbe's -fogstrength: s for every bulb's body, -1 the rule.
+void HDRenderFogStrengthProbe(float strength);

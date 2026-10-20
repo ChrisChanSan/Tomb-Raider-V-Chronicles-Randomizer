@@ -3761,6 +3761,8 @@ namespace
 	std::vector<HDFogArtPart> g_fog_art_now;
 	std::vector<HDFogArtPart> g_fog_art_last;
 	float g_fog_art_probe = -1.0f;
+	// RoomProbe's -fogstrength: one strength for every bulb, -1 the rule.
+	float g_fog_strength = -1.0f;
 
 	/* One triangle of an additive range into the range's box (HDRange::
 	 * addBox), its corners in the group's own coordinates; the range's
@@ -3871,7 +3873,8 @@ namespace
 	}
 
 	/* The bracket's bulbs: each one whose sphere reaches the screen is
-	 * kept for the pass and its density in the upload `bulbs` (c40, eight
+	 * kept for the pass, its density times its strength (hd_fog.h,
+	 * HDFogStrength), and its density in the upload `bulbs` (c40, eight
 	 * floats a bulb) set to 0. Nothing with hd_fog 0 or without the depth
 	 * texture, so the upload stays as it was.
 	 *
@@ -3926,7 +3929,9 @@ namespace
 				continue;
 
 			g_fog_index[g_fog_count] = j;
-			g_fog_bulb[g_fog_count++] = b;
+			g_fog_bulb[g_fog_count] = b;
+			g_fog_bulb[g_fog_count++].density *= g_fog_strength >= 0.0f ?
+				g_fog_strength : HDFogStrength(b.density, b.rad, b.r, b.g, b.b);
 			bulbs[j * 8 + 7] = 0.0f;
 		}
 
@@ -4366,6 +4371,11 @@ int HDRenderFogArt(HDFogArtPart* out, int max, int level)
 void HDRenderFogArtProbe(float weight)
 {
 	g_fog_art_probe = weight;
+}
+
+void HDRenderFogStrengthProbe(float strength)
+{
+	g_fog_strength = strength;
 }
 
 namespace

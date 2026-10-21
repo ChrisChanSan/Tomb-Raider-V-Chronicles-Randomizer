@@ -585,9 +585,13 @@ namespace
 static std::wstring resolveFolder(const std::wstring& chosen, const wchar_t* file)
 { return Tr3Source::resolveFolder(chosen, file); }
 
-// The resolved folders as they go to the core and the patch path.
-static std::wstring tr3Folder(const App& a)  { return resolveFolder(a.cfg.tr3Dir, L"CRASH.TR2"); }
-static std::wstring goldFolder(const App& a) { return resolveFolder(a.cfg.tr3GoldDir, L"chunnel.TR2"); }
+// The resolved folders as they go to the core and the patch path - the
+// same two lookups the command line makes, so the Gold row also finds
+// The Lost Artifact inside the Remastered "3" folder (DATA\LA).
+static std::wstring tr3Folder(const App& a)
+{ return Tr3Source::resolveTr3(a.cfg.tr3Dir); }
+static std::wstring goldFolder(const App& a)
+{ return Tr3Source::resolveTr3Gold(a.cfg.tr3GoldDir); }
 
 // Cache for the packages extracted from Tomb Raider 3.
 //

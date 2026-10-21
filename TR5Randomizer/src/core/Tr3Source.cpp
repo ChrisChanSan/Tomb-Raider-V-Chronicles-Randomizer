@@ -1641,7 +1641,23 @@ std::wstring Tr3Source::resolveTr3(const std::wstring& chosen)
 { return resolveFolder(chosen, L"CRASH.TR2"); }
 
 std::wstring Tr3Source::resolveTr3Gold(const std::wstring& chosen)
-{ return resolveFolder(chosen, L"chunnel.TR2"); }
+{
+    // The folder itself or its data\, as for every other game. Then the
+    // Remastered layout, where The Lost Artifact is a subfolder of the
+    // third game's levels: <bundle>\3\DATA\LA\CHUNNEL.TR2. So "3" and
+    // "3\DATA" both find it, and one folder serves both rows.
+    const std::wstring direct = resolveFolder(chosen, L"chunnel.TR2");
+    if (!direct.empty() || chosen.empty()) return direct;
+
+    std::wstring base = chosen;
+    while (!base.empty() && (base.back() == L'\\' || base.back() == L'/'))
+        base.pop_back();
+
+    const std::wstring inData =
+        resolveFolder(base + L"\\DATA\\LA", L"chunnel.TR2");
+    if (!inData.empty()) return inData;
+    return resolveFolder(base + L"\\LA", L"chunnel.TR2");
+}
 
 std::wstring Tr3Source::resolveBank(const std::wstring& tr3Dir)
 {

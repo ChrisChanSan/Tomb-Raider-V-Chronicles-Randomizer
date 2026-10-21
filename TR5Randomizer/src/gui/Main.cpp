@@ -1333,8 +1333,25 @@ static void checkTr3Editions(App& a)
         std::fprintf(f, "  Enemy pool:         %s\r\n",
                      a.optEnemyPool == 0 ? "level pool only"
                                          : a.optEnemyPool == 1 ? "cross mix" : "allsanity");
+        // The deselected kinds by name, not by count: two runs of one seed
+        // with different deselections give different levels, and only
+        // the names tell which.
         if (!a.optEnemiesOff.empty())
-            std::fprintf(f, "  deselected kinds:   %d\r\n", (int)a.optEnemiesOff.size());
+        {
+            std::string names;
+            for (const EnemyKind& k : Rando::enemyKinds())
+                if (a.optEnemiesOff.count(k.typeId))
+                    names += (names.empty() ? "" : ", ") + std::string(k.name);
+            std::fprintf(f, "  deselected kinds:   %s\r\n", names.c_str());
+        }
+        if (a.optOutfits && !a.optOutfitsOff.empty())
+        {
+            std::string names;
+            for (const OutfitKind& k : Rando::outfitKinds())
+                if (a.optOutfitsOff.count(k.id))
+                    names += (names.empty() ? "" : ", ") + std::string(k.name);
+            std::fprintf(f, "  deselected outfits: %s\r\n", names.c_str());
+        }
         std::fprintf(f, "  Secrets:            %s%s%s\r\n",
                      a.optSecrets == 0 ? "vanilla" : a.optSecrets == 1 ? "in the item pool"
                                                    : a.optSecrets == 2 ? "glitchless list"
@@ -1408,6 +1425,34 @@ static void checkTr3Editions(App& a)
                      Tr3Edition::describe(a.goldEdition).c_str());
         if (tr3EditionUnknown(a))
             std::fprintf(f, "  WARNING: %s\r\n", Tr3Edition::warning());
+
+        // What the planner could draw from them: the guests whose files
+        // are there (guestFilesThere, the planner's own test) and the TR3
+        // outfits in the pool - the same seed with another of these is
+        // another set of levels, and this is where that shows.
+        {
+            std::string guests, outfits;
+            for (const EnemyKind& k : Rando::enemyKinds())
+                if (k.source && guestFilesThere(a, k.source))
+                    guests += (guests.empty() ? "" : ", ") +
+                              std::string(k.name);
+
+            const bool tr3Outfits = a.optOutfits && a.optOutfitsTr3 &&
+                                    !tr3Folder(a).empty();
+            const std::vector<std::string> missing =
+                Tr3Source::missingOutfits(tr3Folder(a));
+            for (const OutfitKind& k : Rando::outfitKinds())
+                if (k.source[0] && tr3Outfits &&
+                    std::find(missing.begin(), missing.end(), k.id) ==
+                        missing.end())
+                    outfits += (outfits.empty() ? "" : ", ") +
+                               std::string(k.name);
+
+            std::fprintf(f, "  Guests available:   %s\r\n",
+                         guests.empty() ? "none" : guests.c_str());
+            std::fprintf(f, "  TR3 outfits:        %s\r\n",
+                         outfits.empty() ? "none" : outfits.c_str());
+        }
         line("");
 
         line("LEVELS");

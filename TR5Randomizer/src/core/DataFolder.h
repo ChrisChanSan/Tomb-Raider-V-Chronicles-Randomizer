@@ -88,6 +88,8 @@ public:
     // Copies all known levels from the source into the target folder,
     // creating the target if needed. This doubles as "restore to default" -
     // both are the same operation, which is why there is only one function.
+    // Each level's HD marker sidecar (<stem>.hdm) in the target goes with
+    // it: it described the randomized level the copy replaces.
     bool copyLevels(const std::wstring& sourceDataDir,
                     const std::wstring& targetDataDir,
                     std::string& error,

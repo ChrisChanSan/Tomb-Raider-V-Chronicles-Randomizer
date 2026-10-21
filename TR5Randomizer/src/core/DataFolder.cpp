@@ -393,6 +393,19 @@ bool DataFolder::copyLevels(const std::wstring& sourceDataDir,
         if (attr != INVALID_FILE_ATTRIBUTES && (attr & FILE_ATTRIBUTE_READONLY))
             SetFileAttributesW(dst.c_str(), attr & ~FILE_ATTRIBUTE_READONLY);
 
+        // The level's HD marker sidecar (<stem>.hdm) goes with the level it
+        // described, as the explicit Restore removes it: a level put back
+        // here and then left as it is - a run that fails on it, a row
+        // switched off - would otherwise hand the engine an earlier run's
+        // cut rooms, donors, outfit and sfximport list beside a vanilla
+        // level. A level the run makes gets its own sidecar written after
+        // it. A file that is not there is not an error.
+        const size_t dot = lf.name.find_last_of('.');
+        const std::string stem =
+            (dot == std::string::npos) ? lf.name : lf.name.substr(0, dot);
+        DeleteFileW(PathUtil::join(targetDataDir,
+                                   PathUtil::widen(stem + ".hdm")).c_str());
+
         if (copiedCount) ++(*copiedCount);
     }
     return true;

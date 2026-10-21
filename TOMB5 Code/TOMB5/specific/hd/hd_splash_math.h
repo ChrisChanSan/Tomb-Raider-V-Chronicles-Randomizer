@@ -262,7 +262,7 @@ struct HDCard
  * tick, its gravity 0x400 over 16 over 8 = 8 units a tick squared (7200
  * units/s^2) - the splash's own numbers, so the drops land as its column
  * does. The counts, the shares and the widths are free choices, set by eye
- * on the round's RoomProbe pictures. Returns the cards written, at most
+ * on RoomProbe pictures. Returns the cards written, at most
  * `max`. */
 const int kSplashCrownInner = 12;
 const int kSplashCrownMiddle = 16;
@@ -348,7 +348,7 @@ inline int HDSplashCards(const HDSplashSetup& s, unsigned int seed,
 /* The splash's two rings on the sheet: the classic middle and outer rings'
  * outer edges as their fronts, the strength (a ring's slope, as the sheet's
  * rings take it) 1.0 and 0.6 of the classic life - a free choice, set by
- * eye on the round's RoomProbe pictures: twice the 0.5 a wading Lara's ring
+ * eye on RoomProbe pictures: twice the 0.5 a wading Lara's ring
  * starts with, for the biggest thing that meets the water. out[0..3] the
  * outer ring (front, strength) then the middle's. False when the splash is
  * gone. */
@@ -490,7 +490,7 @@ inline bool HDTankPuff(float x, float y, float z, int c, unsigned int seed,
  *             dries with the lasers' own countdown, 2.13 s
  *   else      0
  *
- * 1024 is a free choice, set by eye on the round's RoomProbe pictures. */
+ * 1024 is a free choice, set by eye on RoomProbe pictures. */
 inline float HDFilmStrength(int tank, int flags1, int laser, int count)
 {
 	if (tank == 1)
@@ -639,8 +639,8 @@ inline HDTankShape HDTankShapeOf(const float* xyz, int n)
  * 1.77 m). From RICH2's 1,276 the fastest leave at 3,300 units/s and land
  * at most 1,276 units out (2 sqrt(d h) at d = h): the apron's own reach.
  * The counts, the time (0.2 s, 6 ticks), the lift (400 units/s), the life
- * (1 s), the sizes and the shares are free choices, set by eye on the
- * round's RoomProbe pictures. Returns the cards written, at most `max`. */
+ * (1 s), the sizes and the shares are free choices, set by eye on
+ * RoomProbe pictures. Returns the cards written, at most `max`. */
 const int kTankBurstSpray = 40;
 const int kTankBurstDrops = 24;
 const int kTankBurstCards = kTankBurstSpray + kTankBurstDrops;
@@ -796,7 +796,7 @@ inline void HDTankDomePoint(const HDTankShape& sh, const HDTankDome& d,
  * (sqrt(2 g 1,282) / 2 = 1,660 units/s), stretched along the way down -
  * one page every kTankDomeAcross across and every kTankDomeAlong down, so
  * its foam blotches draw out into the streaks of falling water. The
- * shares and the two lengths are free choices, set by eye on the round's
+ * shares and the two lengths are free choices, set by eye on
  * RoomProbe pictures: 0.3 and one page every 512 units both ways draw a
  * blotched cloud over the room. */
 const float kTankDomeBody = 0.15f;
@@ -831,7 +831,7 @@ inline float HDTankDomeShare(const HDTankDome& d, float cosine)
  * 384 units, out of a hash of its place (hd_render.cpp), so the front's
  * edge is ragged rather than a ring round the glass; 256 and 384 (a
  * quarter square and one and a half of the grid's 256-unit steps) are free
- * choices, set by eye on the round's RoomProbe pictures.
+ * choices, set by eye on RoomProbe pictures.
  *
  * kWetRadius: the front stops this far past the dome's foot, along the
  * way. The water that lands is the dome's, 3186 units wide at the floor

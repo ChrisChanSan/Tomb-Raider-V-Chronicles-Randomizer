@@ -11970,7 +11970,7 @@ namespace
 	 * heights fall with the wave number and the first four stay on top.
 	 * Their directions keep at least 0.15 radians from every other row's.
 	 * The envelope's depth - basin 0.30, channel 0.35, sea 0.50 - and the
-	 * directions are free choices, set by eye on the round's RoomProbe
+	 * directions are free choices, set by eye on RoomProbe
 	 * pictures. So are the gains at eye level, basin 3, channel 2, sea 1:
 	 * the calmer the class, the flatter it lies seen flat; the sea's rows
 	 * are high enough already.
@@ -11995,7 +11995,7 @@ namespace
 	 * the steeper rows went white from above. The wavelengths are the
 	 * channel's kind of spread, moved off whole ratios; the heights, the
 	 * angles, the calm, the highlight and the 240 units a second of a row's
-	 * `river` without a flow are free choices, set by eye on the round's
+	 * `river` without a flow are free choices, set by eye on
 	 * RoomProbe strips. */
 	const HDWaterClass kWaterClass[HD_WATER_CLASSES] =
 	{
@@ -12037,7 +12037,7 @@ namespace
 	 * fades over its own period, 8 to 15 seconds and different for every
 	 * row, so the eight never return to one pattern together; the periods
 	 * and the start of each envelope (row i at i times the golden angle)
-	 * are free choices, set by eye on the round's RoomProbe strips. The
+	 * are free choices, set by eye on RoomProbe strips. The
 	 * rows five to eight start their wave a multiple of the golden angle
 	 * further on, the first four where they always have. */
 	const float kWaterGroupPeriod[8] =
@@ -12084,7 +12084,7 @@ namespace
 	 * share and the squeeze by s; at 0 the rows are straight and unbent.
 	 *
 	 * The widths, the cell's length, the share, the gain and the push are
-	 * free choices, set by eye on the round's RoomProbe pictures against
+	 * free choices, set by eye on RoomProbe pictures against
 	 * the lattice measures of the rounds (the share of the surface light's
 	 * power in its six strongest frequencies, and in two directions).
 	 * Widths: basin 1.5 - a crest's line is a direction modulo pi, so the
@@ -12106,7 +12106,7 @@ namespace
 	 * would keep a twentieth of their mean square. 4.49 keeps it (0.52 the
 	 * heights' mean square, 0.258 the window's along over the lengths,
 	 * 0.371 across: 1 / sqrt(0.52 x 0.258 x 0.371)); 6, a third more, a
-	 * free choice set by eye on the round's RoomProbe pictures - at 4.49
+	 * free choice set by eye on RoomProbe pictures - at 4.49
 	 * the pieces read faint against the floor seen through the water. */
 	const float kCrestGain = 6.0f;
 	/* The same gain for WaterVS's swell, which lifts and sinks the sheet
@@ -12118,7 +12118,7 @@ namespace
 	 * under the ground, 37,416 in one picture at 6, 9,237 at most at 1. */
 	const float kCrestSwellGain = 1.0f;
 	/* How far the squeeze pushes at most, of the longest wavelength - a
-	 * free choice, set by eye on the round's RoomProbe pictures. */
+	 * free choice, set by eye on RoomProbe pictures. */
 	const float kBendPush = 0.3f;
 	// Row i's crests are counted from i times this; odd, a free choice.
 	const double kCrestOffset = 977.0;
@@ -12128,7 +12128,7 @@ namespace
 	 * 1,025 units) at crestLen wavelengths would draw pieces longer than
 	 * most of its bodies are wide - ANDY3's pond is about six squares
 	 * across -, straight bands over the whole body again. A square and a
-	 * half: a free choice, set by eye on the round's RoomProbe pictures of
+	 * half: a free choice, set by eye on RoomProbe pictures of
 	 * the pond. */
 	const float kCrestReach = 1536.0f;
 
@@ -12181,7 +12181,7 @@ namespace
 	 * day's strength as the floor's luma times kWaterMoon.
 	 *
 	 * The tint, kNightHigh, the foam's kNightFoam and kNightCaustic are free
-	 * choices, set by eye on the round's RoomProbe pictures of ANDY1 to
+	 * choices, set by eye on RoomProbe pictures of ANDY1 to
 	 * ANDY3. The sky rows (kWaterSky) are the domes as measured and stay. */
 	const float kWaterMoon[3] = { 0.90f, 1.01f, 1.22f };
 	const float kNightHigh = 0.4f;
@@ -12282,7 +12282,7 @@ namespace
 	 * 29,696, and room 96's floor falls a click from x 48,128 to 49,152 -
 	 * one way down from the river through 66 and 67 to the east. 400 units
 	 * a second: a wading stream, slower than the sink rivers' 640 and 1,063
-	 * - a free choice, set by eye on the round's RoomProbe strips.
+	 * - a free choice, set by eye on RoomProbe strips.
 	 *
 	 * `cls` is the class a row gives its body: the three streams are
 	 * rivers; -1 keeps the body's class and gives it the current alone.
@@ -12416,7 +12416,7 @@ namespace
 	const float kWaterG = 4300.0f;
 
 	// Units: how high the thickest foam stands for its light (hd_room.hlsl,
-	// "the foam's body") - a free choice, set by eye on the round's
+	// "the foam's body") - a free choice, set by eye on
 	// RoomProbe pictures of 8, 24 and 48: 8 hardly shows, 48 turns the
 	// blotches' edges into a grain.
 	const float kWaterFoamRelief = 24.0f;
@@ -12442,7 +12442,7 @@ namespace
 	 *
 	 * What the water shows of that speed is held to kRiverLookCap: rows of
 	 * a few hundred units carried at a square a second slide past as a
-	 * smear; the cap is a free choice, set by eye on the round's RoomProbe
+	 * smear; the cap is a free choice, set by eye on RoomProbe
 	 * strips. The sheen on the skin (hd_room.hlsl, RiverPS) adds at most
 	 * kRiverSheen of the highlight's colour on its lighter lines and takes
 	 * 0.6 of that share off on its darker ones - lighter and darker than
@@ -12453,7 +12453,7 @@ namespace
 	 * where a river ends against a wall or a drop reaches kRiverEdge
 	 * upstream from that end (0.75 of a square, inside the half to one
 	 * square a weir's foam takes on the reference pictures supplied for
-	 * this project). Free choices, set by eye on the round's RoomProbe
+	 * this project). Free choices, set by eye on RoomProbe
 	 * pictures; the sheen's and the relief's on the river's pixels outside
 	 * its end foam, whose brightest stays well under white: with
 	 * kRiverRelief 7 and the moon's kNightHigh 0.4, ANDY3's river and
@@ -12691,7 +12691,7 @@ namespace
 	 * and stays young; at night the water round it mirrors a dark sky
 	 * nearly alike at every slope, and a ring shows only where its slope
 	 * turns the mirror to the brighter horizon. kRingBody, 4, is a free
-	 * choice, set by eye on the round's RoomProbe pictures of ANDY3's lake
+	 * choice, set by eye on RoomProbe pictures of ANDY3's lake
 	 * at night from the bank: at 4 a barrel's ring reads from a wading
 	 * Lara's camera at 1.5 and 2 s, at 2 it does not; its slope at the
 	 * ring's start stands far steeper than a real wave's, so near the
@@ -12700,7 +12700,7 @@ namespace
 	 * kRingNear of its squares and whose height within kRingHeight of its
 	 * surface. Speed, life, slope, the merge
 	 * distance, the restart and the two other distances are free choices,
-	 * set by eye on the round's RoomProbe pictures: a wading Lara's ring
+	 * set by eye on RoomProbe pictures: a wading Lara's ring
 	 * slower than a quick splash, as strong at one second as a ring with a
 	 * straight fade over two seconds and still there in the third, gone in
 	 * three and a half. */
@@ -12795,7 +12795,7 @@ namespace
 	 * kFootReachMax: 0.6 of a square from a narrow jet, 0.9 from a strand a
 	 * square wide, 1.2 from one of two. kFootJoin is 512 units, half a
 	 * square; the step and the reach's numbers are free choices, set by eye
-	 * on the round's RoomProbe pictures (at 0.6 of the whole length the
+	 * on RoomProbe pictures (at 0.6 of the whole length the
 	 * reach covered the room); kFootHead's half a reach is a free choice by
 	 * the sketch, kFootHeadGap a free choice that keeps an eighth of the gap
 	 * open at the widest swing.
@@ -13034,7 +13034,7 @@ namespace
 	 * depth byte (8 over 32, rounded down) is 0: only the variant without
 	 * the depth texture reads that byte, and to it the film has no depth.
 	 * kFilmRise, 16 units more, about 4 cm, is a free choice, set by eye on
-	 * the round's RoomProbe pictures. The film's clip is 0, not kWaterClip:
+	 * RoomProbe pictures. The film's clip is 0, not kWaterClip:
 	 * with the clip at the film's own height the film in RICH2 room 23 lost
 	 * a band in front of the tank's plinth, where the frame lies less than
 	 * 8 units under its surface (RoomProbe -tank 33 1.5 at 960 x 540, the
@@ -13137,7 +13137,7 @@ namespace
 	 * the true one where the fine march's is not number 5,751 (8,735); a
 	 * tighter tolerance (half, a quarter) or a march that takes the first
 	 * crossing behind an edge lowered neither (RoomProbe -tankmarch
-	 * map,fit,growth,first; round three's march, 12 steps of 1.5 unhalved,
+	 * map,fit,growth,first; a march of 12 steps of 1.5 unhalved,
 	 * lay within 2 pixels for only 7 to 27 per cent of its hits).
 	 *
 	 * The look's two strengths. kWetDark, the share of the floor's light
@@ -13168,7 +13168,8 @@ namespace
 	float g_wet_blur = kWetBlur;
 	/* And how far from the eye it comes in whole: nearer, the radius shrinks
 	 * with the distance - a near ray's steps span many pixels, but there the
-	 * strip spans more and the mirror holds still (the owner: fine near). */
+	 * strip spans more and the mirror holds still (fine near, by the play
+	 * test). */
 	const float kWetBlurNear = 2048.0f;	// units
 	float g_wet_blur_near = kWetBlurNear;
 
@@ -15340,7 +15341,7 @@ namespace
 		/* The stand-in's pattern (hd_room.hlsl, WaterPS): indoors a swing
 		 * of +-40 % with a finer second pattern for 0.4 of it, under the
 		 * sky the +-25 % of one pattern that reflects the sky's own rows -
-		 * free choices, set by eye on the round's RoomProbe strips. With
+		 * free choices, set by eye on RoomProbe strips. With
 		 * the horizon at 0.65 and overhead at 0.25 of the body's light
 		 * indoors (above), a basin seen at eye level shows its waves. */
 		out.life[0] = open ? 0.25f : 0.40f;
@@ -15470,8 +15471,8 @@ namespace
 	 * room four to eight squares away keep its texture under the water's
 	 * colour and takes the far into it (0.35 turned the far end of
 	 * JOBY2's flooded base into flat water, 0.25 thinned ANDREA2's
-	 * corridor's yellow-green depth); a free choice, set by eye on the
-	 * round's RoomProbe pictures, as kUnderUp is:
+	 * corridor's yellow-green depth); a free choice, set by eye on
+	 * RoomProbe pictures, as kUnderUp is:
 	 * looking straight up 1.6 times the scattered light, straight down
 	 * 0.4.
 	 *
@@ -15488,7 +15489,7 @@ namespace
 	 * it to the brightness of a body lit from inside - ANDREA2's channel
 	 * (0.30 at the most) and JOBY2's sea of rooms 42 and 76 (0.41) keep
 	 * theirs, the body of room 7 is scaled by 0.48; a free choice, set by
-	 * eye on the round's RoomProbe pictures of that base and of ANDREA2's
+	 * eye on RoomProbe pictures of that base and of ANDREA2's
 	 * flooded corridor. Folded in here, no shader slot. kUnderNoSurface:
 	 * more than any level's height, so saturate(D / h) is 1 for every
 	 * point. */
@@ -15518,7 +15519,7 @@ namespace
 	 * a lit floor in the deepest; 0.5 takes the walls six to eight squares
 	 * off into the dark water and keeps Lara's surroundings; 0.8 brightens
 	 * the view up toward the surface 1.8 times and darkens the view down
-	 * to 0.2. Free choices, set by eye on the round's RoomProbe pictures of
+	 * to 0.2. Free choices, set by eye on RoomProbe pictures of
 	 * the three places. */
 	const float kDeepDim = 30000.0f;
 	const float kDeepFloor = 0.25f;
@@ -18116,7 +18117,7 @@ namespace
 	/* A body's cards wear its foam colour (gWaterFoam, c102 of its look)
 	 * times kCardLight and its fog light (gWaterZen.w, c99): the spray of a
 	 * dark canal is that canal's foam, a little brighter for the light it
-	 * catches in the air - 1.5 a free choice, set by eye on the round's
+	 * catches in the air - 1.5 a free choice, set by eye on
 	 * RoomProbe pictures. White and 1 for none. */
 	const float kCardLight = 1.5f;
 
@@ -26368,7 +26369,7 @@ namespace
 			 * breaking crest's lift - a quarter of the whole height now
 			 * above the whitecaps' threshold (gWaterSun.w of that height),
 			 * where the body has whitecaps at all (gWaterMisc.y). A quarter
-			 * is a free choice, set by eye on the round's RoomProbe
+			 * is a free choice, set by eye on RoomProbe
 			 * pictures. */
 			const float rise = g_wbodies[(size_t)r.body].info.swell;
 			float swell[4] = { look.swell[0] * rise, look.swell[1], 0.0f,

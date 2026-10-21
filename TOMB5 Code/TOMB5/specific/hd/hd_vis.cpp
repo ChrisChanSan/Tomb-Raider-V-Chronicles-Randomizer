@@ -58,7 +58,7 @@
  *                  of the fifteen levels by their own faces are 53 at 0.5,
  *                  55 at 0.4, 64 at 0.3, 82 at 0.2 and 113 at 0.1, and 55
  *                  more at 0.3 by the record leading back
- *   edge 2/2560    of the 181 rooms the owner's walk lost for one frame,
+ *   edge 2/2560    of the 181 rooms a play test's walk lost for one frame,
  *                  walked again at the frame's eye, 155 were refused with
  *                  an empty window, 71 of the 102 that could be measured
  *                  standing 2 pixels or less off it at 2,560 (49 touching

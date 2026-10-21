@@ -22,7 +22,7 @@
  * level's pages with the same code the engine runs. hd_render.cpp is the
  * engine's one caller.
  *
- * WHICH SURFACES. The unit is the texture page: a page is one picture - a
+ * Which surfaces. The unit is the texture page: a page is one picture - a
  * crate's ribbed side, a steel duct panel, a marble slab - and it is the
  * same picture wherever a level uses it, because a page number is a file
  * name in the install's one TEX folder. Three sources name a page's gloss,

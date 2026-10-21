@@ -1006,7 +1006,7 @@ namespace
 		 * whole there it hangs in the other room's space - ANDREA1's brick
 		 * block of room 93 over room 101's roof (7,112 pixels at camE,
 		 * 1280x720), the window frame in room 93's loft, JOBY2's black bars
-		 * by the pillar of room 152 - which the owner played as ghosts. The
+		 * by the pillar of room 152 - which showed as ghosts. The
 		 * rest of a room's art, the open half, stays whole on that path
 		 * (DrawRoomWindowed). */
 		const bool empty = ClipEmpty(entry);

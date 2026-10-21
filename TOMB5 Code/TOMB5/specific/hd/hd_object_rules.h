@@ -17,7 +17,7 @@
 /* Three rules of the HD object path, as pure functions, so that the engine,
  * ModelProbe and ModernTest judge by the same lines.
  *
- * THE SKELETON FIT. The bind drift (hd_model.h, HDModelBindDrift) compares
+ * The skeleton fit. The bind drift (hd_model.h, HDModelBindDrift) compares
  * the distances between the centres of a .TRM's nodes with the distances
  * between the slot's bind joints. A node whose mesh hangs far off its own
  * joint - a cabinet's body standing 1700 units above its origin, a door's
@@ -33,7 +33,7 @@
  * (host/render/game_renderer.cpp, the node_offset lambda: box centres by
  * the leading bone, within 256 units); here the drift's own centres.
  *
- * THE POCKET. A door that slides out of its doorway into the wall beside
+ * The pocket. A door that slides out of its doorway into the wall beside
  * it folds, at its open frame, its front and its back panel into one
  * plane - the frame's box is flat there - so that the leaf stands in the
  * pocket as a single sheet with a face to each side. The classic engine
@@ -55,7 +55,7 @@
  * one keyframe each, links to four of its neighbours' - and their
  * keyframes say nothing about this slot's place.
  *
- * THE GLASS. The classic draws a face see-through when its effects word
+ * The glass. The classic draws a face see-through when its effects word
  * has bit 0 set or its texture's draw type is 2 (specific/output.cpp,
  * the item path). A .TRM sorts the see-through part of a model into its
  * alpha run with material 14, the material the room art's glass carries;

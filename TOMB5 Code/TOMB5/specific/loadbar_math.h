@@ -50,7 +50,8 @@ inline long LoadBarModeOf(bool found, unsigned long value, bool tr4_bar)
  * the level's art there (its .TRG) and the data in memory not kept for
  * it. Such a load - another level, the title, the first load, a key
  * refused - takes seconds; one that keeps them or builds none takes a
- * tenth of one (the owner's -log runs: 34 to 94 ms against 0.96 to 5 s). */
+ * tenth of one (the -log runs of a play test: 34 to 94 ms against 0.96 to
+ * 5 s). */
 inline long LoadBuildsHD(long gate, long art, long kept)
 {
 	return gate && art && !kept;

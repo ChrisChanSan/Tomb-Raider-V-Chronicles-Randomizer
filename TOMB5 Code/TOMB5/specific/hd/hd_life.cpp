@@ -411,7 +411,7 @@ void HDLifeLevelBegin(const char* stem)
 
 		/* The body's light, the one its sheet's colours are lit by, as the
 		 * models' ambient: 255 for a body light of one, twice the push's
-		 * neutral 128. A free choice, set by eye on the round's RoomProbe
+		 * neutral 128. A free choice, set by eye on RoomProbe
 		 * pictures. */
 		for (int k = 0; k < 3; k++)
 			g_light.push_back(info.light[k] * 255.0f);

@@ -82,7 +82,7 @@ static const HDSpringRow kHDSprings[] =
  * does not tick. Only springs within kHDSpringRingReach of the eye ring
  * the sheets: the drips' reach (hd_life_rules.h, kHDLifeDripReach), so
  * far springs do not crowd the 64 rings the sheets keep. Sizes, share and
- * reach free choices, set by eye on the round's RoomProbe pictures. */
+ * reach free choices, set by eye on RoomProbe pictures. */
 static const float kHDSpringRingSize = 80.0f;
 static const float kHDSpringRingLeast = 16.0f;
 static const float kHDSpringPeriod = 0.7f;
@@ -106,7 +106,7 @@ static const float kHDSpringRingReach = 6144.0f;
  * (DrawBubbles: half of half its size, 4 to 7.5 at birth, growing). One
  * in three, by hash, leaves a small ring where it reaches the sheet, of
  * the classic bubble's size there (SetupRipple, 48 to 63, flags 2). Rate,
- * speeds, sway and share free choices, set by eye on the round's RoomProbe
+ * speeds, sway and share free choices, set by eye on RoomProbe
  * pictures of ANDREA2's fountain. */
 static const float kHDSpringRate = 3.0f;	// a second, at strength 1
 static const float kHDSpringRiseMin = 200.0f;

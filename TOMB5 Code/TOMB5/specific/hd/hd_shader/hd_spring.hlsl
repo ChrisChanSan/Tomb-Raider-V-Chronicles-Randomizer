@@ -183,7 +183,7 @@ float4 BubblePS(SPRING_IN input, float2 vpos : VPOS) : COLOR0
 
 	/* The rim from 0.55 of the radius, brightest at 0.9, gone at the edge;
 	 * the body a tenth; the highlight a quarter of the radius up and to
-	 * the left of the middle. Free choices, set by eye on the round's
+	 * the left of the middle. Free choices, set by eye on
 	 * RoomProbe pictures. */
 	const float rim = smoothstep(0.55f, 0.9f, r) * (1.0f - smoothstep(0.9f,
 		1.0f, r));

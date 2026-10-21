@@ -4655,7 +4655,7 @@ static void VisDoor(const short n[3], const short v[4][3], short* door)
  * or has just passed projects onto the screen's edges or behind the eye,
  * and the classic walk refuses the room behind with an empty window, or
  * by the side test - while that room's art stands round the eye. Walked
- * again at the owner's flash frames (RoomProbe -visnear), this lists
+ * again at the flash frames of a -log run (RoomProbe -visnear), this lists
  * JOBY3's room 76, JOBY5's 88 and RICH2's 55, 4,029,896 of the 4,127,491
  * pixels of sky those frames showed. */
 static void VisNearPortals(ROOM_INFO* r)
@@ -4874,10 +4874,10 @@ static void VisFollowPortal(short* door, long rn, ROOM_INFO* r)
 	 * window grown by g_vis_edge. The classic walk refuses it, and a room
 	 * whose art is drawn whole then drops out of the list for a frame as
 	 * the eye sways over that edge - the sky shows where its art stood -
-	 * while the frames either side list it. Walked again at the owner's
-	 * 181 dropped rooms, 155 were refused that way, 71 of the 102 that
-	 * could be measured standing 2 pixels or less off the window at 2,560
-	 * (HDVisDefaults' edge). */
+	 * while the frames either side list it. Walked again at the 181 rooms
+	 * a play test's walk dropped, 155 were refused that way, 71 of the 102
+	 * that could be measured standing 2 pixels or less off the window at
+	 * 2,560 (HDVisDefaults' edge). */
 	const float e = g_vis_edge;
 	const float l = (float)r->test_left - e;
 	const float t = (float)r->test_top - e;

@@ -189,13 +189,10 @@ inline HRESULT DeviceReadBack(IDirect3DDevice9* device, IDirect3DSurface9** out)
 /* A system memory X8R8G8B8 surface into a 24-bit TGA at `path`. Returns the
  * bytes written, 0 when nothing was.
  *
- * 24-bit TGA. Core's version wrote 16 bits and read the surface in short
- * strides - that dates from the DirectDraw era, when the back buffer really
- * was 16 bits. The D3D9 port creates it as D3DFMT_X8R8G8B8, i.e. 32 bits;
- * the old math thus read nonsense. On top came a row bug: the start pointer
- * stood at Height * Pitch, one row behind the buffer - the first pass read
- * out of bounds every time. The engine's apostrophe snapshot would thus
- * always have crashed. */
+ * 24-bit TGA out of the D3D9 port's D3DFMT_X8R8G8B8 back buffer: four
+ * bytes a pixel in, three out, and the walk starts on the last row, at
+ * (Height - 1) * Pitch inside the buffer, since TGA's origin is the
+ * bottom left. */
 inline long DeviceSaveTga(IDirect3DSurface9* surf, const char* path)
 {
 	static const unsigned char head[18] = { 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0,

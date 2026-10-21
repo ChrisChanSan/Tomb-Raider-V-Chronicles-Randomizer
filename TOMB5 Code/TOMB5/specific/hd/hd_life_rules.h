@@ -43,7 +43,7 @@ enum
  * pose (a bottle and a barrel on their side, the cloth flat as built);
  * `forward` the angle in degrees of the way the model faces, from +z
  * toward +x, for a fish; `most` how many of it one body takes, 0 for no
- * limit. The drafts are free choices, set by eye on the round's RoomProbe
+ * limit. The drafts are free choices, set by eye on RoomProbe
  * pictures: glass with air in it half under, soaked cloth low, wood a
  * little high; so are two barrels a body at most (one is 326 units
  * across, ANIMATING3_ANDY1's box). The fish's head points toward +x:
@@ -83,7 +83,7 @@ static const HDLifeKind kHDLifeKinds[HD_LIFE_KINDS] =
  * units (HDRenderWaterBodySquares), more than the 11 a cloth reaches under
  * the surface (0.7 of its box's 16), so ANDY1's pools and ANDY3's lake
  * and shallows take barrels alone (HDLifeFits). The weights and the least
- * squares are free choices, set by eye on the round's RoomProbe pictures. */
+ * squares are free choices, set by eye on RoomProbe pictures. */
 struct HDLifeLevel
 {
 	const char* stem;
@@ -214,7 +214,7 @@ inline void HDLifeTankStart(int flags, int* active, int* status, int* water)
  * end, rides, and goes into the slot under its downstream end (the
  * river's ends, below); a river shorter than three squares takes none, as
  * a float would come back every second there. All free choices, set by
- * eye on the round's RoomProbe pictures. */
+ * eye on RoomProbe pictures. */
 static const int kHDLifePerSquares = 3;
 static const int kHDLifeBodyMax = 12;
 static const int kHDLifeDrawMax = 32;
@@ -245,7 +245,7 @@ static const int kHDLifeRiverMin = 3;
  * push takes no alpha (hd_object.h, HDObjectPush), its light is the only
  * thing that fades it, and the water's own absorption does the same to
  * anything under it. The run, the depth and the light are free choices,
- * set by eye on the round's RoomProbe pictures. */
+ * set by eye on RoomProbe pictures. */
 static const float kHDLifeSlotReach = 384.0f;
 static const float kHDLifeSlotTop = 64.0f;
 static const float kHDLifeRiseRun = 1024.0f;
@@ -295,7 +295,7 @@ static const float kHDLifeSpringCore = 16.0f;
  * seconds and a phase of its own per float; its height is a quarter of the
  * model's floating height but never more than its body's sheet rises
  * (HDLifeBobAmp), and the tilt is 3 degrees of pitch and 2 of roll on the
- * same curve. Free choices, set by eye on the round's RoomProbe pictures. */
+ * same curve. Free choices, set by eye on RoomProbe pictures. */
 static const float kHDLifeBobMin = 2.5f;
 static const float kHDLifeBobSpan = 1.5f;
 static const float kHDLifePitch = 0.0523599f;	// 3 degrees
@@ -309,7 +309,7 @@ static const float kHDLifeRoll = 0.0349066f;	// 2 degrees
  * as wide as long, at 20 degrees a second, with a 6 degree yaw wobble at
  * 1.5 hertz. The
  * count, the speeds, the ring, the wobble and the times are free choices,
- * set by eye on the round's RoomProbe pictures. The centre keeps the
+ * set by eye on RoomProbe pictures. The centre keeps the
  * ring's 300 and half of FISH2's 173 long box, 387 units, from water less
  * deep (a fish of a wider ring swam through the bank in the pictures).
  *
@@ -487,7 +487,7 @@ static const float kHDLifeFishPitchMost = 0.5235988f;	// 30 degrees
  * squares of Lara and at most once in two seconds a body, so the eight
  * rings a sheet draw shows (hd_render.cpp, kRingsPerDraw) are not crowded
  * out. The counts, the periods, the reach and the gap are free choices,
- * set by eye on the round's RoomProbe pictures.
+ * set by eye on RoomProbe pictures.
  *
  * Its ring is 96 and up to 15 more: a ring's strength on the sheet is its
  * size over 128 times a half (hd_render.cpp, "the rings"), so 96 to 111
@@ -532,7 +532,7 @@ static const int kHDLifeDropsMax = 32;
 
 /* The share of its body's light a model takes: a fish under the surface
  * takes half - at the full light FISH2's silver reads as white
- * glints through the sheet. A free choice, set by eye on the round's
+ * glints through the sheet. A free choice, set by eye on
  * RoomProbe pictures. */
 static const float kHDLifeFishLight = 0.5f;
 

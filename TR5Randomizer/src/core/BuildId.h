@@ -33,8 +33,8 @@
 // the two halves actually match. The id is still bumped and written into
 // spoiler.txt, which keeps a bug report traceable.
 //----------------------------------------------------------------------------
-#define RANDO_BUILD_ID      19
-#define RANDO_BUILD_STRING  "0.19"
+#define RANDO_BUILD_ID      20
+#define RANDO_BUILD_STRING  "0.20"
 
 // The published version, and a different thing from the build id above.
 // That one counts revisions of the curation data and decides whether two
@@ -42,4 +42,4 @@
 // program they downloaded. Both belong in a bug report, so both are shown.
 // The engine carries the same string in its version resource (tomb5.rc);
 // the two source trees build separately, so they are kept in step by hand.
-#define RANDO_VERSION_STRING "Beta_2.0"
+#define RANDO_VERSION_STRING "Beta_3.0"

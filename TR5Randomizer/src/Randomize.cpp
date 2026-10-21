@@ -432,20 +432,33 @@ int main(int argc, char** argv)
     Patch::markTriggerSafeSectors(lvl, in);
     in.modelHeight = Patch::modelHeightFn(source, nullptr, tr3Dir, tr3GoldDir, cache);
 
+    // The planner gets the guests only when their files are really there:
+    // the level (resolved above) and the bank (Tr3Source::resolveBank),
+    // the same test that greys the GUI's rows. Without the bank they stay
+    // out of the pool with one line and the level is made without them,
+    // rather than drawing one whose sounds cannot be fetched. The outfits
+    // need the level alone.
+    const bool guestsReady =
+        !tr3Dir.empty() && !Tr3Source::resolveBank(tr3Dir).empty();
+    if (!tr3Dir.empty() && !guestsReady)
+        std::printf("  note: no MAIN.SFX for the tr3= path (beside its "
+                    "levels, in data or in the SFX beside DATA) - the "
+                    "Tomb Raider 3 guests stay out of the pool\n");
+
     RandoOptions opt;
     opt.addEnemies = enemies > 0;
     opt.enemiesPerLevel = enemies;
     opt.swapEnemies = enemies > 0;     // combined in the CLI, enough for tests
     opt.randomOutfits = outfits;
-    opt.tr3Outfits    = outfitsTr3;
+    opt.tr3Outfits    = outfitsTr3 && !tr3Dir.empty();
     opt.outfitsOff    = outfitsOff;
     opt.allWeapons = weapons;
     opt.swapEnemies = mix;
     opt.crossEnemies = cross;
     opt.allsanity = allsanity;
     opt.disabledEnemies = enemiesDisabled;
-    opt.tr3Dir     = tr3Dir;
-    opt.tr3GoldDir = tr3GoldDir;
+    opt.tr3Dir     = guestsReady ? tr3Dir : std::wstring();
+    opt.tr3GoldDir = guestsReady ? tr3GoldDir : std::wstring();
     opt.extraPickups = extraItems;
     opt.randomWeather = weather;
     if (enemiesOnly) { opt.shuffleKeyItems = false; opt.shuffleOtherPickups = false; }

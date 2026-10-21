@@ -593,6 +593,23 @@ static std::wstring tr3Folder(const App& a)
 static std::wstring goldFolder(const App& a)
 { return Tr3Source::resolveTr3Gold(a.cfg.tr3GoldDir); }
 
+// Are the files a guest needs really there? Its level (CRASH.TR2 for "tr3",
+// chunnel.TR2 for "tr3gold") and the Tomb Raider 3 bank where the fetch
+// will look for it (Tr3Source::resolveBank: beside the levels, in data\, or
+// in the SFX beside the Remastered DATA). The vulture needs both games:
+// its model is Gold's, its sounds are in TR3's MAIN.SFX. One test for the
+// greying (dinoSourcePresent), the planner and the spoiler.
+static bool guestFilesThere(const App& a, const char* source)
+{
+    const std::wstring tr3 = tr3Folder(a);
+    const bool bank = !tr3.empty() && !Tr3Source::resolveBank(tr3).empty();
+
+    if (std::strcmp(source, "tr3") == 0) return bank;
+    if (std::strcmp(source, "tr3gold") == 0)
+        return bank && !goldFolder(a).empty();
+    return false;
+}
+
 // Cache for the packages extracted from Tomb Raider 3.
 //
 // Lies next to the program. The files are created on the machine of whoever
@@ -902,10 +919,18 @@ static std::wstring cacheDir(const App& a)
         opt.crossEnemies = (a.optEnemyPool == 1);
         opt.allsanity    = (a.optEnemyPool == 2);
         opt.disabledEnemies = a.optEnemiesOff;
-        opt.tr3Dir     = a.cfg.tr3Dir;
-        opt.tr3GoldDir = a.cfg.tr3GoldDir;
+        // The planner gets the RESOLVED folders, and only where the files
+        // the guests need are really there - the test that greys their
+        // rows (dinoSourcePresent). A folder that resolves its level but
+        // not its bank would otherwise keep the guests in the pool and
+        // turn every level that draws one into an ERROR row. The TR3
+        // outfits need the level alone (tr3Ready in the outfit row).
+        opt.tr3Dir     = guestFilesThere(a, "tr3") ? tr3Folder(a)
+                                                   : std::wstring();
+        opt.tr3GoldDir = guestFilesThere(a, "tr3gold") ? goldFolder(a)
+                                                       : std::wstring();
         opt.randomOutfits = a.optOutfits;
-        opt.tr3Outfits    = a.optOutfitsTr3;
+        opt.tr3Outfits    = a.optOutfitsTr3 && !tr3Folder(a).empty();
         opt.outfitsOff    = a.optOutfitsOff;
         opt.allWeapons = true;              // standard, see the App comment
         // Item abundance: the GUI's three tiers as a count. Free placement
@@ -1539,19 +1564,12 @@ static bool dinoSourcePresent(const App& a, const char* source)
 {
     if (!source) return true;                 // lives in TR5 itself
 
-    if (std::strcmp(source, "tr3") == 0)
-        return !tr3Folder(a).empty()
-            && !resolveFolder(a.cfg.tr3Dir, L"MAIN.SFX").empty();
-
     // The vulture needs BOTH installations: its model sits in chunnel.TR2 of
     // The Lost Artifact, but its sounds come from the MAIN.SFX of Tomb
     // Raider 3. The two files differ - Gold ships its own (9.8 MB against
-    // 11.6 MB), and the audited wave numbers refer to TR3's.
-    if (std::strcmp(source, "tr3gold") == 0)
-        return !goldFolder(a).empty()
-            && !resolveFolder(a.cfg.tr3Dir, L"MAIN.SFX").empty();
-
-    return false;
+    // 11.6 MB), and the audited wave numbers refer to TR3's. The test is
+    // guestFilesThere, which the planner asks as well.
+    return guestFilesThere(a, source);
 }
 
 //----------------------------------------------------------------------------

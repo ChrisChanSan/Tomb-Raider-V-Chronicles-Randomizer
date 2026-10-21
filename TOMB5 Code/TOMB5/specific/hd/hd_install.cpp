@@ -416,14 +416,27 @@ namespace
 	}
 
 	/* A root found wide, handed on in the spelling the engine's narrow
-	 * file calls take (fopen, char[260]) - or not at all. */
-	std::string narrow_root(const fs::path& root)
+	 * file calls take (fopen, char[260]) - or not at all. A root the system
+	 * code page cannot spell would reach every one of those calls with '?'
+	 * in it and fail there, file by file, with a half-HD level as the
+	 * result; one line here and HD off is the honest answer.
+	 *
+	 * Turning those calls wide instead was counted: seventeen narrow opens
+	 * and listings in twelve files take a path made from a root (the page
+	 * cache three, the .TRM and .TRL readers two each, the binder two, the
+	 * .TRG scan, the font, the springs, the debris, the classic pages, the
+	 * sound bank, the level key's stamp and the folder listing one each). */
+	std::string narrow_root(const fs::path& root, const char* line)
 	{
 		std::string narrow;
 
-		if (!root.empty() && HDNameFits(root.native(), CP_ACP, narrow))
+		if (root.empty())
 			return narrow;
 
+		if (HDNameFits(root.native(), CP_ACP, narrow))
+			return narrow;
+
+		note(std::string(line) + " - " + shown(root));
 		return std::string();
 	}
 
@@ -517,8 +530,11 @@ namespace
 				break;
 		}
 
-		found_root = narrow_root(root456);
-		found_root_tr3 = narrow_root(root123);
+		found_root = narrow_root(root456,
+			"install path not representable in the system code page: HD off");
+		found_root_tr3 = narrow_root(root123,
+			"I-III install path not representable in the system code page: "
+			"the Tomb Raider III guests stay classic");
 
 		if (root456.empty())
 			note("No Tomb Raider IV-VI Remastered recognised - HD art stays off.");

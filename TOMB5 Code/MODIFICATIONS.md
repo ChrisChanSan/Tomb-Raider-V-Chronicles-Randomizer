@@ -13989,7 +13989,7 @@ rule that fits both regions best, the remainder what it leaves):
 | `colour1` | 49.8 | 87.7 | 0.53 / 0.73 | 0.568 | 1.50 | 22.8 |
 | `colour2` | 57.2 | 57.6 | 0.61 / 0.48 | 0.992 | 1.87 | 17.5 |
 
-The shipped scale lies in the recording's range, a little brighter than the Remaster
+The shipped scale lies in the recording's range, a little brighter than the recording
 there. Read without a scale the sum also sits nearest, but once a free gain is fitted,
 two regions of one frame leave a single comparison, too thin to tell a rule from a scaled
 other one; the picture checks that the sum is not out of range and is not the evidence

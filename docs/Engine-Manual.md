@@ -4,7 +4,7 @@
 
 # The engine — the manual
 
-**PCTomb5.exe, Beta_2.0**
+**PCTomb5.exe, Beta_3.0**
 
 A native Windows 11 build of Tomb Raider Chronicles: Direct3D 9 and XAudio2,
 no wrappers, one self-contained executable. This page covers everything it
@@ -59,6 +59,43 @@ DirectPlay or old DirectX installers.
 **You supply the game.** No levels, script, sounds, music, videos, textures or
 language files ship here. Put `PCTomb5.exe` into your own Chronicles
 installation.
+
+### What you need
+
+**Windows 10 or 11** — the build is tested on Windows 11, and Windows 10 is
+the first to carry the XAudio2 2.9 it is linked against — and your own
+*Tomb Raider Chronicles*. The engine is a 32-bit (x86) program on Direct3D 9
+and XAudio2, both part of Windows; it is marked large-address-aware, so on
+64-bit Windows it has the whole 4 GiB address space. For the HD art, the HQ
+sounds and the HD loading screens it also reads your own *Tomb Raider IV-VI
+Remastered* installation at run time, and the HD art needs a graphics card
+with shader model 3.0 (the full list is under **What the HD art asks of your
+graphics card**). Without that installation, or with a card that falls short,
+the game runs classic.
+
+**What it took on the test machine.** One machine, at 2560 x 1440 and 165 Hz
+with VSync on and HD on, eight levels and the title in one play test of about
+twenty minutes, as the engine's own `-log` lines count it:
+
+- **Video memory**: the HD art's texture pages took 232 MiB (JOBY4) to
+  475 MiB (RICH2) a level, the 18 pages of an installed outfit mod among
+  them, and its geometry 10 to 62 MiB more. No page had to give up a mip
+  level.
+- **Address space**: at most about 870 MiB of the program's 4 GiB were in use
+  at the start of a level's build.
+- **Frame rate**: every level held 165 frames a second (the median second),
+  on a median of 0.3 to 0.8 ms of processor work a frame; 3 of 139,405
+  frames of play came late. The rest of each frame is the wait for the
+  display.
+- **Loading**: building the HD art added 1.2 to 4.6 seconds to a level's load,
+  the pages' decode 0.2 to 0.7 seconds of it on 16 threads; a savegame loaded
+  inside the same level took 10 to 28 ms of HD work.
+
+That log holds no time of the graphics card itself — with VSync the frame
+waits in the present — and neither a smaller card nor a 1920 x 1080 screen
+was measured. Below about 600 MiB of video memory the largest pages load one
+step softer (see **The budget** under **What the HD art asks of your graphics
+card**).
 
 ---
 
@@ -119,7 +156,7 @@ worth knowing by name:
 | `vsync` | DWORD | `1`, the default: the picture waits for the monitor, so it is never torn across the middle. `0` for the original behaviour. **The only setting in the build that is not instant** — it is read when the graphics device is made, so a change takes hold the next time the game starts (or on the next Alt+Enter or resolution change). The *VSync* row writes this. |
 | `gamma` | DWORD | The *Gamma* row on the *Display* page, `0` to `100`. `50`, the default and the middle of the bar, is the picture exactly as the engine draws it; lower is darker, higher is lighter, from the very next frame. A missing value or one above `100` reads as `50`. See **Gamma**. |
 | `hd_enable`, `hd_build` and their companions | | The Remaster art - `hd_build` builds it, `hd_enable` draws it - and the outfit the F4 changer remembers. They have a table of their own under **HD from the Remaster**; every one of them is there, with its default. |
-| `loadbar` | DWORD | The *Loadbar style* row: `0` the TR5 bar, `1` the TR4 bar, `2` off - no loading screen for a short load (see **tomb5 options**). Short is a load that builds no HD art: a savegame loaded inside the level being played, whose HD art is kept, and with `hd_build` 0, no installation or a level without its `.TRG` every load (the classic level's own read takes well under half a second). A load that builds the HD art - another level, the title, the first load after the start, the same level after the device was made anew or a file of it changed - takes one to five seconds and shows the loading screen as `0` does: the level's picture, the TR5 bar and the brake, so that the screen is never black that long. Written by the row. A registry from before this value reads the older `tr4LB` once: `1` (its default) gives the TR4 bar, `0` the TR5 one, so nobody's loading screen changes; `tr4LB` follows `loadbar` from then on. |
+| `loadbar` | DWORD | The *Loadbar style* row: `0` the TR5 bar, `1` the TR4 bar, `2` off - no loading screen for a short load (see **tomb5 options**). Short is a load that builds no HD art: a savegame loaded inside the level being played, whose HD art is kept, and with `hd_build` 0, no installation or a level without its `.TRG` every load (the classic level's own read takes well under half a second). A load that builds the HD art - another level, the title, the first load after the start, the same level after the device was made anew or a file of it changed - takes one to five seconds and shows the loading screen as `0` does: the level's picture, the TR5 bar and the brake, so that the screen is never black that long. Written by the row. A registry from before this value reads the older `tr4LB` once: `1` (its default) gives the TR4 bar, `0` the TR5 one, so nobody's bar style changes; `tr4LB` follows `loadbar` from then on. What a load shows did change: the TR4 level view that Beta 2.0 drew while loading (its *TR4 loadscreens* row, `tr4LS`, on by default) is gone, and every load that shows a screen shows the level's picture out of `SCREENS.STR` (or your HD one with HD textures on), with the level's name over it while *Loading text* is on. |
 | `loadbar_min_ms` | DWORD | The **brake**, `500` by default: with the TR5 or the TR4 bar the loading screen stands at least this many milliseconds from its first frame, the bar running smoothly to its end in that time; a load that takes longer ends when its work does. `0` is no brake: the bar follows the work alone and the level starts the moment the load is done. No options row. |
 | `loadfade_ms` | DWORD | With *Loadbar style* off, on a load without a screen: how long the last frame of the game takes to fade to black where the screen was not black already (a level's end, after a movie), `150` by default. `0` is a cut - one black frame. The fade runs while the loading thread works; what is left of it when the thread is done is cut to black in one frame. No options row. |
 
@@ -394,7 +431,7 @@ you left them.
 
 ### The pad's Modifier and its chords
 
-A pad has a **Modifier** role and thirteen chorded roles behind it —
+A pad has a **Modifier** role and twelve chorded roles behind it —
 weapon 1-6, *HD / SD* and, while *Cheats* is on, the five cheat rows — the
 pad's own version of the keyboard's F-key hotkeys, on the SAME *Key bindings*
 list. A
@@ -503,8 +540,9 @@ camera finishes it over the next ticks, falling at most half a turn behind.
 While you play under *Modern*, the cursor is hidden and held inside the game
 window. It is let go whenever the window loses the focus (Alt+Tab, for
 example), while an FMV plays and under *Tank*, and caught again when you come
-back. The mouse does nothing in the menus or the inventory;
-the keyboard and the pad drive those. First person view keeps its own look and
+back. Moving the mouse does nothing in the menus or the inventory; a button
+you bind to a role works there as that role's key does, and otherwise the
+keyboard and the pad drive those. First person view keeps its own look and
 is not turned by the mouse.
 
 Under *Modern* the camera stays in your hands: a camera the level places with a
@@ -534,8 +572,8 @@ the stick goes by the view you see, not by the angle the camera would like to
 have; held through the moment the push starts or ends, it keeps her course the
 same way as at the sniper camera, until you let go or turn it more than 45
 degrees. With `-log`, the `CAMLOG` line ends in `diag=`, how far the push
-moved the camera, and the `MODERNLOG` line ends in `ref_view=1` on the ticks
-the stick goes by the view.
+moved the camera, and the `MODERNLOG` line carries `ref_view=1`, just before
+its last field `latch_drop=`, on the ticks the stick goes by the view.
 
 ### The Modes sub-page: Combat, Sprint, Duck, Grab and Ledge hang
 
@@ -701,7 +739,9 @@ live in `README.txt`, because the game font cannot draw every character.
 
 <p align="center"><em>The HD art in this and every other screenshot is read at
 run time from the player's own <strong>Tomb Raider IV-VI Remastered</strong>
-installation — none of it is included here.</em></p>
+installation — none of it is included here. The picture shows this page as
+Beta 2.0 had it, until Beta 3.0's is taken; the text below is this
+build's.</em></p>
 
 Six settings the original never had, and that belong neither to *Graphics*
 nor to *HUD* (see **The options menu** above):
@@ -1258,8 +1298,9 @@ frame at 2560 by 1440.
 
 With `-log`, one line names the setting at the start and again whenever it
 changes: `DXLOG gamma row=<0..100> gamma=<g> power=<1/g> pass=<on|off>`. If
-the graphics card refused a step, the same line ends in `refused=` and the
-step, once, and the picture is shown without the curve. The apostrophe
+the graphics card refused a step, the same line ends in `refused=` with the
+step and `hr=` with the card's answer, once, and the picture is shown without
+the curve. The apostrophe
 screenshot (`TombNNNN.tga`) is taken after the curve, so the file is the
 picture as it was on the screen.
 
@@ -1560,9 +1601,9 @@ see *Lara in HD* below for which of her stays classic and why.
   strong each of them is meant to be — the artists gave every glow and lit
   sheet a strength of its own, between a twentieth and a whole — and the engine
   reads it. Measured on the shafts of a VCI corridor: at full strength they
-  reach pure white, read from the art they peak at a quarter of it, which is
-  where the remaster's own picture puts them. The Deepsea Dive's sea bed is a
-  soft shimmer rather than 98 % white.
+  reach pure white, read from the art they peak at a quarter of it, and that
+  soft shaft was then checked by eye on pictures of the test screen. The
+  Deepsea Dive's sea bed is a soft shimmer rather than 98 % white.
 - **Where the art gives no strength, the preset does.** In four places the art
   gives no usable number — a lift shaft in the VCI tower and three window
   glows in Ireland — and at full strength those draw white. The art groups its
@@ -1578,13 +1619,13 @@ see *Lara in HD* below for which of her stays classic and why.
   streaks included: they carry different numbers and the rule is the numbers.
 - **And the light moves, a little.** The same art gives every glow a time, from
   a twentieth of a second for a candle to sixteen seconds for a sun shaft
-  through a hall, and the brightness travels along a shaft at that speed. How
-  far it travels is measured against two recordings of a Remaster installation,
-  of the same corridor three seconds apart: its shafts move their bright places
-  around and their level barely changes — four percent over three seconds. The
-  travel is therefore a sixth of a quarter either way; a quarter reads as
-  pulsing, while at a sixth of it the streaks wander and the room does not
-  breathe. It goes off with `hd_motion` like everything else that moves. A
+  through a hall, and the brightness travels along a shaft at that speed. The
+  art gives only that time; how far the light travels is this engine's own
+  choice, set by eye on its own pictures: six percent either way. A quarter
+  reads as pulsing, while at six percent the streaks wander and the room does
+  not breathe - measured in one VCI room over eight seconds, no pixel moves
+  more than five and a half percent. It goes off with `hd_motion` like
+  everything else that moves. A
   glow whose time is shorter than half a second stands still: at that speed
   the travel is a flicker, not a drift.
 - **A fog bulb is a soft cloud, not a sphere with an outline.** The formula is
@@ -1644,9 +1685,9 @@ see *Lara in HD* below for which of her stays classic and why.
   stay exactly as they were. It is not a mirror: nothing of the room is
   drawn a second time.
 - **The polished floors mirror the room** (`hd_marble`, on by default). The
-  marble of Rome's office levels, RICHCUT2 and the title - RICH2's
-  corridors, its lobby with the green tiles and the gallery, the pool's
-  surround, the washrooms - reflects the room standing over it: the walls,
+  marble of Rome's levels and of the VCI building, RICHCUT2 and the title -
+  RICH2's corridors, its lobby with the green tiles and the gallery, the
+  pool's surround, the washrooms - reflects the room standing over it: the walls,
   the pipes, the statics, Lara and the items, drawn a second time through
   the floor. Which floors: a list of 40 texture pages built into the engine
   (the *mirror column* of the gloss's page list; ANDREA1's church mosaic
@@ -2021,12 +2062,15 @@ it.
   walls of a pool under a sheet catch a moving caustic, a net of light on the
   walls as on the floor (projected along the wall's own face, not streaked
   down it - on a polished wall too). A water plane with no
-  underwater room below - all of JOBY3's and RICH3's water, ANDREA3's two
-  pools, and 20 more planes - is no water square by this rule and keeps the
-  level's own faces. Fifteen levels hold 565 water squares in 56 bodies, each
-  place counted once (a flipmap pair's second room adds 118 squares at the
-  same places); ANDREA3, JOBY3, RICH1, RICH3, RICHCUT2 and the title have no
-  water square by this rule. Set *HD water* off and the level's own water
+  underwater room below - all of JOBY3's water, RICH3's but for the channel
+  below, ANDREA3's two pools, and 20 more planes - is no water square by this
+  rule and keeps the level's own faces. With no flip on, fifteen levels hold
+  565 water squares in 56 bodies, each place counted once (a flipmap pair's
+  second room adds 118 squares at the same places); ANDREA3, JOBY3, RICH1,
+  RICHCUT2 and the title have no water square by this rule. A square over a
+  room that is dry until a flipmap floods it is water while that flip is on:
+  JOBY5's four basins under the leaks (32 squares) and a channel of 21 squares
+  in RICH3. Set *HD water* off and the level's own water
   faces are restored exactly as without the sheets, and the caustic under them
   is off; what stays is only the caustic's shape and its fade with distance on
   the Remaster's own marked water art and the wave on that art, which live in
@@ -2085,11 +2129,11 @@ it.
   the copy nor the depth texture is made.
 - **The water's life.** The waves of a sheet are eight rows, long and short,
   and no row runs as one straight crest: each is broken into short trains of
-  crests, one to three of its own wavelengths long, three crests deep - the
-  middle one strong, its neighbours weaker - and never more than a square and
-  a half; where a train stands, how long and high it is, how far it leans off
-  its row (up to about 15 degrees) and how far it is shifted is decided by a
-  hash of its place, so no two trains of a row are alike, neighbouring ones
+  crests, one and a half to three of its own wavelengths long, three crests
+  deep - the middle one strong, its neighbours weaker - and never more than a
+  square and a half; where a train stands, how long and high it is, how far
+  it leans off its row (up to about 15 degrees) and how far it is shifted is
+  decided by a hash of its place, so no two trains of a row are alike, neighbouring ones
   stand staggered like bricks and nothing repeats across a level. The rows
   lie in a fan round the body's own direction - the longest on it, the
   shortest widest: a basin's spread round nearly every direction, as ripples
@@ -2146,8 +2190,11 @@ it.
   waves. With `hd_motion` off the water stands still and the game's own ripple
   pictures are drawn.
 - **Where a waterfall lands.** Every waterfall object of a level whose water
-  ends over a sheet - 31 in the fifteen levels: ANDREA2's fountain hall,
-  JOBY2's three in room 66 and 27 in JOBY5 - churns the water at its foot.
+  ends over a sheet - 31 in the fifteen levels with no flip on: ANDREA2's
+  fountain hall, JOBY2's three in room 66 and 27 in JOBY5; and nine more while
+  a flipmap floods the water under them: JOBY5's falls 3, 4 and 8 to 13 over
+  its four basins and RICH3's fall 0 over its channel - churns the water at
+  its foot.
   The foot is where the falling water the room's art draws ends (the
   waterfall object's own mesh where the art has none). Waterfall objects
   whose feet come within half a square of each other land as one curtain:
@@ -2382,22 +2429,25 @@ it.
   line
   ends with its current, the way along x and
   z and the speed (`flow=`, `0.00,0.00,0` without one), its places whose
-  water names a sink (`sinks=`), the light its colours take - its rooms'
+  water names a sink (`sinks=`), the table's sinks that lie in its water and
+  count, the body being long enough (`lying=`), and those that lie in a body
+  too short to be a river (`refused=`), the light its colours take - its rooms'
   light, or in a night level the moon's (`lit=`) -, `held=0` (a lifted
   sheet stands level at every point), its lift in units (`lift=`, 0
   without one), the land squares its level surface runs on over, each
   place once (`skirt=`, 0 without a lift), how far under its surface a
   floor is left dry (`clip=`, in units), how much of its class's swell its
   surface takes (`swell=`), how far its waves are short crests in a fan
-  (`crest=`, 1.00 without a row's `crest`) and, last, the place of the
+  (`crest=`, 1.00 without a row's `crest`), the place of the
   ripple source its floats drift away from (`spring=x,z`, `none` without
-  one).
+  one) and, last, `alt=` (below).
   The squares and the sheets count each place once, the level's and a body's
   alike; the second room of a flipmap pair at a place counts under `twins=`.
   Water that only a flipmap's alternate room holds - JOBY5's corridor under
   the leaks once flipmap 0 floods it, four rooms of RICH3 - is a body of
-  its own that draws only while that flip is on (`alt=<room>` at the end of
-  its body line, -1 for water every flip state holds).
+  its own that draws only while that flip is on (`alt=<room>`, the room whose
+  flip floods it, at the end of its body line; -1 for water every flip state
+  holds).
   The first frame of a level whose camera is in a water room writes one
   `WATERLOG level=<stem> undergate` line: the camera's room (`room=`), that
   room's own underwater flag, which decides (`flag=`), the classic camera's
@@ -2654,20 +2704,20 @@ values, in the same key as every other setting
 | Value | Type | Meaning |
 |---|---|---|
 | `hd_enable` | DWORD | The options row *HD textures* writes this, and so does the *HD / SD* key (F12): it is the **look**, `1` HD and `0` classic, of the world and the interface alike (**The HD/SD switch** below says what it switches). `0` is the default, so a new game starts classic. The row and the key are one value: a press of F12 turns the row, the row turns what F12 would, and both are saved at once, so the next game starts as you left it. It decides nothing about what is loaded - that is `hd_build`. |
-| `hd_build` | DWORD | Not on the options page. Whether the HD art is **built** at all, `1` by default: with `1`, every level's HD art is read and built at its load whenever your installation is found, whatever `hd_enable` says, so the switch between the two looks is always ready - at the price of the HD load's time and memory even while you play classic. Set it to `0` and nothing of the HD art is opened or built: the engine is the classic one, and the row and F12 have nothing to switch. One HD-adjacent thing never asks either value: the 44.1 kHz sound bank, which is opened out of your remaster installation in any case - see **HQ sounds** - and whose search also reads `hd_install` and `hd_install_tr3` below and walks your Steam libraries. Written into the registry with its default the first time the game reads its settings. |
-| `hd_objects` | DWORD | HD models for the objects **and for Lara**, `1` by default. There is no options row for it: it is not a matter of taste but a way back if one level's models ever go wrong. Set it to `0` and the rooms stay HD while every object and Lara draw the classic way. Lara has no key of her own on purpose — she is a model like the rest of them and a level's models are one buffer, so a second switch would only be a second way to end up with half a picture. Does nothing at all while `hd_enable` is off. |
+| `hd_build` | DWORD | Not on the options page. Whether the HD art is **built** at all, `1` by default: with `1`, every level's HD art is read and built at its load whenever your installation is found, whatever `hd_enable` says, so the switch between the two looks is always ready - at the price of the HD load's time and memory even while you play classic, and of one sound: with `1` and your installation found, Lara's own footstep and landing sounds (*Boots* under **Footsteps**) come from the unmodded bank in classic play too, so a sound mod's footsteps are replaced there (they become the *Bare* set). Set it to `0` and nothing of the HD art is opened or built: the engine is the classic one, a sound mod's footsteps included, and the row and F12 have nothing to switch. One HD-adjacent thing never asks either value: the 44.1 kHz sound bank, which is opened out of your remaster installation in any case - see **HQ sounds** - and whose search also reads `hd_install` and `hd_install_tr3` below and walks your Steam libraries. Written into the registry with its default the first time the game reads its settings. |
+| `hd_objects` | DWORD | HD models for the objects **and for Lara**, `1` by default. There is no options row for it: it is not a matter of taste but a way back if one level's models ever go wrong. Set it to `0` and the rooms stay HD while every object and Lara draw the classic way. Lara has no key of her own on purpose — she is a model like the rest of them and a level's models are one buffer, so a second switch would only be a second way to end up with half a picture. Changes nothing on screen while `hd_enable` is off; with `hd_build` on, `0` still keeps the models out of the load. |
 | `hd_motion` | DWORD | What **moves** in an HD room, `1` by default: water and waterfalls scrolling, ivy, banners, grass and kelp swaying in the wind, and a small ripple over a water surface, the slow travel of light along a shaft or a lamp cone, the four-page animated pictures (the twenty-seven flipbook surfaces of five levels), the longer loops of fourteen to thirty pages (the turning fan shadows of the 13th Floor, the monitor wall of the Security Breach cutscene, the flames, smoke and rain rings - 168 surfaces in nine levels; set to `0` they show their first page) and the ripple over the Remaster's own still-water sheets — in short, everything this chapter says stops with `hd_motion`. All of it comes from the Remaster's own art — the artists marked which surfaces flow and which vertices bend, and this reads those marks. Like `hd_objects` it has no options row and is a way back rather than a taste: set it to `0` and an HD room stands perfectly still. Does nothing at all while `hd_enable` is off. |
 | `hd_reflect` | DWORD | The **gloss** of metal, marble, ice and glass in an HD room, `1` by default: a highlight from the level's lamps where they hang - worked out once per level for every spot, so it stays by its lamp and runs on across doorways - and a reflection of the surface's own light that grows the flatter you look at it, on floors, walls, crates and ducts alike, never more than two and a half times the surface's own lit colour and never to white. Not a mirror: nothing is drawn twice. Which surfaces shine, in this order: the gloss the Remaster's artists gave a surface themselves (its own strength); your file `hd_gloss.txt`; a list of texture pages built into the engine; and the pages that lie on floors whose footsteps sound of metal, marble or ice - in every room that wears them. RICH2's lobby pages and every see-through floor stay exactly as they were. **`hd_gloss.txt`** lies beside the executable, where `SCRIPT.DAT` and `Balance.txt` are, and is read at every level load, so a change shows at the next one. One texture page per line: the page number, a class (`metal`, `marble`, `ice`, `glass` or `custom`) and optionally strength (above 0, up to 1), exponent (1 to 255, the tighter the highlight the higher) and F0 (0 to 1, how much it reflects face on), where `-` or leaving a number out takes the class's own; a `custom` page names all three. `-<page>` takes a page out (a surface the artists gave a gloss keeps it), `#` starts a comment, and a line that cannot be read is counted and skipped; a file saved as UTF-8 with or without a byte order mark reads the same - for example `140 metal 0.6 32` or `-3149 # the girders stay matt`. The page numbers of a room are in the `GLOSSLOG` lines of a `-log` run. Like `hd_motion` it has no options row and is a way back rather than a taste; set it to `0` and the picture is the one without any gloss. Does nothing while `hd_enable` is off. |
-| `hd_softbody` | DWORD | The options row *Body physics* writes this. The **soft motion of the chest** of the HD Lara (see *Lara in HD*): `0` off, the default, `1` subtle, `2` normal, `3` strong; any other number reads as off. Never on a young-Lara level, never for a Lara drawn classic, and nothing at all while `hd_enable` is off. |
+| `hd_softbody` | DWORD | The options row *Body physics* writes this. The **soft motion of the chest** of the HD Lara (see *Lara in HD*): `0` off, the default, `1` subtle, `2` normal, `3` strong; any other number reads as off. Never on a young-Lara level, never for a Lara drawn classic, and nothing on screen while `hd_enable` is off. |
 | `hd_water` | DWORD | The options row *HD water* writes this. The **water sheets** (see *Water* above), `1` by default: every water square the sheet can cover - over an underwater room, in a room drawn HD - gets this engine's own water surface with a caustic on the floor under it (none in the night levels, see *Water* above), and the level's own water face there is not drawn, nor the Remaster's own water art over it (`art keep` in `hd_water.txt` draws that art again); a water plane with no underwater room below keeps its faces. `0` builds no sheet, restores every water face of the level as without them and switches the caustic under them off; what stays is only the caustic's shape and its fade with distance on the Remaster's own marked water art and the wave on that art, which live in the compiled shaders. Taken at the start of a level; nothing at all with `hd_build` at `0`. Tuning per body of water: `hd_water.txt`. In the Deepsea Dive, under the water, `1` also draws the sea's surface seen from below with the sky (see *The sky is the Remaster's sky*); `0` draws none of it and keeps the level's old moving layers of that surface under the Remaster's art; the Remaster's art of the surface itself is drawn at every frame of the dive either way. |
-| `hd_marble` | DWORD | The options row *Reflections* writes this. The **polished floors' mirror** (see *The polished floors mirror the room* above), `1` by default: the floors of the pages in the mirror column reflect the room, its statics, Lara and the items, and the sky where the rooms in the mirror open to it, and the see-through floors of RICH2's corridor and lobby and of the title are drawn solid, the Remaster's copy of the room under them left out of the level. `0` draws every floor as it was, the see-through ones over the Remaster's copy. Read at the game's start; the row switches the mirror's draw at once (off costs nothing from the next frame) and the floors' build at the next level load, when a level already in memory is built again. Does nothing while `hd_enable` is off. |
+| `hd_marble` | DWORD | The options row *Reflections* writes this. The **polished floors' mirror** (see *The polished floors mirror the room* above), `1` by default: the floors of the pages in the mirror column reflect the room, its statics, Lara and the items, and the sky where the rooms in the mirror open to it, and the see-through floors of RICH2's corridor and lobby and of the title are drawn solid, the Remaster's copy of the room under them left out of the level. `0` draws every floor as it was, the see-through ones over the Remaster's copy. Read at the game's start; the row switches the mirror's draw at once (off costs nothing from the next frame) and the floors' build at the next level load, when a level already in memory is built again. Changes nothing on screen while `hd_enable` is off. |
 | `hd_marble_ceiling` | DWORD | Not on the options page. The most **planes** - floor heights and slopes - one frame mirrors, `64` by default, `1` to `64`: a ceiling far over the most a frame shows, so every plane that shows at least a thousandth of the screen is mirrored (a sliver under that stays plain); each costs a mirrored draw of the rooms that can show in it (the cost table in the record of the marble floors). Past the ceiling the planes covering the least are left plain. Read at the game's start. `hd_marble_planes`, the cap of two before it, is no longer read (a registry that holds it keeps it unread). |
 | `hd_springs` | DWORD | Not on the options page. The **springs** the rule places (see *The springs* above): absent - every registry until you add it - the rule as built, one deep pool in two; `0` none of the rule's (ANDREA2's fountain and the springs of `hd_water.txt` stay); `n` one pool in two times n. Read at the start of a level, never written by the game. |
 | `hd_springcrack` | DWORD | Not on the options page. The **cracks** the springs rise out of (see *The springs* above): absent - every registry until you add it - or `1` every spring has its crack; `0` none, the springs as they were before the cracks. Read at the start of a level, never written by the game. |
 | `hd_reach` | DWORD | The **reach** of the portal walk, `1` by default. In an HD level a room whose portal faces the eye and lands on the screen is drawn even where the classic walk, portal window by portal window, would refuse it, because the Remaster's art opens walls the classic level keeps shut: the torn wall beside the stairs in The Base, the tower of Trajan's Markets. Set it to `0` and the walk is the classic one in an HD level too: a room the reach alone would have listed is not drawn, so the art of one room that showed through the walls of another is gone, and an opened wall may show the clear colour behind it instead. It is there to compare the two answers at the same place with the same build, not a taste; the ROOMLIST dump says `reach=0` in the log. Does nothing while `hd_enable` is off. |
 | `hd_air` | DWORD | The **air of the rooms**, `1` by default. Some of the Remaster's art of one room stands inside another room the first has no doorway, opening or shaft into; on `1` such art, where one of the overlap boxes holds it, is drawn only through its own room's portal window, and not at all when that room has no window this frame, so it no longer shows through a wall - a dark block beside a flag, a window frame in a brick loft, a marble strip above a metal stair opening, black bars beside a pillar, a lit floor in a doorway, a strip of a facade under a courtyard's ceiling. Set it to `0` and that art is drawn as it was before this setting existed: those six come back, and so does art the rule hides where a room the reach lists has no window of its own. On `1` and `2` a room seen with its own window that lies under the sky also brings in the rooms whose art stands in it, so art that hangs far from its own room's doorways - ANDREA2's brick tower beside the alley at the church gate - no longer comes and goes as the camera swings; on `0` it does as before. A room whose art there is mostly a copy of faces another room already holds is not brought in, so it is not drawn twice over itself. `2` is `1` and one more: a room whose art in another room's space stands mostly where that room's own art already stands - a second shell, like the one RICH2's lift shaft carries of the shaft's floors - has that art drawn only through its own room's window, so the doubled girders, lamps and panels no longer come and go beside the lift. It takes more than the doubles there: the shaft's counterweight and pulleys go with them, and the lamps' lit tubes, leaving a dark smear where a lamp hung. On `1` and `2` such a second shell is drawn a little behind the faces it copies, so where both stand the room's own faces win and the lamps and the grating of RICH2's lift shaft no longer speckle as the camera moves; where two rooms with no doorway between them share a stretch of wall, the art on the smaller of their two classic faces is drawn behind the larger one's, so the wall ANDREA1's room 212 shows through the grating from room 19 no longer flickers; the pipe in the hollow of JOBY2's broken pillar by the stairs is drawn whole where its room's walls are in sight; and a room brought in under the sky follows the level's flip state, so art of the state the level is not in is not drawn. It is there to compare the answers at the same place with the same build; the `HDLOG level=` line names it as `air=0`, `air=1` or `air=2` just before its last field, `covered=` (how many faces of one room lie inside a larger face of another and have their art drawn behind), so a log says which ran; with `-log` and the air on, one `HDLOG covered` line per such face follows. Taken at the start of a level; no options row; nothing at all with `hd_build` at `0`. |
-| `hd_vis` | DWORD | **Which rooms an HD frame draws**, `1` by default. A registry an earlier build wrote may hold the `0` most of them wrote on their first run, never chosen, since there is no row: the first start of a build that knows the default moves it to `1` once and writes `hd_vis_rev` `1` beside it; from then on the value is kept as set, so a `0` set by hand afterwards stays `0` (a registry without `hd_vis_rev` is moved again). `0` is the classic walk, the way the settings above describe: the portal walk with the reach, a room's art that stands in another room drawn through its own window, the air and the rooms brought in under the sky. `1` is the **visibility path**: the rooms are the portal walk's from the room the eye is in, as the original game walks them, and every listed room's art is drawn whole, the depth buffer alone deciding what hides what. The walk also lists, each with the part of the window it is seen in, the rooms whose art reaches out of their own room into a listed room (linked with it by a doorway or a floor opening, or that room under the sky), the rooms behind a listed room's classic wall faces its art leaves bare (linked with it), and, through a doorway whose opening in the art is wider than the doorway, the room behind by that opening; every room listed so walks on through its own doorways as a room the doorways list does. No room is carried then (`hd_reach` changes nothing), and a room's art that stands inside another room's space, beyond its own walls, is drawn through its own window as with `0`, so it does not hang in the other room's picture - and art standing in a room its room has no link with is drawn whole only on a wall of its room the original game draws in that frame, one wall with the face it belongs to, in its plane or round a corner -; the rest of its art is drawn whole. A room the original game draws with no HD art of its own, none of its walls covered by art, and other rooms' art standing in it is not drawn at all: the painted tree bands of ANDY3 and ANDY1 give way to the HD trees standing in their place, and so does such a room whose floor squares all open onto rooms drawn HD: the leaf lids over the hollows of ANDY3's forest. Where such a room is not under the sky itself, the frame that lists it draws the sky behind it, so a hollow shows the sky above it whichever way the eye turns. A room the original game draws whose own HD art is never drawn (it all stands outside its box) keeps its faces even where it stands inside another room: JOBY2's sniper rooms behind the broken glass block windows of the courtyard stay the classic black. The art of an object the Remaster bakes into a room - a slot the level's `.MAP` calls `DUMMY` - that lies on a listed classic room's faces is drawn in front of them, as the original game draws the object over the room: those windows' reveal and sill show their brick and wood in the sniper rooms' place. A static mesh the original game draws whose surface the art of the room it stands in lies on - half of it or more, within 32 units - is left to that art while that room is drawn: the dormer on the roof of ANDY3's mill-wheel house. And a room's art lying on the wall plane of a room it has no link with, reaching into that room's height, is drawn through its own window while that room is drawn: the sliver of JOBY2's court in the ceiling corner of the marble room below it. The two depth pushes of the room art stay: a room whose art outside it doubles other rooms' art, and a room's art on a wall inside a larger wall of the room it stands in, are drawn behind the other copy (`hd_air` 0 turns both off with the air). A flipmap pair is listed by the room the doorways lead to only; a wall broken out beside a doorway (0.3 of it bare of art) widens that doorway, seen from either side; a doorway that meets the window it is seen through on its edge, or stops within 2 pixels of it at 2,560, keeps its room listed, so a room does not drop out for one frame as the eye sways; and a doorway the eye stands at - within 128 units of its corners - lists its room with the window it is seen through, as the eye passes it. With `-log` the `HDLOG settings` line ends in `hd_vis=`, a line before it says when an earlier build's value was moved, the `HDLOG level= vis=1` line gives the counts of the level's tables once (ending in `twin= wide_bare= edge= statics_held= statics_ms= enclosed=`) and `VISLOG` the frame's rooms with what listed each, once a second (`e` and `edge=` the window's edge, `n` and `near=` a doorway the eye stands at). Taken at the start of a level; no options row; nothing at all while `hd_enable` is off. |
-| `hd_threads` | DWORD | The **threads of an HD level load**, `0` by default: the machine's own count, never more than 16. The texture pages are unpacked, the rooms' buffers filled and the models' pages unpacked on that many threads; `1` does all of it on one, and any other number takes that many. The level comes out the same whatever it says - the `hash=` at the end of the `built` line is the proof (see *The loading time* below). It is there to compare, not a taste. Taken at the start of a level; no options row; nothing at all with `hd_build` at `0`. |
+| `hd_vis` | DWORD | **Which rooms an HD frame draws**, `1` by default. A registry an earlier build wrote may hold the `0` most of them wrote on their first run, never chosen, since there is no row: the first start of a build that knows the default moves it to `1` once and writes `hd_vis_rev` `1` beside it; from then on the value is kept as set, so a `0` set by hand afterwards stays `0` (a registry without `hd_vis_rev` is moved again). `0` is the classic walk, the way the settings above describe: the portal walk with the reach, a room's art that stands in another room drawn through its own window, the air and the rooms brought in under the sky. `1` is the **visibility path**: the rooms are the portal walk's from the room the eye is in, as the original game walks them, and every listed room's art is drawn whole, the depth buffer alone deciding what hides what. The walk also lists, each with the part of the window it is seen in, the rooms whose art reaches out of their own room into a listed room (linked with it by a doorway or a floor opening, or that room under the sky), the rooms behind a listed room's classic wall faces its art leaves bare (linked with it), and, through a doorway whose opening in the art is wider than the doorway, the room behind by that opening; every room listed so walks on through its own doorways as a room the doorways list does. No room is carried then (`hd_reach` changes nothing), and a room's art that stands inside another room's space, beyond its own walls, is drawn through its own window as with `0`, so it does not hang in the other room's picture - and art standing in a room its room has no link with is drawn whole only on a wall of its room the original game draws in that frame, one wall with the face it belongs to, in its plane or round a corner -; the rest of its art is drawn whole. A room the original game draws with no HD art of its own, none of its walls covered by art, and other rooms' art standing in it is not drawn at all: the painted tree bands of ANDY3 and ANDY1 give way to the HD trees standing in their place, and so does such a room whose floor squares all open onto rooms drawn HD: the leaf lids over the hollows of ANDY3's forest. Where such a room is not under the sky itself, the frame that lists it draws the sky behind it, so a hollow shows the sky above it whichever way the eye turns. A room the original game draws whose own HD art is never drawn (it all stands outside its box) keeps its faces even where it stands inside another room: JOBY2's sniper rooms behind the broken glass block windows of the courtyard stay the classic black. The art of an object the Remaster bakes into a room - a slot the level's `.MAP` calls `DUMMY` - that lies on a listed classic room's faces is drawn in front of them, as the original game draws the object over the room: those windows' reveal and sill show their brick and wood in the sniper rooms' place. A static mesh the original game draws whose surface the art of the room it stands in lies on - half of it or more, within 32 units - is left to that art while that room is drawn: the dormer on the roof of ANDY3's mill-wheel house. And a room's art lying on the wall plane of a room it has no link with, reaching into that room's height, is drawn through its own window while that room is drawn: the sliver of JOBY2's court in the ceiling corner of the marble room below it. The two depth pushes of the room art stay: a room whose art outside it doubles other rooms' art, and a room's art on a wall inside a larger wall of the room it stands in, are drawn behind the other copy (`hd_air` 0 turns both off with the air). A flipmap pair is listed by the room the doorways lead to only; a wall broken out beside a doorway (0.3 of it bare of art) widens that doorway, seen from either side; a doorway that meets the window it is seen through on its edge, or stops within 2 pixels of it at 2,560, keeps its room listed, so a room does not drop out for one frame as the eye sways; and a doorway the eye stands at - within 128 units of its corners - lists its room with the window it is seen through, as the eye passes it. With `-log` the `HDLOG settings` line ends in `hd_vis=`, a line before it says when an earlier build's value was moved, the `HDLOG level= vis=1` line gives the counts of the level's tables once (ending in `twin= wide_bare= edge= statics_held= statics_ms= enclosed=`) and `VISLOG` the frame's rooms with what listed each, once a second and whenever the eye's room changes (`e` and `edge=` the window's edge, `n` and `near=` a doorway the eye stands at). Taken at the start of a level; no options row. Changes nothing on screen while `hd_enable` is off; with `hd_build` on, `1` still builds the level's visibility tables at the load. |
+| `hd_threads` | DWORD | The **threads of an HD level load**, `0` by default: the machine's own count, never more than 16. The texture pages are unpacked, the rooms' buffers filled and the models' pages unpacked on that many threads; `1` does all of it on one, any other number up to 16 takes that many, and a larger one 16. The level comes out the same whatever it says - the `hash=` at the end of the `built` line is the proof (see *The loading time* below). It is there to compare, not a taste. Taken at the start of a level; no options row; nothing at all with `hd_build` at `0`. |
 | `hd_fog` | DWORD | Not on the options page. The **fog of the fog bulbs and of the art's mist**, `1` by default. The level's fog bulbs - ANDY3's mill and its river, ANDY1, ANDY2, ANDREA1, ANDREA2, RICH2, RICH3 - are drawn as fog with a body, thickest at a bulb's middle and fading to nothing at its edge with no outline, over whatever stands in it and over the sky behind it, thinning and rising slowly as it breathes. Every bulb is as thick as the look's band allows: looked at through its middle it lays its own colour over a dark wall as bright as an eighth of white (33 of 255); standing in one of ANDY3's bulbs by the mill lays a light, even veil over the whole view (about 8 of 255 on average, up to 30 where the bulb is thickest), and a bright bulb such as ANDREA2's canal ones is thinned to the same. The art's drifting mist - the pale lumps over the hill and round the crane at ANDY3's mill - is drawn at about a third of its old strength, as faint fog rather than bright cloud; so is the drifting sand over the title's dunes. A layer that drifts over a wall - the golden wash in ANDREA2's and ANDREA3's tunnels - is no mist and keeps its full strength. `0` draws everything as before: the bulbs as a haze on the walls and floors behind each bulb, the mist at full strength. The bulbs' fog needs the water sheets' depth: in a level with no water square (ANDREA3, RICH1, the title) and with `hd_water` at `0` the bulbs keep the haze whatever this says (the mist follows this key there too). In the reflection of a polished floor (`hd_marble`) the bulbs drawn as fog show neither fog nor haze. The log's settings line names the key (`hd_fog=`), and each level's first frame line how many bulbs the fog took and drew (`fog_taken=`, `fog_drawn=`). Read at the game's start; nothing at all while `hd_enable` is off. |
 | `hd_texture_budget_mb` | DWORD | How much video memory the HD art may take, in mebibytes. `0`, the default, means **work it out from the card** (see below; the card's own answer stops at 4095 MiB, which is a limit of the Direct3D 9 call and not of your card). Set a number and that number is the ceiling. |
 | `hd_install` | String | The folder of your *Tomb Raider IV-VI Remastered* — the one holding `tomb456.exe`. Leave it **empty** and the engine finds it by itself. |
@@ -3371,7 +3421,7 @@ HDLOG overlap room=93 holds the art of room=101 - 540 triangles, no portal
 HDLOG level=ANDREA1 overlap pairs=158 intruding tris=16718 in 89 groups
       holder=inside cull=opaque faces=558 bound=15993 unbound=725
       band_unclaimed=11020 air_ms=68 air_tris=11335 air_groups=20 air_pairs=29
-      air_boxed=5256 air=1
+      air_boxed=5256 air=1 covered=...
 HDLOG unlinked level=ANDREA1 group=93 host=101 tris=90
 HDLOG cull level=ANDREA1 ranges opaque=2345 two_sided=125
 HDLOG clip rooms=... open=... full=... scissored=... empty=... windowed_tris=...
@@ -3413,12 +3463,12 @@ and `bound=` how many of its triangles they claim; the level line adds them
 up, with `unbound=` the triangles no face claims that stand a sector deeper
 inside, which are cut to the room's window whenever the room they stand in is
 on the screen; the unclaimed art nearer the holder's wall is drawn whole. Once
-a second the `clip` line ends in how many pieces of that art the frame asked
+a second the `clip` line counts how many pieces of that art the frame asked
 about (`pairs=`), drew whole and cut (the second `scissored=`; the first
 counts rooms). A room the reach lists with no window of its own is not asked:
 its art keeps the answer of the smaller box whatever room it stands in, drawn
 whole outside it and left out inside it.
-The `reach_` fields at the end of the `clip` line count those rooms, their
+The `reach_` fields after them on the `clip` line count those rooms, their
 pieces, the ones drawn whole and the ones left out; a
 `reachart` line per room and holder names them (`holder=` is the holder's
 group, the room of that number until a flipmap swaps it with its pair, and
@@ -3433,17 +3483,19 @@ enclose, off its walls and out of its doorways - and that one of the overlap box
 holds too is drawn only inside its own room's window, and not at all when that window
 is empty, whatever the answers above, unless the classic path draws a face of its room
 that claims it; such art in no box keeps the answers above. The registry setting
-`hd_air` (above) switches this off. The level line ends with
+`hd_air` (above) switches this off. Near its end the level line carries
 `air_ms=` (the time the build spent on it), `air_tris=` (such triangles),
 `air_groups=`, `air_pairs=`, `air_boxed=` (the triangles of `air_tris` a box holds,
 the ones held to their window) and `air=` (the `hd_air` the level was built with; with
 0 every `air_` field is 0; with 2 one `HDLOG hull` line per group with such art in no
 box, `hull=1` where it stands mostly on its host's own art and is held to its own
-window), one `unlinked` line per pair names the art's room
+window), and it ends in `covered=`, the faces of a pair the build found inside a
+larger face of the room their room intrudes in, whose art is drawn pushed back (0
+with `hd_air` 0); one `unlinked` line per pair names the art's room
 (`group=`) and the room whose air it stands in (`host=`), and the `clip` line ends
-with the frame's pieces of such art, the ones drawn - inside their window or whole on
-a claimed face - and the ones left out (`unlinked_pieces=`, `unlinked_drawn=`,
-`unlinked_hidden=`).
+after `stand=` and `stand_behind=` with the frame's pieces of such art, the ones
+drawn - inside their window or whole on a claimed face - and the ones left out
+(`unlinked_pieces=`, `unlinked_drawn=`, `unlinked_hidden=`).
 
 All of this is the way of `hd_vis` 0. With `hd_vis` 1 only the pieces' window runs - a
 room's art standing inside another room is drawn through the room's own window, answered
@@ -4087,7 +4139,7 @@ motion; the hands with what they hold, the thigh holsters, the weapon on the bac
 braid never do.
 
 Never on a young-Lara level, whatever the setting says, and never while Lara is drawn
-classic - with `hd_enable` off nothing of it runs at all.
+classic - with `hd_enable` off none of it moves.
 
 #### The projected shadow
 
@@ -4171,7 +4223,8 @@ shadow, along the same fixed light, at the same darkness and with an edge as sof
 hers, and has no blob. Towards four sectors away its shadow fades out on every side, and
 a little further away it has neither; a creature drawn classic and one baked into a
 room's art keep their blob, and a creature's reflection in a mirror has none. Above and
-below her it fades the same way, about four and a half blocks along the light, so a
+below her it fades the same way, about four blocks along the light (four and a half
+straight above or below her), so a
 creature she climbs or drops past loses its shadow gradually. A creature just out of the
 view or behind a door's edge still casts, so the part of its shadow that reaches into
 the picture is there before the creature comes into view. Where two shadows overlap,
@@ -4544,6 +4597,12 @@ instead of being thrown away, and the ring shows how many you carry; the save
 format grew with it, which is what makes every Beta 1.0 save too short for
 this build — refused, with the message box above, and the game closes.
 
+Saves of Beta 2.0 and of this build load in either. This build adds three
+bytes to the end of the engine's own block of the save (Lara hanging from a
+ledge in mid move, *Ledge hang*) and reads them only where a save has them, so
+a Beta 2.0 save loads here; Beta 2.0 reads that block's first part and leaves
+the three bytes unread.
+
 ---
 
 ## What plays differently from the original
@@ -4655,12 +4714,15 @@ without `-log`, and writes one line:
 `CRASH code=0xC0000005 at=0x... module=PCtomb5.exe+0x... thread=game` - the
 kind of fault (`0xC0000005` is a read or write through a bad pointer), the
 address, the program file it happened in with the offset into it, and the
-thread (`main` the window's, `game` the game's own). With `-log` the line is
-the last of `log.txt`; without it, it goes into `crash.txt` beside where
-`log.txt` would be. Beside it lies `PCtomb5_<date>_<time>.dmp`, a minidump
-(the threads' stacks and the loaded modules, a few dozen kilobytes, no game
-data) written through Windows' own `dbghelp.dll`; on a machine without that
-file the line still goes out (`dump=none` in `crash.txt`). Send the line and
+thread (`main` the window's, `game` the game's own). With `-log` the line goes
+into `log.txt`, followed by `CRASH dump=<file>` when a dump was written;
+without it, it goes into `crash.txt` beside where `log.txt` would be, ending in
+`dump=<file>`. Beside it lies `PCtomb5_<date>_<time>.dmp`, a minidump (the
+threads' stacks and the loaded modules, no game data: 31,860 bytes from the
+diagnostic tool's crash on purpose, `RoomProbe -crash`, and somewhat
+more from the game with its more threads and modules) written through
+Windows' own `dbghelp.dll`; on a machine without that file the line still
+goes out (`dump=none` in `crash.txt`). Send the line and
 the dump with `log.txt`: the offset and the dump name the source line of the
 very build that crashed. Windows' own crash report follows as before.
 
@@ -4684,7 +4746,7 @@ wrote it, and each seam answers a different question:
 | the soft motion of the chest does not show, shows on the wrong place, or moves too much or too little | `HDLOG softbody` — one line whenever her HD composite is built and whenever the option changes: `outfit=` the body's model, `state=` on or off, `reason=` `ok` or why it is off (`young` a young-Lara level, `classic` no HD Lara, `option` switched off, or the outfit's own refusal: `no_body`, `no_axes`, `no_front`, `no_torso`, `band_empty`, `band_edge`, `flat`, `asymmetric`, `radius`, `deep` (the chest stands further forward than its region reaches back), `sparse`), `strength=` the option 0 to 3, `apexL=` and `apexR=` the two points the regions are built on, in the body model's own units, `radius=` the regions' radius, `verts=` how many of the body's vertices each region moves, left/right, and `parts=` which parts carry the motion. While it is on, `HDLOG softbody second` once for every second of game time in which it moved at all: `peak=` the largest offset drawn in that second, `bound=` the largest it may be at this strength, `clamped=` frames that ran into the bound, `resets=` how often it went back to rest (a jump, a gap, a cutscene edge) and `steps=` how many sub-steps the spring ran |
 | Lara has the round blob where the projected shadow was expected, or neither | `HDLOG shadow mode` — on her first frame of a level and whenever the answer changes: `stored=` the option as the registry holds it, `effective=` what her frame draws (`projected`, `original`, `circle`, `faded` or `psx`) and `reason=` `ok` or why the projected shadow does not run: `option` (the option is not 5), `hd_off` (the level is not drawn HD), `classic_lara` (she is drawn classic), `classic_room` (her room is drawn classic and keeps a classic face she can stand on - the line `HDLOG room=` says `shadow=0`), `target` (the shadow's map, its depth surface or its shaders do not exist on this card). `HDLOG shadow target` — on her first frame of a level and whenever the map changes: `state=` `none` (never asked for), `made`, `refused` or `released` (a lost device, a resolution change, the end), `reason=` `ok` or what refused it (`no_device`, `format` - no R32F render target, `depth` - neither D24X8 nor D16, `match`, `create`, `surface`, `depth_create`), `format=` and `size=` the map (R32F, 512), `depth=` its depth surface and `events=` a counter of the changes. `HDLOG shadow others` — the same fields for the creatures' map (G32R32F, 2048; `format` - no G32R32F render target), written in the frame it changes; it is made beside her map in the first frame her shadow runs, and a card that refuses it leaves her shadow running and the creatures their blobs |
 | the projected shadow lies on the wrong side, jumps, is too dark or too faint, or is missing on a floor | `HDLOG shadow second` — once a second of game time while it runs: `dir=` the direction it is drawn with and `target=` the one the key light gives this frame (world axes, y down; the fixed slant while `HD_SHADOW_PULL` is 0, and the two differ only while a change of the lights glides in), `strength=` the darkness drawn / the target's (0.34 with the fixed light, 0.45 the darkest the lights can give), `lights=` the lights of her list that counted and `weight=` their summed brightness times nearness, both before the pull, `slant=` degrees off straight down, `snaps=` how often it started in place that second, `cast=` frames whose map was drawn / frames it ran, `parts=` her models drawn into the map a frame, `rooms=` and `calls=` the room groups drawn again and their draw calls a frame, `ms=` the processor time of the two passes a frame, `stencil=` 1 when the depth buffer's stencil keeps any pixel from being darkened twice, `lag=` the largest angle in degrees that second between the drawn direction and the frame's target - 0 with the fixed light; with a pull above 0, near 0 while only she moves, up when the lights change and back down over about a second and a half; then the creatures' map: `others=` the creatures and items drawn into it a frame (over the frames it was drawn in; 0.0 when none was near her), `omap=` frames it was drawn / frames the shadow ran, `orooms=` the room groups drawn again a frame while it was read - hers and those only its wider reach, four sectors round her, brings in - and `oms=` the processor time of its cast pass a frame (its share of the receive is in `ms=`); then the models: `models=` Lara, the creatures, the items and the reflections drawn again to take the shadow, a frame (the mean over the frames the shadow ran), `mcalls=` their draw calls a frame, `castonly=` the creatures out of view drawn into the creatures' map a frame, `mirror=` frames in which a mirror's copy or a reflection took the shadow through the mirror / frames the shadow ran (0 outside RICH2's washrooms), `mms=` the processor time of the models' pass a frame, and `arrive=` frames in which the shadow was still coming in and the blobs going out / frames the shadow ran (8 of 30 at 30 frames a second in the second it starts, 0 afterwards) |
-| in HD a marble floor shows no reflection, or a washroom mirror shows no Lara and no doors | `HDLOG` — per level: the motion line ending in `clear_pages=` and `clear_parts=` (the see-through floor pages and the parts on them; RICH2, RICHCUT2 and TITLE have some) and `mirrors=`, one `mirrorwall` line per mirror found (`room=`, `axis=`, `plane=`, `side=`, `pane=`, `behind=`, `mirrored=`, `box=`); the level's first frame line ending in `clear_calls=`; and once a second while a mirror draws, `HDLOG mirror items= plane= room= axis= lara= hd= win=` — how many items it reflected, which glass, whether Lara was in it, how many of the items went through the HD models, and `win=` the copy's rectangle on the screen as left, top, right, bottom (right and bottom exclusive), which a reflection drawn the classic way is cut to |
+| in HD a marble floor shows no reflection, or a washroom mirror shows no Lara and no doors | `HDLOG` — per level: the motion line's `clear_pages=` and `clear_parts=` (the see-through floor pages and the parts on them; RICH2, RICHCUT2 and TITLE have some) and `mirrors=`, before its last two fields `gloss_pages=` and `gloss_draws=`, one `mirrorwall` line per mirror found (`room=`, `axis=`, `plane=`, `side=`, `pane=`, `behind=`, `mirrored=`, `box=`); the level's first frame line's `clear_calls=` (after it come `sheen_calls=`, `fog_taken=` and `fog_drawn=`); and once a second while a mirror draws, `HDLOG mirror items= plane= room= axis= lara= hd= win=` — how many items it reflected, which glass, whether Lara was in it, how many of the items went through the HD models, and `win=` the copy's rectangle on the screen as left, top, right, bottom (right and bottom exclusive), which a reflection drawn the classic way is cut to |
 | after Alt+Enter or a resolution key the picture is wrong, untextured or gone | `DXLOG device recreated` — one line each time the graphics device is made again: `pages=` the entries of the texture page table, `moved=` those made again on the new device, `dropped=` those that could not be and are drawn untextured until the next level, `kept=` those already there, `picture=` 1 when the inventory's or load screen's picture was moved too, and `old_device_refs=` what the old device still holds afterwards - 0 is nothing; `hd=rebuilt` when the HD level was built again on the new device, `hd=classic` when it was not or there was none, and `ms=` what that build took. Beside it `HDLOG device recreated - level= rebuilt= flipped_pairs=` (the flipped room pairs set back for the build), `DXLOG window` (after `start`, a `toggle` or a resolution `mode`) with the window's styles, its and its client's rectangle, the monitor's, and the present parameters and creation flags the device reports - the line after two toggles should read as the start's - and `DXLOG screenshot hr= file= bytes=` for every file of the apostrophe key (`hr=0x00000000` is a picture read back; `DXLOG mono picture hr=` appears only when the inventory's picture could not be) |
 | the picture is lighter or darker than the *Gamma* bar says, or the bar does nothing | `DXLOG gamma` — at the first frame and at every change of the row: `row=` the bar, `gamma=` and `power=` the curve, `pass=off` at the middle and `on` elsewhere; a step the graphics card refused adds `refused=` (`copy texture`, `shader`, `copy` or `draw`) and `hr=` once, and the picture is then shown without the curve |
 | it felt like it stuttered, or dropped under 30 | `FPSLOG` — one line per second: frames presented, and the longest gap between two of them |
@@ -5012,8 +5074,10 @@ the work ends:
   a step of its own.
 
 A step a load does not run is written with `ms=0.0 skipped=1` - for a
-savegame loaded inside the level, `scan`, every step of the room build and
-`obj_models`, while `sheets`, `surfaces`, `frames`, `objects`, `life` and
+savegame loaded inside the level, `scan`, `obj_models` and, of the HD build,
+`release`, `budget`, every step from `marks` to `index`, `hash`, `pages_ahead`,
+`tables`, `statics` and `models_hash`, while `sheets`, `surfaces`, `frames`,
+`objects`, `life` and
 `redress` carry their time. `trg_read` ends in `kept=1` when the build took
 the parse the scan read, `textures` when the classic texture pages were kept. A
 build that gives up on the way (no `.TRG`, no room drawn HD) writes no block.

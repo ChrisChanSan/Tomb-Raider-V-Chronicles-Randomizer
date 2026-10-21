@@ -4,7 +4,7 @@
 
 # TR5 Randomizer — the manual
 
-**Beta_2.0**
+**Beta_3.0**
 
 Everything the program does, in the order you will meet it. If you only read
 one section, read [Your first run](#your-first-run) — the rest you can look
@@ -115,12 +115,13 @@ agree:
 
 And three things sit outside the seed entirely: **the randomizer's version,
 the level data it ships with, and the engine**. The build number matters most
-here, because it is bumped whenever something can move an item — including
-changes to the curated placement data, which is not code at all. The same
+here, because it is bumped whenever something can change what a seed writes —
+an item moved, a level repaired, and changes to the curated placement data,
+which is not code at all. The same
 seed on two different builds is two different games.
 
 That is why both numbers stand at the top of the window and in `spoiler.txt`:
-`Beta_2.0` is the release, `Build 0.19` is the placement data. Nothing stops
+`Beta_3.0` is the release, `Build 0.20` is the placement data. Nothing stops
 you mixing a randomizer and an engine of different versions — the numbers are
 there to be read, not enforced.
 

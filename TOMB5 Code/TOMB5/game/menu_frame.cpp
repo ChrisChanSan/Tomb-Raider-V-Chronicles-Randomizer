@@ -775,6 +775,33 @@ static bool MenuStepFog(long, long dir)
 	return 1;
 }
 
+/* HD build, the build gate's setting (the registry's hd_build). On, the
+ * default, the HD art of an installed Remaster is built at every level
+ * load, and the HD textures row and the HD/SD key switch between two
+ * resident draws at once. Off, none of it is built: a load is as short as
+ * without the Remaster, the draw is classic and the key has nothing to
+ * switch (it says so on screen, specific/hd/hd_switch.cpp). The row shows
+ * and steps tomb5_hd_build_next, which the gate takes at the next level
+ * load (specific/file.cpp, S_LoadLevelFile) - like HD water, the row shows
+ * what the next level will do, so a step in a running level changes
+ * nothing there. A stored value other than 0 shows as on and is kept as
+ * stored until a step writes 0 or 1. */
+static const char* MenuValHdBuild(long, char* buf)
+{
+	strcpy(buf, CustomText(tomb5_hd_build_next ? "on" : "off"));
+	return buf;
+}
+
+static bool MenuStepHdBuild(long, long dir)
+{
+	if (!dir)
+		return 0;
+
+	SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
+	tomb5_hd_build_next = tomb5_hd_build_next ? 0 : 1;
+	return 1;
+}
+
 static const char* MenuValHdTextures(long, char* buf)
 {
 	strcpy(buf, CustomText(tomb5.hd_enable ? "on" : "off"));
@@ -1655,13 +1682,15 @@ static const menu_row menu_rows_view[] =
 static const menu_row menu_rows_graphics[] =
 {
 	MENU_TAB("Display", MENU_PAGE_DISPLAY),
+	// The build gate, above the draw it feeds.
+	MENU_VALUE("HD build", MenuValHdBuild, MenuStepHdBuild, MENU_SAVE_TOMB5),
 	MENU_VALUE("HD textures", MenuValHdTextures, MenuStepHdTextures, MENU_SAVE_TOMB5),
 	// Directly under the HD switch it depends on.
 	MENU_VALUE("Body physics", MenuValBodyPhysics, MenuStepBodyPhysics, MENU_SAVE_TOMB5),
 	// Under the HD rows.
 	MENU_VALUE("HD water", MenuValHdWater, MenuStepHdWater, MENU_SAVE_TOMB5),
 	// The polished floors' mirror, with the HD rows; it writes its own key.
-	// Fifteen rows: the page pages eight and seven, with the arrow row
+	// Sixteen rows: the page pages eight and eight, with the arrow row
 	// under them.
 	MENU_VALUE("Reflections", MenuValReflect, MenuStepReflect, MENU_SAVE_NONE),
 	MENU_VALUE("Fog", MenuValFog, MenuStepFog, MENU_SAVE_TOMB5),

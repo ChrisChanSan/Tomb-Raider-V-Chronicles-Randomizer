@@ -57,6 +57,9 @@ char tomb5_hd_install[260];
 // let the same Steam discovery look for it too.
 char tomb5_hd_install_tr3[260];
 
+// The HD build row's value, taken by tomb5.hd_build at the next level load.
+ulong tomb5_hd_build_next = 1;
+
 // "rgba" or "dxt5". A word rather than a number because a reader of the
 // registry should be able to tell what it says without a table, and because
 // there may one day be a third answer.
@@ -723,6 +726,9 @@ void init_tomb5_stuff()
 
 	CloseRegistry();
 
+	// The HD build row starts at what the game starts with.
+	tomb5_hd_build_next = tomb5.hd_build;
+
 	/* HDLOG settings, behind -log, once at the start: the draw a game starts
 	 * with (hd_enable, the HD textures row: 1 HD, 0 classic) and the build
 	 * gate (hd_build: 0 builds nothing HD, any other value builds a level's
@@ -872,8 +878,10 @@ void save_new_tomb5_settings()
 	sprintf(buf, "gamma");
 	REG_WriteLong(buf, tomb5.gamma);
 
+	/* The HD build row's value, not the gate in force: the row's choice is
+	 * the setting, and the gate takes it at the next level load. */
 	sprintf(buf, "hd_build");
-	REG_WriteLong(buf, tomb5.hd_build);
+	REG_WriteLong(buf, tomb5_hd_build_next);
 
 	sprintf(buf, "fps_mode");
 	REG_WriteLong(buf, tomb5.fps_mode);

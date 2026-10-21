@@ -2293,6 +2293,18 @@ long S_LoadLevelFile(long num)
 	 * keep's own answer, from the key stamped now and taken by LoadLevel's
 	 * HDLevelKeyNext (HDLevelKeyEarly). The level's own fade-in from black
 	 * (DoLevel, DoTitle) follows in every state. */
+
+	/* The HD build row's value becomes the build gate here, at the top of
+	 * the load and before the gate's first question (HDLevelKeyEarly just
+	 * below asks HDEnabled). Every reader of tomb5.hd_build - the gate, the
+	 * load bar's share, the release of the level before, the switch's
+	 * "nothing to switch" cause - then sees one value from this load to
+	 * the next, so a step of the row in the middle of a level changes
+	 * nothing until the level is left or loaded again. Turned off, the
+	 * level before is still released: its HD data come down whatever the
+	 * gate says (hd_level.cpp, HDLevelUnload and HDLevelBuild). */
+	tomb5.hd_build = tomb5_hd_build_next;
+
 	HDLevelKeyEarly(name, &next);
 
 	const long row = (long)tomb5.loadbar;

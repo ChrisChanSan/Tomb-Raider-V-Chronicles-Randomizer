@@ -26,6 +26,7 @@
 #include "../../game/gameflow.h"	// the level's file name
 #include "../../game/control.h"		// GlobalCounter
 #include "../../game/text.h"		// GnFrameCounter
+#include "../input.h"			// the ammo caption - the off notice
 
 #include <string.h>
 
@@ -157,6 +158,18 @@ void HDSwitchInput(bool key, bool pad, bool live)
 
 	if (what == HD_SWITCH_FLIPPED)
 		SaveDrawn();
+
+	/* A press with the build gate off says so on screen: the HD build row
+	 * (game\menu_frame.cpp) turned the HD art off, so the key has nothing
+	 * to switch until that row is on again and a level is loaded. Shown
+	 * where the switch line names the cause hd_build=0, in the caption the
+	 * ammo hotkeys use at the top of the screen (specific\input.cpp), for
+	 * the same 30 drawn frames; its buffer holds eleven letters. */
+	if (what == HD_SWITCH_NOTHING && !tomb5.hd_build)
+	{
+		strcpy(ammo_change_buf, "HD is off");
+		ammo_change_timer = 30;
+	}
 
 	if (what == HD_SWITCH_NONE || !gLogEnabled)
 		return;

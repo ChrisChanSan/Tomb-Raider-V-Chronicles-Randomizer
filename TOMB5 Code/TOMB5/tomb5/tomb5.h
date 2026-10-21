@@ -28,6 +28,13 @@ extern char tomb5_hd_install[260];
 // without it loses those four models and nothing more.
 extern char tomb5_hd_install_tr3[260];
 
+// The build gate's next value: what the HD build row shows and saves as the
+// registry's hd_build. tomb5.hd_build takes it at the next level load
+// (specific\file.cpp, S_LoadLevelFile), before the gate is first asked, so
+// the gate stays one fact for the whole of a level. Set from hd_build at the
+// game's start.
+extern ulong tomb5_hd_build_next;
+
 // How the HD pages are held on the card: "rgba" for the lossless A8R8G8B8
 // default, "dxt5" for a quarter of the video memory and a measurable loss of
 // quality. A string for the same reason hd_install is one. Registry value:

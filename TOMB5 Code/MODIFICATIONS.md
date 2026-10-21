@@ -31474,14 +31474,17 @@ file. The decisions taken on the list for this round are stated under *Decisions
   project's own.
 - Numbers measured on reference pictures supplied for this project stay; the wording names
   the picture as such.
-- TROne, checked from the notes of earlier permitted readings, since no copy of TROne was
-  at hand: the water's wind numbers in `hd_room.hlsl` and `HD_MARBLE_LEAN`'s 60 degrees
-  are TROne's own design, credited (ledger entries 20 and 389). The glow's choice between
-  the file's and the face's normal, made per part, stays as built and is this project's
-  own; it is to be confirmed by this project's own A/B on RoomProbe pictures, and where
-  the file's normal does not win, TROne's face normal is taken, credited (entry 31). The
-  shadow table of `hd_shadow.h` is this project's own (entry 171); a number-by-number
-  comparison with TROne's shadow code is still open.
+- F-018, TROne's four chains, from the notes of earlier permitted readings and the second
+  TROne check of 2026-10-22; three are settled, one is to be re-derived:
+  the water's wind numbers in `hd_room.hlsl` are TROne's own design, THIRD, credited,
+  unchanged (ledger entry 20);
+  `HD_MARBLE_LEAN`'s 60 degrees is TROne's own design, THIRD for the one number,
+  credited, unchanged (entry 389);
+  the shadow table of `hd_shadow.h` is OWN, every number with this project's own reason
+  or measurement, no TROne value found for any of its quantities (entry 171);
+  the glow's choice between the file's and the face's normal, made per part, is to be
+  re-derived by this project and is UNCLEAR until then; it stands meanwhile on this
+  project's own measurement of #179 (entry 31).
 - The menu pictures are taken anew for Beta 3.0; until then the captions say they show
   Beta 2.0's pages.
 - Commit texts cannot change. The bodies of `9362b431`, `4a3896f9`, `a113f3db`,
@@ -31498,12 +31501,14 @@ Not run: the build from the Visual Studio window, which skips the shader guard; 
 RoomProbe water census of the manual's water numbers; the check that TROne's commit
 `75c4c843` is public, which needs the network. Not measured: frame times at 1920 x 1080
 and the graphics card's own time; the figures in the manual and the README are those of
-2560 x 1440. Open from the decisions: the A/B of the glow's normal on RoomProbe pictures
-and the number-by-number comparison of the shadow table with TROne's shadow code (F-018).
-For rounds of their own: the stale gate comments of `hd_level.cpp`'s level load (about
-lines 6744 to 6756 and 6897), which only a gate round edits, and section 3's bullets for
-the other randomizer files changed since Beta 1.0, which need a documentation round. Line
-numbers in older entries refer to their own commit and were not refreshed.
+2560 x 1440. Open from the decisions: the re-derivation of the glow's normal choice
+(F-018), an A/B with RoomProbe over the glow's 46 views, which needs one switch, a
+face-normal-everywhere flag in `HDRenderGlowOverride` consulted in `BuildGlowParts` and a
+RoomProbe argument beside `-glowps`. For rounds of their own: the stale gate comments of
+`hd_level.cpp`'s level load (about lines 6744 to 6756 and 6897), which only a gate round
+edits, and section 3's bullets for the other randomizer files changed since Beta 1.0,
+which need a documentation round. Line numbers in older entries refer to their own
+commit and were not refreshed.
 
 **Checked.** `be.bat` exit 0, `release/PCtomb5.exe` built Oct 22 2026 00:37:40, MD5
 `d731ef5125172f5758e277688bfc9181`, with `Beta_3.0` in its version resource; `broom`,
@@ -31522,7 +31527,8 @@ within its file's width.
 **Commits.** `56ae33de`, `6bee428f`, `5c76a312`, `7bac8520`, `d0e980a8`, `983dc242`,
 `6c990e6f`, `0fc25137`, `d73318a0`, `3bea74ff`, `2e8be55c`, `4a35c94a`, `7844ec8b` (code,
 shaders, tests and version), `8d39cd1c`, `d325666e`, `1da57ef4`, `c8c163d0`, `6ee2088e`,
-`c2bd3deb` (documents) and this record.
+`c2bd3deb`, `00291c94` (documents) and this record, whose last commit writes the F-018
+verdicts of the second TROne check.
 
 ## 3. Randomizer changes since Beta 1.0
 

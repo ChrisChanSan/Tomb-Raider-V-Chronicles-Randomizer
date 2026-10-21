@@ -1,4 +1,4 @@
-TR5 Randomizer  Beta_2.0
+TR5 Randomizer  Beta_3.0
 ========================
 
 What is in here
@@ -11,8 +11,8 @@ What is in here
                       you want to report a bug.
   audio\, movie\      Where your HQ soundtracks and FMVs go; each
                       folder has a note in it.
-  screens\            Where the remaster's loading screens go; there is
-                      a note in it.
+  screens\            Where your own remaster's loading screens go;
+                      there is a note in it.
   savegame\           Savegames live here, not loose in the folder.
   data\               Precomputed data. The randomizer carries the same
                       data inside itself, so these files are optional -
@@ -105,12 +105,12 @@ lies. If you put a copy of that file in the audio folder, under the
 same name, that copy is used instead.
 
 The original stores its sounds as 22 kHz ADPCM inside every level
-file; the remaster's are 44.1 kHz, and they are not the old ones
+file; those of your remaster are 44.1 kHz, and they are not the old ones
 upsampled - there really is more in them. About nine sounds in ten
 are swapped. The rest keep
 their original version on purpose: enemies the randomizer moved in
 from other levels, and the guests from Tomb Raider III, have no
-counterpart in the remaster and keep the sounds they arrived with.
+counterpart in your remaster and keep the sounds they arrived with.
 
 Music: the HQ soundtracks go into audio\HQ EN, audio\HQ DE and so on,
 named after the track number. There is a note in the audio folder.

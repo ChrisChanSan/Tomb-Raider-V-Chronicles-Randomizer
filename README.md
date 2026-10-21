@@ -4,7 +4,7 @@
 
 # TR5 Randomizer
 
-**Beta_2.0**
+**Beta_3.0**
 
 A randomizer for **Tomb Raider Chronicles** (PC) — including a build of the
 game engine that runs natively on Windows 11 (D3D9 + XAudio2, no wrappers).
@@ -42,7 +42,7 @@ GPLv3.
 | **Sound** | With your own Tomb Raider IV-VI Remastered installed, the game plays its sound effects at 44.1 kHz — measurably wider, not upsampled. A `MAIN.SFX` you put into `audio\` yourself is used before it |
 | **Loading screens** | Your own Remaster's pictures in `screens\HD\` make the loading screens run at 1920x1080 instead of 640x480, while *HD textures* is on |
 | **HD art** | With your own Remaster installed, the levels, Lara and the pickups can be drawn with its HD models and textures — read where they lie, never copied, never shipped. They are loaded with every level whenever the Remaster is found, and *Options -> Graphics -> HD textures* or F12 switches the world and the interface between them and the classic look at any moment; the game starts classic until you switch it once. Which rooms an HD frame draws is the visibility path by default (registry `hd_vis` 1, the HD art of every room in sight drawn whole); `hd_vis` 0 keeps the classic portal walk. An installation an earlier build set up may hold the `hd_vis` 0 that build wrote; the first start moves it to 1 once (writing `hd_vis_rev` beside it), and a 0 set afterwards stays - see the [engine manual](docs/Engine-Manual.md) |
-| **HD water** | In an HD level most pools, canals and stretches of sea (every one with an underwater room below) get the engine's own moving water surface - waves, reflection, a clear or murky depth, foam in patches along the bank and where a waterfall lands, streaks on a fast river, a wet line round whatever stands in it but Lara and the creatures swimming in it - in place of the Remaster's own water art over it, tunable per body of water in `hd_water.txt` (`art keep` brings that art back). *Options -> Graphics -> HD water* turns it off and brings back the level's own water faces |
+| **HD water** | In an HD level most pools, canals and stretches of sea (every one with an underwater room below) get the engine's own moving water surface - waves, reflection, a clear or murky depth, foam in patches along the bank and where a waterfall lands, streaks on a fast river, a wet line round whatever stands in it but Lara and the creatures swimming in it - in place of the water art your installation has over it, tunable per body of water in `hd_water.txt` (`art keep` brings that art back). *Options -> Graphics -> HD water* turns it off and brings back the level's own water faces |
 | **Reflections** | In an HD level the polished floors of Rome, the VCI building and the title mirror the room over them - every floor height and slope in view at its own height, each tread of a stair, the ramps and the corridors going up, and ANDREA1's church mosaic; a sliver showing less than a thousandth of the screen stays plain and leaves without a fade. *Options -> Graphics -> Reflections* turns the mirror off at once, for a machine that cannot carry it; the floors stay solid until the next level load. See the [engine manual](docs/Engine-Manual.md) |
 | **60 frames a second** | The default. The game still thinks thirty times a second and what is drawn in between is interpolated, so nothing about the physics changes. *Options -> Graphics -> Display -> Frame rate* offers 30, 60 and the display's own refresh |
 | **Level order** | Optional, from shuffling inside a section up to a free run through the whole game |
@@ -107,7 +107,9 @@ the title screen, as a tree of tabs: **Audio**, **Controls**, **Graphics**,
 **HUD**, **tomb5 options**, **Special Features** and **Credits** — with
 sub-pages of their own, *Key bindings*, *View* and *Modes* under Controls and
 *Display* under Graphics. The original's own rows are where they always were;
-nothing was taken away.
+nothing was taken away. The pictures below show Beta 2.0's pages until Beta
+3.0's are taken; the captions name the rows as Beta 3.0 has them, so a caption
+can name a row its picture does not show yet.
 
 <table>
 <tr>
@@ -120,9 +122,11 @@ three movement fixes — climb-up delay, flexible crawling, crawl tilting.</td>
 </tr>
 <tr>
 <td width="50%"><img src="docs/menu-graphics.jpg" alt="Graphics"><br>
-<b>Graphics</b>: HD textures, fog and distance fog, shimmer, the mono screen
-and shadow styles, PSX skies, static lighting, the underwater effect, look
-transparency and footprints.</td>
+<b>Graphics</b>, over two pages: HD textures with Body physics under it, HD
+water and Reflections, fog and distance fog, shimmer, the mono screen and
+shadow styles, PSX skies, static lighting, the underwater effect, look
+transparency and footprints. The picture is Beta 2.0's page, without Body
+physics, HD water and Reflections.</td>
 <td width="50%"><img src="docs/menu-display.jpg" alt="Display"><br>
 <b>Display</b>, under Graphics: the frame rate — 30, 60 or whatever your
 screen refreshes at; 60 is what a fresh installation gets — VSync, and
@@ -130,14 +134,16 @@ Gamma, a slider that lightens or darkens every picture the game shows, in a
 window or full screen; its middle, the default, changes nothing, and the
 number beside the bar, a percentage, says where it stands (with the percent
 sign on screens of about 3:2 and wider, without it on narrower ones such as
-4:3).</td>
+4:3). The picture is Beta 2.0's page, without Gamma.</td>
 </tr>
 <tr>
 <td width="50%"><img src="docs/menu-controls.jpg" alt="Controls"><br>
 <b>Controls</b>: Tank or Modern, the Action row that splits Interact from the
-Secondary button, the pad layout, camera speed, dead zone and mouse
-sensitivity (bars with their number beside them, a percentage, its sign shown
-as on Display), targeting and the ammo hotkeys.</td>
+Secondary button, the pad layout, and for Modern controls camera speed, dead
+zone and mouse sensitivity (bars with their number beside them, a percentage,
+its sign shown as on Display) and Invert mouse; then targeting and the ammo
+hotkeys. The picture is Beta 2.0's page, without the mouse rows and the
+numbers.</td>
 <td width="50%"><img src="docs/menu-key-bindings.jpg" alt="Key bindings"><br>
 <b>Key bindings</b>: every role rebindable, on the keyboard and on the pad
 alike, over as many pages as the list needs, with <i>Reset to defaults</i>
@@ -148,18 +154,22 @@ standing above each of them.</td>
 <b>View</b>: the first-person view, its field of view, the death camera, the
 head-bone look, the damping, and whether her body is drawn.</td>
 <td width="50%"><img src="docs/menu-modes.jpg" alt="Modes"><br>
-<b>Modes</b>: Combat, Sprint, Duck and Grab, each of them Toggle or Hold.</td>
+<b>Modes</b>: Combat, Sprint, Duck and Grab, each of them Toggle or Hold, and
+Ledge hang (Modern controls only, off by default). The picture is Beta 2.0's
+page, without Ledge hang.</td>
 </tr>
 <tr>
 <td width="50%"><img src="docs/menu-hud.jpg" alt="HUD"><br>
 <b>HUD</b>: bar mode and positions, enemy bars, the ammo counter, the
 game-over menu, the loading bar style (TR5, TR4 or off - no loading screen
 for a short load) and the loading text (the name of the level being
-loaded).</td>
+loaded). The picture is Beta 2.0's page: its <i>TR4 loadscreens</i> row is
+gone, and every load that shows a screen shows the level's own picture.</td>
 <td width="50%"><img src="docs/menu-audio.jpg" alt="Audio"><br>
 <b>Audio</b>: music and effect volume, each a bar with its number beside it,
 a percentage from 0 to 100 (its sign shown as on Display), sound quality —
-and the language, which can be changed while the game runs.</td>
+and the language, which can be changed while the game runs. The picture is
+Beta 2.0's page, without the numbers.</td>
 </tr>
 </table>
 
@@ -294,18 +304,18 @@ a boot on mud, on metal, on wood, chosen by the sector). The floor layer is
 the loud half.
 
 **Boots** is the level's own footstep sound: it is the sound
-the **installed remaster** has for it, so a sound mod that replaces the
+your own **installed Remaster** has for it, so a sound mod that replaces the
 footsteps does not make every outfit barefoot. **Bare** is a second set of
-recordings the level loads beside its own: the barefoot steps the remaster's
-own bank carries (sound id 417, five recordings that no level uses), or your
-sound mod's own footsteps when a mod really replaces sound id 0 — most sound
-mods do not, and one that only changes a door or a voice is passed over here
-rather than handing the boots back under the name *bare*.
+recordings the level loads beside its own: the barefoot steps your
+installation's own bank carries (sound id 417, five recordings that no level
+uses), or your sound mod's own footsteps when a mod really replaces sound id
+0 — most sound mods do not, and one that only changes a door or a voice is
+passed over here rather than handing the boots back under the name *bare*.
 
 Both ways of shipping footsteps count: a mod's own `5\DATA\MAIN.SFX`, and
 loose `0000.wav` to `0003.wav` and `0010.wav` beside it with no bank at all.
 The test is not which of the two a mod uses but whether what it puts on sound
-id 0 differs from the installed remaster's, so a mod that ships only the five
+id 0 differs from your installed Remaster's, so a mod that ships only the five
 wav files supplies **Bare** exactly as a mod's bank does. Either way the log
 says once per level that the mod's own ids 0 and 4 are bypassed while the
 outfit wears boots — that is what makes the two sets two. While she walks
@@ -318,10 +328,12 @@ mod's `outfit.txt` can say `footsteps=bare`, and the built-in table says it
 for the bodies that have no boots. Your own choice wins over both and is kept
 per outfit.
 
-There is no separate barefoot LANDING among those five recordings, and the
-remaster has none either: measured on a recording the author made of his own
-Remaster installation, its barefoot landing is a random one of the same five. So ours draws the landing
-from the same five too. A level with no room left for a second
+There is no separate barefoot LANDING among those five recordings. Measured on
+the bank, the boots' landing (175 ms) is more than four times as long as their
+steps (33 to 41 ms), while none of the five barefoot takes (106, 86, 134, 69
+and 113 ms) stands out from the others that way: all five are steps. So the
+barefoot landing draws from the same five, at the volume and range the level
+gives its own landing. A level with no room left for a second
 set, or with no sound bank to take one from, shows the row as *unavailable*
 and the log says which of the two it was. Every line of it begins with
 `SFXLOG footsteps:`.
@@ -388,8 +400,8 @@ HDLOG level=ANDREA3 pickup floor slot=240 name=CROWBAR_ITEM
 fifteen levels of the campaign, eleven pickups are lifted at all and nine of
 them by 7 units or less — a crowbar 6.2, a laser sight 4.2, a flare 1.0. Two
 are not. A mod's fitted pair of Uzis comes up 19.2, and the largest in the game
-is your own installation's: RICH3's crossbow ammunition, where the remaster has
-no Tomb Raider V model for the slot and the engine falls back to the Tomb
+is your own installation's: RICH3's crossbow ammunition, where your installation
+has no Tomb Raider V model for the slot and the engine falls back to the Tomb
 Raider IV quiver. That model is drawn at TR5's item origin and reaches **126.6
 units** below the level's own mesh — at that origin nearly two thirds of it
 would stand in the floor; the engine lifts it onto it. A big number always
@@ -413,14 +425,14 @@ and mirrored, and an exporter that mirrors the shape without the bone names
 leaves part of one hand hanging on the other — invisible while Lara stands
 still, a sheet of skin stretching between her wrists the moment she aims. The
 engine folds those weights back onto the hand they belong to. Only a real
-mirroring error is touched; the rounding every one of the Remaster's own files
-carries is left alone.
+mirroring error is touched; the rounding every one of your installation's own
+files carries is left alone.
 
 **Outfits are different: they are ADDED, never swapped in.** An
 `OUTFIT_*.TRM` a mod ships becomes an entry of its own in **Lara's wardrobe**,
-beside the ones the two Remasters bring — your `OUTFIT_CLASSIC` does *not*
-take the place of the Remaster's Rome outfit, and a level that asks for the
-Rome outfit still gets the Rome outfit.
+beside the ones your two Remasters bring — your `OUTFIT_CLASSIC` does *not*
+take the place of your installation's Rome outfit, and a level that asks for
+the Rome outfit still gets the Rome outfit.
 
 **An outfit from Tomb Raider I-III wears TR5's head.** The two bundles build
 Lara's head differently. A IV-VI body carries her whole head — skull and hair —
@@ -638,10 +650,10 @@ alone.
 there is one, and a loose `<NNNN>.wav` — exactly four digits, anywhere under
 the mod — replaces that numbered sample of the bank. The bank itself no
 longer has to be copied into `audio\` by hand: without one there, the engine
-reads the installed remaster's own where it lies. Samples `0000` to `0003`
-and `0010` are the footsteps and the landing, and those five are the one
-exception to "a mod replaces it": they become the **Bare** set of the F4
-outfit changer instead of replacing the boots for every outfit at once — see
+reads the bank of your own installed Remaster where it lies. Samples `0000`
+to `0003` and `0010` are the footsteps and the landing, and those five are
+the one exception to "a mod replaces it": they become the **Bare** set of the
+F4 outfit changer instead of replacing the boots for every outfit at once — see
 *Footsteps* above. This holds whether the mod ships them in a bank or as five
 loose wav files.
 
@@ -663,11 +675,11 @@ another game stands in that game's frame, so it is turned onto the vanilla
 item's own — by the shape of its vertices and not by its bounding box, which
 cannot tell a pair of guns from one gun standing up.
 
-**And it is POSED first, out of your own I-III installation.** A remaster
-inventory model is stored in the classic *bind pose*: each part carries the
-mesh tree's offsets and no rotation at all, which for the IMI Uzis mod means
-its two guns lie side by side and parallel. The cross that the I-III remaster
-shows is that game's own **frame 0**, and the engine reads it now — the mesh
+**And it is POSED first, out of your own I-III installation.** An inventory
+model in the `.TRM` format is stored in the classic *bind pose*: each part
+carries the mesh tree's offsets and no rotation at all, which for the IMI Uzis
+mod means its two guns lie side by side and parallel. The cross is that game's
+own **frame 0**, and the engine reads it now — the mesh
 tree and the first frame of the classic object, out of the level files of your
 `Tomb Raider I-III Remastered` folder (`1\DATA\*.PHD`, `2\DATA\*.TR2`,
 `3\DATA\*.TR2`), the first level in name order that holds it. The pair comes
@@ -719,17 +731,17 @@ HDLOG level=RICH1 item slot=345 name=HK_ITEM model=EXTRA5_HK_ITEM draws
       the model's vertices name a classic mesh this slot never draws
 ```
 
-Put the geometry on node 0. The remaster's own `EXTRA5_HK_ITEM` has 2426 of
-its 2499 vertices there and the 73 that are not are the sight.
+Put the geometry on node 0. Your installation's own `EXTRA5_HK_ITEM` has 2426
+of its 2499 vertices there and the 73 that are not are the sight.
 
 **And one sidecar line.** A randomized level's `<level>.hdm` now carries an
 `sfximport` line naming the sound ids the run imported from another game.
-Those are ids the remaster's own bank keeps other recordings on, and without
-the line the engine's HQ bridge could pair one of them: the Tomb Raider III
-vulture died with a scientist's voice line from RICH1. The engine reads that
-line **whether the HD textures are on or off**, because the bank chain it
-protects is not part of the HD path either. An engine older than this build
-ignores the word and plays what it always played.
+Those are ids your installation's own bank keeps other recordings on, and
+without the line the engine's HQ bridge could pair one of them: the Tomb
+Raider III vulture died with a scientist's voice line from RICH1. The engine
+reads that line **whether the HD textures are on or off**, because the bank
+chain it protects is not part of the HD path either. An engine older than
+this build ignores the word and plays what it always played.
 
 **Mods are yours, not ours.** Nothing of any mod is part of this project and
 nothing of one is ever shipped with it, exactly like the game data and the
@@ -787,6 +799,22 @@ The four Tomb Raider III guests (T-Rex, raptor, compy, vulture) likewise need
 your own **Tomb Raider III** installation; their models and sounds are read
 from it at run time and none of them ships here either.
 
+**The machine:** Windows 10 or 11 (the engine is tested on Windows 11; the
+XAudio2 it uses comes with Windows 10). `PCtomb5.exe` is a 32-bit program on
+Direct3D 9 and XAudio2, so it has four gigabytes of address space whatever the
+machine holds. The HD path also needs a graphics card with shader model 3.0
+(vertex and pixel shader 3.0, at least 512 pixel shader instruction slots, the
+UBYTE4 vertex type and A8R8G8B8 textures); a card that lacks one of them plays
+the classic art, with the reason in the log. Measured on the test machine at
+2560 x 1440 and 165 Hz, over eight levels and the title with HD on: a level's
+HD pages took 232 to 475 MiB of video memory (an installed outfit mod's pages
+among them) and its HD geometry 10 to 62 MiB more, the program used at most
+about 870 MiB of its address space, and every level ran at a median of 165
+frames a second, no second of play below 144, on a median 0.3 to 0.8 ms of
+processor work a frame. A card that offers less than about 600 MiB of texture
+memory loads the largest pages one mip level down rather than leaving any out;
+the [engine manual](docs/Engine-Manual.md) has the details.
+
 ## Building
 
 **The one prerequisite is Visual Studio with the C++ desktop workload.** Every
@@ -800,7 +828,11 @@ you are running, and nothing else. The engine project builds with the
 individual component of the Visual Studio Installer on newer versions, and
 present in Visual Studio 2019 itself.
 
-- **Engine:** `TOMB5 Code\tomb5.vcxproj` with Visual Studio (Win32, Release).
+- **Engine:** `TOMB5 Code\tomb5.vcxproj` with Visual Studio (Win32, Release),
+  or `Preparation\Tools\Diagnose\be.bat` on the command line, which first
+  checks every compiled HD shader (`.inc`) against its `.hlsl` and rebuilds
+  one that is out of step; a build from the Visual Studio window skips that
+  check.
 - **Randomizer:** `TR5Randomizer\build\b1.bat` (command line) and
   `b2.bat` (GUI).
 - **Package:** `Preparation\Tools\BuildRelease.ps1` assembles

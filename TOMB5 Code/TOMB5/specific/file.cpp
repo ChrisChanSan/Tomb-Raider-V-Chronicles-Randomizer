@@ -19,7 +19,7 @@
 #include "hd/hd_font.h"			// the HD font
 #include "hd/hd_pagecache.h"		// the level's HD pages, for the warm-up
 #include "hd/hd_model.h"		// HDModelPreload
-#include "hd/hd_feet.h"		// the two footstep sets
+#include "hd/hd_feet.h"		// the footstep sets
 #include "hd/hd_install.h"		// HDInstallRoot - an HD build follows
 #include "file.h"
 #include "function_stubs.h"
@@ -1581,42 +1581,6 @@ bool LoadCinematic()
 	return 1;
 }
 
-/* Whether a level sample belongs to the footsteps (SFX_LARA_FEET or
- * SFX_LARA_LAND). The two ids own a handful of samples between them - four
- * steps and one landing in each of the sixteen classic levels, measured -
- * and those take their payload from the unmodded bank. The answer comes
- * from the level's own sound map, so a level that numbers them differently
- * is still answered right. */
-static bool feet_sample(long sample)
-{
-	static const int kFeetIds[2] = { SFX_LARA_FEET, SFX_LARA_LAND };
-
-	/* Only with the HD build on. Without it there is no wardrobe, no outfit and
-	 * no second set, so the two ids take the ordinary chain and a sound mod
-	 * plays unchanged. */
-	if (!HDEnabled() || !sample_lut || !sample_infos)
-		return false;
-
-	for (int k = 0; k < 2; k++)
-	{
-		const int info = sample_lut[kFeetIds[k]];
-
-		if (info < 0)
-			continue;
-
-		int takes = (sample_infos[info].flags >> 2) & 0xF;
-
-		if (takes < 1)
-			takes = 1;
-
-		if (sample >= sample_infos[info].number &&
-			sample < sample_infos[info].number + takes)
-			return true;
-	}
-
-	return false;
-}
-
 bool LoadSamples()
 {
 	long num_infos, num_samples, uncomp_size, comp_size;
@@ -1634,19 +1598,20 @@ bool LoadSamples()
 		return 0;
 	}
 
-	/* Two spare SAMPLE_INFO entries after the level's own. The barefoot
-	 * recordings are a second set for sound ids 0 and 4, and a set needs a
-	 * SAMPLE_INFO of its own - the number of its first sample and how many
-	 * takes follow it. The level's table is exactly num_infos long, so the
-	 * two are allocated here with it. The level file fills only its own
-	 * entries; hd_feet.cpp fills these two, and leaves them zero in a level
-	 * without a bare set.
+	/* Four spare SAMPLE_INFO entries after the level's own. The barefoot
+	 * recordings and the unmodded boots are further sets for sound ids 0 and
+	 * 4, and a set needs a SAMPLE_INFO of its own - the number of its first
+	 * sample and how many takes follow it. The level's table is exactly
+	 * num_infos long, so the four are allocated here with it. The level file
+	 * fills only its own entries; hd_feet.cpp fills these, and leaves zero
+	 * the ones a level has no set for.
 	 *
-	 * Nothing reads past num_infos on its own: sample_lut names an info, and
-	 * only HDFeetBare ever writes an index above it.
+	 * Nothing reads past num_infos on its own: sample_lut names an info and
+	 * is never written above it; only HDFeetStepInfo, asked by SoundEffect
+	 * for Lara's own steps, ever answers with an index past the level's.
 	 *
-	 * Only with the HD build on: sixteen bytes shift every later allocation in
-	 * the bump allocator, and with hd_build 0 or no installation the memory
+	 * Only with the HD build on: 32 bytes shift every later allocation in the
+	 * bump allocator, and with hd_build 0 or no installation the memory
 	 * layout stays exactly that of the classic engine. */
 	const long spare = HDEnabled() ? HD_FEET_SPARE_INFOS : 0;
 
@@ -1738,15 +1703,14 @@ bool LoadSamples()
 		long riffSize = comp_size;
 		long hqSize = 0;
 		SfxRiffParts hqWhere;
-		/* The samples behind sound ids 0 and 4 (the booted footsteps) are
-		 * loaded through the first unmodded bank of the chain, so that a
-		 * sound mod which replaces the footsteps supplies the barefoot set
-		 * (hd_feet.cpp) instead of making every outfit barefoot at once.
-		 * Every other sample takes the ordinary chain, mod and loose .wav
-		 * included. */
-		char* hq = feet_sample(i)
-			? HQSfxPayloadBoots(i, uncomp_size, &hqSize, &hqWhere)
-			: HQSfxPayload(i, uncomp_size, &hqSize, &hqWhere);
+		/* Every sample takes the ordinary chain, mod and loose .wav included,
+		 * the footsteps as well: what plays for sound ids 0 and 4 in the
+		 * classic draw and for every emitter but Lara is the chain's, as
+		 * without the HD build. The other sets of Lara's footsteps are
+		 * hd_feet.cpp's, built after this loop; it holds the unmodded boots
+		 * to the same length rule, so it is told each sample's size. */
+		HDFeetNoteSample(i, uncomp_size);
+		char* hq = HQSfxPayload(i, uncomp_size, &hqSize, &hqWhere);
 
 		if (hq)
 		{
@@ -1847,9 +1811,9 @@ bool LoadSamples()
 			HQSfxSubstituted(), num_samples, HQSfxSource(), HQSfxReplaced(),
 			HQSfxOverlaid());
 
-	/* The barefoot set, into the slots after the level's own and into the
-	 * two spare infos allocated above. It writes its own log line, including
-	 * the reason when a level cannot have one.
+	/* The barefoot set and the unmodded boots, into the slots after the
+	 * level's own and into the spare infos allocated above. It writes its own
+	 * log lines, including the reason when a level cannot have a set.
 	 *
 	 * After the summary above, because it takes its recordings through the
 	 * same HQSfxPayload the loop does and would otherwise raise that line's

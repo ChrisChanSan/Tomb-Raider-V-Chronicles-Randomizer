@@ -11721,10 +11721,15 @@ static void hd_build_gate()
 		hd_switch_count(feet, "\tif (!HDEnabled())\n");
 	ok(n == 1, "hd build gate: the barefoot set is built behind it", n, 1);
 	n = hd_switch_count(file,
-		"const long spare = HDEnabled() ? HD_FEET_SPARE_INFOS : 0;") +
-		hd_switch_count(file,
-		"if (!HDEnabled() || !sample_lut || !sample_infos)");
-	ok(n == 2, "hd build gate: the samples ask the build gate", n, 2);
+		"const long spare = HDEnabled() ? HD_FEET_SPARE_INFOS : 0;");
+	ok(n == 1, "hd build gate: the spare sample infos ask the build gate", n,
+		1);
+
+	/* No sample is redirected at the load: the footsteps take the ordinary
+	 * chain like every other sample, and Lara's set is chosen at every step
+	 * by her draw. */
+	n = hd_switch_count(file, "HQSfxPayloadBoots(");
+	ok(n == 0, "hd build gate: no sample is redirected at the load", n, 0);
 
 	// The loading screens and the F4 changer ask the draw.
 	n = hd_switch_count(file, "if (!tomb5.hd_enable ||");

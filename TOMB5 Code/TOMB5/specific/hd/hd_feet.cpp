@@ -260,9 +260,9 @@ void HDFeetLevelBuild(short* lut, SAMPLE_INFO* infos, int infoCount, int spare,
 
 	/* Is the ordinary set a footstep mod's? Two questions with one test.
 	 *
-	 * The bare set asks it of the first take of id 0, as it always has: a
-	 * sound mod that replaces the footsteps is a barefoot mod, so when the
-	 * chain's id 0 is a mod's own recording the bare set IS the ordinary set.
+	 * The bare set asks it of the first take of id 0: a sound mod that
+	 * replaces the footsteps is a barefoot mod, so when the chain's id 0 is a
+	 * mod's own recording the bare set IS the ordinary set.
 	 *
 	 * The boots ask it of every take of ids 0 and 4: where any one of them is
 	 * not the unmodded bank's, the ordinary set is not the boots, and the

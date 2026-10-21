@@ -31521,8 +31521,8 @@ within its file's width.
 
 **Commits.** `56ae33de`, `6bee428f`, `5c76a312`, `7bac8520`, `d0e980a8`, `983dc242`,
 `6c990e6f`, `0fc25137`, `d73318a0`, `3bea74ff`, `2e8be55c`, `4a35c94a`, `7844ec8b` (code,
-shaders, tests and version), `8d39cd1c`, `d325666e`, `1da57ef4`, `c8c163d0`, `6ee2088e`
-(documents) and this record.
+shaders, tests and version), `8d39cd1c`, `d325666e`, `1da57ef4`, `c8c163d0`, `6ee2088e`,
+`c2bd3deb` (documents) and this record.
 
 ## 3. Randomizer changes since Beta 1.0
 

@@ -596,6 +596,11 @@ const char* HDInstallDiagnostics()
 	return notes.c_str();
 }
 
+bool HDInstallSearched()
+{
+	return searched;
+}
+
 const char* HDInstallRootTr3()
 {
 	if (!searched)

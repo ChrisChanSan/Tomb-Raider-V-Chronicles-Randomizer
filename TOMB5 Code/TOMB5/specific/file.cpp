@@ -2433,6 +2433,56 @@ long S_LoadLevelFile(long num)
 	}
 
 	Log("S_LoadLevelFile: load thread joined");
+
+	/* INSTALL, behind -log, once per process: where the HD art and the Tomb
+	 * Raider III guests' models come from, why - the search's own notes,
+	 * which no other line prints - and which bank the level's sounds were
+	 * read from: a mod's, audio\MAIN.SFX, the installation's, or none (the
+	 * level's own samples). After the first load thread has joined, because
+	 * the installation is asked either above (hd_build 1, main thread) or by
+	 * the sound bank chain on the load thread (hd_build 0, and only when no
+	 * earlier bank opened), and the bank is known only once that chain ran;
+	 * the thread has ended, so its answers are read here without a race.
+	 * Nothing is looked for here: a search neither of them needed stays
+	 * unmade, and the line says so. The root printed is the folder found,
+	 * which can carry the player's own path - so behind -log only. */
+	static bool install_said = false;
+
+	if (gLogEnabled && !install_said)
+	{
+		const char* bank = HQSfxFromMod() ? "mod" : !HQSfxHaveBank() ? "level"
+			: !strcmp(HQSfxSource(), "audio\\MAIN.SFX") ? "audio" : "install";
+		char reason[3072];
+		size_t at = 0;
+
+		install_said = true;
+		reason[0] = 0;
+
+		// The notes one to a line, joined into one with " | ".
+		for (const char* n = HDInstallSearched() ? HDInstallDiagnostics() :
+			"not looked for: hd_build=0 and an earlier sound bank opened";
+			*n && at + 4 < sizeof(reason); n++)
+		{
+			if (*n != '\n')
+				reason[at++] = *n;
+			else
+			{
+				memcpy(reason + at, " | ", 3);
+				at += 3;
+			}
+		}
+
+		reason[at] = 0;
+
+		const bool asked = HDInstallSearched();
+		const char* hd = asked && HDInstallRoot()[0] ? HDInstallRoot()
+			: "none";
+		const char* tr3 = asked && HDInstallRootTr3()[0] ? HDInstallRootTr3()
+			: "none";
+
+		Log("INSTALL hd=%s tr3=%s reason=%s bank=%s", hd, tr3, reason, bank);
+	}
+
 	S_LoadScreenJoin();
 	LoadLogStep(&loadlog_at, "thread");
 

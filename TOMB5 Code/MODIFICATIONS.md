@@ -31475,16 +31475,15 @@ file. The decisions taken on the list for this round are stated under *Decisions
 - Numbers measured on reference pictures supplied for this project stay; the wording names
   the picture as such.
 - F-018, TROne's four chains, from the notes of earlier permitted readings and the second
-  TROne check of 2026-10-22; three are settled, one is to be re-derived:
-  the water's wind numbers in `hd_room.hlsl` are TROne's own design, THIRD, credited,
-  unchanged (ledger entry 20);
-  `HD_MARBLE_LEAN`'s 60 degrees is TROne's own design, THIRD for the one number,
-  credited, unchanged (entry 389);
-  the shadow table of `hd_shadow.h` is OWN, every number with this project's own reason
-  or measurement, no TROne value found for any of its quantities (entry 171);
-  the glow's choice between the file's and the face's normal, made per part, is to be
-  re-derived by this project and is UNCLEAR until then; it stands meanwhile on this
-  project's own measurement of #179 (entry 31).
+  TROne check of 2026-10-22; three are settled, one is to be re-derived: the water's wind
+  numbers in `hd_room.hlsl` are TROne's own design, THIRD, credited, unchanged (ledger
+  entry 20); `HD_MARBLE_LEAN`'s 60 degrees is TROne's own design, THIRD for the one
+  number, credited, unchanged (entry 389); the shadow table of `hd_shadow.h` is OWN, every
+  number with this project's own reason or measurement, no TROne value found for any of
+  its quantities (entry 171); the glow's choice between the file's and the face's normal,
+  made per part, is to be re-derived by this project and is UNCLEAR until then; it stands
+  meanwhile on this project's own measurement of #179 (entry 31). TROne's author confirmed
+  chains 2 and 4 on 2026-10-22 (ledger entries 20 and 389).
 - The menu pictures are taken anew for Beta 3.0; until then the captions say they show
   Beta 2.0's pages.
 - Commit texts cannot change. The bodies of `9362b431`, `4a3896f9`, `a113f3db`,

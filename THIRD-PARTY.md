@@ -68,7 +68,7 @@ file:
 
 | `TOMB5 Code/TOMB5/specific/hd/hd_laradraw.cpp/.h` | `host/render/game_renderer.cpp`: `draw_hair` (its copy of 2026-09-05; in TROne-main, copy of 2026-10-06, commit 75c4c843, `draw_hair` skins the links its glues build the same way) | The **braid rule**: `HAIR_OG` has one bone per link, so all six links get a frame of their own built from the link's absolute position and its two angles - where TR5 itself builds a matrix for links 1, 3 and 5 only and draws 0, 2 and 4 as skinned connectors out of stashed vertices. Everything else in that file is this engine's own: the LMX-to-LM turn of `lara_matrices`, the per-node ambient out of `LaraNodeAmbient`, the hand-slot pointer comparison, the first-person mask and the mirror. |
 
-| `TOMB5 Code/TOMB5/specific/hd/hd_shader/hd_room.hlsl`, the wind | `host/render/game_renderer.cpp`: `k_hd_vert`'s `hd.water_effect` block (its copy of 2026-09-05) | The **wind's shape and its scale**: two sines of the position taken across each other, about 24 classic units of travel and a wavelength of about 1.4 blocks - the shape that block gave TROne's water in that copy, applied here to the `.TRG`'s own `TrgVertex::sway` weight, which TROne does not read. Translated to HLSL. The water itself - its wave, swell, UV wobble and caustic - is this project's own design (the origin ledger below, entries 40 to 86) and takes no shape or number from TROne; the water shapes this row credited to TROne before are recorded in `MODIFICATIONS.md`, entry "Water in the HD rooms". Not taken: TROne's water flag, a room bit in its copy of 2026-10-05 (75c4c843 classes water and shore from the engine's own split), where ours is the classic path's own water marks (the water marks row above) and the classic floor data's water squares. One observation stays TROne's: TR5's own brightness term, the `WaterTable` shimmer, is computed per vertex, and a remaster water surface is a few large quads, so on its own it reaches the screen as a slow blotch - which TROne's own comment reported about TR4 water in its copy of 2026-09-05 (in 75c4c843 its basin note says the same of a ripple). That is why a per-pixel term is added at all: the shimmer is untouched, parity and all, and the caustic on top of it is a zero mean modulation that carries no average brightness of its own. Settled 2026-10-21/22 as TROne's own design (its porting notes call the water block its own formulas; the only program-sourced wave in its rules is a different motion, an offset along the normal); class THIRD, credited, unchanged. A confirming question to TROne's author is optional and has been passed on. |
+| `TOMB5 Code/TOMB5/specific/hd/hd_shader/hd_room.hlsl`, the wind | `host/render/game_renderer.cpp`: `k_hd_vert`'s `hd.water_effect` block (its copy of 2026-09-05) | The **wind's shape and its scale**: two sines of the position taken across each other, about 24 classic units of travel and a wavelength of about 1.4 blocks - the shape that block gave TROne's water in that copy, applied here to the `.TRG`'s own `TrgVertex::sway` weight, which TROne does not read. Translated to HLSL. The water itself - its wave, swell, UV wobble and caustic - is this project's own design (the origin ledger below, entries 40 to 86) and takes no shape or number from TROne; the water shapes this row credited to TROne before are recorded in `MODIFICATIONS.md`, entry "Water in the HD rooms". Not taken: TROne's water flag, a room bit in its copy of 2026-10-05 (75c4c843 classes water and shore from the engine's own split), where ours is the classic path's own water marks (the water marks row above) and the classic floor data's water squares. One observation stays TROne's: TR5's own brightness term, the `WaterTable` shimmer, is computed per vertex, and a remaster water surface is a few large quads, so on its own it reaches the screen as a slow blotch - which TROne's own comment reported about TR4 water in its copy of 2026-09-05 (in 75c4c843 its basin note says the same of a ripple). That is why a per-pixel term is added at all: the shimmer is untouched, parity and all, and the caustic on top of it is a zero mean modulation that carries no average brightness of its own. Settled 2026-10-21/22 as TROne's own design (its porting notes call the water block its own formulas; the only program-sourced wave in its rules is a different motion, an offset along the normal); class THIRD, credited, unchanged. A confirming question to TROne's author was passed on and answered on 2026-10-22: the formula and the numbers were TROne's own (entry 20). |
 | `TOMB5 Code/TOMB5/specific/hd/hd_fontmatch.cpp/.h`, `hd_font.cpp/.h` and the branch in `game/text.cpp` | `host/render/game_renderer.cpp`, the block its own code marks `hdtext` (`hdtext_find` and `hdtext_arm`), and the glyph draw beside it. **No line numbers**, on purpose: no line range for it could be checked against a copy of TROne that can be read here, so the block is named by its own marker instead — the reasoning stands over `hd_fontmatch.h` | The **method**, not the code: find a classic glyph in the remaster's `FONT<n>_OG.DDS` by sliding its ink mask over the atlas and scoring **intersection over union**, refuse anything under **0.94** because a similar character is the wrong character, take the `FONT<n>.DDS` beside the winner as the picture to draw from, and relocate the classic UV to the hit while adding **one texel of margin to image and screen in the same ratio**, so that the letter neither moves nor grows. Also theirs: the alpha ramp threshold 96 for what counts as ink, and the observation that the atlas of TR5 carries the classic glyph bitmaps unchanged. What is **not** taken and is not needed: their sprite scan and their "is this an alphabet" gate - the 106 glyph rectangles are known here (`game/chardef.inc`), so there is nothing to discover and nothing to guard against. New here: the per-glyph margin (a uniform one puts a slice of the neighbouring tick beside the apostrophe - measured), the seeding of that measurement from the classic page, the tpage sentinel that carries a quad to a texture outside `Textures[]`, the mip chain with its LOD bias, and the whole Direct3D 9 side. Their alpha-test change is not needed either: this engine's alpha reference is already 0. |
 
 | `TOMB5 Code/TOMB5/specific/polyinsert.cpp`, the mip LOD bias of the HD font quad | `host/render/game_renderer.cpp` (TROne-main, copy of 2026-09-13; Copyright 2026 Todesengel, GPLv3), where the same bias stands with the same reason in TROne's own words | The **number and the reason for it**: a mip LOD bias of **-0.7** on the glyph quad, so that a font atlas minified by a D3D9 sampler keeps its edge instead of blurring into the next mip. The minification this project spends it on is its own measurement (1.8 at 1080p, 2.7 at 720p, 1.35 at 1440p), and so is where the bias lands at each of those (level 0.14 at 1080p, 0 at 1440p). |
@@ -377,19 +377,22 @@ from", carries the tables.
     by a hash of the packed int16 position, the owning group read from the index
     runs. TROne, `hd_load` and `hd_water_mark`. THIRD. Ours: the pairing count of
     entry 2.
-20. **The wind's shape** - two sines of the position taken across each other,
-    about 24 units of travel, a wavelength of about 1.4 blocks.
-    TROne, `k_hd_vert`'s water block (copy of 2026-09-05), where the same
-    shape moved TROne's water. THIRD; free choice to keep TROne's numbers for
-    the wind. The water's wave, swell, UV wobble and caustic, which this entry
-    credited to TROne before (`MODIFICATIONS.md`, "Water in the HD rooms"),
-    are this project's own design: entries 40 to 86. Audit round B1
-    (2026-10-21), from the notes of earlier permitted readings, found the shape
-    and its numbers to be TROne's own design. Settled 2026-10-21/22 as TROne's
-    own design (its porting notes call the water block its own formulas; the
-    only program-sourced wave in its rules is a different motion, an offset
-    along the normal); class THIRD, credited, unchanged. A confirming question
-    to TROne's author is optional and has been passed on.
+20. **The wind's shape** - two sines of the position taken across each other, about 24
+    units of travel, a wavelength of about 1.4 blocks. TROne, `k_hd_vert`'s water block
+    (copy of 2026-09-05), where the same shape moved TROne's water. THIRD; free choice to
+    keep TROne's numbers for the wind. The water's wave, swell, UV wobble and caustic,
+    which this entry credited to TROne before (`MODIFICATIONS.md`, "Water in the HD
+    rooms"), are this project's own design: entries 40 to 86. Audit round B1 (2026-10-21),
+    from the notes of earlier permitted readings, found the shape and its numbers to be
+    TROne's own design. Settled 2026-10-21/22 as TROne's own design (its porting notes
+    call the water block its own formulas; the only program-sourced wave in its rules is a
+    different motion, an offset along the normal); class THIRD, credited, unchanged. A
+    confirming question to TROne's author is optional and has been passed on. The author's
+    reply of 2026-10-22 confirms it: the bob's formula and numbers were TROne's own (the
+    rules passage once cited carries no water text and none of the numbers today, the code
+    calls the old bob an own invention, and a small UV ripple with the same numbers
+    remains, unmarked), inferred from the present code, since TROne's history begins on
+    2026-10-06.
 21. **Material 16's ripple held to the part's own UV span, nothing moving in
     the vertex.** TROne, its own material 16 water rule. THIRD. Ours: `sway` is 0
     on 27 of the 28 parts; 23 of 28 live in a sub-rectangle of their page.
@@ -3904,24 +3907,24 @@ carries the tables.
     planes, 2,414 calls and 5.4 ms of the GPU at 0, 7 planes, 879 calls and
     1.8 ms at 0.1 %, 3,643 to 6,351 pixels changed by more than 8 of 255;
     OWN, the choice of the thousandth.
-389. **The leaning floors** (`hd_render.cpp`, `marble_lean`,
-    `g_marble_store`; `hd_marble_math.h`, `HDMarbleLeanFace`,
-    `HD_MARBLE_LEAN` 0.5) - a face of the column's pages facing up and
-    leaning past the flat face but less than 60 degrees lies in a sloped
-    plane of its own. DATA: RoomProbe `-marblesteep` over the fifteen
-    levels - the faces of the column's pages facing up lean up to 56.3
-    degrees or 85 and more, nothing between (the area by five degrees);
-    ANDREA1's corridors going up at 26.4 to 26.6. THIRD for the same line:
-    TROne (GPLv3) by Todesengel1931 - https://github.com/todesengel1931 -
-    takes floors and ramps up to 60 degrees by a normal's height over half
-    its length (`host/render/reflection_plane.h`, `floor_plane`), read on
-    2026-10-19 in the copy named for this round; no code was taken, and
-    audit round B1, from the notes of earlier permitted readings, found the
-    line to be TROne's own design. The census's gap
-    (56.3 to 85 degrees) does not choose a line inside it: 60 is TROne's line,
-    taken as its number and credited here. Settled 2026-10-21/22 as TROne's own
-    design (`reflection_plane.h`'s `floor_plane` carries no program marker, only
-    its own comments); THIRD for the one number, credited, unchanged.
+389. **The leaning floors** (`hd_render.cpp`, `marble_lean`, `g_marble_store`;
+    `hd_marble_math.h`, `HDMarbleLeanFace`, `HD_MARBLE_LEAN` 0.5) - a face of the column's
+    pages facing up and leaning past the flat face but less than 60 degrees lies in a
+    sloped plane of its own. DATA: RoomProbe `-marblesteep` over the fifteen levels - the
+    faces of the column's pages facing up lean up to 56.3 degrees or 85 and more, nothing
+    between (the area by five degrees); ANDREA1's corridors going up at 26.4 to 26.6.
+    THIRD for the same line: TROne (GPLv3) by Todesengel1931 -
+    https://github.com/todesengel1931 - takes floors and ramps up to 60 degrees by a
+    normal's height over half its length (`host/render/reflection_plane.h`,
+    `floor_plane`), read on 2026-10-19 in the copy named for this round; no code was
+    taken, and audit round B1, from the notes of earlier permitted readings, found the
+    line to be TROne's own design. The census's gap (56.3 to 85 degrees) does not choose a
+    line inside it: 60 is TROne's line, taken as its number and credited here. Settled
+    2026-10-21/22 as TROne's own design (`reflection_plane.h`'s `floor_plane` carries no
+    program marker, only its own comments); THIRD for the one number, credited, unchanged.
+    The author's reply of 2026-10-22 confirms it: the 60-degree line is TROne's own choice
+    (cos 60, no source given; the Remaster data marks no reflecting floor, measured over
+    all 144 .TRG files, so TROne decides its planes geometrically).
 390. **A slope's faces share a plane by their corners** (`hd_marble_math.h`,
     `HDMarbleTiltFits`; `hd_render.cpp`, `marble_build`) - a sloped face
     joins a plane found already where its corners lie within the clip's

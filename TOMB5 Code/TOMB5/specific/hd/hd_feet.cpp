@@ -341,14 +341,10 @@ void HDFeetLevelBuild(short* lut, SAMPLE_INFO* infos, int infoCount, int spare,
 	}
 	else if (g_ownLand >= 0 && g_ownLand < infoCount)
 	{
-		/* The landing draws from the same recordings: the remaster has no
-		 * barefoot landing of its own either. Across eight standing jumps,
-		 * the landing under each matched one of the five bank recordings at
-		 * 0.65 to 0.93 normalised correlation (463 / 462 / 462 / 466 / 465 /
-		 * 462 / 464 / 464), while the boots' 175 ms landing never rose above
-		 * 0.32. So sound id 4 gets the same takes as sound id 0, with the
-		 * level's own id 4 volume and radius - the boots' thud does not fit
-		 * a bare foot. */
+		/* The landing draws from the same recordings: none of the bank's
+		 * five barefoot takes stands out as a landing (hd_feet.h). So sound
+		 * id 4 gets the same takes as sound id 0, with the level's own id 4
+		 * volume and radius - the boots' thud does not fit a bare foot. */
 		g_bareLand = (short)(infoCount + 1);
 		fill_info(infos[g_bareLand], infos[g_ownLand], next, g_takes, pitch);
 	}

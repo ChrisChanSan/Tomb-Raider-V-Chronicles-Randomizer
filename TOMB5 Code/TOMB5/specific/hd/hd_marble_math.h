@@ -461,6 +461,10 @@ inline bool HDMarbleBuildAfterSwitch(bool built, bool want, int faces)
  * mirror's pages that face up (RoomProbe -marblesteep) lean at most 56.3
  * degrees as floors (ramps, the corridors going up, a pool's surround)
  * and 85 and more as walls, and none between: the line lies in that gap.
+ * 60 degrees is TROne's own line for floors and ramps, taken as its
+ * number (TROne (GPLv3) by Todesengel1931 -
+ * https://github.com/todesengel1931, host/render/reflection_plane.h,
+ * floor_plane); no code of TROne's is used.
  * `nyVertex` is the corners' own normals' height (up being negative), the
  * side as the flat face takes it. */
 #define HD_MARBLE_LEAN	0.5f

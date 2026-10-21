@@ -509,9 +509,8 @@ float4 gCounts : register(c17);
  * w = tomb5.hd_motion, so hd_motion 0 draws the still picture the weight
  *     alone gives.
  *
- * The swing. Two reference shots of one VCI corridor from the remaster, three
- * seconds apart, show the same light streaks standing in different places.
- * What is drawn is the smallest thing that reproduces that: the weight
+ * The swing. The light streaks travel along the shaft; they do not
+ * brighten and dim. The smallest thing that draws that: the weight
  * breathes by HD_RAY_SWING about its own value, once per gAdd.z seconds, with
  * a phase taken from the surface point so that neighbouring parts of one fan
  * are out of step and the bright places travel along the shaft instead of the
@@ -522,27 +521,15 @@ float4 gAdd : register(c18);
 
 /* How far the swing carries, either side of the part's own weight, and over
  * what distance one wave of it fits. The .TRG gives only the PERIOD, so
- * neither is read from the file; the amplitude is measured, the wavelength
- * chosen.
+ * neither is read from the file; both are this project's choices.
  *
- * The amplitude. Two remaster shots of the VCI corridor, three seconds apart,
- * over the shaft band on the far wall (108 columns, x 470 to 900, y 240 to
- * 430):
- *
- *     shot t1   band mean 124.6   column sd 17.9  =  14.3 % of the mean
- *     shot t4   band mean 130.1   column sd 21.5  =  16.5 % of the mean
- *
- * The pattern keeps its strength and the level barely moves: 4.4 percent
- * between the two, an upper bound since the camera moved as well. The
- * remaster's shafts TRAVEL; they do not brighten and dim, which is what the
+ * The amplitude. 0.06 is set by eye on RoomProbe pictures, small enough
+ * that the shafts travel and do not brighten and dim, which is what the
  * travelling wave is for. A swing of a quarter either way reads as pulsing
  * (the ANDREA church candle glows then move by +7.8 and -9.3 percent of the
- * whole pixel).
- *
- * 0.06 is that 4.4 percent with the head-room a WEIGHT has over a lit
- * surface: the swing multiplies the additive share of a pixel and not the
- * pixel, so a part whose glow is the whole of what is on screen moves by 6
- * percent at most and one drawn over a lit wall by less. RoomProbe on RICH2
+ * whole pixel). The swing multiplies the additive share of a pixel and not
+ * the pixel, so a part whose glow is the whole of what is on screen moves by
+ * 6 percent at most and one drawn over a lit wall by less. RoomProbe on RICH2
  * room 25, eight seconds at one second against the -nomotion still picture:
  * the worst pixel moves 5.4 percent (17.0 with a quarter), and the share of
  * pixels moving more than 5 percent is none (0.82 with a quarter).
@@ -588,11 +575,9 @@ float4 gSpec : register(c19);
  *    everywhere else this costs one compare
  * z  how fast, in waves a second
  *
- * All three come out of the .TRG part's own three numbers. The reading of
- * param[1] as the travel is our own measurement of the material; which of
- * param[0] and param[2] is the frequency and which the rate is this
- * project's free choice, and it coincides with the order TROne's prose
- * names - see MaterialRipple in hd_render.cpp for both. No number of
+ * All three come out of this project's own water data: the water the part
+ * lies over sets them (HDArtRipple in hd_splash_math.h, "the art's ripple"
+ * in hd_render.cpp), and no number of the part's .TRG material or of
  * TROne's is used. The structure - a texture ripple with no movement in the
  * vertex, its travel held to the part's own UV span - is TROne's own design
  * (Copyright 2026 Todesengel, GPLv3, TROne-main, copy of 2026-10-06,
@@ -1041,7 +1026,7 @@ float4 CellHash(float4 i, float4 j, out float4 second)
  * It drifts with the clock by HD_BEND_DRIFT cells a second. One way and
  * one octave, about 25 slots: a second way cost 7 more than the sheet's
  * variants have. 1.5, the drift and the push are free choices, set by eye
- * on the round's RoomProbe pictures. RoomVS's WaveSum keeps its own slow
+ * on RoomProbe pictures. RoomVS's WaveSum keeps its own slow
  * bend. */
 #define HD_BEND_CELL 1.5f
 #define HD_BEND_DRIFT float2(0.031f, -0.023f)
@@ -1100,7 +1085,7 @@ float2 WaveBend(float2 p, float t, float2 k0, float push)
  * across one crest alone drew each piece as a round bump - from above a
  * pitted sheet; a sixth of the cells empty left flat stretches with single
  * dimples. 3, the lengths, the heights, the lean, the shift and the
- * bricks' half cell are free choices, set by eye on the round's RoomProbe
+ * bricks' half cell are free choices, set by eye on RoomProbe
  * pictures. */
 #define HD_CREST_ACROSS 3.0f
 #define HD_CREST_LEAN 0.8f
@@ -1348,7 +1333,7 @@ VS_OUT RoomVS(float4 inPos : POSITION, float4 inNormal : NORMAL,
 	 * and hides the remaster's art (gSwell.z 1, hd_render.cpp set_room_rows),
 	 * what the flood still finds at the water's height is the bank - the
 	 * land's own vertices at the surface plane inside the flood box, ANDY3's
-	 * pond banks and JOBY5's deck among them (RoomProbe, the round's
+	 * pond banks and JOBY5's deck among them (RoomProbe
 	 * pictures) - and the swell, the wobble and the surface caustic would
 	 * tear it. So none of the three is laid on there; the colour shimmer
 	 * keeps `shimmerOn` as the classic path does. 0 in every room without a
@@ -2195,7 +2180,7 @@ float PatchField(float2 p, float t, float var)
 
 /* The change of the frame's depth under the surface per pixel above which
  * the waterline is whole (WaterPS, "the line where a shape meets the
- * water"), in units: a free choice, set by eye on the round's RoomProbe
+ * water"), in units: a free choice, set by eye on RoomProbe
  * pictures. */
 #define HD_LINE_STEEP 6.0f
 
@@ -2205,7 +2190,7 @@ float PatchField(float2 p, float t, float var)
  * a 4:3 width (AlterFOV), it reaches 12.6 units up and down and at any
  * pitch at most 24 units below or above the eye; 32 leaves room for a
  * rolled camera. HD_SWELL_EYE the distance across over which the hold
- * fades out, a square and a half. Free choices, set on the round's
+ * fades out, a square and a half. Free choices, set on a
  * RoomProbe sweep of the eye through JOBY2's rain basin. */
 #define HD_SWELL_GAP 32.0f
 #define HD_SWELL_EYE 1536.0f
@@ -2352,8 +2337,8 @@ WATER_OUT WaterVS(float4 inPos : POSITION, float4 inNormal : NORMAL,
  * pixel's own footprint, the world step of one pixel right and one pixel
  * down: solving that 2 x 2 system turns world units into pixels, which
  * shrinks the move with the view distance - far water does not swim - and
- * turns it with the view. Two bounds, free choices set by eye on the
- * round's RoomProbe pictures: 256 units (a quarter square) in the world,
+ * turns it with the view. Two bounds, free choices set by eye on
+ * RoomProbe pictures: 256 units (a quarter square) in the world,
  * against a wave scaled up by hd_water.txt, and 4 % of the screen, against
  * a footprint that collapses at a grazing view. RefractMove returns that
  * move in screen units; the caller scales it by the guard below and keeps
@@ -2452,7 +2437,7 @@ float WaterDepthBelow(float vertexDepth, float viewZ, float3 eye, float2 uv,
  * amplitude is the ring's strength (falling with its age, on the processor)
  * over the square root of 1 + d / 256, d the distance from the centre - the
  * ring's energy spread over a growing circle. The wavelength, the train and
- * the 256 are free choices, set by eye on the round's RoomProbe pictures.
+ * the 256 are free choices, set by eye on RoomProbe pictures.
  * A loop over the registers, so the slots do not grow with the count. */
 #define HD_RING_WAVE 90.0f
 
@@ -2541,8 +2526,8 @@ float4 WaterPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
 	 * of the surface (|V.y| 0.15), not at all where it looks down by 37
 	 * degrees or more (0.6), and linearly between: the water takes a body
 	 * where it lay flat, and the view from above keeps the look it has.
-	 * The gains and the two angles are free choices, set by eye on the
-	 * round's RoomProbe pictures. The rings are added after it. */
+	 * The gains and the two angles are free choices, set by eye on
+	 * RoomProbe pictures. The rings are added after it. */
 	slope *= (1.0f + gWaterStage.y * saturate((0.6f - abs(V.y)) *
 		(1.0f / 0.45f))) * shoal;
 	slope += RingSlope(world.xz);
@@ -2713,7 +2698,7 @@ float4 WaterPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
 	 * plane, and the room's own underwater fog and the screen's wobble do
 	 * the rest, as they do for everything under water. Without the copy the
 	 * blend shows the frame behind at the same shares. 0.35, 0.1 and the
-	 * 0.1 of the edge are free choices, set by eye on the round's RoomProbe
+	 * 0.1 of the edge are free choices, set by eye on RoomProbe
 	 * pictures and the reference pictures supplied for this project. */
 	if (above < 0.5f)
 	{
@@ -2767,7 +2752,7 @@ float4 WaterPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
 	 *
 	 * The numbers here - the speeds, the 400 units, the 5 and 4.5 seconds,
 	 * the 24 and 48 units, the line's 0.25 and the density's curves - are
-	 * free choices, set by eye on the round's RoomProbe pictures. */
+	 * free choices, set by eye on RoomProbe pictures. */
 	const float var = input.viewZ.z;
 	const float2 fp = (world.xz + var * float2(400.0f, -330.0f)) *
 		gWaterBase.w;
@@ -2847,7 +2832,7 @@ float4 WaterPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
 	 * shaded by what stands round it (0.65 at no thickness), and a blotch
 	 * has a darker rim where its cover is half (1 - 1.4 c (1 - c), 0.65 at
 	 * the rim). The cover still decides how much of the water it hides.
-	 * 0.3, 0.65 and 1.4 are free choices, set by eye on the round's
+	 * 0.3, 0.65 and 1.4 are free choices, set by eye on
 	 * RoomProbe pictures. */
 	const float cover = foam * (1.0f / 0.75f);
 	const float lump = cover * (0.5f + 0.5f * n);
@@ -2998,7 +2983,7 @@ float4 WaterPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
  *
  * The speed, the stretch, the side's move, the lag, the power 0.75 and the
  * lobe field (cells of about 900 by 1,300 units drifting at 0.05 a second)
- * are free choices, set by eye on the round's RoomProbe pictures and
+ * are free choices, set by eye on RoomProbe pictures and
  * strips: a power of 0.5 filled the zone, 1 and 2 left a thin line; a
  * stretch of 0.45 drew a comb.
  *
@@ -3161,7 +3146,7 @@ float4 FootPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
  * The ridges' spacings, the 0.8 and 0.97 of a line's edges, the slow
  * field's cells (about 1,340 units along the flow, 2,030 across) and its
  * threshold of 0.35 to 0.65, HD_RIVER_SKIN, HD_RIVER_THIN and the 0.6 are
- * free choices, set by eye on the round's RoomProbe pictures and strips.
+ * free choices, set by eye on RoomProbe pictures and strips.
  * Seen from below nothing: the sheen and the end are drawn from above,
  * and under the water RoomPS lays the caustic itself.
  *
@@ -3271,7 +3256,7 @@ float4 RiverPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
 	 * cells, so the blob's upper rim is ragged; densest at the end, still
 	 * holed there, broken up toward the rim. The cell
 	 * sizes, the turns and the reach's swing are free choices, set by eye
-	 * on the round's RoomProbe pictures. */
+	 * on RoomProbe pictures. */
 	const float2 q = world.xz - dir * (gRiverEdge.z * t) +
 		var * float2(400.0f, -330.0f);
 	const float2 c1 = Wave2(float2(dot(q, float2(0.00626f, 0.00427f)),
@@ -3365,7 +3350,7 @@ float4 CardPS(CARD_OUT input, float2 vpos : VPOS) : COLOR0
 {
 	/* The round cut: full in the middle, falling to nothing at the rim as
 	 * the square of one less the squared radius - a free choice, set by eye
-	 * on the round's RoomProbe pictures. */
+	 * on RoomProbe pictures. */
 	const float r2 = dot(input.uv.zw, input.uv.zw);
 	const float round = saturate(1.0f - r2);
 	const float4 page = tex2D(sPage, input.uv.xy);

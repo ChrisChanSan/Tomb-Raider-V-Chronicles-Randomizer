@@ -36,8 +36,7 @@
  * are measured in play of this game, 5 do not apply and 2 of unknown origin
  * are not used. The turn rate (MODERN_TURN_RATE below), the camera's return
  * behind her and the ends of its orbit rate (modern_camera.h) are this
- * project's own choices, each with its reason beside it. A set of option
- * names is read from the player's own COMMON.TXT.
+ * project's own choices, each with its reason beside it.
  *
  * Angles are the engine's 16-bit units: 65536 is a full turn, 0 is +Z, 0x4000
  * is +X (item->pos.y_rot, phd_atan(z, x)). The per-tick state machine, the

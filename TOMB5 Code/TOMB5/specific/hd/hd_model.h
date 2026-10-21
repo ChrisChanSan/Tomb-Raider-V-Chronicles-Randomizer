@@ -462,7 +462,7 @@ struct HDModelLighting
 	 * 255 - a flat opaque channel with BC7 noise and no mask. (The one page
 	 * that is not flat is 8002, Lara's hair, at 15.2 % below 128 - and that
 	 * is coverage, not gloss.) So the strength is a MATERIAL number per part,
-	 * set from the remaster's look, in hd_lara.cpp's table.
+	 * set by eye on RoomProbe pictures, in hd_lara.cpp's table.
 	 *
 	 * strength 0 is off and costs the pixel shader one multiply by zero.
 	 * power is the Blinn-Phong exponent: small and the highlight is a broad

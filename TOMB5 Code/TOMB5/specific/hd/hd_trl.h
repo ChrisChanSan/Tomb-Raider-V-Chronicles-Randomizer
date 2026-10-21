@@ -26,7 +26,7 @@
 
 // The lips of a cutscene face.
 //
-// The remaster moves a speaking face with one file per spoken track:
+// A speaking face of the installation has one file per spoken track:
 // <FACE>_HEAD_<track>.TRL in 5\ITEM, where <track> is the audio track the
 // cutscene plays (CUTSEQ.BIN) and <FACE>_HEAD.TRM is the face. LARA_HEAD.TRM
 // lies in 4\ITEM and its eighteen track files in 5\ITEM.

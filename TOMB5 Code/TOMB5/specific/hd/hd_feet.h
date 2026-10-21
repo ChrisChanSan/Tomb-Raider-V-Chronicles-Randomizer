@@ -69,18 +69,14 @@
 //          sound id 0 differ from the unmodded bank's", so both kinds answer
 //          it and a mod that is about doors or voices answers it with no.
 //
-// And the landing, measured twice. The boots have four steps of 33 to 41 ms
-// and one landing of 175 ms - a landing is 4.7 times a step and 2.4 times its
-// peak. Of the bank's five barefoot recordings (106 / 86 / 134 / 69 / 113 ms)
-// none stands out that way, so all five are steps and none is a landing on
-// its own. A direct recording of the remaster jumping and running settled how
-// its landing is handled: it has no barefoot landing either - under each of
-// eight landings it played one of the same five (matched at 0.65 to 0.93
-// normalised correlation, the boots' landing never above 0.32). So sound id 4
-// draws from the same five takes as sound id 0, with the level's own id 4
-// volume and radius. A mod that does supply a distinct landing - one several
-// times the RMS of its own steps - is used as the bare landing instead when
-// that mod is the source.
+// And the landing, measured on the bank. The boots have four steps of 33 to
+// 41 ms and one landing of 175 ms - a landing is 4.7 times a step and 2.4
+// times its peak. Of the bank's five barefoot recordings (106 / 86 / 134 /
+// 69 / 113 ms) none stands out that way, so all five are steps and none is a
+// landing on its own. So sound id 4 draws from the same five takes as sound
+// id 0, with the level's own id 4 volume and radius. A mod that does supply
+// a distinct landing - one several times the RMS of its own steps - is used
+// as the bare landing instead when that mod is the source.
 //
 // The infos. The level's sound map is game_malloc'ed and exactly num_infos
 // long, so file.cpp asks for two more and this fills them: one for the bare

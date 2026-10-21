@@ -48,9 +48,10 @@ inline short InterpLerpAngle(short a, short b, float alpha)
  * would take InterpLerpAngle's arbitrary half while the pose is already the
  * new one (refused by the neighbour rule or InterpPoseFar), and Lara would
  * stand sideways for one frame. So a node whose y difference is exactly half
- * a turn keeps its live rotation and only its position blends. TROne blends finished node
- * matrices, where the two halves cancel before the blend, and needs no such
- * rule; nothing of its code is used here. */
+ * a turn keeps its live rotation and only its position blends. TROne, read
+ * for comparison, blends finished node matrices, where the two halves
+ * cancel before the blend, and needs no such rule; nothing of its code is
+ * used here. */
 inline bool InterpHalfTurn(short a, short b)
 {
 	return (short)(b - a) == (short)-32768;
@@ -610,11 +611,12 @@ inline void InterpRootLerp(const long prev[3], const long cur[3], float t, long 
  * add a turn of 2z in x/y that the animation itself carries at 30 Hz too, so
  * it is not corrected.
  *
- * The approach is re-derived from TROne (GPLv3) by Todesengel1931 -
- * https://github.com/todesengel1931, which blends whole node matrices with
- * the previous frame expressed in the current one. This engine blends Euler
- * angles and a separate offset, so that step is done by hand; for half a
- * turn it is two signs. No TROne source is in this file. */
+ * TROne (GPLv3) by Todesengel1931 - https://github.com/todesengel1931 -
+ * was read for comparison, and the approach follows it: TROne blends whole
+ * node matrices with the previous frame expressed in the current one. This
+ * engine blends Euler angles and a separate offset, so that step is done
+ * by hand; for half a turn it is two signs. No TROne source is in this
+ * file. */
 inline void InterpRootFlip(const long in[3], long out[3])
 {
 	out[0] = -in[0];

@@ -658,6 +658,11 @@
     <ClInclude Include="TOMB5\specific\hd\hd_splash_math.h" />
     <ClInclude Include="TOMB5\specific\hd\hd_water_under.h" />
     <ClInclude Include="TOMB5\specific\hd\hd_fog.h" />
+    <ClInclude Include="TOMB5\specific\hd\hd_debris.h" />
+    <ClInclude Include="TOMB5\specific\hd\hd_debris_rules.h" />
+    <ClInclude Include="TOMB5\specific\hd\hd_marble_math.h" />
+    <ClInclude Include="TOMB5\specific\hd\hd_object_rules.h" />
+    <ClInclude Include="TOMB5\specific\hd\hd_sky_cap.h" />
     <ClInclude Include="TOMB5\tomb5\libs\discordRPC\discord_register.h" />
     <ClInclude Include="TOMB5\tomb5\libs\discordRPC\discord_rpc.h" />
     <ClInclude Include="TOMB5\tomb5\libs\zlib\zlib.h" />
@@ -833,8 +838,10 @@ REM Without it nothing happens and the build behaves exactly as before.
 REM
 REM The copy may fail and must never fail the build: while the game is
 REM running the file is locked, and then release\ is the fallback - which
-REM is what that folder is for.
-if defined TR5_GAME_DIR copy /Y "$(TargetPath)" "%TR5_GAME_DIR%\" &gt;nul 2&gt;&amp;1 &amp;&amp; echo   copied to %TR5_GAME_DIR% || echo   note: game folder locked - EXE stays in release\
+REM is what that folder is for. A TR5_GAME_DIR that names no folder is
+REM reported as such, not as a locked one.
+if defined TR5_GAME_DIR if not exist "%TR5_GAME_DIR%\" echo   note: game folder not found - EXE stays in release\
+if defined TR5_GAME_DIR if exist "%TR5_GAME_DIR%\" copy /Y "$(TargetPath)" "%TR5_GAME_DIR%\" &gt;nul 2&gt;&amp;1 &amp;&amp; echo   copied to %TR5_GAME_DIR% || echo   note: game folder locked - EXE stays in release\
 exit /b 0</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>

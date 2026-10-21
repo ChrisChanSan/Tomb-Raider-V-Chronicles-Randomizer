@@ -1036,6 +1036,9 @@
     <ClInclude Include="TOMB5\specific\loadbar_math.h">
       <Filter>TOMB5\specific</Filter>
     </ClInclude>
+    <ClInclude Include="TOMB5\specific\zrange_math.h">
+      <Filter>TOMB5\specific</Filter>
+    </ClInclude>
     <ClInclude Include="TOMB5\specific\hd\hd_folderlist.h">
       <Filter>TOMB5\specific\hd</Filter>
     </ClInclude>
@@ -1073,6 +1076,21 @@
       <Filter>TOMB5\specific\hd</Filter>
     </ClInclude>
     <ClInclude Include="TOMB5\specific\hd\hd_fog.h">
+      <Filter>TOMB5\specific\hd</Filter>
+    </ClInclude>
+    <ClInclude Include="TOMB5\specific\hd\hd_debris.h">
+      <Filter>TOMB5\specific\hd</Filter>
+    </ClInclude>
+    <ClInclude Include="TOMB5\specific\hd\hd_debris_rules.h">
+      <Filter>TOMB5\specific\hd</Filter>
+    </ClInclude>
+    <ClInclude Include="TOMB5\specific\hd\hd_marble_math.h">
+      <Filter>TOMB5\specific\hd</Filter>
+    </ClInclude>
+    <ClInclude Include="TOMB5\specific\hd\hd_object_rules.h">
+      <Filter>TOMB5\specific\hd</Filter>
+    </ClInclude>
+    <ClInclude Include="TOMB5\specific\hd\hd_sky_cap.h">
       <Filter>TOMB5\specific\hd</Filter>
     </ClInclude>
   </ItemGroup>

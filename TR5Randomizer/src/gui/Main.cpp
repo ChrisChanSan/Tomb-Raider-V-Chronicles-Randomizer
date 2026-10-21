@@ -984,6 +984,10 @@ static void checkTr3Editions(App& a)
         opt.randomOutfits = a.optOutfits;
         opt.tr3Outfits    = a.optOutfitsTr3 && !tr3Folder(a).empty();
         opt.outfitsOff    = a.optOutfitsOff;
+        // A TR3 outfit whose level is not in the folder stays out of the
+        // pool, as a guest without its bank does.
+        for (const std::string& id : Tr3Source::missingOutfits(tr3Folder(a)))
+            opt.outfitsOff.insert(id);
         opt.allWeapons = true;              // standard, see the App comment
         // Item abundance: the GUI's three tiers as a count. Free placement
         // spots and the item limit cap them anyway.

@@ -1659,6 +1659,22 @@ std::wstring Tr3Source::resolveTr3Gold(const std::wstring& chosen)
     return resolveFolder(base + L"\\LA", L"chunnel.TR2");
 }
 
+std::vector<std::string> Tr3Source::missingOutfits(const std::wstring& tr3Dir)
+{
+    std::vector<std::string> out;
+    if (tr3Dir.empty()) return out;
+
+    for (const OutfitSource& o : outfits())
+    {
+        if (std::strcmp(o.source, "tr3") != 0) continue;
+        std::wstring file;
+        for (const char* p = o.file; *p; ++p)
+            file.push_back(wchar_t((unsigned char)*p));
+        if (resolveFolder(tr3Dir, file.c_str()) != tr3Dir) out.push_back(o.id);
+    }
+    return out;
+}
+
 std::wstring Tr3Source::resolveBank(const std::wstring& tr3Dir)
 {
     if (tr3Dir.empty()) return std::wstring();

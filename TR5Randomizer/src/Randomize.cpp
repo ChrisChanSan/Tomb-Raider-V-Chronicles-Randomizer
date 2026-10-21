@@ -482,6 +482,10 @@ int main(int argc, char** argv)
     opt.randomOutfits = outfits;
     opt.tr3Outfits    = outfitsTr3 && !tr3Dir.empty();
     opt.outfitsOff    = outfitsOff;
+    // A TR3 outfit whose level is not in the folder stays out of the pool,
+    // as a guest without its bank does.
+    for (const std::string& id : Tr3Source::missingOutfits(tr3Dir))
+        opt.outfitsOff.insert(id);
     opt.allWeapons = weapons;
     opt.swapEnemies = mix;
     opt.crossEnemies = cross;

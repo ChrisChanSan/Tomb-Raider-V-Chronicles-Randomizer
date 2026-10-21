@@ -20283,8 +20283,13 @@ namespace
 	std::vector<char> g_marble_open;
 	const int kMarbleRoomOutside = 0x8;
 	bool g_marble_sky = true;
-	// Whether the last frame's mirrors drew the sky, for RoomProbe.
+	/* How many planes of the last frame drew the sky into their mirrors
+	 * (marble_sky drew a call), for RoomProbe. */
 	int g_marble_sky_planes = 0;
+	/* The rooms each drawn plane of the last frame was given to draw whole
+	 * (marble_plane_rooms), by group, in the planes' drawn order, for
+	 * RoomProbe's -marblelist and -marblepop. */
+	std::vector<std::vector<int> > g_marble_plane_groups;
 	/* Which group draws which room now (HDRenderMarbleRooms: the level's
 	 * table, which a flip map changes; none in RoomProbe, room n drawn by
 	 * group n), and its length. */
@@ -21614,17 +21619,23 @@ namespace
 	/* The noted draws made again; the projection is the caller's. A sky
 	 * group is left out: it is drawn in a depth slice of its own; and a
 	 * room or stand range whose box can show nothing in this mirror
-	 * (marble_box_out, `clip` the mirror's in clip space). Returns how
-	 * many were left out so. */
-	int marble_replay(const float* clip)
+	 * (marble_box_out, `clip` the mirror's in clip space). The draws from
+	 * `from` up to `to` (both clamped to the list). Returns how many were
+	 * left out so. */
+	int marble_replay(const float* clip, size_t from, size_t to)
 	{
 		int culled = 0;
 
 		marble_scissor();
 		g_marble_replay = true;
 
-		for (const MarbleDraw& d : g_marble_draws)
+		if (to > g_marble_draws.size())
+			to = g_marble_draws.size();
+
+		for (size_t k = from; k < to; k++)
 		{
+			const MarbleDraw& d = g_marble_draws[k];
+
 			if (d.kind != 2 && d.id >= g_room_groups)
 				continue;
 
@@ -21811,14 +21822,250 @@ namespace
 
 	void marble_room_state();
 
-	/* The sky into a plane's mirror, before its rooms, as the frame draws
-	 * its own (HDRenderSky: its depth slice and its order, the band over
-	 * the dome, every room drawn after it in front): centred on the eye
-	 * and turned as the view is (a noted room's matrix with the view, its
-	 * move left out), under the mirror's projection, clip and scissor,
-	 * without fog or bulbs, as hd_level.cpp's HDFrameSky draws the frame's
-	 * sky. The view and the frame's light come back after it. */
-	void marble_sky(const std::vector<const MarbleDraw*>& noted)
+	/* The near end of the sky's depth slice: HDRenderSky's HD_SKY_MINZ,
+	 * defined with it further down. Every pixel of the world is nearer. */
+	const float kMarbleSkyNear = 0.996f;
+
+	/* The sky's passes into a plane's mirror after the frame's solid draws
+	 * (HDMarbleSolidRun), and only where the mirror's layer reads the
+	 * target. The frame draws its sky first and every room over it
+	 * (HDRenderSky). Drawn so into a mirror, the sky is shaded over the
+	 * plane's whole scissor, and most of it is then hidden by the rooms or
+	 * lies where no face of the plane reads it. So:
+	 *
+	 * - The plane's own faces mark the stencil first (kMarbleSkyFloor,
+	 *   marble_sky_floor), and every sky pass is tested against the mark.
+	 * - The depth buffer already holds the solid draws, all nearer than
+	 *   kMarbleSkyNear, and the depth test drops the sky's pixels behind
+	 *   them before they are shaded - while the pass writes no depth: the
+	 *   room shader's alpha test (clip) makes a pass that writes depth test
+	 *   it after the shader. Everything drawn after the sky is nearer than
+	 *   it and lies over it, as over the sky drawn first.
+	 * - The alpha pass, which HDRenderSky draws untested in the .TRG's
+	 *   part order, is drawn at the slice's near end, tested and without
+	 *   the depth write: it passes wherever the slice or the clear is and
+	 *   nowhere a solid draw is. The opaque pass is drawn in the slice and
+	 *   tested, as HDRenderSky draws it, and without the depth write where
+	 *   the sky has one opaque part at most: its depth sorts opaque parts
+	 *   among themselves, and only RICH3's sky (two) and TITLE's (two
+	 *   groups) have more (RoomProbe -skycensus). No later sky part reads
+	 *   the depth: every sky part of the fifteen levels is opaque or alpha,
+	 *   so HDRenderSky's third call draws nothing and is left out here.
+	 * - The mirror's layer reads it: a pixel whose depth is under 1 is
+	 *   held (MarblePS). So the passes drawn without the depth write are
+	 *   drawn once more, with it, at the slice's near end and with no
+	 *   colour, through the layer's pixel shader in its mask form: it has
+	 *   no clip, so that draw's depth test stays early (the room path keeps
+	 *   the bound pixel shader for a sky group's opaque and alpha passes).
+	 *
+	 * Every pixel the layer reads gets the colour and the held depth it
+	 * got with the sky drawn first. */
+	const DWORD kMarbleSkyFloor = 0x40;
+
+	/* The plane's faces into the stencil (kMarbleSkyFloor): the pixels of
+	 * the target the mirror's layer reads (MarblePS). Drawn through the
+	 * frame's own projection (`frame`) turned in x, which puts a face's
+	 * pixel where the layer reads the target for it (HDRenderMarbleDraw,
+	 * "the flip's place"), with the layer's pixel shader in its mask form
+	 * and no colour; and twice more, one row of the target up and one
+	 * down: the layer reads between the two rows a row of the frame has
+	 * there. The caller keeps and restores the render states. */
+	void marble_sky_floor(const MarbleLayer& layer, const D3DVIEWPORT9& vp,
+		const float* frame)
+	{
+		const UINT faces = (UINT)(layer.verts.size() / 3);
+		const float mask[4] = { 1.0f, 0.0f, 0.0f, 0.0f };
+		float kept[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+		const int rows[3] = { 0, 1, -1 };
+		float turned[16];
+
+		// x turned: the first column of the row-major matrix negated.
+		for (int k = 0; k < 16; k++)
+			turned[k] = k % 4 == 0 ? -frame[k] : frame[k];
+
+		if (!faces || !g_card_vs || !g_marble_ps || !vp.Width || !vp.Height)
+			return;
+
+		g_device->GetPixelShaderConstantF(105, kept, 1);
+		g_device->SetVertexShader(g_card_vs);
+		g_device->SetPixelShader(g_marble_ps);
+		g_device->SetFVF(kCardFVF);
+		g_device->SetPixelShaderConstantF(105, mask, 1);
+		g_device->SetRenderState(D3DRS_ZFUNC, D3DCMP_ALWAYS);
+		g_device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+		g_device->SetRenderState(D3DRS_COLORWRITEENABLE, 0);
+		g_device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+		g_device->SetRenderState(D3DRS_CLIPPLANEENABLE, 0);
+		g_device->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
+		g_device->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+		g_device->SetRenderState(D3DRS_STENCILENABLE, TRUE);
+		g_device->SetRenderState(D3DRS_STENCILFUNC, D3DCMP_ALWAYS);
+		g_device->SetRenderState(D3DRS_STENCILPASS, D3DSTENCILOP_REPLACE);
+		g_device->SetRenderState(D3DRS_STENCILFAIL, D3DSTENCILOP_KEEP);
+		g_device->SetRenderState(D3DRS_STENCILZFAIL, D3DSTENCILOP_KEEP);
+		g_device->SetRenderState(D3DRS_STENCILREF, kMarbleSkyFloor);
+		g_device->SetRenderState(D3DRS_STENCILWRITEMASK, kMarbleSkyFloor);
+
+		for (int s = 0; s < 3; s++)
+		{
+			// Moved in clip space: y plus w times the rows' share.
+			const float oy = 2.0f * (float)rows[s] / (float)vp.Height;
+			float moved[16];
+
+			for (int k = 0; k < 16; k++)
+				moved[k] = turned[k];
+
+			for (int r = 0; r < 4; r++)
+				moved[r * 4 + 1] += oy * turned[r * 4 + 3];
+
+			set_matrix_constant(0, moved);
+			g_device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, faces,
+				&layer.verts[0], sizeof(CardVertex));
+		}
+
+		g_device->SetPixelShaderConstantF(105, kept, 1);
+	}
+
+	bool marble_sky_passes(const D3DMATRIX* world, const MarbleLayer& layer,
+		const float* frame)
+	{
+		D3DVIEWPORT9 saved;
+
+		if (!g_device || g_room_groups >= (int)g_groups.size() ||
+			FAILED(g_device->GetViewport(&saved)))
+			return false;
+
+		D3DVIEWPORT9 slice = saved;
+		D3DVIEWPORT9 front = saved;
+
+		slice.MinZ = kMarbleSkyNear;
+		slice.MaxZ = 1.0f;
+		front.MinZ = kMarbleSkyNear;
+		front.MaxZ = kMarbleSkyNear;
+
+		const D3DRENDERSTATETYPE states[] =
+		{
+			D3DRS_ZFUNC, D3DRS_ZWRITEENABLE, D3DRS_STENCILENABLE,
+			D3DRS_STENCILFUNC, D3DRS_STENCILPASS, D3DRS_STENCILFAIL,
+			D3DRS_STENCILZFAIL, D3DRS_STENCILREF, D3DRS_STENCILMASK,
+			D3DRS_STENCILWRITEMASK, D3DRS_COLORWRITEENABLE, D3DRS_CULLMODE,
+			D3DRS_CLIPPLANEENABLE, D3DRS_ALPHATESTENABLE,
+			D3DRS_ALPHABLENDENABLE
+		};
+		const int count = (int)(sizeof(states) / sizeof(states[0]));
+		DWORD kept[sizeof(states) / sizeof(states[0])];
+
+		for (int s = 0; s < count; s++)
+			g_device->GetRenderState(states[s], &kept[s]);
+
+		const auto keep = [&]()
+		{
+			for (int s = 0; s < count; s++)
+				g_device->SetRenderState(states[s], kept[s]);
+		};
+
+		marble_sky_floor(layer, saved, frame);
+		keep();
+		marble_room_state();
+
+		const auto order = [](const HDRange& a, const HDRange& b)
+		{
+			return a.baseVertex < b.baseVertex;
+		};
+		int opaque = 0;
+
+		for (int g = g_room_groups; g < (int)g_groups.size(); g++)
+			for (const HDRange& range : g_groups[(size_t)g].pass[0])
+				opaque += range.count ? 1 : 0;
+
+		/* A pass tested against the faces' mark, and with `unwritten`
+		 * without the depth write. */
+		const auto within = [&](bool unwritten)
+		{
+			g_device->SetRenderState(D3DRS_STENCILENABLE, TRUE);
+			g_device->SetRenderState(D3DRS_STENCILFUNC, D3DCMP_EQUAL);
+			g_device->SetRenderState(D3DRS_STENCILMASK, kMarbleSkyFloor);
+			g_device->SetRenderState(D3DRS_STENCILREF, kMarbleSkyFloor);
+			g_device->SetRenderState(D3DRS_STENCILWRITEMASK, 0);
+			g_device->SetRenderState(D3DRS_STENCILPASS, D3DSTENCILOP_KEEP);
+			g_device->SetRenderState(D3DRS_STENCILFAIL, D3DSTENCILOP_KEEP);
+			g_device->SetRenderState(D3DRS_STENCILZFAIL, D3DSTENCILOP_KEEP);
+
+			if (unwritten)
+				g_device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+		};
+		bool drew = false;
+		bool unwritten = false;
+
+		for (int g = g_room_groups; g < (int)g_groups.size(); g++)
+		{
+			std::vector<HDRange>& alpha = g_groups[(size_t)g].pass[1];
+
+			// The .TRG's part order, as HDRenderSkyPartOrder keeps it.
+			if (!std::is_sorted(alpha.begin(), alpha.end(), order))
+				std::stable_sort(alpha.begin(), alpha.end(), order);
+
+			g_device->SetViewport(&slice);
+			within(opaque <= 1);
+
+			if (HDRenderRoomMask(g, world, 0, HD_PASS_OPAQUE))
+			{
+				drew = true;
+				unwritten = unwritten || opaque <= 1;
+			}
+
+			keep();
+			g_device->SetViewport(&front);
+			g_device->SetRenderState(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);
+			within(true);
+
+			if (HDRenderRoomMask(g, world, 0, HD_PASS_ALPHA))
+				drew = unwritten = true;
+
+			keep();
+		}
+
+		// The held depth, from the sky's own triangles.
+		if (unwritten && g_marble_ps)
+		{
+			const float mask[4] = { 1.0f, 0.0f, 0.0f, 0.0f };
+			float screen[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+
+			g_device->GetPixelShaderConstantF(105, screen, 1);
+			g_device->SetViewport(&front);
+			g_device->SetRenderState(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);
+			g_device->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
+			g_device->SetRenderState(D3DRS_COLORWRITEENABLE, 0);
+			within(false);
+
+			for (int g = g_room_groups; g < (int)g_groups.size(); g++)
+			{
+				g_device->SetPixelShader(g_marble_ps);
+				g_device->SetPixelShaderConstantF(105, mask, 1);
+				HDRenderRoomMask(g, world, 0, opaque <= 1 ?
+					HD_PASS_SOLID : HD_PASS_ALPHA);
+			}
+
+			g_device->SetPixelShaderConstantF(105, screen, 1);
+			keep();
+			marble_room_state();
+		}
+
+		g_device->SetViewport(&saved);
+		return drew;
+	}
+
+	/* The sky into the plane's mirror (its faces `layer`, the frame's
+	 * projection `frame`), after the frame's solid draws
+	 * (marble_sky_passes): centred on the eye and
+	 * turned as the view is (a noted room's matrix with the view, its
+	 * move left out), under the
+	 * mirror's projection, clip and scissor, without fog or bulbs, as
+	 * hd_level.cpp's HDFrameSky draws the frame's sky. The view and the
+	 * frame's light come back after it. False where nothing was drawn:
+	 * no room noted, or no sky group (RoomProbe without -rooms). */
+	bool marble_sky(const std::vector<const MarbleDraw*>& noted,
+		const MarbleLayer& layer, const float* frame)
 	{
 		const MarbleDraw* any = 0;
 
@@ -21826,7 +22073,7 @@ namespace
 			any = noted[g];
 
 		if (!any || g_room_groups >= (int)g_groups.size())
-			return;
+			return false;
 
 		float modelView[16], turn[16], keepView[16];
 
@@ -21849,7 +22096,10 @@ namespace
 		apply_frame_lighting(&sky);
 		marble_scissor();
 		g_marble_replay = true;
-		HDRenderSky((const D3DMATRIX*)turn);
+
+		const bool drew = marble_sky_passes((const D3DMATRIX*)turn,
+			layer, frame);
+
 		g_marble_replay = false;
 		HDRenderScissorOff();
 		std::memcpy(g_view, keepView, sizeof(keepView));
@@ -21857,6 +22107,7 @@ namespace
 		g_water_table_up = (const void*)~(size_t)0;
 		apply_frame_lighting(g_marble_frame);
 		marble_room_state();
+		return drew;
 	}
 
 	// The room path's shaders and stream, as the bracket sets them.
@@ -22418,6 +22669,24 @@ int HDRenderMarbleSkyPlanes()
 	return g_marble_sky_planes;
 }
 
+/* RoomProbe's -marblelist and -marblepop: the rooms (groups) plane `plane`
+ * of the last frame, in the drawn order, was given to draw whole - the
+ * rooms over and its own walk's - at most `most` into `groups`; how many,
+ * or -1 for a plane past those drawn. */
+int HDRenderMarblePlaneGroups(int plane, int* groups, int most)
+{
+	if (plane < 0 || plane >= (int)g_marble_plane_groups.size())
+		return -1;
+
+	const std::vector<int>& g = g_marble_plane_groups[(size_t)plane];
+	const int n = (int)g.size() < most ? (int)g.size() : most;
+
+	for (int k = 0; k < n; k++)
+		groups[k] = g[(size_t)k];
+
+	return n;
+}
+
 // RoomProbe's -marblewalk n: a plane's own walk, n portals out.
 void HDRenderMarbleWalk(int portals)
 {
@@ -22517,6 +22786,7 @@ void HDRenderMarbleDraw(HDWetModelDraw draw, const void* projection,
 	g_marble_stats = HDRenderMarbleStats();
 	g_marble_rows_list.clear();
 	g_marble_sky_planes = 0;
+	g_marble_plane_groups.clear();
 
 	if (!g_marble_on || !g_marble_want || !g_device || !g_in_frame ||
 		!g_card_vs || !g_marble_ps || g_marble_draws.empty() ||
@@ -22953,6 +23223,20 @@ void HDRenderMarbleDraw(HDWetModelDraw draw, const void* projection,
 			!noted[(size_t)d.id])
 			noted[(size_t)d.id] = &d;
 
+	/* Where the frame's solid draws end among the noted ones
+	 * (HDMarbleSolidRun): the sky goes in after them and before the rest. */
+	size_t solidEnd = 0;
+	{
+		std::vector<unsigned int> passes;
+
+		passes.reserve(g_marble_draws.size());
+
+		for (const MarbleDraw& d : g_marble_draws)
+			passes.push_back(d.passes);
+
+		solidEnd = HDMarbleSolidRun(passes, HD_PASS_SOLID);
+	}
+
 	// The rooms over the frame's rooms, once for every plane.
 	std::vector<HDMarbleOverRoom> overRooms;
 	{
@@ -22973,6 +23257,8 @@ void HDRenderMarbleDraw(HDWetModelDraw draw, const void* projection,
 		g_marble_stats.over_group[i] = overRooms[i].group;
 		g_marble_stats.over_via[i] = overRooms[i].via;
 	}
+
+	g_marble_plane_groups.assign((size_t)drawn, std::vector<int>());
 
 	for (int i = 0; i < drawn; i++)
 	{
@@ -23047,14 +23333,19 @@ void HDRenderMarbleDraw(HDWetModelDraw draw, const void* projection,
 		const std::vector<HDMarbleOverRoom> planeRooms =
 			marble_plane_rooms(layer, overRooms, noted, clip);
 
-		// The sky first, where the plane's view holds a room under it.
-		if (g_marble_sky && marble_sees_open(planeRooms, noted, clip))
-		{
-			marble_sky(noted);
-			g_marble_sky_planes++;
-		}
+		for (const HDMarbleOverRoom& r : planeRooms)
+			g_marble_plane_groups[(size_t)i].push_back(r.group);
 
-		const int left = marble_replay(clip);
+		/* The frame's solid draws, then the sky where the plane's view
+		 * holds a room under it, into the pixels they left (marble_sky,
+		 * marble_sky_passes), then the rest as noted. */
+		int left = marble_replay(clip, 0, solidEnd);
+
+		if (g_marble_sky && marble_sees_open(planeRooms, noted, clip) &&
+			marble_sky(noted, layer, keepProj))
+			g_marble_sky_planes++;
+
+		left += marble_replay(clip, solidEnd, g_marble_draws.size());
 
 		g_marble_stats.over += marble_replay_over(planeRooms, noted, clip,
 			&g_marble_stats.over_culled, i ? 0 : g_marble_stats.over_out);

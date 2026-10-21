@@ -346,6 +346,26 @@ inline void HDMarbleWalk(const std::vector<std::vector<int> >& up,
 	}
 }
 
+/* How many of a frame's noted draws (hd_render.cpp, HDRenderMarbleDraw:
+ * `passes`, each draw's pass mask in the frame's order) lead the list with
+ * the solid passes alone (`solid`, HD_PASS_SOLID): the frame draws its
+ * solid phase first, every pixel written and its depth with it, then the
+ * clear floors, the glass and the glows, which blend over what is behind
+ * them. A mirror draws its sky after that run and before the rest, so the
+ * depth test drops the sky behind the solid draws and every see-through
+ * draw still lies over the sky, as it does with the sky drawn first. A
+ * draw of no pass (0) is in the run. */
+inline size_t HDMarbleSolidRun(const std::vector<unsigned int>& passes,
+	unsigned int solid)
+{
+	size_t k = 0;
+
+	while (k < passes.size() && !(passes[k] & ~solid))
+		k++;
+
+	return k;
+}
+
 /* Whether group `group` draws a room under the sky (hd_render.cpp,
  * marble_sees_open): `open[g]` is 1 for such a group; a group out of the
  * table is none. */

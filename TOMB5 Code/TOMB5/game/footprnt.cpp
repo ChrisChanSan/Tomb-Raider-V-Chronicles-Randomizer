@@ -49,16 +49,17 @@ void AddFootprint(ITEM_INFO* item)
 	room_num = item->room_number;
 	floor = GetFloor(pos.x, pos.y, pos.z, &room_num);
 
-	/* The footstep sound is skipped when the HD outfit's own foot layer
-	 * already covers the surface. Some of Lara's animations carry a boot
-	 * sound recording (FlipEffect 32) on the same frame as the plain
-	 * footstep (PlaySound 0) - e.g. ANDREA1's id 288 runs 274 ms against
-	 * id 0's 41 ms (AnimCmd: 121 of this slot's 148 sfx-0 frames carry
-	 * both; lara.cpp also calls AddFootprint directly on three more).
-	 * Without the check, the plain surface sound would play a second time
-	 * under the boot recording. HDFeetSurfaceQuiet() is false whenever
-	 * hd_enable is off, boots are worn, or the level has no barefoot set,
-	 * so the line below behaves exactly as before in every other case. */
+	/* The surface sound is skipped while Lara walks barefoot in the HD
+	 * draw. Her animations carry this boot-on-a-surface recording
+	 * (FlipEffect 32) on the same frame as the plain footstep (PlaySound
+	 * 0) - e.g. ANDREA1's id 288 runs 274 ms against id 0's 41 ms
+	 * (AnimCmd: 121 of this slot's 148 sfx-0 frames carry both; lara.cpp
+	 * also calls AddFootprint directly on three more) - and under a bare
+	 * step a boot on mud or metal is the wrong sound. HDFeetSurfaceQuiet()
+	 * asks it at this step: true only while she is drawn HD, her outfit is
+	 * barefoot and the level has a bare set. Drawn classic, in boots, with
+	 * hd_build 0 or in a level without a bare set, the line below plays as
+	 * the level has it. */
 	if (floor->fx != 6 && floor->fx != 5 && floor->fx != 11 &&
 		!HDFeetSurfaceQuiet())
 		SoundEffect(footsounds[floor->fx] + SFX_FOOTSTEPS_MUD, &lara_item->pos, 0);

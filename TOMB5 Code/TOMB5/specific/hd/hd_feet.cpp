@@ -468,7 +468,8 @@ void HDFeetLevelBuild(short* lut, SAMPLE_INFO* infos, int infoCount, int spare,
 	 * it is passed over at its one caller instead of being switched. */
 	Log("SFXLOG footsteps: the floor layer (this level's own ids %d..%d, played "
 		"by AddFootprint on the same frame as id %d) is passed over while she "
-		"is barefoot - those recordings are a boot on a surface",
+		"is barefoot - those recordings are a boot on a surface - and only "
+		"while she is drawn HD",
 		SFX_FOOTSTEPS_MUD, SFX_FOOTSTEPS_METAL, kStepsId);
 }
 
@@ -525,8 +526,12 @@ const char* HDFeetInfoName(int info)
 
 bool HDFeetSurfaceQuiet()
 {
-	if (!g_bare)
+	if (!HDFeetQuietRule(HDLaraDrawActive(), g_bare, HDFeetAvailable()))
+	{
+		// The next quiet spell - after F12 or the changer - says so again.
+		g_saidQuiet = false;
 		return false;
+	}
 
 	if (!g_saidQuiet)
 	{

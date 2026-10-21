@@ -38,8 +38,8 @@
 //
 // So the switch is the two ids and the floor layer. A barefoot recording under
 // her foot and a boot on the surface under it on the same frame would be both
-// at once, so while she is barefoot AddFootprint asks HDFeetSurfaceQuiet() and
-// passes the floor layer over. The footprint itself
+// at once, so while she is drawn barefoot AddFootprint asks
+// HDFeetSurfaceQuiet() and passes the floor layer over. The footprint itself
 // is a picture and is not touched. Sound id 17 (the wet foot) is not switched:
 // there is one dry barefoot set and no wet one.
 //
@@ -154,6 +154,14 @@ inline int HDFeetPick(int sfx, int mapped, long caller, long lara,
 	return pick >= 0 ? pick : mapped;
 }
 
+/* The floor layer's rule, pure: passed over only while she is drawn HD, her
+ * outfit walks barefoot and the level has a bare set to walk on. Its one
+ * caller plays it for Lara alone, so there is no emitter to ask. */
+inline bool HDFeetQuietRule(bool drawnHD, bool bare, bool haveBare)
+{
+	return drawnHD && bare && haveBare;
+}
+
 /* Called from LoadSamples once the level's own samples are decoded. `lut` and
  * `infos` are the level's own tables, `infoCount` how many entries were read
  * and `spare` how many entries beyond that the caller allocated. `next` is the
@@ -197,10 +205,11 @@ int HDFeetStepInfo(int sfx, int mapped, long caller);
 const char* HDFeetInfoName(int info);
 
 /* Whether the FLOOR layer is to be passed over - see the two layers above.
- * True only while a bare set is in force, so a player with boots on, or in a
- * level that has no second set, hears the level as it is. Says so in the log
- * the first time in each bare spell; the caller is game\footprnt.cpp and
- * nothing else. */
+ * HDFeetQuietRule with this level's answer: true only while she is drawn HD
+ * and barefoot on a bare set, so with the classic draw, with boots on, or in
+ * a level that has no second set the player hears the level as it is.
+ * Says so in the log the first time in each quiet spell; the caller is
+ * game\footprnt.cpp and nothing else. */
 bool HDFeetSurfaceQuiet();
 
 // What the level's sets hold, for the log line and for a tool.

@@ -126,10 +126,12 @@ bool HDFeetBare(bool bare);
 bool HDFeetIsBare();
 
 /* Whether the FLOOR layer is to be passed over - see the two layers above.
- * True only while a bare set is in force, so a player with hd_enable off, with
- * boots on, or in a level that has no second set hears exactly what he heard
- * before. Says so in the log the first time in each bare spell; the caller is
- * game\footprnt.cpp and nothing else. */
+ * True only while a bare set is in force, so a player with hd_build 0 or no
+ * installation, with boots on, or in a level that has no second set hears
+ * the level's own steps. The set follows hd_build, not the draw: with
+ * hd_build on, a player who plays classic hears the bare set's steps from
+ * the installation's bank too. Says so in the log the first time in each
+ * bare spell; the caller is game\footprnt.cpp and nothing else. */
 bool HDFeetSurfaceQuiet();
 
 // What the level's two sets hold, for the log line and for a tool.

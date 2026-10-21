@@ -12085,7 +12085,7 @@ namespace
 	 *
 	 * The widths, the cell's length, the share, the gain and the push are
 	 * free choices, set by eye on RoomProbe pictures against
-	 * the lattice measures of the rounds (the share of the surface light's
+	 * the lattice measures (the share of the surface light's
 	 * power in its six strongest frequencies, and in two directions).
 	 * Widths: basin 1.5 - a crest's line is a direction modulo pi, so the
 	 * basin's rows then lie round 171 of the 180 degrees, ripples from all

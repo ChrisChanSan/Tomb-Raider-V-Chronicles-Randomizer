@@ -3071,8 +3071,8 @@ static void BuildWaterSurfaces()
  * the array has been refilled for another level by then (see
  * ReleaseWaterFramePages).
  *
- * Nothing here runs with hd_enable off: the water face list is empty then,
- * and this function returns at its first line. */
+ * Nothing here runs with hd_build 0 or no installation: the water face list
+ * is empty then, and this function returns at its first line. */
 struct HDWaterFrame
 {
 	unsigned short tile;		// the classic texinfo the frame lives in
@@ -3456,7 +3456,8 @@ static void BuildWaterFrames()
  * rotation has left in it this moment; `out` comes back as the same record
  * with the HD page and the coordinates on it. Called once per drawn water
  * face from InsertRoomWater, inside the HD branch and nowhere else - with
- * hd_enable off there are no water faces and this list is empty. */
+ * hd_build 0 or no installation there are no water faces and this list is
+ * empty. */
 bool HDWaterFrameFor(const TEXTURESTRUCT* tex, TEXTURESTRUCT* out)
 {
 	if (!tex || !out || g_water_frames.empty())
@@ -6752,10 +6753,10 @@ void HDLevelLoad(const char* wadName)
 	 *
 	 * `sfximport` names the sound ids the run imported from another game, and
 	 * the HQ bank bridge that acts on it is deliberately outside this gate
-	 * (sound does not depend on hd_enable, specific\hqsfx.cpp). Read below the
-	 * gate, the list would be missing with hd_enable off - the default - and
-	 * an imported sound would be replaced by the wrong HQ sample (the
-	 * vulture's death cry in English).
+	 * (sound depends on neither hd_build nor hd_enable, specific\hqsfx.cpp).
+	 * Read below the gate, the list would be missing with hd_build 0 or no
+	 * installation, and an imported sound would be replaced by the wrong HQ
+	 * sample (the vulture's death cry in English).
 	 *
 	 * Reading it here costs one small text file and changes nothing else: the
 	 * rooms, the cuts and the donors below are read by HD code alone, and
@@ -6894,15 +6895,16 @@ static void HDLevelBuildHD();
 /* The level's HD build, and the one thing that is not part of it.
  *
  * The footsteps depend on the HD gate and nothing else: the bare set is built
- * by HDFeetLevelBuild whenever hd_enable is on - in LoadSamples, on the load
- * thread, long before this - and the body it follows is decided by
- * HDLaraLevelBuild inside this build, on the main thread after file.cpp has
- * joined the load thread. The build has five ways to give up (no rooms, no
- * device, no page cache, no HD room, no stem), and none of them takes the
- * bare set or the F4 row away. So the footsteps are decided here, on every
- * way out of the build: decided only at its end, a card without shader model
- * 3 (which turns the whole session classic while hd_enable stays 1) would
- * keep whatever footstep choice the menu applied inside the previous level.
+ * by HDFeetLevelBuild whenever hd_build is on and an installation is found -
+ * in LoadSamples, on the load thread, long before this - and the body it
+ * follows is decided by HDLaraLevelBuild inside this build, on the main
+ * thread after file.cpp has joined the load thread. The build has five ways
+ * to give up (no rooms, no device, no page cache, no HD room, no stem), and
+ * none of them takes the bare set or the F4 row away. So the footsteps are
+ * decided here, on every way out of the build: decided only at its end, a
+ * card without shader model 3 (which turns the whole session classic while
+ * hd_enable stays 1) would keep whatever footstep choice the menu applied
+ * inside the previous level.
  *
  * On those ways out the answer is the level's own body and not the chosen
  * key, because there is no HD body: HDLaraDrawBuild runs inside
@@ -8282,7 +8284,8 @@ static void SwapRoomContents(int a, int b)
  * scroll, wave and book back to its start in mid-level.
  *
  * Returns whether the level draws HD again. A level that was classic when
- * the device went stays classic; nothing here runs with hd_enable 0. */
+ * the device went stays classic; nothing here runs with hd_build 0 or no
+ * installation. */
 bool HDLevelDeviceRecreated()
 {
 	bool rebuilt = false;

@@ -3980,6 +3980,27 @@ carries the tables.
 345. **RoomProbe `-marblewalk` and `-marblesky`; ModernTest's `marble_walk`**
     (`Preparation/Tools/Diagnose/`) - the tool's switches for the round's two rules and 8
     checks of their pure functions. OWN.
+346. **The sky in a mirror after the solid draws, on the plane's faces** (`hd_render.cpp`,
+    `marble_sky_passes`, `marble_sky_floor`, `kMarbleSkyFloor`, `kMarbleSkyNear`;
+    `hd_marble_math.h`, `HDMarbleSolidRun`) - the sky drawn after the run of solid draws
+    that leads the frame's noted draws and before the see-through ones, tested against a
+    stencil mark of the plane's faces (the frame's projection turned in x, one row of the
+    target up and down), its passes without the depth write (the opaque pass keeps it
+    where the sky has two opaque parts), the held depth laid from its own triangles
+    through the layer's mask shader; `HDRenderSky`'s third call left out. OWN; DATA:
+    RoomProbe `-skycensus` over the fifteen levels (only opaque and alpha sky parts; RICH3
+    two opaque parts, TITLE two opaque groups); GPU timestamps round the sky, 2,560 x
+    1,440: R4920 0.46 to 0.27 ms, R5222 1.37 to 0.89, A717 0.32 to 0.19, the lobby 0.63 to
+    0.66; the pictures md5-identical to the sky drawn first at his 73 places (146) and at
+    round 2's eyes and his ticks with the sky's groups (57); one row each way the least
+    that keeps them so (without it 4 of 146 differ by a pixel).
+347. **RoomProbe `-marblepop` and the `marblerooms` line; ModernTest's six checks of
+    `HDMarbleSolidRun`** (`Preparation/Tools/Diagnose/`) - the walk's pops in the tool:
+    each change of the frame's room list drawn at its frame's eye with the rooms before
+    and after, the mirror on and off; the rooms each drawn plane's mirror draws
+    (`HDRenderMarblePlaneGroups`). OWN; DATA: his RICH2 walk (frames 85000 to 93000, 173
+    changes) 75 moving the mirror (91,846 pixels) with the base's mirror, 45 (13,290) with
+    the head's; ANDREA1 (117599 to 121000, 98 changes) 6 (734) and 4 (712).
 
 ## Credited, but not contained here
 

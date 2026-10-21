@@ -21138,6 +21138,183 @@ not in the repository. `hd_render.h`'s comments do not name the three new probe 
 `-marblewalk` and `-marblesky`, ModernTest's `marble_walk`, the tools' README), and this
 record's own commit after them.
 
+**Round 5, fix pass.** 2026-10-21
+
+**What.** The review of round 5 found five points: the sky over round 4's cost (the mirror
+under 2.1 ms at the worst eye) and on by default; the sky's parity proof empty, because
+the eye sets were drawn without the sky's groups (`-rooms`) and the `marblesky` line
+counted planes as drawn that drew nothing; no `-marblepop` in RoomProbe; at ANDREA1's roof
+walk the sky where the facade's reflection was thought to belong; the statics of the rooms
+over still out of the mirror. Changed: the sky is drawn after the frame's solid draws and
+only over the plane's own faces (`marble_sky_passes`, `marble_sky_floor`,
+`HDMarbleSolidRun`), `marble_sky` says whether it drew, RoomProbe has `-marblepop` and a
+`marblerooms` line.
+
+**The sky's cost, measured before a line changed.** GPU timestamps round each plane's sky
+(a timing build of this pass, not kept; the last frame's planes summed, median of three,
+2,560 x 1,440, the sky's groups given) against the mirror's whole time with the sky off:
+at RICH2's R4920 the sky took 0.46 ms, at R5222 1.37, at R5205 0.98, in the lobby (L2, L4)
+0.63, at ANDREA1's A717 0.32. Where it went: drawn first, the sky is shaded over the
+plane's whole scissor; the rooms then cover most of it and much of the rest lies where no
+face of the plane reads the target. Tried, each against the pictures of his 73 places
+(146, plain and `-marblevoid`, md5 against the sky drawn first) and the timestamps:
+
+| tried | pictures alike | the sky at R4920 / R5222 |
+|---|---|---|
+| the sky after the solid draws, its alpha pass at the slice's near end, depth written | 144 | no gain (0.47 / 1.36 ms) |
+| the same, its alpha pass without the depth write | 136 | no gain; the layer reads the depth to tell a held pixel |
+| marked in the stencil as it draws, the mark laid into depth after | 146 | dearer (0.51 / 1.51): a pass that writes stencil or depth through the room shader's clip is tested after the shader |
+| held to the plane's faces (a stencil mark), no writes, the held depth from a quad over the mark | 135 | 0.30 / 0.96; but the quad holds floor pixels the sky's triangles do not reach (the far floor, where the floor's clip cuts the sky away) |
+| held to the faces, no writes, the held depth from the sky's own triangles drawn once more with the layer's mask shader | 146 | 0.30 / 0.96 |
+| the same, the faces' mark through the frame's projection turned in x, three rows | 146 | 0.27 / 0.89 |
+
+The depth test alone saves nothing (the sky drawn after the solid draws without the faces'
+mark costs what it cost first, 0.46 / 1.41 ms): the sky's pixels that cost lie outside the
+rooms' and the floor's both. A pass with `ZFUNC NEVER` or a scissor of one pixel takes the
+sky's time to nothing, so the time is the sky's pixels and nothing else.
+
+**The rule.** The noted draws lead with the frame's solid phase (`hd_level.cpp`: the
+rooms', stands' and pieces' `HD_PASS_SOLID` before the clear floors, the glass and the
+glows); `HDMarbleSolidRun` finds where that run ends, and the sky goes in there - after
+every depth-writing draw it lies behind, before every see-through draw that lies over it.
+The plane's faces mark the stencil (`kMarbleSkyFloor`), drawn through the frame's own
+projection turned in x - where the layer reads the target for a face's pixel - and one row
+of the target up and down, because the layer reads between the two rows a row of the frame
+has (one row each way is the least that keeps all 146 pictures alike; without them four
+differ, by a pixel). Every sky pass is tested against the mark and writes no depth, so the
+tests stay early: the alpha pass at the slice's near end (it passes where the slice or the
+clear is, nowhere a solid draw is), the opaque pass in the slice where the sky has one
+opaque part at most (RICH3 and TITLE have two and keep their depth, which sorts them).
+Then the passes drawn without depth are drawn once more with the depth write and no colour
+through the layer's pixel shader in its mask form, which has no clip, so the held depth
+lies exactly where the sky's own triangles reached. `HDRenderSky`'s third call is left out
+of the mirror: `RoomProbe -skycensus` over the fifteen levels finds only opaque and alpha
+parts in the sky groups, so it draws nothing (and it would mark the fog's pass due through
+`fog_note`).
+
+**Measured: the cost after.** The sky's own time, the same timestamps:
+
+| eye | sky drawn first (ms) | after the solid draws, on the faces (ms) |
+|---|---|---|
+| R4920 | 0.46 | 0.27 |
+| R5222 | 1.37 | 0.89 |
+| R5205 | 0.98 | 0.86 |
+| L4 (lobby) | 0.63 | 0.66 |
+| L2 (lobby) | 0.63 | 0.67 |
+| R26 (gallery) | 0.02 | 0.05 |
+| A717 | 0.32 | 0.19 |
+
+The mirror's whole GPU time at round 4's eyes (`cost.py`, three runs; other work on the
+machine throughout, the lobby's medians spread by up to half a millisecond run to run):
+
+| eye | base | the sky first | now | now, `-marblesky 0` |
+|---|---|---|---|---|
+| R4920 | 0.75 | 1.20 | 1.04 | 0.76 |
+| R4892 | 0.82 | 1.04 | 1.00 | 0.88 |
+| R4946 | 0.90 | 1.44 | 1.16 | 0.92 |
+| R5222 | 2.02 | 3.51 | 3.04 | 2.04 |
+| R5205 | 1.03 | 1.86 | 1.88 | 1.04 |
+| R3682 | 0.53 | 1.45 | 1.31 | 0.67 |
+| L4 | 1.76 | 2.34 | 2.71 | 1.76 |
+| L2 | 1.76 | 2.51 | 2.50 | 1.76 |
+| R26 | 0.70 | 1.40 | 1.43 | 1.36 |
+| A263 | 0.31 | 0.31 | 0.31 | 0.31 |
+| A283 | 0.41 | 0.40 | 0.41 | 0.41 |
+| A717 | 0.37 | 0.70 | 0.60 | 0.38 |
+| A690 | 0.30 | 0.57 | 0.53 | 0.32 |
+| Aup | 0.09 | 0.09 | 0.10 | 0.10 |
+
+The level loads do no new work: the faces' mark and the sky's passes are drawn per frame.
+
+**Decisions.** The sky stays in the mirror, in every level whose mirrored rooms open to
+it, as he asked ("24. Ja"); what of its cost was waste is gone, and what remains is the
+sky's own pixels: at R5222 the floor shows the sky on about 100,000 pixels at 960 x 540
+(the sky's own change there, below, 107,148 pixels), each shaded through the room shader's
+layers (RICH2: an opaque sheet, two alpha sheets, the band), at two rows of the target a
+row of the frame. Round 4's figure cannot hold there with any sky: the mirror without it
+already takes 2.04 ms at R5222. No draw found leaves the picture as it is and costs less;
+a cheaper sky would be another picture (a lower resolution, a shader of its own, part of
+the band left out), and that is not this pass's to choose (Left).
+
+**The sky's proof, with the sky's groups.** `marble_sky` returns whether it drew and the
+`marblesky` line counts only planes that drew. Round 2's 36 eyes and his 21 ticks again,
+now with each level's room count (`-rooms`: ANDREA1 242, ANDREA2 252, RICH2 179, RICH3
+218, RICHCUT2 7, TITLE 116), `hd_water` 1, `hd_marble` 1: against the sky drawn first all
+57 md5-identical; with `-marblesky 0` the 26 the walk changes and no other; the sky's own
+change (now against now with `-marblesky 0`), pixels changed and of them by more than 8 of
+255, in 17 of the 57 - A165 3,636 (138), L0 9,708 (1,155), L120 8,134 (0), L120b 2 (1),
+L120d 35,813 (2,080), L2 1,276 (489), L4 206 (3), P125 15,055 (6,707), P126 18,987
+(10,218), T40 6,784 (1,148), W3c 2,295 (0), p10 5,908 (0), his ticks RICH2 4912 78 (0),
+4920 1,026 (0), 5205 71,580 (1,050) and 5222 107,148 (94), ANDREA1 677 1 (0). The title's
+T40 has the sky in its mirror after all: the earlier "no sky at T33 and T40" was measured
+without the sky's groups.
+
+**The pops along his walks, with `-marblepop`.** His RICH2 walk from frame 85000 to 93000
+(187 frames, the corridor, the offices and the lobby) and his ANDREA1 walk from frame
+117599 to 121000 (104 frames, the church and its stairs), the files built from the round's
+`ROOMLIST` timelines, each with the sky's groups, the mirror of the base (`-marblewalk 0
+-marblesky 0`) and the head's:
+
+| walk | changes | moving the mirror | of 100 px or more | px summed |
+|---|---|---|---|---|
+| RICH2, the base's mirror | 173 | 75 | 58 | 91,846 |
+| RICH2, the head's | 173 | 45 | 16 | 13,290 |
+| ANDREA1, the base's mirror | 98 | 6 | 1 | 734 |
+| ANDREA1, the head's | 98 | 4 | 1 | 712 |
+
+The largest left: RICH2 85371, room 48 into the frame's list, 3,442 pixels, and 87075,
+room 84 out of it, 1,761 - the planes and the rooms the mirrors draw are the same before
+and after (the `planes=` and `mirrored=` parts), so what moves is the room's light: found
+by the walk it is drawn with the light of the room it came from, listed by the frame with
+its own (Left, as in round 5's record). ANDREA1 119194, 614 pixels, is a plane coming in
+(`planes=1/2 +-6144`): the stair's tread, as the least share has it.
+
+**ANDREA1's roof walk (tick 22947): the sky at the facade's foot is the reflection.** The
+facade with the windows is drawn by group 137 (RoomProbe `-skipgroup` against the plain
+picture, direct view: 38,322 pixels in the facade's box), the roof over it by group 156
+(29,856), the flat wall left of it by 130 (18,501). Room 137's floor lies at y -3840,
+2,304 units under the terrace's floor (room 181, y -6144), and room 156, under the sky,
+stands on -6144 over it: the facade lies below the terrace's plane, seen over the
+terrace's edge, and a floor reflects only what stands above its plane. With the sky off,
+the floor showing no mirrored room (`-marblevoid`) is 51,902 pixels; without group 156 the
+same 51,902, without 137 51,923 (21 more: what of the facade stands above the plane), and
+with the plane's walk at eight portals the same 51,902: no room stands above the plane in
+those directions. The sky is what the floor reflects there; the red band at the facade's
+foot is the sunset low over the horizon, which the floor nearest the edge reflects.
+
+**The statics of the rooms over.** Not changed (round 5's record: the classic statics'
+draw and the carrier rooms' stand ranges are outside the marble region).
+
+**A correction to round 5's record.** The mirror does draw the frame's glass and glows:
+the noted draws are every room call of the frame up to `HDRenderMarbleDraw`, which
+`hd_level.cpp` calls after the rooms' blend and additive phases, and `marble_replay`
+replays them all. The sky drawn after everything showed it: RICH2's office windows (16547)
+took the sky over their glass, 24,568 pixels apart (11,937 by more than 8) from the sky
+drawn first. So the plain square under RICH2's ceiling lamp (15389) and the office windows
+(15569) named as "glass and glowing parts not mirrored" have another cause, not found in
+this pass.
+
+**Checked.** The nine builds exit 0 (each in its own `cmd` call); ModernTest 16,019 (six
+of `HDMarbleSolidRun` in `marble_walk`), MenuTest 44,917, InterpTest 754, LipsTest 299
+with the lip objects and 272 without (the cutseq path given by hand), none failed. Against
+the base tool, md5-identical: the classic path 6 of 6; with `hd_marble` 0 the 15 cameras
+at `hd_water` 0 and 1, the six HD views, round 2's 36 eyes at `hd_water` 0 and 1 and his
+21 ticks; with `hd_marble` 1 the 15 cameras at `hd_water` 0 and 1 and the six HD views;
+with `hd_marble` 1 round 2's eyes and his ticks differ in the 19 and 7 pictures round 5's
+record names, by the same pixels (drawn without the sky's groups, so the walk's alone).
+Against the sky drawn first (round 5's `f667fac5`): his 73 places, plain and
+`-marblevoid`, 146 of 146; round 2's eyes and his ticks with the sky's groups, 57 of 57.
+
+**Left.** The sky's cost at RICH2's tanks' room and lobby over round 4's figure (above):
+the remaining time is the sky's own pixels, and only a different picture would cost less.
+A room the walk finds draws with the light of the room it came from. The cause of the
+plain patches under RICH2's lamps and in the office windows. The statics of the rooms
+over.
+
+**Commits.** `c97bbd98` (the sky after the solid draws, on the plane's faces), `3aecd504`
+(RoomProbe's `-marblepop` and `marblerooms`, ModernTest's six checks), and this record's
+own commit after them.
+
 ### The spring (#200)
 2026-10-14
 

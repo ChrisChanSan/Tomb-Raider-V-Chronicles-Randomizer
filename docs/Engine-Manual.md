@@ -1689,8 +1689,8 @@ see *Lara in HD* below for which of her stays classic and why.
   and its vault, RICH2's shaft - are in the mirror also where you look
   down and see none of them, and where its rooms open to the sky (RICH2's
   tanks' room, ANDREA1's roof walk) the sky is in it too, as the level
-  draws it. What the mirror still shows as a flat sheen is glass and
-  lamps, which it does not draw. Where a
+  draws it. Here and there the mirror still shows a plain patch, under
+  a ceiling lamp for one. Where a
   broken tank's water has run over the marble, this mirror runs on under
   the water, which darkens the floor (see *The dive splash and the fish
   tank*). In your own `hd_gloss.txt` (see `hd_reflect`) the word

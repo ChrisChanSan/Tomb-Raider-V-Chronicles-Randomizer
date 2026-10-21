@@ -27,7 +27,7 @@
  * with a recording of its own. TROne's modern control was its own design,
  * not a reading of any program - its input code of that copy cited no
  * disassembler or decompilation - and no code of TROne's is copied here.
- * Since its round K32 TROne carries this file's core and this project's
+ * TROne carries this file's core and this project's
  * orbit camera in its own input code (TROne-main, copy of 2026-10-06, commit
  * 75c4c843, docs\CONTROLS.md 4.7 and docs\LEGAL.md). Units, state list and
  * wording here are TR5's own; ModernTest.cpp takes over TROne's test

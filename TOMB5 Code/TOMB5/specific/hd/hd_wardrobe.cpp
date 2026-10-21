@@ -100,7 +100,7 @@ namespace
 	 * -alpha over the wardrobe's pages: mean 254.6..255.0, not one texel below
 	 * 128), so the material is named:
 	 *
-	 *   latex     0.45 / 26   the two catsuits, the reference look
+	 *   latex     0.45 / 26   the two catsuits
 	 *   rubber    0.30 / 22   the diving suit
 	 *   cloth     0.10 / 14   the Rome top and the rest
 	 *

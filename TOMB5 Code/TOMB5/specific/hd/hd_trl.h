@@ -295,7 +295,7 @@ void HDLipsSkinsBlend(const double* from, const double* to, double t,
  * Inside the clip the frame itself. A track file is often shorter than its
  * cutscene and most stop moving before their audio ends, but its last frame
  * can stand well off the bind - 9.72 units in LARSON_HEAD_108.TRL, the widest
- * of the 44 files a face takes (LipsTest prints each) - so past the last
+ * of the 45 files a face takes (LipsTest prints each) - so past the last
  * frame the face eases back over HD_LIPS_EASE_FRAMES frames -
  * `amount` from (N - k) / N down to 1 / N, k frames past the last - and from
  * then on it is the bind, which is the face's own static buffer. A frame

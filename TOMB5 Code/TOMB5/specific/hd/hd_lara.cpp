@@ -389,8 +389,8 @@ namespace
 	 *
 	 * TR5's own lighting has no specular term at all - aTransformLightClipMesh
 	 * adds an ambient and a diffuse cosine and stops - so without this every
-	 * HD outfit comes out matt, where in the remaster the VCI catsuit and the
-	 * TR3 London one read as latex and the skin carries a soft sheen.
+	 * HD outfit comes out matt, though the VCI catsuit and the TR3 London one
+	 * are latex and the skin carries a soft sheen.
 	 *
 	 * It is a table and not a measurement, unlike everything else in this
 	 * file. The obvious source would be the pages' alpha channel: on the room
@@ -417,7 +417,7 @@ namespace
 	 * brightest, power the Blinn-Phong exponent - low is a broad satin sheen,
 	 * high a tight wet point.
 	 *
-	 *   latex     0.45 / 26   the two catsuits, the reference look
+	 *   latex     0.45 / 26   the two catsuits
 	 *   rubber    0.30 / 22   the diving suit
 	 *   skin      0.12 / 10   a soft wide sheen, never a point
 	 *   hair      0.14 / 18

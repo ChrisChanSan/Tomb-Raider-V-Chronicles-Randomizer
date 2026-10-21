@@ -275,8 +275,9 @@ namespace
 	 *     RICH2  room 25   wall lamps     21.9 % mean,  4.3 % of it white
 	 *     RICH1  room 136  ray fan        22.7 % mean,  2.2 % of it white
 	 *
-	 * The remaster's own picture of the same corridor carries soft streaks of
-	 * about a quarter of white with nothing saturated at all.
+	 * A reference picture supplied for this project of the same corridor
+	 * shows soft streaks of about a quarter of white with nothing saturated
+	 * at all.
 	 *
 	 * A .TRG part carries a material and four floats, and the four mean
 	 * different things per material: material 13's param[0..2] are texture
@@ -312,7 +313,7 @@ namespace
 	 * brightness they turn RICH1's lift shaft into a white block and ANDY's
 	 * window glows far too bright. Measured through RoomProbe on the additive
 	 * pass alone over a black background, mean brightness as a share of
-	 * white, against the remaster's own 16 to 31 percent:
+	 * white, against the 16 to 31 percent a reference streak reads:
 	 *
 	 *                                  at weight 1         with this rule
 	 *     RICH1 room 13, from below   36.3 %, 7.3 white   21.4 %, 0.1
@@ -634,10 +635,9 @@ namespace
 	/* How long one swing of an additive part takes, in seconds, or 0 for a
 	 * still one.
 	 *
-	 * The remaster's light streaks move: two shots of the same corridor three
-	 * seconds apart show them in different places. The only slot in the file
-	 * that is measurably a time is param[3], and material 13's 0.15 seconds
-	 * shows it (see above). Material 2 fills the same slot with
+	 * The light streaks move, and the only slot in the file that is
+	 * measurably a time is param[3], as material 13's 0.15 seconds
+	 * shows (see above). Material 2 fills the same slot with
 	 * 0.05 to 16 seconds - a candle's flicker at one end and a sun shaft's
 	 * slow drift at the other - and it is the only additive material that
 	 * fills it at all: 14, 15 and 16 carry a hard zero there in every tuple

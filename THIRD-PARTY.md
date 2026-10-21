@@ -4272,6 +4272,48 @@ carries the tables.
     (`Preparation/Tools/Diagnose/RoomProbe.cpp`, the `-underlook` line's `disc`, the
     `seapower` knob's 0; `ModernTest.cpp`, `water_sea`) - the power the look drew with
     and its strength printed, and 7 checks of `HDWaterGlowPowerUnder`. OWN.
+439. **A mirror's own walk** (`hd_marble_math.h`, `HDMarbleWalk`; `hd_render.cpp`,
+    `marble_plane_rooms`, `g_marble_walk` 3, `marble_over_world`) - each plane's mirror
+    draws the rooms found from the drawn rooms holding its faces through every portal to
+    three portals, a room taken only where the plane's mirrored view can show its box.
+    OWN; DATA: RoomProbe at the changes of the frame's room list in the owner's play log
+    of 2026-10-20 (the list rebuilt from its `ROOMLIST` lines, each change drawn before
+    and after at its eye, the mirror on and off): RICH2 45 of 140 changes moved the mirror
+    (10,357 pixels at 960 x 540) before, 18 (565) after; ANDREA1 2 of 129 before, none
+    after. The depth 3: at the 49 RICH2 changes that moved it, 7,126 pixels with none,
+    5,188 at one portal, 778 at two, 362 at three.
+440. **The sky in a mirror** (`hd_render.cpp`, `g_marble_open`, `kMarbleRoomOutside`,
+    `marble_sees_open`, `marble_sky`; `hd_marble_math.h`, `HDMarbleOpen`,
+    `HDMarbleSkyTurn`) - a plane's mirror whose list holds a room under the sky
+    (`ROOM_OUTSIDE`) gets the sky, drawn first as the frame draws it. OWN, the classic
+    walk's rule for the frame (`game/draw.cpp`, `outside` and `SkyDrawPhase`) asked of the
+    mirror's own list; DATA: RICH2's tanks' room 99,116 pixels of floor showing none of
+    the mirrored rooms filled, ANDREA1's roof walk 52,935; the sky groups' opaque pass
+    alone, measured first, left ANDREA1's 52,935 empty (its band lies in the alpha pass).
+441. **RoomProbe `-marblewalk` and `-marblesky`; ModernTest's `marble_walk`**
+    (`Preparation/Tools/Diagnose/`) - the tool's switches for the round's two rules and 8
+    checks of their pure functions. OWN.
+442. **The sky in a mirror after the solid draws, on the plane's faces** (`hd_render.cpp`,
+    `marble_sky_passes`, `marble_sky_floor`, `kMarbleSkyFloor`, `kMarbleSkyNear`;
+    `hd_marble_math.h`, `HDMarbleSolidRun`) - the sky drawn after the run of solid draws
+    that leads the frame's noted draws and before the see-through ones, tested against a
+    stencil mark of the plane's faces (the frame's projection turned in x, one row of the
+    target up and down), its passes without the depth write (the opaque pass keeps it
+    where the sky has two opaque parts), the held depth laid from its own triangles
+    through the layer's mask shader; `HDRenderSky`'s third call left out. OWN; DATA:
+    RoomProbe `-skycensus` over the fifteen levels (only opaque and alpha sky parts; RICH3
+    two opaque parts, TITLE two opaque groups); GPU timestamps round the sky, 2,560 x
+    1,440: R4920 0.46 to 0.27 ms, R5222 1.37 to 0.89, A717 0.32 to 0.19, the lobby 0.63 to
+    0.66; the pictures md5-identical to the sky drawn first at his 73 places (146) and at
+    round 2's eyes and his ticks with the sky's groups (57); one row each way the least
+    that keeps them so (without it 4 of 146 differ by a pixel).
+443. **RoomProbe `-marblepop` and the `marblerooms` line; ModernTest's six checks of
+    `HDMarbleSolidRun`** (`Preparation/Tools/Diagnose/`) - the walk's pops in the tool:
+    each change of the frame's room list drawn at its frame's eye with the rooms before
+    and after, the mirror on and off; the rooms each drawn plane's mirror draws
+    (`HDRenderMarblePlaneGroups`). OWN; DATA: his RICH2 walk (frames 85000 to 93000, 173
+    changes) 75 moving the mirror (91,846 pixels) with the base's mirror, 45 (13,290) with
+    the head's; ANDREA1 (117599 to 121000, 98 changes) 6 (734) and 4 (712).
 
 ## Credited, but not contained here
 

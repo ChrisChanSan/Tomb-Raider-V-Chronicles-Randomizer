@@ -761,6 +761,30 @@
  *                     engine's, where not given). The marble: line's over
  *                     is how many were drawn into each mirror, summed, and
  *                     culled how many lay wholly outside the mirror's view.
+ *     -marblewalk n   each plane's own walk (HDRenderMarbleWalk): from
+ *                     the drawn rooms holding its faces out through every
+ *                     portal to n portals, each room its mirrored view
+ *                     can show drawn into its mirror (3, the engine's,
+ *                     where not given; 0 the frame's list and the rooms
+ *                     over alone, the measure of a room that comes and
+ *                     goes in a mirror with the frame's list).
+ *     -marblesky 0|1  the HD sky drawn into a mirror whose view holds a
+ *                     room under the sky, after the frame's solid draws
+ *                     and before the rest (HDRenderMarbleSky; 1, the
+ *                     engine's, where not given; the sky's groups need
+ *                     -rooms), and one marblesky line: the planes of the
+ *                     frame that drew it, of those drawn.
+ *     -marblepop <file>  the mirrors along a walk, frame after frame (with
+ *                     -roombox and -out <prefix>): a line of the file one
+ *                     frame, "<frame> <LEVEL> <room> <x> <y> <z> target
+ *                     <tx> <ty> <tz> rooms <r,...>"; where a frame's rooms
+ *                     are not those of the frame before, the tool runs
+ *                     itself at that eye with both lists, the mirror on
+ *                     and off, and prints one marblepop line: the rooms
+ *                     that come and go in the list, the mirror's own
+ *                     pixels apart, the direct view's, the planes drawn
+ *                     and the rooms the mirrors draw that come and go;
+ *                     a last line sums them (MarblePop).
  *     -marbletarget <path>  the mirror's target as the frame's last
  *                     mirrored plane left it, written to <path> (two rows
  *                     a row of the frame, turned in x; -marbleslots picks
@@ -790,7 +814,9 @@
  *                     or beside its scissor) and its plane in world space
  *                     (n.p = d); and one marblecpu line,
  *                     the picture's HDRenderMarbleDraw on the processor
- *                     beside its GPU time.
+ *                     beside its GPU time; and one marblerooms line a
+ *                     drawn plane, the rooms its mirror drew whole (the
+ *                     rooms over and its own walk's), by group.
  *     -marblesteep    the level's triangles of the mirror's pages (the
  *                     table's, or -marblepages') that face up, by lean: one
  *                     marblesteep line a room with faces leaning past the
@@ -11023,6 +11049,13 @@ int HDRenderMarblePlaneRows(const float** rows);
 void HDRenderMarbleTread(int units);
 // -marbleleast s: the least share of the screen a plane shows.
 void HDRenderMarbleLeast(float share);
+// -marblewalk n: a plane's own walk to n portals.
+void HDRenderMarbleWalk(int portals);
+// -marblesky 0|1: the sky drawn into the mirrors, and the planes that did.
+void HDRenderMarbleSky(bool on);
+int HDRenderMarbleSkyPlanes();
+// -marblelist, -marblepop: the rooms a drawn plane's mirror drew whole.
+int HDRenderMarblePlaneGroups(int plane, int* groups, int most);
 // -marbleslopes: the level's sloped planes, one line each (ProbeMarble).
 int HDRenderMarbleSlopeRows(const float** rows);
 static bool g_marble_slopes = false;
@@ -11224,6 +11257,24 @@ static bool MarbleArg(int argc, char** argv, int* at)
 	{
 		HDRenderMarbleCracks(true);
 		g_marble_cracks = true;
+		return true;
+	}
+
+	/* -marblewalk n: each plane's own walk from the rooms holding its faces
+	 * to n portals, the rooms its view can show drawn into its mirror
+	 * (HDRenderMarbleWalk). */
+	if (!strcmp(a, "-marblewalk") && more)
+	{
+		HDRenderMarbleWalk(atoi(argv[++*at]));
+		return true;
+	}
+
+	/* -marblesky 0|1: the sky drawn into a mirror whose view holds a room
+	 * under the sky (HDRenderMarbleSky; 1, the engine's, where not given).
+	 */
+	if (!strcmp(a, "-marblesky") && more)
+	{
+		HDRenderMarbleSky(atoi(argv[++*at]) != 0);
 		return true;
 	}
 
@@ -11872,6 +11923,9 @@ static void ProbeMarble(const void* projection)
 		s.water, s.opaque, s.heights, ms, first, s.spread, s.rising,
 		s.copies, s.copies_water, s.buried, s.joined, s.slopes,
 		s.over, s.over_culled);
+	// How many of the frame's mirrors drew the sky (HDRenderMarbleSky).
+	printf("marblesky: planes %d of %d drawn\n", HDRenderMarbleSkyPlanes(),
+		s.drawn);
 
 	/* -marblecracks: each open edge of a mirror face, and the totals - the
 	 * edges closed, the open ones by their gap (under 1 unit, 1 to 4, 4 to
@@ -11949,6 +12003,25 @@ static void ProbeMarble(const void* projection)
 	if (g_marble_list)
 		printf("marblecpu: planes %d drawn %d calls %d cpu %.3f ms gpu %.4f "
 			"ms\n", s.planes, s.drawn, s.calls, cpu, ms);
+
+	/* -marblelist: one marblerooms line a drawn plane, the rooms its mirror
+	 * was given to draw whole (the rooms over and its own walk's), by
+	 * group; -marblepop reads them. */
+	for (int i = 0; g_marble_list && i < s.drawn; i++)
+	{
+		int g[512];
+		const int n = HDRenderMarblePlaneGroups(i, g, 512);
+
+		if (n < 0)
+			break;
+
+		printf("marblerooms: %d", i);
+
+		for (int k = 0; k < n; k++)
+			printf("%s%d", k ? "," : " ", g[k]);
+
+		printf("%s\n", n ? "" : " -");
+	}
 
 	/* One marbleplane line a plane of the frame, the drawn first in their
 	 * places' order, then by score; the pixels the occlusion count saw and
@@ -23901,6 +23974,352 @@ static int UnderTicks(int argc, char** argv, int at)
 	return failed ? 1 : 0;
 }
 
+/* -marblepop <file>: the mirrors along a walk, frame after frame - what a
+ * change of the frame's room list does to them: RoomProbe <5-folder>
+ * -marblepop <file> -roombox <folder> -out <prefix> [switches]. A line of
+ * the file is one frame of the walk, in the walk's order:
+ *
+ *   <frame> <LEVEL> <room> <x> <y> <z> target <tx> <ty> <tz> rooms <r,...>
+ *
+ * (world; a ROOMLIST line's frame, the camera's room, the eye and the
+ * frame's rooms, the nearest CAMLOG tick's target); `#` starts a comment,
+ * and a line "walk" starts a new walk, its next frame with none before it.
+ * Where a frame's rooms are not those of the frame before, the tool runs
+ * itself four times at that frame's eye (the camera of -walktarget, the
+ * rooms by -with, the switches after the file, -marblelist): with the
+ * rooms before and with the rooms after, each with the mirror (-marble 1)
+ * and without it (-marble 0), and prints
+ *
+ *   marblepop: <frame> room=<r> list=+<a,...>-<b,...> mirror=<pixels>
+ *   direct=<pixels> planes=<before>/<after> +<key,...>-<key,...>
+ *   mirrored=+<g,...>-<g,...>
+ *
+ * mirror the pixels more than 8 of 255 apart with the mirror where the two
+ * pictures without it are alike - the mirror's own change; direct those
+ * apart without it; planes the planes drawn before and after and the
+ * planes that come and go (a height, or s and a sloped plane's number;
+ * the marblelist lines); mirrored the rooms the mirrors draw that come and
+ * go - the frame's rooms and those every drawn plane draws whole (the
+ * marblerooms lines). Frames whose rooms are those of the frame before are
+ * counted, not drawn. A last marblepop line sums the frames, the changes,
+ * those moving the mirror, those by 100 pixels or more and the pixels.
+ * The pictures stay under <prefix>_<frame>_b1, _b0, _a1 and _a0. */
+static int MarblePop(int argc, char** argv, int at)
+{
+	FILE* f = at + 1 < argc ? fopen(argv[at + 1], "r") : 0;
+	char exe[MAX_PATH];
+	static char line[65536];
+	std::string folder, prefix = "marblepop", rest;
+
+	if (!f || argc < 2)
+	{
+		printf("marblepop: cannot read %s\n", at + 1 < argc ? argv[at + 1] :
+			"(no file)");
+		return 1;
+	}
+
+	GetModuleFileNameA(0, exe, sizeof(exe));
+
+	for (int i = 2; i < argc; i++)
+	{
+		if (i == at || i == at + 1)
+			continue;
+
+		const std::string a = argv[i];
+
+		if (a == "-out" && i + 1 < argc)
+		{
+			prefix = argv[++i];
+			continue;
+		}
+
+		// The mirror and its list are this tool's to set.
+		if (a == "-marble" && i + 1 < argc)
+		{
+			i++;
+			continue;
+		}
+
+		if (a == "-marblelist")
+			continue;
+
+		if (a == "-roombox" && i + 1 < argc)
+			folder = argv[i + 1];
+
+		rest += " \"" + a + "\"";
+	}
+
+	struct Frame
+	{
+		long frame = 0;
+		std::string level;
+		int room = -1;
+		long eye[3] = { 0, 0, 0 };
+		long target[3] = { 0, 0, 0 };
+		std::vector<int> rooms;
+	};
+
+	const auto join = [](const std::vector<std::string>& v)
+	{
+		std::string s;
+
+		for (size_t k = 0; k < v.size(); k++)
+			s += (k ? "," : "") + v[k];
+
+		return s;
+	};
+	const auto words = [](const std::vector<int>& v)
+	{
+		std::vector<std::string> s;
+
+		for (int r : v)
+			s.push_back(std::to_string(r));
+
+		return s;
+	};
+	// What `a` holds and `b` does not.
+	const auto minus = [](const std::set<std::string>& a,
+		const std::set<std::string>& b)
+	{
+		std::vector<std::string> v;
+
+		for (const std::string& s : a)
+			if (!b.count(s))
+				v.push_back(s);
+
+		return v;
+	};
+
+	/* One run of this tool at `cur`'s eye with `rooms`: the picture into
+	 * rgb, the drawn planes' keys and the rooms the mirrors draw into
+	 * planes and mirrored (with the mirror). */
+	const auto run = [&](const Frame& cur, const std::vector<int>& rooms,
+		bool mirror, const std::string& path, std::vector<unsigned char>& rgb,
+		long* w, long* h, std::set<std::string>& planes,
+		std::set<std::string>& mirrored)
+	{
+		const walkoff::Room& seed = walkoff::g_room[(size_t)cur.room];
+		std::string with;
+
+		for (int r : rooms)
+		{
+			if (r == cur.room || r < 0 || r >= (int)walkoff::g_room.size())
+				continue;
+
+			const walkoff::Room& o = walkoff::g_room[(size_t)r];
+
+			with += " -with " + std::to_string(r) + " " +
+				std::to_string(o.x - seed.x) + " 0 " +
+				std::to_string(o.z - seed.z);
+		}
+
+		const std::string cmd = std::string("\"\"") + exe + "\" \"" +
+			argv[1] + "\" " + cur.level + " " + std::to_string(cur.room) +
+			" " + std::to_string(cur.eye[0] - seed.x) + " " +
+			std::to_string(cur.eye[1]) + " " +
+			std::to_string(cur.eye[2] - seed.z) + " 0 0 -walktarget " +
+			std::to_string(cur.target[0]) + " " +
+			std::to_string(cur.target[1]) + " " +
+			std::to_string(cur.target[2]) + with + rest +
+			(mirror ? " -marble 1 -marblelist" : " -marble 0") +
+			" -out \"" + path + "\" 2>NUL\"";
+		FILE* p = _popen(cmd.c_str(), "r");
+		char out[8192];
+
+		planes.clear();
+		mirrored.clear();
+
+		for (int r : rooms)
+			mirrored.insert(std::to_string(r));
+
+		mirrored.insert(std::to_string(cur.room));
+
+		while (p && fgets(out, sizeof(out), p))
+		{
+			char kind[16];
+			int k = 0, key = 0, n = 0;
+
+			if (sscanf(out, "marblelist: %d %15s %d %n", &k, kind, &key, &n) ==
+				3 && strstr(out, " drawn "))
+				planes.insert((strcmp(kind, "slope") ? "" : "s") +
+					std::to_string(key));
+			else if (sscanf(out, "marblerooms: %d %n", &k, &n) == 1)
+				for (const char* s = out + n; *s; )
+				{
+					char* end = 0;
+					const long g = strtol(s, &end, 10);
+
+					if (end == s)
+						break;
+
+					mirrored.insert(std::to_string(g));
+					s = end;
+
+					while (*s == ',')
+						s++;
+				}
+		}
+
+		if (p)
+			_pclose(p);
+
+		return ReadOwnPng(path + "_" + cur.level + "_r" +
+			std::to_string(cur.room) + ".png", rgb, w, h);
+	};
+
+	std::string loaded;
+	Frame prev;
+	bool have = false;
+	long frames = 0, changes = 0, moving = 0, big = 0, pixels = 0;
+	int failed = 0;
+
+	while (fgets(line, sizeof(line), f))
+	{
+		char* hash = strchr(line, '#');
+
+		if (hash)
+			*hash = 0;
+
+		// A line "walk": a new walk starts, no frame before it.
+		if (!strncmp(line, "walk", 4))
+		{
+			have = false;
+			continue;
+		}
+
+		Frame cur;
+		char level[32], kind[16], word[16];
+		int n = 0;
+
+		if (sscanf(line, "%ld %31s %d %ld %ld %ld %15s %ld %ld %ld %15s %n",
+			&cur.frame, level, &cur.room, &cur.eye[0], &cur.eye[1],
+			&cur.eye[2], kind, &cur.target[0], &cur.target[1],
+			&cur.target[2], word, &n) != 11 || strcmp(kind, "target") ||
+			strcmp(word, "rooms"))
+			continue;
+
+		cur.level = level;
+
+		for (const char* s = line + n; *s; )
+		{
+			char* end = 0;
+			const long r = strtol(s, &end, 10);
+
+			if (end == s)
+				break;
+
+			cur.rooms.push_back((int)r);
+			s = end;
+
+			while (*s == ',')
+				s++;
+		}
+
+		std::sort(cur.rooms.begin(), cur.rooms.end());
+		cur.rooms.erase(std::unique(cur.rooms.begin(), cur.rooms.end()),
+			cur.rooms.end());
+		frames++;
+
+		if (loaded != cur.level)
+		{
+			if (folder.empty() || !walkoff::Load(folder, cur.level.c_str()))
+			{
+				printf("marblepop: %ld needs -roombox with %s.TRC\n",
+					cur.frame, cur.level.c_str());
+				failed++;
+				have = false;
+				continue;
+			}
+
+			loaded = cur.level;
+		}
+
+		if (cur.room < 0 || cur.room >= (int)walkoff::g_room.size())
+		{
+			printf("marblepop: %ld: room %d is not in %s\n", cur.frame,
+				cur.room, cur.level.c_str());
+			failed++;
+			have = false;
+			continue;
+		}
+
+		const bool alike = have && prev.level == cur.level &&
+			prev.rooms == cur.rooms;
+		const Frame before = prev;
+
+		prev = cur;
+
+		if (!have || alike)
+		{
+			have = true;
+			continue;
+		}
+
+		changes++;
+
+		const std::string at0 = prefix + "_" + std::to_string(cur.frame);
+		std::vector<unsigned char> b1, b0, a1, a0;
+		long w[4] = { 0, 0, 0, 0 }, h[4] = { 0, 0, 0, 0 };
+		std::set<std::string> pb, pa, mb, ma, none, none2;
+
+		if (!run(cur, before.rooms, true, at0 + "_b1", b1, &w[0], &h[0], pb,
+			mb) || !run(cur, before.rooms, false, at0 + "_b0", b0, &w[1],
+			&h[1], none, none2) || !run(cur, cur.rooms, true, at0 + "_a1",
+			a1, &w[2], &h[2], pa, ma) || !run(cur, cur.rooms, false,
+			at0 + "_a0", a0, &w[3], &h[3], none, none2) || w[0] != w[1] ||
+			w[0] != w[2] || w[0] != w[3] || h[0] != h[1] || h[0] != h[2] ||
+			h[0] != h[3])
+		{
+			printf("marblepop: %ld no pictures\n", cur.frame);
+			failed++;
+			continue;
+		}
+
+		long own = 0, direct = 0;
+
+		for (size_t i = 0; i + 2 < a1.size(); i += 3)
+		{
+			int on = 0, off = 0;
+
+			for (int c = 0; c < 3; c++)
+			{
+				const int d1 = abs((int)b1[i + c] - (int)a1[i + c]);
+				const int d0 = abs((int)b0[i + c] - (int)a0[i + c]);
+
+				on = d1 > on ? d1 : on;
+				off = d0 > off ? d0 : off;
+			}
+
+			direct += off > 8;
+			own += on > 8 && off <= 8;
+		}
+
+		std::set<std::string> lb, la;
+
+		for (const std::string& s : words(before.rooms))
+			lb.insert(s);
+
+		for (const std::string& s : words(cur.rooms))
+			la.insert(s);
+
+		moving += own > 0;
+		big += own >= 100;
+		pixels += own;
+		printf("marblepop: %ld room=%d list=+%s-%s mirror=%ld direct=%ld "
+			"planes=%d/%d +%s-%s mirrored=+%s-%s\n", cur.frame, cur.room,
+			join(minus(la, lb)).c_str(), join(minus(lb, la)).c_str(), own,
+			direct, (int)pb.size(), (int)pa.size(),
+			join(minus(pa, pb)).c_str(), join(minus(pb, pa)).c_str(),
+			join(minus(ma, mb)).c_str(), join(minus(mb, ma)).c_str());
+	}
+
+	fclose(f);
+	printf("marblepop: %ld frames, %ld changes, %ld moving the mirror, %ld "
+		"of 100 px or more, %ld px; %d without pictures\n", frames, changes,
+		moving, big, pixels, failed);
+	return failed ? 1 : 0;
+}
+
 int main(int argc, char** argv)
 {
 	for (int i = 2; i + 1 < argc; i++)
@@ -23910,6 +24329,10 @@ int main(int argc, char** argv)
 	for (int i = 2; i + 2 < argc; i++)
 		if (!strcmp(argv[i], "-undertick"))
 			return UnderTicks(argc, argv, i);
+
+	for (int i = 1; i + 1 < argc; i++)
+		if (!strcmp(argv[i], "-marblepop"))
+			return MarblePop(argc, argv, i);
 
 	for (int i = 1; i < argc; i++)
 		if (!strcmp(argv[i], "-windowcycle"))

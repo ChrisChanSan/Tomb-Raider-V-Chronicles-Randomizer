@@ -286,6 +286,108 @@ inline void HDMarbleOverRooms(const std::vector<std::vector<int> >& up,
 	}
 }
 
+/* A plane's own walk (hd_render.cpp, the mirrors' rooms): from the groups
+ * holding the plane's faces (`start`) out through every portal - `up` and
+ * `side` by room number, `table` and `rooms` as HDMarbleGroupOf takes them
+ * - to `depth` portals; a group is asked once, `seen(group, via)` answers
+ * whether the plane's mirrored view can show it, and only a group seen is
+ * taken and walked on from. Each taken group with the start it was found
+ * from (`via`); the starts themselves are not listed. The walk does not
+ * read the frame's list, so what the mirror holds does not change when
+ * the eye's walk lists a room one frame and not the next. */
+template <class Seen>
+inline void HDMarbleWalk(const std::vector<std::vector<int> >& up,
+	const std::vector<std::vector<int> >& side, const short* table,
+	int rooms, int groups, const std::vector<int>& start, int depth,
+	Seen seen, std::vector<HDMarbleOverRoom>& out)
+{
+	std::vector<char> asked(groups > 0 ? (size_t)groups : 0, 0);
+	std::vector<HDMarbleOverRoom> ring, next;
+
+	out.clear();
+
+	for (int g : start)
+		if (g >= 0 && g < groups && !asked[(size_t)g])
+		{
+			asked[(size_t)g] = 1;
+			ring.push_back({ g, g });
+		}
+
+	for (int d = 0; d < depth && !ring.empty(); d++)
+	{
+		next.clear();
+
+		for (const HDMarbleOverRoom& r : ring)
+			for (int pass = 0; pass < 2; pass++)
+			{
+				const std::vector<std::vector<int> >& doors = pass ? side : up;
+
+				if (r.group >= (int)doors.size())
+					continue;
+
+				for (int room : doors[(size_t)r.group])
+				{
+					const int g = HDMarbleGroupOf(room, table, rooms, groups);
+
+					if (g < 0 || asked[(size_t)g])
+						continue;
+
+					asked[(size_t)g] = 1;
+
+					if (!seen(g, r.via))
+						continue;
+
+					out.push_back({ g, r.via });
+					next.push_back({ g, r.via });
+				}
+			}
+
+		ring.swap(next);
+	}
+}
+
+/* How many of a frame's noted draws (hd_render.cpp, HDRenderMarbleDraw:
+ * `passes`, each draw's pass mask in the frame's order) lead the list with
+ * the solid passes alone (`solid`, HD_PASS_SOLID): the frame draws its
+ * solid phase first, every pixel written and its depth with it, then the
+ * clear floors, the glass and the glows, which blend over what is behind
+ * them. A mirror draws its sky after that run and before the rest, so the
+ * depth test drops the sky behind the solid draws and every see-through
+ * draw still lies over the sky, as it does with the sky drawn first. A
+ * draw of no pass (0) is in the run. */
+inline size_t HDMarbleSolidRun(const std::vector<unsigned int>& passes,
+	unsigned int solid)
+{
+	size_t k = 0;
+
+	while (k < passes.size() && !(passes[k] & ~solid))
+		k++;
+
+	return k;
+}
+
+/* Whether group `group` draws a room under the sky (hd_render.cpp,
+ * marble_sees_open): `open[g]` is 1 for such a group; a group out of the
+ * table is none. */
+inline bool HDMarbleOpen(const std::vector<char>& open, int group)
+{
+	return group >= 0 && (size_t)group < open.size() && open[(size_t)group];
+}
+
+/* The sky's matrix in a mirror (hd_render.cpp, marble_sky): a room's
+ * matrix with the view, `modelView` (row vectors, sixteen floats), turned
+ * as the view is and moved by nothing - the sky centred on the eye, as the
+ * frame's sky is drawn about the camera. */
+inline void HDMarbleSkyTurn(const float* modelView, float* out)
+{
+	for (int k = 0; k < 16; k++)
+		out[k] = modelView[k];
+
+	out[3] = out[7] = out[11] = 0.0f;
+	out[12] = out[13] = out[14] = 0.0f;
+	out[15] = 1.0f;
+}
+
 /* A sloped face's plane (hd_render.cpp, marble_build): the normal of the
  * face `p` (nine floats, the group's own x and z, the world's y) turned up
  * (y negative) and of length 1, and its distance in world space, the

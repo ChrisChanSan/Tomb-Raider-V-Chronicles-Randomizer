@@ -25897,6 +25897,120 @@ static void marble_over()
 		"marble over: rooms out of range are none", (int)out.size(), 0);
 }
 
+/* The marble floors' own walk and the sky (hd_marble_math.h,
+ * HDMarbleWalk, HDMarbleOpen, HDMarbleSkyTurn, HDMarbleSolidRun). */
+static void marble_walk()
+{
+	printf("the marble floors: a plane's own walk and the sky\n");
+
+	/* A plane's own walk (HDMarbleWalk) from room 0 along a corridor 0 -
+	 * 2 - 7 - 6, with 1 over 0 and 4 over 1; room 7 not seen. */
+	std::vector<std::vector<int> > wu(8), ws(8);
+	std::vector<HDMarbleOverRoom> walk;
+	const std::vector<int> start = { 0 };
+	const auto all = [](int, int) { return true; };
+	const auto no7 = [](int g, int) { return g != 7; };
+
+	wu[0] = { 1 };
+	wu[1] = { 4 };
+	ws[0] = { 2 };
+	ws[2] = { 0, 7 };
+	ws[7] = { 2, 6 };
+
+	HDMarbleWalk(wu, ws, 0, 0, 8, start, 0, all, walk);
+	ok(walk.empty(), "marble walk: no portal, no room", (int)walk.size(), 0);
+
+	HDMarbleWalk(wu, ws, 0, 0, 8, start, 1, all, walk);
+	ok(walk.size() == 2 && walk[0].group == 1 && walk[1].group == 2 &&
+		walk[0].via == 0 && walk[1].via == 0,
+		"marble walk: one portal, the room over and beside, by the start",
+		(int)walk.size(), 2);
+
+	HDMarbleWalk(wu, ws, 0, 0, 8, start, 3, all, walk);
+	ok(walk.size() == 5 && walk[4].group == 6,
+		"marble walk: three portals, each room once, the start not listed",
+		(int)walk.size(), 5);
+
+	HDMarbleWalk(wu, ws, 0, 0, 8, start, 3, no7, walk);
+
+	bool past = false;
+
+	for (const HDMarbleOverRoom& w : walk)
+		past = past || w.group == 7 || w.group == 6;
+
+	ok(!past && walk.size() == 3,
+		"marble walk: a room its view cannot show ends the walk there",
+		(int)walk.size(), 3);
+
+	// Two starts: neither is listed, each room by the start it came from.
+	const std::vector<int> two = { 0, 2 };
+
+	HDMarbleWalk(wu, ws, 0, 0, 8, two, 1, all, walk);
+	ok(walk.size() == 2 && walk[0].group == 1 && walk[0].via == 0 &&
+		walk[1].group == 7 && walk[1].via == 2,
+		"marble walk: two starts, each room by the start it came from",
+		(int)walk.size(), 2);
+
+	// The flip: room 2 drawn as group 5 now.
+	const short wt[8] = { 0, 1, 5, 3, 4, 2, 6, 7 };
+
+	HDMarbleWalk(wu, ws, wt, 8, 8, start, 1, all, walk);
+	ok(walk.size() == 2 && walk[1].group == 5,
+		"marble walk: a flip map names the group that draws the room",
+		walk.size() == 2 ? walk[1].group : -1, 5);
+
+	// The sky's rooms: a group under the sky, none out of the table.
+	std::vector<char> open(4, 0);
+
+	open[2] = 1;
+	ok(HDMarbleOpen(open, 2) && !HDMarbleOpen(open, 1) &&
+		!HDMarbleOpen(open, -1) && !HDMarbleOpen(open, 4),
+		"marble sky: the open groups, none out of range", 0, 0);
+
+	// The sky's matrix: the view's turn kept, its move left out.
+	const float mv[16] = { 0.0f, 0.0f, -1.0f, 0.5f, 0.0f, 1.0f, 0.0f, 0.5f,
+		1.0f, 0.0f, 0.0f, 0.5f, 120.0f, -340.0f, 9000.0f, 2.0f };
+	float turn[16];
+
+	HDMarbleSkyTurn(mv, turn);
+	ok(turn[2] == -1.0f && turn[5] == 1.0f && turn[8] == 1.0f &&
+		turn[12] == 0.0f && turn[13] == 0.0f && turn[14] == 0.0f &&
+		turn[3] == 0.0f && turn[7] == 0.0f && turn[11] == 0.0f &&
+		turn[15] == 1.0f,
+		"marble sky: turned as the view, centred on the eye", 0, 0);
+
+	/* Where the sky goes in among a frame's noted draws (HDMarbleSolidRun):
+	 * after the run of solid draws that leads the list. The masks as
+	 * hd_render.h has them: opaque 1, alpha 2 (the solid passes 3),
+	 * additive 4, blend 8, clear 16. */
+	const unsigned int solid = 0x3;
+	const std::vector<unsigned int> none;
+	const std::vector<unsigned int> frame = { 3, 3, 1, 2, 3, 16, 8, 8, 4 };
+	const std::vector<unsigned int> glass = { 8, 3, 3 };
+	const std::vector<unsigned int> nothing = { 3, 0, 3, 8 };
+	const std::vector<unsigned int> mixed = { 3, 11, 3 };
+	const std::vector<unsigned int> solids = { 3, 3, 3 };
+
+	ok(HDMarbleSolidRun(none, solid) == 0,
+		"marble sky: no noted draw, the sky first",
+		(int)HDMarbleSolidRun(none, solid), 0);
+	ok(HDMarbleSolidRun(frame, solid) == 5,
+		"marble sky: after the solid phase, before the clear floors",
+		(int)HDMarbleSolidRun(frame, solid), 5);
+	ok(HDMarbleSolidRun(glass, solid) == 0,
+		"marble sky: a see-through draw first keeps the sky first",
+		(int)HDMarbleSolidRun(glass, solid), 0);
+	ok(HDMarbleSolidRun(nothing, solid) == 3,
+		"marble sky: a draw of no pass stays in the run",
+		(int)HDMarbleSolidRun(nothing, solid), 3);
+	ok(HDMarbleSolidRun(mixed, solid) == 1,
+		"marble sky: a draw with a blended pass ends the run",
+		(int)HDMarbleSolidRun(mixed, solid), 1);
+	ok(HDMarbleSolidRun(solids, solid) == 3,
+		"marble sky: all solid, the sky after them all",
+		(int)HDMarbleSolidRun(solids, solid), 3);
+}
+
 /* The marble floors' slopes (hd_marble_math.h): a sloped face's plane, its
  * normal up and of length 1 in either winding, its distance in world space
  * with the group's origin; a level face's plane is the floor's height; two
@@ -27417,6 +27531,7 @@ int main()
 	marble_places();
 	marble_counts();
 	marble_over();
+	marble_walk();
 	marble_slopes();
 	marble_every();
 	debris_pieces();

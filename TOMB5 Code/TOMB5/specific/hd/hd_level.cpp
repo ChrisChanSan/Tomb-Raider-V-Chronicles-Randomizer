@@ -15,6 +15,7 @@
 #include "hd_switch.h"			// HDDrawn - the world drawn HD or classic
 #include "hd_memory.h"			// the address space, and the rule that spends it
 #include "hd_outfitmenu.h"		// the footsteps follow the outfit
+#include "hd_feet.h"			// HDFeetSay - the FEET line at the load
 #include "hd_install.h"
 #include "hd_bind.h"
 #include "hd_lara.h"			// HD_LARA_OUTFIT_* - the data[3] agreement
@@ -6917,6 +6918,9 @@ void HDLevelBuild()
 	 * and nothing to say about either. */
 	if (HDEnabled())
 		HDOutfitMenuFollowFeet();
+
+	// The FEET line behind -log: the sets and the outfit, once both are known.
+	HDFeetSay();
 }
 
 /* The build of a level whose HD data HDLevelUnload kept for this load

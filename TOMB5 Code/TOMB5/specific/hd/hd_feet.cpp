@@ -473,6 +473,31 @@ void HDFeetLevelBuild(short* lut, SAMPLE_INFO* infos, int infoCount, int spare,
 		SFX_FOOTSTEPS_MUD, SFX_FOOTSTEPS_METAL, kStepsId);
 }
 
+void HDFeetSay()
+{
+	char bare[32], boots[32];
+
+	if (!g_lut)
+		return;
+
+	if (g_bareSteps >= 0)
+		snprintf(bare, sizeof(bare), "%d,%d", (int)g_bareSteps,
+			(int)g_bareLand);
+	else
+		snprintf(bare, sizeof(bare), "none");
+
+	if (g_bootSteps >= 0)
+		snprintf(boots, sizeof(boots), "%d,%d", (int)g_bootSteps,
+			(int)g_bootLand);
+	else
+		snprintf(boots, sizeof(boots), "none");
+
+	Log("FEET ordinary=\"%s\" boots=%s bare=%s outfit=%s drawn=%s "
+		"boots_infos=%s", g_ordinary, g_bootSteps >= 0 ? "unmodded" : "none",
+		bare, g_bare ? "bare" : "boots", HDLaraDrawActive() ? "hd" : "sd",
+		boots);
+}
+
 bool HDFeetAvailable()
 {
 	return g_bareSteps >= 0;

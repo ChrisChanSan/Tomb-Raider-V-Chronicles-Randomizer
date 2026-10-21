@@ -181,6 +181,11 @@ void HDFeetNoteSample(int levelSample, long pcmBytes22k);
 // Thrown away with the level. The tables themselves are game_malloc's.
 void HDFeetLevelEnd();
 
+/* The FEET line behind -log, once a level's outfit is known: what the
+ * ordinary set is, whether the unmodded boots are loaded, the bare set's
+ * entries and what the outfit wants. Silent in a level that built no sets. */
+void HDFeetSay();
+
 // Is there a barefoot set in this level at all? False means the F4 row says
 // "unavailable" and the log says why.
 bool HDFeetAvailable();

@@ -29102,6 +29102,195 @@ to and the uploads in play.
 *Commits.* `d3cc638` (the build gate and the draw's gates), `6366176` (the row and the
 switch as one state), `5d9da2f` (the build gate's comment), and the record's own commit.
 
+### The installation gate: the HD build row and the TR3 sources (#230)
+2026-10-21 - 2026-10-22
+
+**What.** Five things around the installations the engine and the randomizer read at
+run time. The search for the Remasters and the Mods scan walk every folder with wide
+names and error codes and cannot throw any more; a root the system code page cannot
+spell is refused with one line. One `INSTALL` line behind `-log` says what the search
+found and why. A row *HD build* on the *Graphics* page switches the HD build off for
+good, from the next level load on, so a player who plays classic gets the short loads
+back. The randomizer reads Tomb Raider III from the I-III Remastered folder `3` as
+well as from the original release, names the edition of the files it reads and warns
+on an unknown one, gives its planner the resolved folders and the same presence test
+as the greying, removes stale `.hdm` sidecars when it restores a level, and writes the
+TR3 state into `spoiler.txt`. And RICH1's door that "plays Lara's footsteps" in a tool
+was measured: it is a tool's misreading of a count Core left negative, and nothing of
+it runs in the engine.
+
+**Why.** The play test, after the analysis and the measurements: "Measure everything,
+then we are safe; leave no question open. The more robust the better." Then: "No build
+on demand. As it is now, only with the extra that a user can disable HD completely.
+Then they have the short load times again, and HD can still switch on the fly." On the
+Tomb Raider III files of another edition: "TR3 files: warn. Nice side effect: the TR3
+DLC can be read from the Remaster too; it is hard to get, it was the only thing that
+had to be bought." On the seed: "Seed: yes" - the TR3 state goes into `spoiler.txt`
+only, the seed stays. On the odd commands in RICH1: "It may be the crawl roll, it was
+buggy there and was forgotten. We append animation sets to every level, like
+Andrea1's underwater pickups."
+
+**Measured before the change.** The engine runs in the system's ANSI code page
+(no manifest code page, character set "not set"; 1252 on the test machine). The
+round's harness links the base's `hd_install.cpp` and `hd_mods.cpp` and the head's,
+built as the engine is (v142, Win32, `/std:c++17`), and walks folders it makes itself
+with a Cyrillic, a CJK and a Latin-1 ("Tomb Über") name:
+
+| case | base | head |
+|---|---|---|
+| override folder holding a Cyrillic and a CJK entry beside a Latin-1 bundle | `HDInstallRoot` throws `system_error`; afterwards both roots empty, diagnostics EMPTY | the Latin-1 bundle found, no throw |
+| override folder whose IV-VI bundle sits in a Cyrillic folder | throws | found; "install path not representable in the system code page: HD off", root empty |
+| I-III override whose bundle sits in a CJK folder | throws | found; the I-III line, the guests classic |
+| library path (UTF-8, as `libraryfolders.vdf` spells it) with a Cyrillic, a CJK, a Latin-1 letter | `is_directory` false, error 2, for all three: passed over without a note | walked; Cyrillic and CJK refused with the line, Latin-1 found and handed on |
+| Mods folder with a Latin-1 mod, a Cyrillic mod and a CJK list | `HDModsScan` throws | 2 mods (Plain, Tomb Über Mod), 2 `MODLOG skipped` lines |
+| Mods folder with only "Tomb Über Mod" and a plain mod | `HDModsScan` throws | both found |
+| no override, this machine's Steam | both roots found | the same roots and the same notes, line for line |
+
+The last but one row is a finding of this round: the scan kept its paths in the code
+page (`path::string()`) and asked the file system about them through `u8path`, which
+throws on any byte that is not UTF-8, so a German umlaut in a mod's folder name ended
+the game at the first level load - with `hd_build` 0 as well, since the sound bank
+chain scans the Mods folder first. The price of the HD build for a player who never
+presses F12, from the play test's log (eight levels and the title): 1.25 to 4.78 s more
+per level load, median 2.8 s; 232 to 475 MiB of texture pages and 10 to 62 MiB of room
+buffers on the card; 7 to 17 MiB of managed model buffers. On the randomizer side, with
+the Remastered folder `3` as the TR3 path, the GUI greyed the guests but its planner
+kept them (it got the raw path), and every level that drew one became an ERROR row
+"(sounds): MAIN.SFX not readable"; the command line ended with exit code 1 (Andrea1,
+seed 380, `mix cross allsanity 8 weapons outfit-tr3`: "Raptor (sounds): MAIN.SFX not
+readable").
+
+**The rule from the data.** A name is compared wide and turned into the code page only
+where a narrow file call needs it, and only when it survives the trip there and back
+(`WC_NO_BEST_FIT_CHARS`). Seventeen narrow opens and listings in twelve files take a
+path made from a root (the page cache three, the `.TRM` and `.TRL` readers two each,
+the binder two, the `.TRG` scan, the font, the springs, the debris, the classic pages,
+the sound bank, the level key's stamp and the folder listing one each): over the twelve
+set as the limit for turning them wide, so the root is refused at the source and the
+sites stay narrow. The I-III Remastered keeps the TR3 levels in `3\DATA`, The Lost
+Artifact in `3\DATA\LA` and the bank in `3\SFX`; the bank's 414 waves are the
+original's byte for byte behind a 740-byte head the wave reader steps over, and four of
+its five levels have the original's size, so only a hash tells the editions apart.
+
+**Design.** *The resolver* (`specific/hd/hd_install.cpp`, the new pure header
+`hd_install_names.h`): `child` walks with `increment(ec)` and compares with
+`_wcsicmp`; Steam's folder is read with `RegGetValueW`, the vdf's paths as UTF-8 (the
+code page as the fallback); the roots are found wide and handed on by `narrow_root`;
+`search` runs the walk inside a try/catch whose catch writes the reason.
+`HDInstallSearched` asks nothing; `HDInstallAddLibrary` is for the tools. *The Mods
+scan* (`hd_mods.cpp`) keeps its paths in the code page and asks the file system in that
+same code page; a name that does not fit is skipped with one line; the scan has the
+same net. *The `INSTALL` line* (`specific/file.cpp`, once, after the first load thread
+has joined): `INSTALL hd=<root|none> tr3=<root|none> reason=<notes joined with " | ">
+bank=<mod|audio|install|level>` - after the join rather than at the first resolver call,
+because with `hd_build` 0 that call is the sound bank chain's on the load thread, and
+the bank is known only once the chain ran; the line looks nothing up, so `hd_build` 0
+walks no library it did not walk before. *The row* (`game/menu_frame.cpp`): *HD build*,
+on and off, default on, right above *HD textures*; it shows and steps
+`tomb5_hd_build_next` (`tomb5/tomb5.h` and `.cpp`), which the save writes as
+`hd_build`; the gate in force, `tomb5.hd_build`, takes it at the top of
+`S_LoadLevelFile`, before `HDLevelKeyEarly` asks `HDEnabled` for the first time. Every
+reader of `tomb5.hd_build` - `HDEnabled`, the load bar's share, `HDLevelBuild`'s
+ahead-drop, the switch's cause, the outfit window's text - reads it and none writes it,
+so a step in a running level changes nothing until the next load; turned off, the level
+before is still released (`HDLevelUnload` and `HDLevelBuild` release whatever the gate
+says). F12 with the gate off shows "HD is off" for 30 drawn frames in the ammo hotkeys'
+caption (`hd_switch.cpp`), where the switch line names `hd_build=0`. *The randomizer*:
+`Tr3Source::resolveBank` (beside the level, `data\MAIN.SFX`, the `SFX` beside a `DATA`)
+for `sfxPath`, the GUI and the command line; `resolveTr3Gold` also in `DATA\LA` and
+`LA`; one test, `guestFilesThere`, for the greying and the planner, which now gets the
+resolved folder only where the test passes; `opt.tr3Outfits` needs a resolved TR3 level
+folder, and an outfit whose level is missing goes into the planner's `outfitsOff`
+(`Tr3Source::missingOutfits`); the command line makes the same test and runs guest-free
+with one line. `Preparation/Tr3Checksums.csv` carries an `Edition` column and the six
+Remastered rows; `Tr3Edition::check` (`DataFolder.cpp`) hashes the TR3 files a run
+reads, keeps each hash in the package cache's `Tr3Hashes.txt` under its path, size and
+write time, and names the edition; an unknown one gets "TR3 files of an unknown
+edition: guest sounds and textures may differ" in the result rows (*done, warning*), the
+status line, `spoiler.txt` and on the command line, and the run goes on.
+`DataFolder::copyLevels` removes `<stem>.hdm` for every level it copies, so the Copy
+phase cleans up as Restore does. `spoiler.txt` gains `TR3 SOURCES` (both editions, the
+guests available, the TR3 outfits in the pool) and names the deselected kinds and
+outfits.
+
+**RICH1's door and the crawl roll.** The measurement saw RICH1's `DOOR_TYPE4` (slot 290)
+animation 655 listing 2,650 commands with sound ids 0, 4 and flipeffect 32 in the
+randomized file, against 64 in the vanilla one. Measured with AnimCmd, ItemCheck,
+LaraAnim and a probe of the animation records over the vanilla and the randomized
+file: both slots are used (six `DOOR_TYPE4` items in room 15, one `ANIMATING2` in room
+162, in both files); 655 is the door's own first animation (the vanilla file has 764
+animations, not 655) and `ANIMATING2`'s is 739, and both records carry a command count
+of 43690 (`0xAAAA`) where the next animation's index shows they own none. The records
+are byte for byte the same in the randomized file. The engine reads the count as
+`short`, -21846, and runs commands only for a count above 0 (`AnimateItem`), so none of
+them runs; AnimCmd reads it unsigned and walks on through the following animations'
+commands - in the vanilla file the 192 words to the block's end, in the randomized one
+into the appended commands, which is where ids 0, 4 and 17 and flipeffect 32 came from.
+The same pattern stands in ten records of seven vanilla levels (ANDY1 587 and ANDY3 593
+`MESHSWAP1` 65534, JOBY2 698 slot 423, JOBY4 481 and 482, RICH1 655 and 739, RICH3 649
+slot 68, TITLE 567 and 568), none of them a slot the randomizer transfers. The crawl roll
+is Lara's duck roll, animations 218 to 220 (`lara_duck`, `AS_DUCKROLL`): stubs in the
+vanilla RICH1 (frame size 0), handed over in the randomized file with their own frame
+data, the donor's rates and sizes (37, 39, 37), its three sounds rebased onto RICH1's
+frame numbers (frames 3 and 11 of 219, as in ANDY1 and JOBY4) and the chain intact (218
+to 219 at 4275, 219 to 220 at 4275, 220 to 222 at 4302, 222's first frame). Nothing to
+fix there; PICKUPF (204), DUCKPICKUPF (312) and AIRLOCKSW (470) are handed over too.
+
+**Decisions.** No build on demand (the play test's word). The row's value becomes the
+gate at the next load only, because the gate is one fact for a whole level and the gate
+lines are not touched; the row says so in the manual rather than in its caption. The
+notice uses the one caption the engine already draws in play, so it fits eleven
+letters. The roots are refused rather than the seventeen sites turned wide. The
+`INSTALL` line comes after the first join, not at the first resolver call (above). The
+TR3 editions are warned about and never refused; the seed and the RNG consumption are
+unchanged, and the TR3 state goes into `spoiler.txt` only. The planner's change touches
+only paths that did not resolve their files: for a working installation it sees
+non-empty paths exactly when it did.
+
+**Checked.** The nine build scripts exit 0 at the base and at the head. ModernTest 16140
+checks at the base and 16155 here (15 in `install_names`), MenuTest 44917 and 44938 (20
+in `graphics_build_row`, one more row in the Graphics table's sweep), InterpTest 754
+and 754, LipsTest 299 and 272 (with and without the scratch object folder, the game's
+`cutseq.bin` given by its path) at both, 0 failed. The harness above, before and after.
+The randomizer's own `Tr3Source` on the original and the Remastered folders: `3` and
+`3\DATA` give `3\data` and `3\DATA\LA` and the bank in `3\SFX`; all four guests fetch
+from it with sound packages identical to the original's (260,194, 229,570, 55,858 and
+94,600 bytes). The command line on Andrea1, seed 380: the original folders "original"/
+"original"; `3` and `3\DATA` "Remastered" for both, guests fetched, exit 0 (the base:
+exit 1); the original TR3 with the Remastered Gold "original"/"Remastered"; a copy of
+`CRASH.TR2` with one texel byte flipped "unknown edition (CRASH.TR2)", the WARNING,
+guests fetched, exit 0; a folder with `CRASH.TR2` alone the guest-free line, the Jungle
+outfit drawn, exit 0 (the base: exit 1). A probe linking `DataFolder.cpp`: at the base
+both sidecars of two restored levels stay, now both go and a foreign `.hdm` stays. The
+regression of `Preparation/Verification.md`, base against head, the command line, seed
+380, `mix cross allsanity 8 weapons`, all thirteen campaign levels, `.trc` and `.hdm`:
+with the TR3 guests and outfits from the original TR3 and Gold (10 levels draw a guest,
+6 a TR3 outfit), without them, and with the original TR3 and the Remastered Gold - 78
+of 78 files byte-identical. TestRando over the thirteen levels prints the same at the
+base and here. With `hd_build` 0 and the same files the engine's output differs from
+the base's by the one `INSTALL` line: the search is reached by the same callers as
+before (the line looks nothing up), and for this machine's Steam the harness gives the
+same roots and notes.
+
+**Left.** The engine and the GUI were not run here: the row, the notice, the
+`INSTALL` line, the result rows and `spoiler.txt` are proved from the code, the
+builds and MenuTest's reading of the tree, and the first look is the play test's. The
+row's caption has no string row in `game/gameflow.cpp`'s table, outside this round's
+files, so it reads *HD build* in every language. The HD font, made once a session, stays
+after the row turns the build off while *HD textures* is on (`HDFontGlyphAt` asks the
+draw alone, a line of the HD gate this round does not edit). `global/types.h` still says
+`hd_build` is "registry only, read at the game's start". A notice for a stale
+`hd_install` override in the options, and a wide spelling of the override itself, were
+left out. The seventeen narrow sites stay narrow. `Tr5Transfer.cpp` reads a donor
+animation's command count unsigned and walks it without a bound; no slot it transfers
+carries a negative count today.
+
+**Commits.** `25cbabbb` (the walks and the wide names), `19a9b871` (the code page line),
+`7bd4644f` (the `INSTALL` line), `325a44bf` (the HD build row), `fd45a98f` (the TR3
+bank), `b28f1f76` (Gold in `DATA\LA`), `f0a48d2a` (the planner's test), `ffafd867` (the
+editions), `c8f9ccf2` (an outfit whose level is missing), `e41b2988` (the `.hdm`
+cleanup), `473f439b` (`spoiler.txt`) and the record.
+
 ### The gamma row (#220)
 2026-10-18
 
@@ -31542,3 +31731,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #224 | The search objects' binding and the double doors (#224) |
 | #225 | The zoom at the frame rate (#225) |
 | #226 | The translucent parts of HD models and JOBY2's window (#226) |
+| #230 | The installation gate: the HD build row and the TR3 sources (#230) |

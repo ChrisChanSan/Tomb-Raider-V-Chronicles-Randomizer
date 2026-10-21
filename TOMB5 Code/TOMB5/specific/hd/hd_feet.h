@@ -43,6 +43,14 @@
 // is a picture and is not touched. Sound id 17 (the wet foot) is not switched:
 // there is one dry barefoot set and no wet one.
 //
+// Who walks. Ids 0 and 4 are not Lara's alone: measured with AnimCmd, a guard
+// (BLUE_GUARD, BLUE_GUARD2, SWAT_PLUS_MIP on the guard's animation), MAFIA2,
+// HITMAN and CYBORG play them from their own animations, and the weapon item
+// of a one-handed gun carries id 0 as well. They all keep the level's own
+// entry whatever Lara wears; only a step whose caller is Lara herself is ever
+// redirected. The caller is SfxCommandCaller (game\sound.h), which AnimateItem
+// and AnimateLara set around every sound of an animation command.
+//
 // The three sets, all in memory from the level's start:
 //
 //   ordinary  the level's own entries for ids 0 and 4, loaded through the
@@ -86,9 +94,10 @@
 // number and count, which are what was really loaded, and the bare set's
 // pitch, which comes from the bank's own barefoot entry (0 where id 0 is 12).
 //
-// The switch is HDFeetBare: it writes into the level's sound map, for ids 0
-// and 4, the entries of the set the outfit wants - the bare set, or the
-// unmodded boots where they are loaded, or the level's own.
+// The choice is made at every step, in SoundEffect, by HDFeetStepInfo below:
+// the sound map itself is never bent. So the HD/SD switch changes the next
+// step and the F4 changer the next step after it closes, and a step already
+// sounding finishes as it began.
 //
 // Nothing is allocated after the level is up. Everything here is loaded while
 // LoadSamples runs; the outfit's answer afterwards is one flag.
@@ -99,6 +108,51 @@ struct SAMPLE_INFO;
  * own for this file: bare steps, bare landing, unmodded boots' steps and
  * unmodded boots' landing. */
 #define HD_FEET_SPARE_INFOS	4
+
+/* The two sound ids this file switches, SFX_LARA_FEET and SFX_LARA_LAND of
+ * game\sound.h - written out here so that the rule below compiles without
+ * the engine's headers, and checked against them in hd_feet.cpp. */
+#define HD_FEET_ID_STEPS	0
+#define HD_FEET_ID_LAND		4
+
+/* The spare entries of one level, by sound map index, -1 where a set is not
+ * there. */
+struct HDFeetSets
+{
+	int bareSteps;
+	int bareLand;
+	int bootSteps;
+	int bootLand;
+};
+
+/* The step's choice, pure: which sound map entry sound id `sfx` plays.
+ *
+ *   mapped   the level's own entry for it (sample_lut[sfx]), the ordinary set
+ *   caller   who plays it: SfxCommandCaller, an object number or -1
+ *   lara     Lara's object number (LARA)
+ *   drawnHD  whether Lara is drawn HD at this step (HDLaraDrawActive)
+ *   bare     whether her HD outfit walks barefoot (HDFeetIsBare)
+ *
+ * Every emitter but Lara, every id but 0 and 4, and every step while she is
+ * drawn classic keep `mapped`. Drawn HD, she walks on the bare set or on the
+ * unmodded boots, and on `mapped` wherever the set she wants is not there. */
+inline int HDFeetPick(int sfx, int mapped, long caller, long lara,
+	bool drawnHD, bool bare, const HDFeetSets& sets)
+{
+	if (caller < 0 || caller != lara || !drawnHD || mapped < 0)
+		return mapped;
+
+	int pick;
+
+	if (sfx == HD_FEET_ID_STEPS)
+		pick = bare ? sets.bareSteps : sets.bootSteps;
+	else if (sfx == HD_FEET_ID_LAND)
+		pick = bare ? sets.bareLand : sets.bootLand;
+	else
+		return mapped;
+
+	return pick >= 0 ? pick : mapped;
+}
 
 /* Called from LoadSamples once the level's own samples are decoded. `lut` and
  * `infos` are the level's own tables, `infoCount` how many entries were read
@@ -126,11 +180,21 @@ bool HDFeetAvailable();
 // Why not, in words, for the menu and the log. "" when it is available.
 const char* HDFeetWhyNot();
 
-/* Bend sound ids 0 and 4 to the bare set or back to the boots. Costs two
- * shorts, may be called at any time and is idempotent. Does nothing at all
- * when there is no bare set. Returns what is in force afterwards. */
+/* What the outfit wants: barefoot or in boots. One flag, read at every step;
+ * may be called at any time and is idempotent. Does nothing at all when there
+ * is no bare set. Returns what is in force afterwards. */
 bool HDFeetBare(bool bare);
 bool HDFeetIsBare();
+
+/* The sound map entry one sound plays - HDFeetPick with this level's sets,
+ * Lara's object number and her draw at this moment. SoundEffect asks it for
+ * every sound once the level's own entry is known; anything but ids 0 and 4
+ * comes back unchanged at once. */
+int HDFeetStepInfo(int sfx, int mapped, long caller);
+
+/* For the SFXLOG line: "bare" or "boots" when `info` is one of this level's
+ * spare entries, "" otherwise. */
+const char* HDFeetInfoName(int info);
 
 /* Whether the FLOOR layer is to be passed over - see the two layers above.
  * True only while a bare set is in force, so a player with boots on, or in a

@@ -587,7 +587,25 @@ void AnimateLara(ITEM_INFO* item)
 					if ((cmd[1] & 0xC000) == SFX_LANDANDWATER ||
 						((cmd[1] & 0xC000) == SFX_LANDONLY && (lara.water_surface_dist >= 0 || lara.water_surface_dist == NO_HEIGHT)) ||
 						((cmd[1] & 0xC000) == SFX_WATERONLY && lara.water_surface_dist < 0 && lara.water_surface_dist != NO_HEIGHT))
+					{
+						/* Who plays it, as AnimateItem says for every other
+						 * item: SoundEffect sends Lara's own footsteps to
+						 * the set her drawn outfit walks on, and only hers
+						 * (specific\hd\hd_feet.h). The SFXLOG line reads the
+						 * same fields. */
+						SfxCommandCaller = item->object_number;
+						SfxCommandRoom = item->room_number;
+						SfxCommandAnim = item->anim_number;
+						SfxCommandType = cmd[1] & 0xC000;
+						SfxCommandRoomFlags = item->room_number == NO_ROOM
+							? -1 : (long)room[item->room_number].flags;
 						SoundEffect(cmd[1] & 0x3FFF, &item->pos, SFX_ALWAYS);
+						SfxCommandCaller = -1;
+						SfxCommandRoom = -1;
+						SfxCommandAnim = -1;
+						SfxCommandType = -1;
+						SfxCommandRoomFlags = -1;
+					}
 				}
 
 				cmd += 2;

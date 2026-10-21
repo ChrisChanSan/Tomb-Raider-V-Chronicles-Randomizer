@@ -16,7 +16,14 @@
 #include "../dxsound.h"
 #include "../function_stubs.h"
 #include "../../game/sound.h"
+#include "../../game/objects.h"	// LARA - the one emitter that is switched
 #include "hd_level.h"			// HDEnabled - the gate this all lives in
+#include "hd_laradraw.h"		// HDLaraDrawActive - Lara drawn HD or not
+
+/* The header names the two ids by number so that its pure rule compiles in a
+ * test without the engine; these hold the numbers to game\sound.h. */
+static_assert(HD_FEET_ID_STEPS == SFX_LARA_FEET, "hd_feet.h: id 0 moved");
+static_assert(HD_FEET_ID_LAND == SFX_LARA_LAND, "hd_feet.h: id 4 moved");
 
 namespace
 {
@@ -480,21 +487,40 @@ bool HDFeetBare(bool bare)
 	if (!HDFeetAvailable() || !g_lut)
 		return false;
 
-	/* Two shorts, and that is the whole switch. No reload, no allocation and
-	 * nothing that cares which thread asks: every set is already in
-	 * DS_Buffers and every entry is already in the level's own sound map. */
-	g_lut[kStepsId] = bare ? g_bareSteps
-		: g_bootSteps >= 0 ? g_bootSteps : g_ownSteps;
-
-	if (g_bareLand >= 0)
-		g_lut[kLandId] = bare ? g_bareLand
-			: g_bootLand >= 0 ? g_bootLand : g_ownLand;
-
+	/* One flag, and that is the whole switch. No reload, no allocation, no
+	 * write into the sound map: every set is already in DS_Buffers and every
+	 * entry already in the level's own table, and the next step asks. */
 	if (g_bare != bare)
 		g_saidQuiet = false;
 
 	g_bare = bare;
 	return g_bare;
+}
+
+int HDFeetStepInfo(int sfx, int mapped, long caller)
+{
+	if ((sfx != kStepsId && sfx != kLandId) || !g_lut)
+		return mapped;
+
+	const HDFeetSets sets = { g_bareSteps, g_bareLand, g_bootSteps,
+		g_bootLand };
+
+	return HDFeetPick(sfx, mapped, caller, LARA, HDLaraDrawActive(), g_bare,
+		sets);
+}
+
+const char* HDFeetInfoName(int info)
+{
+	if (info < 0 || !g_lut)
+		return "";
+
+	if (info == g_bareSteps || info == g_bareLand)
+		return "bare";
+
+	if (info == g_bootSteps || info == g_bootLand)
+		return "boots";
+
+	return "";
 }
 
 bool HDFeetSurfaceQuiet()

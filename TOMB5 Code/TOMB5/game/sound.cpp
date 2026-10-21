@@ -20,6 +20,7 @@
 #include "camera.h"
 #include "control.h"
 #include "balance.h"
+#include "../specific/hd/hd_feet.h"	// HDFeetStepInfo - Lara's footsteps
 
 SAMPLE_INFO* sample_infos;
 SoundSlot LaSlot[32];
@@ -27,9 +28,10 @@ short* sample_lut;
 long sound_active;
 long sound_cut_flag = 0;
 
-// Diagnosis: who called the running sound? AnimateItem sets these before
-// the PlaySound commands and cleans up afterwards; all other callers leave
-// -1 in place. Only for the SFXLOG, no game behavior.
+// Who called the running sound? AnimateItem and AnimateLara set these before
+// the PlaySound commands and clean up afterwards; all other callers leave -1
+// in place. Read for the SFXLOG line, and the caller also by HDFeetStepInfo:
+// Lara's footsteps follow her drawn outfit and nobody else's do.
 long SfxCommandCaller = -1;
 long SfxCommandRoom = -1;
 long SfxCommandAnim = -1;
@@ -223,6 +225,13 @@ long SoundEffect(long sfx, PHD_3DPOS* pos, long flags)
 	if (lut == -2)
 		return 0;
 
+	/* Lara's footsteps (ids 0 and 4) follow the outfit she is drawn in, at
+	 * this step: the bare set or the unmodded boots while she is drawn HD,
+	 * the level's own entry while she is drawn classic. Every other emitter
+	 * and every other id keep the level's own entry (specific\hd\hd_feet.h).
+	 * With hd_build 0 there are no sets and this is the entry as read. */
+	lut = HDFeetStepInfo(sfx, lut, SfxCommandCaller);
+
 	info = &sample_infos[lut];
 
 	if (info->randomness)
@@ -414,14 +423,25 @@ long SoundEffect(long sfx, PHD_3DPOS* pos, long flags)
 	// comes from an anim command, AnimateItem (control.cpp) sets the
 	// caller item, room, anim number, object type and room flags
 	// beforehand and they are logged too; otherwise those fields are
-	// left out.
-	if (SfxCommandCaller >= 0)
-		Log("SFXLOG sfx=%d map=%d sample=%d of %d variants vol=%d pitch=%d %s obj=%d room=%d anim=%d type=0x%X rflags=0x%X",
-			sfx, lut, sample, rnd, volume, pitch, flag == 3 ? "loop" : "once",
-			SfxCommandCaller, SfxCommandRoom, SfxCommandAnim, SfxCommandType, SfxCommandRoomFlags);
-	else
-		Log("SFXLOG sfx=%d map=%d sample=%d of %d variants vol=%d pitch=%d %s",
-			sfx, lut, sample, rnd, volume, pitch, flag == 3 ? "loop" : "once");
+	// left out. A footstep of Lara's that HDFeetStepInfo sent to one of the
+	// level's spare entries ends in " feet=bare" or " feet=boots".
+	{
+		const char* feet = HDFeetInfoName(lut);
+		const char* gap = *feet ? " feet=" : "";
+
+		const char* mode = flag == 3 ? "loop" : "once";
+
+		if (SfxCommandCaller >= 0)
+			Log("SFXLOG sfx=%d map=%d sample=%d of %d variants vol=%d "
+				"pitch=%d %s obj=%d room=%d anim=%d type=0x%X rflags=0x%X%s%s",
+				sfx, lut, sample, rnd, volume, pitch, mode, SfxCommandCaller,
+				SfxCommandRoom, SfxCommandAnim, SfxCommandType,
+				SfxCommandRoomFlags, gap, feet);
+		else
+			Log("SFXLOG sfx=%d map=%d sample=%d of %d variants vol=%d "
+				"pitch=%d %s%s%s", sfx, lut, sample, rnd, volume, pitch, mode,
+				gap, feet);
+	}
 
 	if (flag == 3)
 		dx = S_SoundPlaySampleLooped(sample, (ushort)volume, pitch, (short)pan);

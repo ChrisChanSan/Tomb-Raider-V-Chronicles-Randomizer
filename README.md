@@ -303,25 +303,35 @@ A step in this engine is **two sounds on one frame**: her own foot (sound id
 a boot on mud, on metal, on wood, chosen by the sector). The floor layer is
 the loud half.
 
-**Boots** is the level's own footstep sound: it is the sound
-your own **installed Remaster** has for it, so a sound mod that replaces the
-footsteps does not make every outfit barefoot. **Bare** is a second set of
-recordings the level loads beside its own: the barefoot steps your
-installation's own bank carries (sound id 417, five recordings that no level
-uses), or your sound mod's own footsteps when a mod really replaces sound id
-0 — most sound mods do not, and one that only changes a door or a voice is
-passed over here rather than handing the boots back under the name *bare*.
+The footsteps follow **what is drawn**, at every step, and only Lara's do:
+
+| | Lara drawn classic | Lara drawn HD, *Boots* | Lara drawn HD, *Bare* |
+|---|---|---|---|
+| no sound mod | the level's own boots | the same boots | the Remaster's barefoot steps |
+| a mod that replaces the footsteps | the mod's footsteps | your installation's unmodded boots | the mod's footsteps |
+| anyone else who walks | the level's own steps, a mod's if one replaces them | the same | the same |
+
+**Boots** in the HD look is the sound your own **installed Remaster** has for
+the footsteps, unmodded, so a sound mod that replaces them does not make every
+outfit barefoot. **Bare** is your sound mod's own footsteps when a mod really
+replaces sound id 0, or otherwise the barefoot steps your installation's own
+bank carries (sound id 417, five recordings that no level uses) — most sound
+mods do not replace them, and one that only changes a door or a voice is passed
+over here rather than handing the boots back under the name *bare*. In the
+classic look Lara wears the classic boots and her steps are the level's own,
+your sound mod's included. A guard or a SWAT beside her keeps the level's own
+steps whatever she wears. F12 changes her step at the next footfall; every set is
+in the sound memory from the level's load.
 
 Both ways of shipping footsteps count: a mod's own `5\DATA\MAIN.SFX`, and
 loose `0000.wav` to `0003.wav` and `0010.wav` beside it with no bank at all.
-The test is not which of the two a mod uses but whether what it puts on sound
-id 0 differs from your installed Remaster's, so a mod that ships only the five
-wav files supplies **Bare** exactly as a mod's bank does. Either way the log
-says once per level that the mod's own ids 0 and 4 are bypassed while the
-outfit wears boots — that is what makes the two sets two. While she walks
-barefoot the **floor layer does not play at all**, because those recordings are
-a boot on a surface and putting one under a barefoot step is exactly the
-double sound this setting exists to avoid.
+The test is not which of the two a mod uses but whether what it puts on the
+footsteps differs from your installed Remaster's, so a mod that ships only the
+five wav files counts exactly as a mod's bank does. While she walks barefoot in
+the HD look the **floor layer does not play at all**, because those recordings
+are a boot on a surface and putting one under a barefoot step is exactly the
+double sound this setting exists to avoid; drawn classic, or in boots, it
+plays as the level has it.
 
 What an outfit does unless you say otherwise comes from the wardrobe — a
 mod's `outfit.txt` can say `footsteps=bare`, and the built-in table says it
@@ -651,11 +661,11 @@ there is one, and a loose `<NNNN>.wav` — exactly four digits, anywhere under
 the mod — replaces that numbered sample of the bank. The bank itself no
 longer has to be copied into `audio\` by hand: without one there, the engine
 reads the bank of your own installed Remaster where it lies. Samples `0000`
-to `0003` and `0010` are the footsteps and the landing, and those five are
-the one exception to "a mod replaces it": they become the **Bare** set of the
-F4 outfit changer instead of replacing the boots for every outfit at once — see
-*Footsteps* above. This holds whether the mod ships them in a bank or as five
-loose wav files.
+to `0003` and `0010` are the footsteps and the landing: they replace Lara's
+steps in the classic look and everyone else's in both, and in the HD look they
+are the **Bare** set of the F4 outfit changer, while an outfit with boots walks
+on your installation's unmodded boots — see *Footsteps* above. This holds
+whether the mod ships them in a bank or as five loose wav files.
 
 **Not supported.** A face on its own does nothing: a mod
 that ships `<NAME>_HEAD.TRM` without the body's `<NAME>.TRM` is passed over,

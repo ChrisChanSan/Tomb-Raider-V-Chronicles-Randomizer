@@ -2704,7 +2704,7 @@ values, in the same key as every other setting
 | Value | Type | Meaning |
 |---|---|---|
 | `hd_enable` | DWORD | The options row *HD textures* writes this, and so does the *HD / SD* key (F12): it is the **look**, `1` HD and `0` classic, of the world and the interface alike (**The HD/SD switch** below says what it switches). `0` is the default, so a new game starts classic. The row and the key are one value: a press of F12 turns the row, the row turns what F12 would, and both are saved at once, so the next game starts as you left it. It decides nothing about what is loaded - that is `hd_build`. |
-| `hd_build` | DWORD | Not on the options page. Whether the HD art is **built** at all, `1` by default: with `1`, every level's HD art is read and built at its load whenever your installation is found, whatever `hd_enable` says, so the switch between the two looks is always ready - at the price of the HD load's time and memory even while you play classic, and of one sound: with `1` and your installation found, Lara's own footstep and landing sounds (*Boots* under **Footsteps**) come from the unmodded bank in classic play too, so a sound mod's footsteps are replaced there (they become the *Bare* set). Set it to `0` and nothing of the HD art is opened or built: the engine is the classic one, a sound mod's footsteps included, and the row and F12 have nothing to switch. One HD-adjacent thing never asks either value: the 44.1 kHz sound bank, which is opened out of your remaster installation in any case - see **HQ sounds** - and whose search also reads `hd_install` and `hd_install_tr3` below and walks your Steam libraries. Written into the registry with its default the first time the game reads its settings. |
+| `hd_build` | DWORD | Not on the options page. Whether the HD art is **built** at all, `1` by default: with `1`, every level's HD art is read and built at its load whenever your installation is found, whatever `hd_enable` says, so the switch between the two looks is always ready - at the price of the HD load's time and memory even while you play classic. The footsteps follow the look and not this value: drawn classic, Lara's steps are the level's own - a sound mod's, if one replaces them - as with `0` (see **Footsteps**). Set it to `0` and nothing of the HD art is opened or built: the engine is the classic one, and the row and F12 have nothing to switch. One HD-adjacent thing never asks either value: the 44.1 kHz sound bank, which is opened out of your remaster installation in any case - see **HQ sounds** - and whose search also reads `hd_install` and `hd_install_tr3` below and walks your Steam libraries. Written into the registry with its default the first time the game reads its settings. |
 | `hd_objects` | DWORD | HD models for the objects **and for Lara**, `1` by default. There is no options row for it: it is not a matter of taste but a way back if one level's models ever go wrong. Set it to `0` and the rooms stay HD while every object and Lara draw the classic way. Lara has no key of her own on purpose — she is a model like the rest of them and a level's models are one buffer, so a second switch would only be a second way to end up with half a picture. Changes nothing on screen while `hd_enable` is off; with `hd_build` on, `0` still keeps the models out of the load. |
 | `hd_motion` | DWORD | What **moves** in an HD room, `1` by default: water and waterfalls scrolling, ivy, banners, grass and kelp swaying in the wind, and a small ripple over a water surface, the slow travel of light along a shaft or a lamp cone, the four-page animated pictures (the twenty-seven flipbook surfaces of five levels), the longer loops of fourteen to thirty pages (the turning fan shadows of the 13th Floor, the monitor wall of the Security Breach cutscene, the flames, smoke and rain rings - 168 surfaces in nine levels; set to `0` they show their first page) and the ripple over the Remaster's own still-water sheets — in short, everything this chapter says stops with `hd_motion`. All of it comes from the Remaster's own art — the artists marked which surfaces flow and which vertices bend, and this reads those marks. Like `hd_objects` it has no options row and is a way back rather than a taste: set it to `0` and an HD room stands perfectly still. Does nothing at all while `hd_enable` is off. |
 | `hd_reflect` | DWORD | The **gloss** of metal, marble, ice and glass in an HD room, `1` by default: a highlight from the level's lamps where they hang - worked out once per level for every spot, so it stays by its lamp and runs on across doorways - and a reflection of the surface's own light that grows the flatter you look at it, on floors, walls, crates and ducts alike, never more than two and a half times the surface's own lit colour and never to white. Not a mirror: nothing is drawn twice. Which surfaces shine, in this order: the gloss the Remaster's artists gave a surface themselves (its own strength); your file `hd_gloss.txt`; a list of texture pages built into the engine; and the pages that lie on floors whose footsteps sound of metal, marble or ice - in every room that wears them. RICH2's lobby pages and every see-through floor stay exactly as they were. **`hd_gloss.txt`** lies beside the executable, where `SCRIPT.DAT` and `Balance.txt` are, and is read at every level load, so a change shows at the next one. One texture page per line: the page number, a class (`metal`, `marble`, `ice`, `glass` or `custom`) and optionally strength (above 0, up to 1), exponent (1 to 255, the tighter the highlight the higher) and F0 (0 to 1, how much it reflects face on), where `-` or leaving a number out takes the class's own; a `custom` page names all three. `-<page>` takes a page out (a surface the artists gave a gloss keeps it), `#` starts a comment, and a line that cannot be read is counted and skipped; a file saved as UTF-8 with or without a byte order mark reads the same - for example `140 metal 0.6 32` or `-3149 # the girders stay matt`. The page numbers of a room are in the `GLOSSLOG` lines of a `-log` run. Like `hd_motion` it has no options row and is a way back rather than a taste; set it to `0` and the picture is the one without any gloss. Does nothing while `hd_enable` is off. |
@@ -2756,8 +2756,10 @@ meshes, the items and enemies, Lara, the water, its life and its splashes, the
 shadows and the fog bulbs, and the sharp letters of every text, the inventory
 ring and the pickup display, the loading screens (as the switch stands when a
 load begins) and the F4 outfit changer, which opens over the HD look only. The
-sounds stay as loaded: the 44.1 kHz bank and the barefoot steps are in the
-sound memory from the level's load and play whatever is drawn.
+sounds stay as loaded: the 44.1 kHz bank and every set of footsteps are in the
+sound memory from the level's load. Only Lara's own step follows the look, at
+her next footfall: drawn classic she walks in the level's own boots, drawn HD
+on what her outfit wears (see **Footsteps**).
 
 A press shows the change on the next frame: the classic rooms, statics and sky,
 the classic items, enemies and Lara, the level's own water faces, splashes and
@@ -4299,8 +4301,8 @@ outfit.
 with `hd_build` at `0` or with no *Tomb Raider IV-VI Remastered* found, Lara
 is the classic Lara and F4 does nothing at all — with `-log` it says which it
 was, once per session. The same goes for a mod's **models**, which only the
-HD path draws. The barefoot set is built whenever the art is and plays
-whatever is drawn. A mod's
+HD path draws. The footstep sets are built whenever the art is, and which
+one Lara walks on follows the look (see **Footsteps**). A mod's
 **sound bank** is the exception: that is read by the HQ-sound chain, which
 does not care what `hd_enable` says (see **HQ sounds**).
 
@@ -4442,25 +4444,44 @@ A step in this engine is **two sounds on one frame**: her own foot (sound id
 a boot on mud, on metal, on wood, chosen by the sector). The floor layer is
 the loud half.
 
-**Boots** is the level's own footstep sound, taken from the first bank in the
-chain that is *not* a mod's, so a sound mod that replaces the footsteps no
-longer makes every outfit barefoot. **Bare** is a second set of recordings
-loaded beside the level's own: what the ordinary chain would have played for
-those ids — your sound mod's own footsteps, if a mod really replaces sound id
-0 — and, where the chain has nothing of its own to say, the barefoot
-recordings the Remaster's bank carries and no level uses. Both ways of
-shipping footsteps count: a mod's own `5\DATA\MAIN.SFX`, and loose `0000.wav`
-to `0003.wav` and `0010.wav` beside it with no bank at all. While she walks
-barefoot the **floor layer does not play at all**, because those recordings
-are a boot on a surface and putting one under a barefoot step is exactly the
-double sound this setting exists to avoid. The foot*print* is a picture and is
-not touched.
+Which recording a step plays is decided **at every step**, by what is drawn
+and by who walks:
+
+| | Lara drawn classic | Lara drawn HD, *Boots* | Lara drawn HD, *Bare* |
+|---|---|---|---|
+| no sound mod | the level's own boots | the same boots | the Remaster's barefoot steps |
+| a mod that replaces the footsteps | the mod's footsteps | your installation's unmodded boots | the mod's footsteps |
+| anyone else who walks | the level's own steps, a mod's if one replaces them | the same | the same |
+
+**Boots** in the HD look is the footstep sound of your own installed Remaster,
+unmodded, so a sound mod that replaces the footsteps does not make every
+outfit barefoot. **Bare** is your sound mod's own footsteps, if a mod really
+replaces sound id 0 — most sound mods do not, and one that only changes a
+door or a voice is passed over here — and otherwise the barefoot recordings
+the Remaster's bank carries and no level uses. In the classic look Lara wears
+the classic boots and her steps are the level's own, a sound mod's included,
+exactly as without the HD art. A guard, a SWAT, a mafioso or the cyborg
+walking beside her keeps the level's own steps whatever she wears. F12
+changes her step at the next footfall; a step already sounding finishes as it
+began. Every set lies in the sound memory from the level's load, so nothing
+is loaded when you switch. Both ways of shipping footsteps count: a mod's own
+`5\DATA\MAIN.SFX`, and loose `0000.wav` to `0003.wav` and `0010.wav` beside it
+with no bank at all. While she walks barefoot in the HD look the **floor
+layer does not play at all**, because those recordings are a boot on a
+surface and putting one under a barefoot step is exactly the double sound
+this setting exists to avoid; drawn classic, or in boots, it plays as the
+level has it. Her wet step (in shallow water) is the same in every outfit.
+The foot*print* is a picture and is not touched.
 
 What an outfit does unless you say otherwise comes from the wardrobe — an
 `outfit.txt` or a list block can say `footsteps=bare`, and the built-in table
 says it for the bodies that have no boots. Your own choice in the F4 window
 wins over both and is kept per outfit. Every line of this in the log begins
-with `SFXLOG footsteps:`.
+with `SFXLOG footsteps:`, and each level load writes one summary line,
+`FEET ordinary="<source>" boots=<unmodded|none> bare=<entries|none>
+outfit=<boots|bare> drawn=<hd|sd> boots_infos=<entries|none>`; a step of
+Lara's that took a set of its own ends its `SFXLOG` line in `feet=bare` or
+`feet=boots`.
 
 ---
 

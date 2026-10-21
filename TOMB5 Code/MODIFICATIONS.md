@@ -12320,6 +12320,131 @@ log. Files: `specific/hd/hd_feet.cpp`/`.h`, `hd_level.cpp`/`.h`, `game/footprnt.
 
 **Commits.** `4698b8f`, `77b3028`, `52ec0c9`, `1ff12e4`, `5d98092`
 
+### Lara's footstep follows the draw and her outfit, and nobody else's does (#232)
+2026-10-21 - 2026-10-22
+
+**What.** Sound ids 0 (the step) and 4 (the landing) are chosen at every step, not at the
+load, and only for Lara. Every level sample, the footsteps included, takes the ordinary
+chain at the load - a mod's loose `.wav`, a mod's bank, else the unmodded bank, else the
+level's own recording - so the level's own entries for ids 0 and 4 are the **ordinary
+set**. Beside it, from the level's start, lie the **bare set** (the bank's barefoot
+recordings in new slots, or, where the ordinary set is a footstep mod's own recording,
+the ordinary samples themselves) and the **unmodded boots** (the first unmodded bank's
+ids 0 and 4 in new slots, loaded only where the ordinary set differs from them).
+`SoundEffect` asks `HDFeetStepInfo` for the entry: while Lara is drawn HD her step plays
+the bare set under a barefoot outfit and the unmodded boots under boots (the ordinary set
+where no boots set was needed); drawn classic, and for every other emitter in either
+draw, the step plays the ordinary set. The floor layer (ids 288 to 294) is passed over
+only while she is drawn HD and barefoot at that step. `AnimateLara` now names her as the
+caller of her animation sounds, as `AnimateItem` does for every other item. With `-log`,
+one line at each level load: `FEET ordinary="<source>" boots=<unmodded|none>
+bare=<id,id|none> outfit=<boots|bare> drawn=<hd|sd> boots_infos=<id,id|none>`, and a
+switched step's `SFXLOG` line ends in ` feet=bare` or ` feet=boots`.
+
+**Why.** The play test of 2026-10-21, in English: some SWATs share Lara's running sound,
+so they go barefoot too; in SD there are only boots, and the barefoot steps are needed
+only through the outfit changer and mods - choose an outfit without boots, then switch to
+SD, and the boots do not come back; and the more robust the better. The code gave the
+two causes. First, the outfit's answer was written into the level's sound map itself
+(`HDFeetBare` set `sample_lut[0]` and `[4]` to the bare entries), and `SoundEffect` reads
+that map for every caller, so every enemy whose own animation plays id 0 or 4 walked on
+the bare set with her. Second, that answer was set at the load and by the F4 changer
+and never asked the draw, and since #202 the sets are built whenever `hd_build` is on and
+an installation is found, so a classic-drawn Lara with a barefoot HD outfit walked
+barefoot, and lost the floor layer too: `footprnt.cpp`'s comment said the layer stayed
+on with `hd_enable` off, but the code asked the outfit alone. The same load-time split
+sent ids 0 and 4 through the unmodded bank in every draw, so a sound mod's footsteps were
+never heard in classic play.
+
+**Measured.** The emitters of ids 0 and 4, `AnimCmd` over slots 0 to 470: in the
+classic levels BLUE_GUARD id 0 (JOBY3, JOBY5), MAFIA2 id 4 (JOBY3, JOBY5), HITMAN id 4
+(RICH3), besides Lara and her weapon sets. In three randomized levels: JOBY5 - Lara,
+UZI_ANIM, SHOTGUN_ANIM, REVOLVER_ANIM, SWAT_PLUS_MIP (36, on the guard's animation) id 0,
+MAFIA2 id 4, BLUE_GUARD2 (460) id 0, CYBORG (469) id 4; RICH3 - HITMAN id 4, BLUE_GUARD2
+id 0; ANDREA1 - MAFIA2 id 4, BLUE_GUARD2 id 0, and none of the four Tomb Raider III
+guests (their steps are 447 and 438; the import maps every guest id to its own base or to
+the mute 411). Commands are read only by `AnimateItem` (`game/control.cpp`) and
+`AnimateLara` (`game/laramisc.cpp`); an arm's animation runs none, so the pistols', Uzis'
+and revolver's id 0 never plays, while a one-handed gun's weapon item (SHOTGUN_ANIM) goes
+through `AnimateItem` (`game/lara1gun.cpp`). Ids 0, 4 and 17 are played from animation
+commands only.
+
+The sets, measured with a harness that links the engine's own `hqsfx.cpp` and
+`hd_feet.cpp` against the randomizer's level reader, the base's and the head's, over the
+installed bank, with and without a footstep mod of loose wav files and a bank of its own
+(48 kHz, ids 0 and 4 116,802 bytes of audio). Bytes are audio bytes; the boots are 29,204
+bytes as RIFF files (28,624 of audio, four steps at 44.1 kHz and one landing), the bank's
+barefoot set 22,614 (22,394 of audio, five takes at 22.05 kHz).
+
+| level | mod | base: the level's own ids 0, 4 / new slots | head: the level's own / new slots | other slots | spare infos |
+|---|---|---|---|---|---|
+| ANDREA1, randomized, 242 samples, 207 infos | none | unmodded boots 28,624 / bare set 22,394 | the same, table identical | 237 of 237 identical | 207..208 / 207..210 |
+| ANDREA1 | footsteps | unmodded boots 28,624 / the mod's copy 116,802 | the mod's 116,802 / unmodded boots 28,624 | 237 of 237 | 207..208 / 207..210 |
+| JOBY5, classic, 121 samples, 117 infos | none | 28,624 / 22,394 | the same, table identical | 116 of 116 | 117..118 / 117..120 |
+| JOBY5, classic | footsteps | 28,624 / 116,802 | 116,802 / 28,624 | 116 of 116 | 117..118 / 117..120 |
+| JOBY5, randomized, 221 samples | footsteps | 28,624 / 116,802 | 116,802 / 28,624 | 216 of 216 | 196..197 / 196..199 |
+| RICH3, randomized, 242 samples | none | 28,624 / 22,394 | the same, table identical | 237 of 237 | 222..223 / 222..225 |
+| TITLE, 4 samples | none | no footsteps, no set | no footsteps, no set | 4 of 4 | empty / empty |
+
+With a footstep mod the footsteps' bytes are 145,426 before and after, in the same five
+new slots; without one the sample table is the base's byte for byte. The sound map grows
+by the two new spare entries, 16 bytes of `game_malloc` (ANDREA1 1,672 to 1,688). With
+`hd_build` 0 the harness's whole output - table, infos (ANDREA1 1,656 bytes, JOBY5 936)
+and every step's entry - is the base's, with the mod and without.
+
+**The rule from the data.** A footstep is Lara's when its caller is `LARA`: every other
+emitter of ids 0 and 4 is an item animated by `AnimateItem`, which names it. What she
+walks on is a fact of what is drawn at that step: drawn classic she wears the engine's
+own boots, and the ordinary chain is what the classic engine plays; drawn HD she wears
+the outfit, and the outfit's feet choose. A footstep mod is a mod whose recording on a
+footstep sample differs from the unmodded bank's, byte for byte.
+
+**Decisions.** (1) The draw asked is `HDLaraDrawActive()` - Lara's body drawn HD, which
+is `HDDrawn()` with her HD composite built and `hd_objects` on - not `HDDrawn()` alone: a
+level whose HD build gave up, or `hd_objects` 0, draws her classic in boots while the
+switch says HD. (2) A footstep mod's bare set is the ordinary samples themselves, not a
+copy: the ordinary set now IS the mod's, so the copy would hold the same bytes twice;
+this keeps the footsteps' memory at the base's figure. (3) The boots ask every take of
+both ids, so a mod that replaces only the landing or some steps still leaves the HD
+boots whole; they are all or nothing per id and held to the load loop's length rule
+(`HDFeetNoteSample`). (4) The weapon item of a one-handed gun keeps the ordinary set
+like every emitter that is not Lara. (5) `AnimateLara` sets `SfxCommandCaller` and its
+four companions around her sounds: Lara's `SFXLOG` lines now carry `obj=0 room= anim=
+type= rflags=` like everyone else's. (6) The choice follows at the next step, never
+mid-sample: F12 back to SD brings the boots back at her next footfall, F12 to HD the bare
+set; a step already sounding finishes as it began. (7) Sound id 17 (`SFX_LARA_WET_FEET`)
+is not switched; there is one dry barefoot set. (8) `HD_FEET_SPARE_INFOS` is 4 whether or
+not a level loads the boots, so the layout of the bump allocator depends on `hd_build`
+and the installation only.
+
+**Checked.** The nine builds of `Preparation/Tools/Diagnose` exit 0 (`be`, `broom`,
+`btrg`, `bmodel`, `bmap`, `bmt`, `bmenu`, `bit`, `blips`). The suites at the base and at
+the head: ModernTest 16,140 and 16,306, MenuTest 44,917 and 44,917, InterpTest 754 and
+754, LipsTest 299 and 299 with the player's `.OBJ` folder, 272 and 272 without, 0 failed
+each. ModernTest's `hd_feet` (164 checks): `HDFeetPick` over nine emitters (Lara, the
+one-handed gun's weapon item, SWAT_PLUS_MIP, BLUE_GUARD, MAFIA2, HITMAN, BLUE_GUARD2,
+CYBORG, no caller) times both draws, both outfits, with and without a footstep mod and
+ids 0 and 4, against an expectation written out on its own; the ids the sets do not own;
+a level without id 4 or without sets; F12 through `HDSwitchStep` itself; and
+`HDFeetQuietRule` in all eight cases. The gate checks: the spare infos ask the build
+gate, no sample is redirected at the load, the step and the floor ask Lara's draw. The
+harness's step table, base against head, every emitter, both draws, both outfits: at the
+base every emitter took the bare entries under a barefoot outfit in either draw; at the
+head only Lara, only drawn HD. Not played: the head was not run in the game.
+
+**Left.** Three comments outside this round's files still describe the load-time split:
+`specific/hqsfx.h` at `HQSfxPayloadBoots` ("Null means keep the level's own"),
+`specific/hd/hd_outfitmenu.cpp` at the F4 apply ("two shorts in the level's sound map")
+and `specific/hd/hd_level.cpp` above `HDLevelBuild` ("whenever hd_enable is on"). The
+FEET line is written at the load; an F4 change is in its own `HDLOG f4` line. Whether
+the one-handed gun's weapon item should walk on Lara's set too is a question for the
+play test. In the randomized RICH1, DOOR_TYPE4 (slot 290) animation 655 lists 2,650
+commands including ids 0 and 4 (the classic level: 64); not followed here.
+
+**Commits.** `b9b64d5d` (the sets in memory), `57d462f3` (the choice per step and the
+caller), `574afdd6` (the floor layer), `c3e5c85b` (the checks and the FEET line),
+`62995fda` (a comment), and the records.
+
 ### The soft motion of the chest: an optional secondary motion for the HD Lara
 2026-10-02
 
@@ -31542,3 +31667,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #224 | The search objects' binding and the double doors (#224) |
 | #225 | The zoom at the frame rate (#225) |
 | #226 | The translucent parts of HD models and JOBY2's window (#226) |
+| #232 | Lara's footstep follows the draw and her outfit, and nobody else's does (#232) |

@@ -335,4 +335,4 @@ const BYTE kHDSpringBubblePS[] =
       0,   0,   0, 128, 255, 255, 
       0,   0
 };
-// bshader-stamp 8b8b45d600a6806720c2145aeaa01f32
+// bshader-stamp b42f4e03e958ddafb320a2e7df95a01a

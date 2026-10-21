@@ -2194,9 +2194,9 @@ additive channels exceed 1.0 (mean 1.26, max 2.00) and 10.9 per cent of ANDREA1'
 beyond that, the Remaster's shafts and lamp cones are fans of dozens of quads that all
 meet at the lamp and therefore SUM, and painting them with no weight of their own
 saturates them to white. A quarter-swing moved a candle glow by 8 to 9 per cent of the
-whole pixel between two arbitrary moments where the reference material's own shafts
-travel 4.4 per cent; at 0.06 the worst pixel of a measured room moves 5.4 per cent
-instead of 17.0. The chord through a fog sphere, `2*sqrt(r^2 - d^2)`, has an infinite
+whole pixel between two arbitrary moments; at 0.06 the worst pixel of a measured room
+moves 5.4 per cent instead of 17.0. The chord through a fog sphere,
+`2*sqrt(r^2 - d^2)`, has an infinite
 derivative at the rim, so a per-pixel evaluation stands the intensity up vertically at
 the silhouette where the classic per-vertex evaluation lets the rasteriser smear it; and
 the classic cull - a 45 degree cone about the view axis - was affordable at 4:3, where
@@ -5884,16 +5884,17 @@ same night. The play-test report, put into English: JOBY2 is very bad, it was be
 before; it should have drawn the room with the door and the portal to the outside, exactly
 what was fixed for rooms 123 to 99. The pipes of room 30 seen in the court: could they not
 get a flag, only drawn inside? ANDREA3 is bad too: normally only the sky is there, now a
-room is shown that is no neighbour. The round made everything worse and must go back. We
-must get away from deciding which room wins. The normal engine walks, from Lara's
+room is shown that is no neighbour. The round made everything worse and had to go back,
+and deciding which room wins was to be given up. The normal engine walks, from Lara's
 position, all the rooms she can see; each room knows its neighbours and passes the list
 on. The HD shader apparently gets none of that, hence all these errors; it would only need
 a list - Lara is in room 33, her neighbours are 31, 30, 28, 152 - a normal portal walk.
 The problem is the missing knowledge of which room knows which room, and a sensible
 passing-on as the real engine does it; that fits all the normal things, and every piece of
 HD geometry where solid classic edges are cut open to make them see-through needs it too.
-A flag on the pipes would only mask the problem; they must know: I stand in room X and X
-knows y and z. The court is physically never reachable. And: yes, let us try it.
+A flag on the pipes would only mask the problem; the pipes must know which room Lara
+stands in and which rooms that room knows. The court is physically never reachable. The
+report ended with the go-ahead to try it.
 
 **The approach.** A second path, chosen at a level's start by the registry setting
 `hd_vis` (0, the default, everything above; 1, this path). Its list is the engine's own
@@ -6423,8 +6424,8 @@ it), `bb02f82` (the walk's portal comment), `a7d6750` (RoomProbe `-viscams`) and
 record.
 
 **Round 11: the ghosts, the portal the eye stands at, and the leftovers (2026-10-16).**
-The play test ran with `hd_vis` 1 - put into English: "hd_vis was 1 by the registry; I
-have not changed it since it was implemented" - so the play tests have run the visibility
+The play test ran with `hd_vis` 1 - the registry had held 1 since the setting was built
+and it was never changed - so the play tests have run the visibility
 path since round 9, and every place of this round was seen on it (the play test's log of
 the engine of `3f8f52dd`, levels ANDREA1, ANDREA2, ANDY3, JOBY2 and JOBY4, and twenty
 pictures; reference pictures supplied for this project, not in the repository). The play
@@ -6432,7 +6433,7 @@ test reported ghosts (a brown block hanging over the roof at ANDREA1's facade wi
 three flags; black bars and a striped column standing in JOBY2's next room, seen through a
 door), black beyond an archway in ANDREA2 and at the far end of JOBY2's container
 corridor, which it took for faults of the original game (ANDREA2 "seems an original-game
-portal problem", JOBY2 "too, I think because of the flipmap or the draw distance"),
+portal problem", JOBY2 too, suspected to come of the flipmap or the draw distance),
 JOBY2's lockers and a block in ANDY3's canopy still drawn classic inside the HD picture,
 and a piece of wood on an ANDY3 house where "HD and SD are in conflict again". Each place
 was matched and classed before anything changed.
@@ -6896,10 +6897,10 @@ pictures of ANDY3's mill-wheel house, of JOBY2's facade window with the broken p
 an earlier list) and a trview picture of JOBY2's room 30 cutting into its neighbour
 (reference pictures supplied for this project, not in the repository), a `-log` of a still
 stand before the window, and the play test's answers, put into English: ANDREA1 and ANDY3
-are right on the earlier points; asked whether `hd_vis` should become the default, "yes, I
-think we now have everything except a few small things. ANDY3 alone has gained a lot; it
-may be a positive bug, but I can now see the mill from rooms where it is actually not
-possible - a nice effect"; of the mill-wheel house, "some of the meshes are still SD and
+are right on the earlier points; asked whether `hd_vis` should become the default, yes,
+with everything in place except a few small things, ANDY3 having gained a lot: the mill
+now shows from rooms where it actually cannot be seen, perhaps a positive bug and a nice
+effect; of the mill-wheel house, "some of the meshes are still SD and
 some fight with the HD textures"; of the window's log, "the log is here"; and of JOBY2's
 ghosts, "they are still there minimally, a few pixels; that should be 256 units of
 overlap; it probably cut only 250". That last reading was taken as a hypothesis to
@@ -7162,11 +7163,12 @@ labels corrected, six checks more).
 **Round 14: the migration, the sniper windows, the forest lids (2026-10-18).** The engine
 with round 13 in it was played, and the answers, put into English: on the default,
 "migrate to 1; that is now the default"; on ANDY3's dormer, "top"; on JOBY2's facade
-window and its splinters, "almost"; on the 19 statics left to the art, "I will look at
-them when I get to it". Two pictures of JOBY2 came with them (a glass block window of the
-pink brick facade, its lower pane broken, the grey sky in the hole; trview's room 21 from
-outside) with the words "the window behind the snipers must become fully black again. Now
-the skybox comes through there, because we no longer carry textures", and four of ANDY3
+window and its splinters, "almost"; the 19 statics left to the art were to be looked at
+later, in the play test's own time. Two pictures of JOBY2 came with them (a glass block
+window of the pink brick facade, its lower pane broken, the grey sky in the hole;
+trview's room 21 from outside) with the request that the window behind the snipers become
+fully black again, since the skybox now comes through there because the textures are no
+longer carried, and four of ANDY3
 (trview's hillside of room 27 and the forest walls round it; in the game the dark leaf
 canopy over a hollow and the trunks round it) with "there are still a few places where the
 old SD is still in the HD; the last agent found almost all of them" (reference pictures
@@ -7393,11 +7395,11 @@ in `hd_vis.h`) and the records of the sky.
 **Round 15: the window's reveal, the catwalk (2026-10-20).** Round 14 was played; the
 report, put into English: "JOBY2, the windows are a thing of their own: the ANIMATINGs
 carry the texture for the missing wall"; asked whether the baked reveal should be drawn in
-front again as the classic draws its ANIMATING, "yes, but with care. In places there are
-already textures there that the ANIMATING would bring again. Then we have a texture fight
-again"; and of RICH1, with a picture, "that is the catwalk from room 72; two textures seem
-to lie on top of each other there. When I move the camera they alternate and flicker";
-RICH1 otherwise "top". The play test's pictures (the window from inside room 146 with the
+front again as the classic draws its ANIMATING, yes, but with care, since in places
+textures already lie there that the ANIMATING would bring again, and the textures would
+fight once more; and of RICH1, with a picture, the catwalk from room 72 seems to carry two
+textures on top of each other that alternate and flicker as the camera moves; RICH1
+otherwise "top". The play test's pictures (the window from inside room 146 with the
 sniper behind the hole, the play test's trview view of room 146's window wall, the window
 from above, the catwalk from above with Lara on its green lattice) and a play-test log of
 the build of 2026-10-19: the eyes are the log's CAMLOG lines (JOBY2 ticks 1044390, 1047453
@@ -10041,8 +10043,8 @@ draw does not draw as the classic's glass keeps its colour whatever lies under i
 the decision: no colour is named anywhere in the code.
 
 **Why.** The play test of 2026-10-18, after Round 4 (the grid "Top", its break "Top",
-the bridge's pane "Top"), asked whether the panes should stay grey: let us make a blue
-tint; then we stand a little apart and are closer to the original. The original is this
+the bridge's pane "Top"), asked whether the panes should stay grey: a blue tint instead,
+which sets the project a little apart and closer to the original. The original is this
 engine's classic draw, whose glass is blue: the hue is taken from the classic texels,
 never from a picture.
 
@@ -10577,9 +10579,9 @@ in our data gives them a part, and they are parked.
 
 **Why.** The play test of 2026-10-18, after Round 1: the window's break "Top"; asked
 whether the shards should show more: yes; if they become blue, an extra boost on top. On
-the statics with no HD part: I noticed that before; have a look at TROne, otherwise park
-it as a task. On the deal's 5 to 20 ms in the frame of a large break: leave it for now; it
-stays.
+the statics with no HD part, already noticed before: they were to be compared with TROne
+or parked as a task. On the deal's 5 to 20 ms in the frame of a large break: leave it for
+now; it stays.
 
 **The classic shards, measured.** RoomProbe `-debris 132:0 <life>` at the break's eye of a
 play-test log of 2026-10-18 (the flip at tick 79750, the glass sound at 79781, the flyby's
@@ -11100,9 +11102,9 @@ factor=`; `ModelProbe -alpha` measures the glass against the classic's band, Mod
 holds the rules (21 checks).
 
 **Why.** The play test of 2026-10-20, on the build of that day, with a picture of RICH2's
-cabinet from this build and a comparison picture: we must become much more clear. And of
-RICH1's oval doors after Round 1: RICH1 is top. The comparison picture is used as a band
-of numbers.
+cabinet from this build and a comparison picture: the glass must become much clearer.
+And of RICH1's oval doors after Round 1: RICH1 is top. The comparison picture is used as
+a band of numbers.
 
 **Measured, before any change.** The classic, RICH2's `SEARCH_OBJECT1` (slot 164), doors
 on nodes 1 and 2: 12 see-through faces each, six a side on mirrored texture corners; the
@@ -17289,7 +17291,7 @@ frame. The merge: `traps.cpp`, `hd_level.cpp`'s call after the depth bind,
 **Round 3: the wet floor and the barrel's rings.** Asked for, put into English: an idea
 for the aquariums - room 23's lowered area and rooms 122, 121, 45 and 46: after the shot
 the floor gets a gloss, to show that it is wet (proposed on 2026-10-11, ordered on
-2026-10-13: the wet gloss, yes, let us do it). And after the play test of 2026-10-13: the
+2026-10-13: the wet gloss, yes, to be done). And after the play test of 2026-10-13: the
 barrel's rings are barely visible; the play test had to look from very close, at one
 angle, to see that they had arrived at all.
 
@@ -17441,12 +17443,12 @@ left to it.
 
 **Round 4: the run-off's rooms and radius, the look, the mirror mended.** Asked for after
 the play test of 2026-10-14, put into English: the floor stays wet; it can be a little
-bit stronger; please limit it to my rooms, only in the small radius; in the corridor
-there are already conflicts with the half-see-through, the triangles are not mirrored
-yet, and the reflections are still a bit buggy - the vending machine and Lara are
-distorted like a graphics glitch. So the drying is settled: the floor stays wet. The play
-test's rooms are those of the wet floor's first order: RICH2 rooms 122, 121, 45 and 46 at
-the tank of room 122, the lowered area of room 23 at the other.
+bit stronger; it is to be limited to the rooms first ordered, only in the small radius;
+in the corridor there are already conflicts with the half-see-through, the triangles are
+not mirrored yet, and the reflections are still a bit buggy - the vending machine and
+Lara are distorted like a graphics glitch. So the drying is settled: the floor stays wet.
+The play test's rooms are those of the wet floor's first order: RICH2 rooms 122, 121, 45
+and 46 at the tank of room 122, the lowered area of room 23 at the other.
 
 The eyes. The play test's five pictures' cameras are the `CAMLOG` eyes the play test's log
 holds still for 20 ticks and more after the shot (the tank's view in room 122, the view
@@ -22197,10 +22199,10 @@ own commit after them.
 ### The spring (#200)
 2026-10-14
 
-**What.** Asked for on 2026-10-09: "In ANDREA2 we have an underwater spring, I find
-that quite nice. Could we have, under the spring, a kind of visible rising current, and
-build a few small bubbles into the jet? Then the spring would be complete, and we could
-scatter it sporadically under water in all levels where it would fit." The spring is
+**What.** Asked for on 2026-10-09: ANDREA2's underwater spring, found quite nice, was to
+get a visible rising current under it and a few small bubbles in the jet, which would
+make the spring complete, and it could then be scattered sporadically under water in all
+levels where it would fit. The spring is
 the ring source of ANDREA2 room 194's fountain basin over water room 120 (the middle of
 its six water squares, x 54,272 to 57,344, z 31,744 to 33,792): the game itself makes
 no ripple there and no item stands there. Since this round a spring is the engine's
@@ -22400,10 +22402,10 @@ names the spring. A static blocks only the square its origin stands on.
 2026-10-15
 
 **What.** Asked for on 2026-10-14, after a play test had seen the spring in the game ("The
-spring looks good."), with a sketch and look references: "Is it possible to make, at the
-foot of the spring, a 3D crack or hole that carries the floor's texture? The hole's fill
-can be a black texture, a void." - and, asked whether that was only an idea: "Yes, if
-there are no conflicts, you can start the spring." The play test's sketch shows from the
+spring looks good."), with a sketch and look references: a 3D crack or hole at the foot
+of the spring that carries the floor's texture, its fill a black texture, a void - and,
+asked whether that was only an idea: yes, the spring could be started if there were no
+conflicts. The play test's sketch shows from the
 side a shallow pit in the floor with the jet rising out of it and from above an irregular,
 elongated outline; the reference pictures supplied for this project (not in the
 repository) show a long jagged slit with torn edges and holes in plaster, dark inside,
@@ -22654,9 +22656,9 @@ inside the rock) draw a black wall, as before; the classic floor of that square 
 #### Round 4: the column and the crack under its bottom
 2026-10-15
 
-**What.** The play test of the third round: "Yes, the crack still disappears. I
-do not know whether it is new, but at certain angles the water column that rises upward
-now disappears too." And with two pictures at the fountain: "Very hard to see. Picture 1
+**What.** The play test of the third round: the crack still disappears, and at certain
+angles the rising water column now disappears too, whether newly or not was not known.
+And with two pictures at the fountain: "Very hard to see. Picture 1
 it is there, picture 2 a tiny bit to the right and the column is gone." The play test's
 pictures (reference pictures supplied for this project, not in the repository) show
 Lara under the water near the fountain's tiled floor with the column over her and, after
@@ -23285,8 +23287,8 @@ folder listing (`specific/hd/hd_folderlist.h`), `RoomProbe -reload`, `-reloadas`
 `-ahead` and `-aheadverify`, and the `LOADLOG` steps `trg_ahead` and `pages_ahead` and
 the word `skipped=1`.
 
-**Why.** On 2026-10-14 the decision on this entry's candidates was: "Ok, then let us take
-your recommendation, B plus C." Of C, the parts outside the room art's fill are built here
+**Why.** On 2026-10-14 the decision on this entry's candidates was to take the
+recommended B plus C. Of C, the parts outside the room art's fill are built here
 (C1); the hulls, the largest groups, `MarkCarryCells` on the pool and the sidecar (C2)
 live in the code another round is changing and follow its merge. The play test's `-log`
 run of the seam's build loads ANDREA1 fresh in 3,722 ms and a savegame inside it in 3,594:
@@ -23695,8 +23697,8 @@ thread 168 (of it `textures` 139), `screen` 116, `hd_build` 24, `warmup` 15. Ask
 whether the total could come down further, the play test was given three candidates with
 their savings and risks - the picture drawn once (about 50 ms, the classic path), the
 decoded HD picture kept (30 to 140 ms, HD only), the classic pages kept (about 139 ms, the
-riskier one, behind the build gate) - and ordered all three: "Yes, since we have come
-this far, let us go the full hundred per cent." Project decision of 2026-10-15.
+riskier one, behind the build gate) - and ordered all three, to go the full hundred per
+cent now that the work had come this far. Project decision of 2026-10-15.
 
 **How.** *M - the two steps split first.* `textures`: `LoadTextures`
 (`specific/file.cpp`) reads in order the header's page counts, the pixel format of the
@@ -23960,14 +23962,14 @@ registry DWORDs `loadbar`, `loadbar_min_ms` and `loadfade_ms`, `specific/loadbar
 words `frames=` and `wait=` at the end of the step `bar` and the line `step=hd_frames`.
 
 **Why.** After round 4 a savegame loaded inside its level took about 52 ms in the play
-test's newest log, and the bar was hardly to be seen. On 2026-10-15 the play test wrote:
-"we have the switch Loading bar TR4/TR5, we could give it a third state, off, a seamless
-throw into the level ... For the values TR4/TR5 we could build in an artificial brake.
-Then the player can choose whether to see the bar and the picture, with the picture
-staying for roughly half a second to a second and the bar running through smoothly. Or
-with off straight on - a nice variant, also with speedruns in mind." Then: "Should we show
-the fade in/out for the 52 ms? I think that is better than a standing picture. I am not
-sure." and "Take 500 ms for the brake, a good middle value I think." It was not known in
+test's newest log, and the bar was hardly to be seen. On 2026-10-15 the play test
+proposed a third state for the switch Loading bar TR4/TR5, off, a seamless throw into the
+level, and an artificial brake for the values TR4/TR5, so that the player can choose
+whether to see the bar and the picture, the picture staying for roughly half a second to
+a second and the bar running through smoothly, or go straight on with off - a nice
+variant, also with speedruns in mind. It then asked whether the fade in/out should show
+for the 52 ms, likely better than a standing picture though not certain, and proposed
+500 ms for the brake as a good middle value. It was not known in
 play what the rows *TR4 loadscreens* and *Loading text* still do; the manual says it now.
 Project decisions of 2026-10-15: the third state, the brake at 500 ms, the fade with its
 length a value.
@@ -24199,12 +24201,13 @@ for any of them. New: `HDLevelKeyEarly` and `HDLevelNextLoad` (`hd_level.h`),
 `LoadBuildsHD` and `LoadScreenModeOf` (`specific/loadbar_math.h`), the word `shown=` at
 the end of the `LOADLOG` step `bar`.
 
-**Why.** Round 1 was played (a `-log` run of a build of 2026-10-15); the report: "The
-brake feels great. The transitions inside a level look great too, super smooth. One thing
-I overlooked: Loadbar = Off has a side effect. When I load across levels or go back to the
-title, that takes longer than inside a level because of the HD build. Now we have black
-screens for that time. For the long transitions we must keep the pictures and the loading
-bar at Off, or the player thinks it crashed, and the beautiful HD pictures never appear."
+**Why.** Round 1 was played (a `-log` run of a build of 2026-10-15); the report: the brake
+feels great, and the transitions inside a level look great too, super smooth. One thing
+had been overlooked: Loadbar = Off has a side effect. A load across levels or back to the
+title takes longer than one inside a level because of the HD build, and it now shows
+black screens for that time. The long transitions were to keep the pictures and the
+loading bar at Off, or the player thinks it crashed, and the beautiful HD pictures never
+appear.
 
 **How.** *M - the play test's loads classed first.* Every load of the play test's newest
 run (35, a bar for 20 of them and off for 15) and of the run before round 1 (34), by the
@@ -24328,10 +24331,10 @@ drawn nowhere any more, with the row on or off. New: `LoadNameDrawn`, `LoadNextS
 reads). The comments of `drawbars.cpp` on the screen's state say what `mode` is since
 round 2: the screen's state, TR5 for an off load that builds.
 
-**Why.** Round 1 was played; the report: "I found the TR4 loading texts." and "If I see it
-right, the TR4 loading texts still carry PS1 leftovers; the switch can be always off and
-vanish from the menu. Or we keep it and show the level's name at the top centre. 50/50
-coin toss, you decide, surprise me. Maybe you think of something better." On the play
+**Why.** Round 1 was played; the report: the TR4 loading texts were found and seemed to
+still carry PS1 leftovers, so the switch could be always off and vanish from the menu, or
+stay and show the level's name at the top centre - a 50/50 coin toss, left to the
+project, open to something better. On the play
 test's picture of round 1 the lettering was cut at the bottom edge at 2560 x 1440. Project
 decision of 2026-10-15, answered with "Sounds good.": the row stays, with its key and its
 default, and shows the level's name at the top centre of every shown loading screen; the
@@ -24458,8 +24461,8 @@ by reading: a level completed into a slot marked `GF_NOLEVEL`, which `DoGameflow
 passes over to the slot after it; whether the shipped script has one was not checked.
 The row keeps its name *Loading text*; whether it should read *Level name* is left to a
 decision. The play test's answers the same night: the look stays as built, style 2 and the
-margin `GetFixedScale(20)` - "The look is good."; the row keeps its name - "Loading text
-fits; in case we add something later it is kept more general."; the TR4 view under the
+margin `GetFixedScale(20)` - "The look is good."; the row keeps its name, which fits and
+stays more general in case something is added later; the TR4 view under the
 name, `LoadNextSlot` and the `LOADLOG name` line went with round 4.
 
 **Commits.** `5206c07` (the comments on the screen's state), `2947690` (the name);
@@ -24480,15 +24483,15 @@ change, no room picture does.
 
 **Why.** Round 3 asked three things. On the look (the title list's style 2, the
 margin `GetFixedScale(20)`): "The look is good." On the row's
-name: "Loading text fits; in case we add something later it is kept more general." On the
+name: *Loading text* fits and stays more general in case something is added later. On the
 TR4 view, which showed the level being left under the name of the level being loaded, the
-question back was: "Are the TR4 loading pictures still good for anything? Otherwise we can
-drop the switch." The facts given in answer: the view is this port's inheritance, through
-the TOMB5 project it starts from, of Tomb Raider 4's PC loading screens - one fixed camera
-per level, drawn from the level being left -, while Tomb Raider 5 itself loads over its
-pictures, and only for the view did round 3 need a mirror of `DoGameflow`'s switch and a
-mark of its own. The recommendation was to drop the row and the view, and the order was:
-"Yes, order the round, away with it." Project decision of 2026-10-15.
+question back was whether the TR4 loading pictures were still good for anything, or else
+the switch could go. The facts given in answer: the view is this port's inheritance,
+through the TOMB5 project it starts from, of Tomb Raider 4's PC loading screens - one
+fixed camera per level, drawn from the level being left -, while Tomb Raider 5 itself
+loads over its pictures, and only for the view did round 3 need a mirror of `DoGameflow`'s
+switch and a mark of its own. The recommendation was to drop the row and the view, and the
+order was: "Yes, order the round, away with it." Project decision of 2026-10-15.
 
 **How.** *D - every use listed first*, by `git grep` at `1c68828` for `tr4_loadscreens`,
 `tr4LS`, `RenderLoadPic`, `GetLoadScreenCam`, `tr4_load_screens`, `TR4LS`, `load_cam`,
@@ -28882,20 +28885,19 @@ pass `9b9520c`, `f28f6ef`, `5262f98`, `67cd411`; its fix pass the record's own c
 the options pass `7887938`, `27ab9e6`, `ed14c79`, `f717d38` and the record's own commit.
 
 **Built when found: the build gate and the draw state.** 2026-10-14 (late evening) -
-2026-10-15. The request, in the words given for it: "Can we do it so that, when the
-Remaster has been detected at game start, the HD textures are loaded in the background
-even if SD is selected, and the switch with F12 is always possible without intermediate
-states? That would automatically disable the switch in that case [no installation]. And we
-would have no what-if state. The HD/SD textures are always available and the player can
-always switch the textures on the fly, everywhere. Or do we get conflicts or other
-problems then?" Told the costs - a player with the Remaster who plays classic pays the HD
-build at every load and its memory, and a build in the background during play would bring
-a stretch with nothing to switch to and upload hitches, so the build stays at the load -
-the answer was: "Yes, order it like that, synchronously at the load." Asked whether the
-interface should switch as well: "The interface too, please. Then it is uniform." Told
-that the sounds are loaded into the sample memory at the load and cannot follow a state
-that changes from frame to frame: "No, the sounds are fine. That can stay." Project
-decisions of 2026-10-14.
+2026-10-15. The request: when the Remaster has been detected at game start, the HD
+textures were to be loaded in the background even with SD selected, so that the switch
+with F12 is always possible without intermediate states; with no installation that
+would disable the switch by itself, and no what-if state would remain. The HD/SD
+textures would always be available and the player could switch them on the fly,
+everywhere - unless that brought conflicts or other problems. Told the costs - a player
+with the Remaster who plays classic pays the HD build at every load and its memory, and a
+build in the background during play would bring a stretch with nothing to switch to and
+upload hitches, so the build stays at the load - the answer was: "Yes, order it like that,
+synchronously at the load." Asked whether the interface should switch as well: "The
+interface too, please. Then it is uniform." Told that the sounds are loaded into the
+sample memory at the load and cannot follow a state that changes from frame to frame: "No,
+the sounds are fine. That can stay." Project decisions of 2026-10-14.
 
 *Design.* (1) The build gate: a level's HD data are built at its load whenever the
 installation is found and the new registry setting `hd_build` - a DWORD beside `hd_air`, 1
@@ -29132,10 +29134,10 @@ and in full screen alike, and the picture under the menu follows the bar while i
 moves. At the middle nothing runs and the picture is the engine's own, byte for byte.
 
 **Why.** The request, 2026-10-18, on a picture of a dark place lit by the flare in
-Lara's hand: "I have to do that sometimes because I have no gamma slider. When it is
-too dark, something can be invisible." Asked whether a gamma slider should go into the
-options menu: "Yes, note the gamma slider; I have been putting it off for too long", and
-"Yes, you can slot the gamma slider in any time it fits."
+Lara's hand: the flare is sometimes needed because there is no gamma slider, and where it
+is too dark, something can stay invisible. Asked whether a gamma slider should go into
+the options menu: yes, to be noted, having been put off for too long, and the gamma
+slider could be slotted in any time it fits.
 
 **What the device offers, measured before the change.** A scratch probe on this machine,
 read only towards the display (no ramp set): both outputs of the test machine's GPU report
@@ -30860,7 +30862,7 @@ its `hd_fog_vs.inc` and `hd_fog_ps.inc`; RoomProbe `-fogbulbs`, `-fogprofile <bu
 `-hdfog 0|1` (or `-fog 0|1`) and `-fogpass 0`; ModernTest's group `fog_body`.
 
 **Why.** The play tests of 2026-10-17 and 2026-10-18, with a picture of ANDY3's mill: in
-ANDY1 we once improved the fog bulbs; they are not perfect, but better than those there;
+ANDY1's fog bulbs were improved once; they are not perfect, but better than those there;
 everything around the mill must still become volumetric fog. The improvement meant is the
 fog bulb chord weighted with a `smoothstep` over its own range and the 45 degree cone
 taken out of the pixel shader ("The engine's own per-vertex lighting, as shader
@@ -31439,13 +31441,25 @@ file. The decisions taken on the list for this round are stated under *Decisions
   them; the barefoot landing on the bank's own takes; a "The machine:" paragraph; "your
   own installation" for what the HD path reads; `be.bat` as the build route that checks
   the shaders.
-- The review's follow-up (`2e8be55c`, `4a35c94a` and the record's own commit). The last
+- The review's follow-up (`2e8be55c`, `4a35c94a`, `c8c163d0`, `7844ec8b`, `6ee2088e` and
+  the last pass's commits). The last
   comments that named `hd_enable` as the gate where the code asks `HDEnabled()` name
   `hd_build` and an installation (`hd_level.cpp`, `hd_feet.h`); ModernTest's and
   PoolProbe's texts and two Preparation notes name no person; one German quotation and
   two in-log line numbers left this record; the ledger names no scratch tool and says
   that its TROne verdicts rest on the notes of earlier permitted readings; the README
-  says that the four gigabytes of address space are those of 64-bit Windows.
+  says that the four gigabytes of address space are those of 64-bit Windows. In
+  `7844ec8b` the additive-weight and swing comments of `hd_render.cpp` name a reference
+  picture supplied for this project, the outfit sheen of `hd_lara.cpp` and
+  `hd_wardrobe.cpp` gives the material reason, `hd_trl.h` counts the 45 track files that
+  LipsTest counts, `hd_feet.cpp` says what a player at `hd_build` 0 hears, and the round
+  name of a third-party history leaves `modern_move.h` and `modern_camera.h`; comments
+  only. In `6ee2088e` the room-light check's comment compares the shipped scale with its
+  recording. The last pass adds `4a35c94a` and `c8c163d0` to the commit texts that cannot
+  change, drops the reference material's own number from the two-shot statistic of the
+  swing, restates every first-person rendering of the play test's words as a reported
+  request or decision, and lets the ledger's "No game data" say that InterpTest keeps a
+  few declared root-offset triples, measured on the level, as expectations, class DATA.
 
 **Decisions.**
 
@@ -31471,9 +31485,10 @@ file. The decisions taken on the list for this round are stated under *Decisions
 - The menu pictures are taken anew for Beta 3.0; until then the captions say they show
   Beta 2.0's pages.
 - Commit texts cannot change. The bodies of `9362b431`, `4a3896f9`, `a113f3db`,
-  `6ccadf38`, `7b8557f7`, `54afc06a`, `8b6d5766` and `e0198d87` name play-test files, a
-  mod's folder, a person, a GPU model or a comparison recording, or quote German; this
-  record and the ledger repeat none of it, and their wording is the one that stands.
+  `6ccadf38`, `7b8557f7`, `54afc06a`, `8b6d5766`, `e0198d87`, `4a35c94a` and `c8c163d0`
+  name play-test files, a mod's folder, a person, a GPU model, a comparison recording or
+  scratch tools, or quote German; this record and the ledger repeat none of it, and their
+  wording is the one that stands.
 
 **Left.** Parked, as behaviour or as code beyond comments: the mouse reset after a menu,
 the activating click, the "Looped" log text and the DXLOG guard (F-042); the guards around
@@ -31483,25 +31498,31 @@ Not run: the build from the Visual Studio window, which skips the shader guard; 
 RoomProbe water census of the manual's water numbers; the check that TROne's commit
 `75c4c843` is public, which needs the network. Not measured: frame times at 1920 x 1080
 and the graphics card's own time; the figures in the manual and the README are those of
-2560 x 1440. Line numbers in older entries refer to their own commit and were not
-refreshed.
+2560 x 1440. Open from the decisions: the A/B of the glow's normal on RoomProbe pictures
+and the number-by-number comparison of the shadow table with TROne's shadow code (F-018).
+For rounds of their own: the stale gate comments of `hd_level.cpp`'s level load (about
+lines 6744 to 6756 and 6897), which only a gate round edits, and section 3's bullets for
+the other randomizer files changed since Beta 1.0, which need a documentation round. Line
+numbers in older entries refer to their own commit and were not refreshed.
 
-**Checked.** `be.bat` exit 0, `release/PCtomb5.exe` built Oct 22 2026 00:11:27 with
-`Beta_3.0` in its version resource; `broom`, `btrg`, `bmodel`, `bmap`, `bmt`, `bmenu`,
-`bit` and `blips` exit 0; `b1.bat` and `b2.bat` exit 0. ModernTest 16,140 checks, MenuTest
-44,917, InterpTest 754 with the player's `ANDREA1.TRC` (711 checks and its 11 frame blocks
-failed without it), LipsTest 299 with the player's `.OBJ` folder and 272 without, 0 failed
-each, run again at the end of the round. A fresh clone builds with `be.bat` with the
-shader guard quiet and leaves `git status` empty, and `BuildRelease.ps1` packages from it.
-The same seed 380 through `Randomize.exe` before and after the build-id change, the
-thirteen campaign levels, plain and with `mix cross allsanity 8 weapons items20 weather`:
-78 of 78 files byte-identical. Section 1's counts come from a script that compares this
-round's head with the first commit under `TOMB5/` and scans each file for the notice.
-Every added line of the round is within its file's width.
+**Checked.** `be.bat` exit 0, `release/PCtomb5.exe` built Oct 22 2026 00:37:40, MD5
+`d731ef5125172f5758e277688bfc9181`, with `Beta_3.0` in its version resource; `broom`,
+`btrg`, `bmodel`, `bmap`, `bmt`, `bmenu`, `bit` and `blips` exit 0; `b1.bat` and `b2.bat`
+exit 0. ModernTest 16,140 checks, MenuTest 44,917, InterpTest 754 with the player's
+`ANDREA1.TRC` (711 checks and its 11 frame blocks failed without it), LipsTest 299 with
+the player's `.OBJ` folder and 272 without, 0 failed each, run again at the end of the
+round. A fresh clone builds with `be.bat` with the shader guard quiet and leaves
+`git status` empty, and `BuildRelease.ps1` packages from it. The same seed 380 through
+`Randomize.exe` before and after the build-id change, the thirteen campaign levels, plain
+and with `mix cross allsanity 8 weapons items20 weather`: 78 of 78 files byte-identical.
+Section 1's counts come from a script that compares this round's head with the first
+commit under `TOMB5/` and scans each file for the notice. Every added line of the round is
+within its file's width.
 
 **Commits.** `56ae33de`, `6bee428f`, `5c76a312`, `7bac8520`, `d0e980a8`, `983dc242`,
-`6c990e6f`, `0fc25137`, `d73318a0`, `3bea74ff`, `2e8be55c`, `4a35c94a` (code, shaders,
-tests and version), `8d39cd1c`, `d325666e`, `1da57ef4` (documents) and this record.
+`6c990e6f`, `0fc25137`, `d73318a0`, `3bea74ff`, `2e8be55c`, `4a35c94a`, `7844ec8b` (code,
+shaders, tests and version), `8d39cd1c`, `d325666e`, `1da57ef4`, `c8c163d0`, `6ee2088e`
+(documents) and this record.
 
 ## 3. Randomizer changes since Beta 1.0
 

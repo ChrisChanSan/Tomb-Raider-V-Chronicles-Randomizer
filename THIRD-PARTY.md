@@ -4418,8 +4418,9 @@ would be overstating it.
 reads Lara's key frames and her bone table out of the player's own `ANDREA1.TRC`
 at run time, read only, as `LipsTest` reads the faces' track files and
 `cutseq.bin`; without the file the checks that need them fail and say so. What
-the tests keep in their source are measured values cited as such - among them a
-few root offsets of Lara's animations (three numbers each), the portal between
-ANDREA1's rooms 2 and 57, frame numbers, and the counts `LipsTest` expects of
-the player's files - the same kind of measurement this page cites throughout. No
-level, frame table or model can be rebuilt from them.
+the tests keep in their source are measured values cited as such, class DATA -
+among them a few root offsets of Lara's animations (three numbers each) that
+`InterpTest` declares as expectations for its rules, measured on the level, the
+portal between ANDREA1's rooms 2 and 57, frame numbers, and the counts
+`LipsTest` expects of the player's files - the same kind of measurement this page
+cites throughout. No level, frame table or model can be rebuilt from them.

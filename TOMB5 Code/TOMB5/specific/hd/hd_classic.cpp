@@ -11,6 +11,7 @@
  * version. See the LICENSE file at the root of this source tree.
  */
 #include "hd_classic.h"
+#include "hd_install_names.h"	// the root's code page, the leaves' test
 
 #include <algorithm>
 #include <cmath>
@@ -419,7 +420,12 @@ namespace
 		if (!ok)
 			return false;
 
-		const std::string leaf = fs::u8path(path).filename().u8string();
+		// The path is spelt in the system code page (the root as the
+		// installation search hands it on, the leaf as the walk below took
+		// it); the leaf is its last part, cut out without a conversion.
+		const size_t cut = path.find_last_of("\\/");
+		const std::string leaf = cut == std::string::npos
+			? path : path.substr(cut + 1);
 
 		std::snprintf(out->level, sizeof(out->level), "%s", leaf.c_str());
 		return true;
@@ -718,8 +724,14 @@ bool HDClassicRead(const char* bundleRoot, int game, int id,
 		const std::string data = join(join(bundleRoot, folder), "DATA");
 		// TR1 ships .PHD and the other two .TR2 - the extension is the game's.
 		const char* ext = game == 1 ? ".PHD" : ".TR2";
+		/* The root is spelt in the system code page, so it is read back in
+		 * that code page: a UTF-8 reading (u8path) throws on such a spelling
+		 * as soon as it holds a letter beyond ASCII, and nothing above this
+		 * walk catches it. The leaves go to fopen, so they are taken in the
+		 * same code page, and a leaf it cannot spell is passed over. */
 		std::error_code ec;
-		fs::directory_iterator it(fs::u8path(data), ec), end;
+		fs::directory_iterator it(fs::path(HDNameWide(data, CP_ACP)), ec),
+			end;
 		std::vector<std::string> leaves;
 
 		for (; !ec && it != end; it.increment(ec))
@@ -730,7 +742,11 @@ bool HDClassicRead(const char* bundleRoot, int game, int id,
 				continue;
 			}
 
-			const std::string leaf = it->path().filename().u8string();
+			std::string leaf;
+
+			if (!HDNameFits(it->path().filename().native(), CP_ACP, leaf))
+				continue;
+
 			const size_t tail = std::strlen(ext);
 
 			if (leaf.size() > tail && _stricmp(leaf.c_str() + leaf.size() - tail, ext) == 0)

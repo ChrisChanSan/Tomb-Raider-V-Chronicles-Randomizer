@@ -21,6 +21,7 @@
 #include "hd_wardrobe.h"
 
 #include "hd_install.h"
+#include "hd_install_names.h"	// the root's code page, the leaves' test
 #include "hd_mods.h"
 #include "hd_trm.h"
 
@@ -1120,9 +1121,15 @@ namespace
 
 	void add_from_install(const std::string& root, int game, int source)
 	{
+		/* The root is spelt in the system code page, as the installation
+		 * search hands it on, so it is read back in that code page. A UTF-8
+		 * reading (u8path) throws on such a spelling as soon as it holds a
+		 * letter beyond ASCII - an U with umlaut in a library name - and
+		 * nothing above this walk would catch it. */
 		const std::string folder = join(game_folder(root, game), "ITEM");
 		std::error_code ec;
-		fs::directory_iterator it(fs::u8path(folder), ec), end;
+		fs::directory_iterator it(fs::path(HDNameWide(folder, CP_ACP)), ec),
+			end;
 
 		if (ec)
 			return;
@@ -1137,7 +1144,20 @@ namespace
 			if (!it->is_regular_file(ec) || ec)
 				continue;
 
-			leaves.push_back(it->path().filename().string());
+			// The narrow file calls below need the name in the code page; a
+			// name it cannot spell is named among the refused, not thrown on.
+			const std::wstring name = it->path().filename().native();
+			std::string leaf;
+
+			if (!HDNameFits(name, CP_ACP, leaf))
+			{
+				refused.push_back(std::string(source == HD_WARDROBE_SOURCE_46
+					? "46/" : "13/") + HDNameShown(name) + " - its name has "
+					"letters the system code page cannot spell");
+				continue;
+			}
+
+			leaves.push_back(leaf);
 		}
 
 		// The file system's own order is not a promise; the wardrobe's is.

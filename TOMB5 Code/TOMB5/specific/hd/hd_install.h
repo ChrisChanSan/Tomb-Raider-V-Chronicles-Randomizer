@@ -71,6 +71,11 @@ const char* HDInstallDiagnostics();
 // setup dialog and the tests need this.
 void HDInstallForget();
 
+// One more Steam library folder for the next search, searched as a library
+// from libraryfolders.vdf is, and before the ones Steam names. For the tools,
+// which cannot add a library to Steam's own file; the engine never calls it.
+void HDInstallAddLibrary(const wchar_t* folder);
+
 // The path stored in the registry, or an empty string. Public so the setup
 // dialog can show it.
 const char* HDInstallOverride();

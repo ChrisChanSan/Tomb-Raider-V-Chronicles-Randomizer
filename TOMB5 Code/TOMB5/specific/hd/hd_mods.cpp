@@ -13,6 +13,7 @@
 #include "hd_mods.h"
 #include "hd_pagecache.h"	// HD_PAGE_MOD_MAX - the real cap on the count
 #include "hd_folderlist.h"	// a mod's model found by a folder listing
+#include "hd_install_names.h"	// the wide names, the code page test
 
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
@@ -22,6 +23,7 @@
 #include <cstdarg>
 #include <cstdio>
 #include <cstring>
+#include <exception>
 #include <filesystem>
 #include <string>
 #include <system_error>
@@ -151,19 +153,39 @@ namespace
 		return out;
 	}
 
+	/* Every path this file keeps is spelt in the system code page, as the
+	 * engine's fopen takes it and as the paths it hands out are opened
+	 * (HDModsPath, HDModsBank, HDModsWav and the rest). A path is turned
+	 * wide only to ask the file system about it, and read in that same code
+	 * page: read as UTF-8, a name like "Über" is not valid UTF-8 and the
+	 * conversion throws. */
+	fs::path wide(const std::string& path)
+	{
+		return fs::path(HDNameWide(path, CP_ACP));
+	}
+
+	/* The spelling a walked entry is kept by, or false when the system code
+	 * page cannot hold it: such a file could not be opened by the engine's
+	 * narrow calls anyway, and asking path::string() for it throws. */
+	bool narrow(const fs::path& path, std::string& out)
+	{
+		return HDNameFits(path.native(), CP_ACP, out);
+	}
+
 	bool file_there(const std::string& path)
 	{
 		std::error_code ec;
-		return fs::is_regular_file(fs::u8path(path), ec);
+		return fs::is_regular_file(wide(path), ec);
 	}
 
 	/* A model's file, out of one listing of its ITEM folder
 	 * (hd_folderlist.h): every name a level asks for is asked of every
 	 * active mod's two folders. Asked of the file itself where the folder
-	 * cannot be listed. */
+	 * cannot be listed. The path is in the system code page (see wide()
+	 * above), which is the listing's spelling `false`. */
 	bool model_there(const std::string& path)
 	{
-		const int listed = HDFolderHas(path, true);
+		const int listed = HDFolderHas(path, false);
 
 		return listed >= 0 ? listed != 0 : file_there(path);
 	}
@@ -171,7 +193,7 @@ namespace
 	bool folder_there(const std::string& path)
 	{
 		std::error_code ec;
-		return fs::is_directory(fs::u8path(path), ec);
+		return fs::is_directory(wide(path), ec);
 	}
 
 	// A name beginning with "_" is switched off, at every depth. That is the
@@ -201,7 +223,7 @@ namespace
 	int count_files(const std::string& folder, const char* ext, Mod* mod, int game)
 	{
 		std::error_code ec;
-		fs::directory_iterator it(fs::u8path(folder), ec), end;
+		fs::directory_iterator it(wide(folder), ec), end;
 		int count = 0;
 
 		if (ec)
@@ -215,7 +237,13 @@ namespace
 			if (!it->is_regular_file(ec) || ec)
 				continue;
 
-			const std::string leaf = it->path().filename().string();
+			std::string leaf;
+			std::string whole;
+
+			if (!narrow(it->path().filename(), leaf) ||
+				!narrow(it->path(), whole))
+				continue;
+
 			const std::string low = lower(leaf);
 
 			if (low.size() <= std::strlen(ext) ||
@@ -233,7 +261,7 @@ namespace
 				Outfit one;
 
 				one.stem = upper(leaf.substr(0, leaf.size() - std::strlen(ext)));
-				one.path = it->path().string();
+				one.path = whole;
 				one.game = game;
 
 				bool twice = false;
@@ -350,7 +378,7 @@ namespace
 	void collect_wavs(Mod& mod, int index)
 	{
 		std::error_code ec;
-		fs::recursive_directory_iterator it(fs::u8path(mod.path),
+		fs::recursive_directory_iterator it(wide(mod.path),
 			fs::directory_options::skip_permission_denied, ec), end;
 
 		if (ec)
@@ -361,19 +389,25 @@ namespace
 			if (ec)
 				break;
 
-			const std::string leaf = it->path().filename().string();
+			// The switch-off test on the wide name: a folder whose name the
+			// code page cannot spell is still switched off by its "_".
+			const std::wstring name = it->path().filename().native();
 
 			if (it->is_directory(ec) && !ec)
 			{
-				if (disabled(leaf) || it.depth() >= 8)
+				if ((!name.empty() && name[0] == L'_') || it.depth() >= 8)
 					it.disable_recursion_pending();
 
 				continue;
 			}
 
+			std::string leaf;
+			std::string whole;
 			int number = 0;
 
-			if (!it->is_regular_file(ec) || ec || !wav_number(leaf, &number))
+			if (!it->is_regular_file(ec) || ec ||
+				!narrow(it->path().filename(), leaf) ||
+				!wav_number(leaf, &number) || !narrow(it->path(), whole))
 				continue;
 
 			bool taken = false;
@@ -396,7 +430,7 @@ namespace
 
 			one.number = number;
 			one.mod = index;
-			one.path = it->path().string();
+			one.path = whole;
 			wavs.push_back(one);
 			mod.ships.wavs++;
 		}
@@ -414,7 +448,8 @@ namespace
 		std::vector<Mod>& found)
 	{
 		std::error_code ec;
-		fs::directory_iterator it(fs::u8path(rel.empty() ? root : join(root, rel)), ec), end;
+		fs::directory_iterator it(wide(rel.empty() ? root : join(root, rel)),
+			ec), end;
 
 		if (ec)
 			return;
@@ -424,7 +459,22 @@ namespace
 			if (ec)
 				break;
 
-			const std::string leaf = it->path().filename().string();
+			/* A name the system code page cannot spell names a mod or a
+			 * list whose files the engine could not open: one line, and
+			 * the walk goes on. path::string() on it would throw. */
+			std::string leaf;
+			std::string whole;
+
+			if (!narrow(it->path().filename(), leaf) ||
+				!narrow(it->path(), whole))
+			{
+				const std::wstring name = it->path().filename().native();
+
+				if (!name.empty() && name[0] != L'_')
+					note("MODLOG skipped %s - its name has letters the system "
+						"code page cannot spell", HDNameShown(name).c_str());
+				continue;
+			}
 
 			/* A loose .txt is a list, not a mod. It lies beside the mod
 			 * folders - Mods\outfit.txt, Mods\Outfits\outfit_1-5.txt - and the
@@ -441,7 +491,7 @@ namespace
 
 				if (low.size() > 4 && low.compare(low.size() - 4, 4, ".txt") == 0 &&
 					!disabled(leaf))
-					lists.push_back(it->path().string());
+					lists.push_back(whole);
 
 				continue;
 			}
@@ -457,11 +507,11 @@ namespace
 				continue;
 			}
 
-			if (is_mod(it->path().string()))
+			if (is_mod(whole))
 			{
 				Mod one;
 
-				one.path = it->path().string();
+				one.path = whole;
 				one.name = here;
 				one.sort = lower(here);
 				found.push_back(one);
@@ -573,10 +623,36 @@ namespace
 		}
 	}
 
+	/* The scan, with nothing let out of it. The walks above step with
+	 * error codes and keep every name wide until it is known to fit the
+	 * code page, so nothing in them is known to throw; this is the net
+	 * under that. The scan runs at every level load whatever the HD
+	 * settings say (the sound bank chain asks it first), so a throw here
+	 * would end the game. A scan stopped half way overlays nothing. */
 	void need_scan()
 	{
-		if (!scanned)
+		if (scanned)
+			return;
+
+		try
+		{
 			scan();
+		}
+		catch (const std::exception& e)
+		{
+			mods.clear();
+			wavs.clear();
+			lists.clear();
+			note("MODLOG the scan stopped on an error (%s) - nothing is "
+				"overlaid", e.what());
+		}
+		catch (...)
+		{
+			mods.clear();
+			wavs.clear();
+			lists.clear();
+			note("MODLOG the scan stopped on an error - nothing is overlaid");
+		}
 	}
 }
 

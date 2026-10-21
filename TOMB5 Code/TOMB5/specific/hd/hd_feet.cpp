@@ -279,7 +279,8 @@ void HDFeetLevelBuild(short* lut, SAMPLE_INFO* infos, int infoCount, int spare,
 	 *
 	 * The bare set asks it of the first take of id 0: a sound mod that
 	 * replaces the footsteps is a barefoot mod, so when the chain's id 0 is a
-	 * mod's own recording the bare set IS the ordinary set.
+	 * mod's own recording the bare set IS the ordinary set - provided every
+	 * take of id 0 reached its slot.
 	 *
 	 * The boots ask it of every take of ids 0 and 4: where any one of them is
 	 * not the unmodded bank's, the ordinary set is not the boots, and the
@@ -298,9 +299,20 @@ void HDFeetLevelBuild(short* lut, SAMPLE_INFO* infos, int infoCount, int spare,
 	/* A copy and not the pointer: HQSfxWavSource hands back a buffer of its own
 	 * that the next call on it overwrites. */
 	char modWho[160];
+	char holeWhy[160];
 
 	{
 		const int first = chain_differs(own.number, next);
+		/* The first take decides whether it is a mod; every take decides
+		 * whether the mod's set is whole. A later take the loop refused holds
+		 * the level's own recording, and a bare set with a hole in it would
+		 * play the boots on some steps and not on others - all or nothing,
+		 * as the boots are. */
+		int hole = -1;
+
+		for (int i = 1; i < ownTakes && hole < 0; i++)
+			if (chain_differs(own.number + i, next) == -1)
+				hole = i;
 		/* Which kind of mod it is, for the log alone - the rule has already
 		 * decided. A loose .wav wins inside the chain, so when there is one
 		 * it is the name to print even if a mod's bank is played as well. */
@@ -313,7 +325,15 @@ void HDFeetLevelBuild(short* lut, SAMPLE_INFO* infos, int infoCount, int spare,
 		snprintf(g_ordinary, sizeof(g_ordinary), "%s",
 			first == -1 ? "the level's own" : overlaid ? wav : HQSfxSource());
 
-		if (first > 0)
+		if ((first > 0 || first == -2) && hole > 0)
+		{
+			snprintf(holeWhy, sizeof(holeWhy), "take %d of sound id 0 plays "
+				"the level's own recording - the chain has none for it, or the "
+				"load refused it by its length; a set with a hole is no set",
+				hole);
+			modWhy = holeWhy;
+		}
+		else if (first > 0)
 		{
 			useMod = true;
 			modWhy = overlaid ? "its own loose .wav stands on sound id 0"

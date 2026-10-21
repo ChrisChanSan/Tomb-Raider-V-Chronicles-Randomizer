@@ -29106,7 +29106,8 @@ switch as one state), `5d9da2f` (the build gate's comment), and the record's own
 2026-10-21 - 2026-10-22
 
 **What.** Five things around the installations the engine and the randomizer read at
-run time. The search for the Remasters and the Mods scan walk every folder with wide
+run time. The search for the Remasters, the Mods scan and the two readers that walk a
+found root (the wardrobe and the classic object reader) walk every folder with wide
 names and error codes and cannot throw any more; a root the system code page cannot
 spell is refused with one line. One `INSTALL` line behind `-log` says what the search
 found and why. A row *HD build* on the *Graphics* page switches the HD build off for
@@ -29145,12 +29146,20 @@ with a Cyrillic, a CJK and a Latin-1 ("Tomb Über") name:
 | Mods folder with a Latin-1 mod, a Cyrillic mod and a CJK list | `HDModsScan` throws | 2 mods (Plain, Tomb Über Mod), 2 `MODLOG skipped` lines |
 | Mods folder with only "Tomb Über Mod" and a plain mod | `HDModsScan` throws | both found |
 | no override, this machine's Steam | both roots found | the same roots and the same notes, line for line |
+| the root the search now finds in a library with a Latin-1 name, walked by the wardrobe (`4\ITEM`: an ASCII and a Cyrillic outfit file) and by the classic object reader (`3\DATA`: `JUNGLE.TR2`) | both readers throw `system_error` | the wardrobe lists the ASCII outfit and passes over the Cyrillic one; the reader finds `GUN_OPTION` in `JUNGLE.TR2`; the same tree under an ASCII name: the reader's line the base's, the base's wardrobe walk still throwing on the Cyrillic file name |
 
-The last but one row is a finding of this round: the scan kept its paths in the code
+The second Mods row is a finding of this round: the scan kept its paths in the code
 page (`path::string()`) and asked the file system about them through `u8path`, which
 throws on any byte that is not UTF-8, so a German umlaut in a mod's folder name ended
 the game at the first level load - with `hd_build` 0 as well, since the sound bank
-chain scans the Mods folder first. The price of the HD build for a player who never
+chain scans the Mods folder first. The last row came out of the round's check of its
+own work: the base's search passed such a library over, and once it found the root, the
+wardrobe's walk (`hd_wardrobe.cpp`, `add_from_install`) and the classic reader's
+(`hd_classic.cpp`, `HDClassicRead`) read its code-page spelling back as UTF-8 through
+`u8path`, which throws on it, with no catch above them - the end of the game at the
+first HD level build. An override path with such a letter reached the same throw at
+the base; the wardrobe also read each file name through `path::string()`, which threw
+on a Cyrillic one. The price of the HD build for a player who never
 presses F12, from the play test's log (eight levels and the title): 1.25 to 4.78 s more
 per level load, median 2.8 s; 232 to 475 MiB of texture pages and 10 to 62 MiB of room
 buffers on the card; 7 to 17 MiB of managed model buffers. On the randomizer side, with
@@ -29180,13 +29189,18 @@ code page as the fallback); the roots are found wide and handed on by `narrow_ro
 `HDInstallSearched` asks nothing; `HDInstallAddLibrary` is for the tools. *The Mods
 scan* (`hd_mods.cpp`) keeps its paths in the code page and asks the file system in that
 same code page; a name that does not fit is skipped with one line; the scan has the
-same net. *The `INSTALL` line* (`specific/file.cpp`, once, after the first load thread
-has joined): `INSTALL hd=<root|none> tr3=<root|none> reason=<notes joined with " | ">
-bank=<mod|audio|install|level>` - after the join rather than at the first resolver call,
-because with `hd_build` 0 that call is the sound bank chain's on the load thread, and
-the bank is known only once the chain ran; the line looks nothing up, so `hd_build` 0
-walks no library it did not walk before. *The row* (`game/menu_frame.cpp`): *HD build*,
-on and off, default on, right above *HD textures*; it shows and steps
+same net. *The readers of a found root* (`hd_wardrobe.cpp`, `hd_classic.cpp`) read it
+in the code page it is handed on in (`HDNameWide`), take each file name through
+`HDNameFits` and pass over one the code page cannot spell - the wardrobe counts it
+among the files its scan line says it passed over; the classic reader cuts the level's
+name out of the path without a conversion. *The `INSTALL` line* (`specific/file.cpp`,
+once, after the first load thread has joined): `INSTALL hd=<root|none> tr3=<root|none>
+reason=<notes joined with " | "> bank=<mod|audio|install|level>` - after the join
+rather than at the first resolver call, because with `hd_build` 0 that call is the
+sound bank chain's on the load thread, and the bank is known only once the chain ran;
+the line looks nothing up, so `hd_build` 0 walks no library it did not walk before.
+*The row* (`game/menu_frame.cpp`): *HD build*, on and off, default on, right above
+*HD textures*; it shows and steps
 `tomb5_hd_build_next` (`tomb5/tomb5.h` and `.cpp`), which the save writes as
 `hd_build`; the gate in force, `tomb5.hd_build`, takes it at the top of
 `S_LoadLevelFile`, before `HDLevelKeyEarly` asks `HDEnabled` for the first time. Every
@@ -29252,6 +29266,9 @@ checks at the base and 16155 here (15 in `install_names`), MenuTest 44917 and 44
 in `graphics_build_row`, one more row in the Graphics table's sweep), InterpTest 754
 and 754, LipsTest 299 and 272 (with and without the scratch object folder, the game's
 `cutseq.bin` given by its path) at both, 0 failed. The harness above, before and after.
+A probe linking `hd_install.cpp` with the base's or the head's `hd_classic.cpp` and
+running the wardrobe's walk, base and head, on a library named with an umlaut and on
+the same tree under an ASCII name: the table's last row.
 The randomizer's own `Tr3Source` on the original and the Remastered folders: `3` and
 `3\DATA` give `3\data` and `3\DATA\LA` and the bank in `3\SFX`; all four guests fetch
 from it with sound packages identical to the original's (260,194, 229,570, 55,858 and
@@ -29289,7 +29306,8 @@ carries a negative count today.
 `7bd4644f` (the `INSTALL` line), `325a44bf` (the HD build row), `fd45a98f` (the TR3
 bank), `b28f1f76` (Gold in `DATA\LA`), `f0a48d2a` (the planner's test), `ffafd867` (the
 editions), `c8f9ccf2` (an outfit whose level is missing), `e41b2988` (the `.hdm`
-cleanup), `473f439b` (`spoiler.txt`) and the record.
+cleanup), `473f439b` (`spoiler.txt`), `48f79410` (the readers of a found root) and the
+record's own two commits.
 
 ### The gamma row (#220)
 2026-10-18

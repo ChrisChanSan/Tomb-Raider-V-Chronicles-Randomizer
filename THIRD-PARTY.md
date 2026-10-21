@@ -4462,6 +4462,15 @@ carries the tables.
     fifteen vanilla files, and RICH1's records byte for byte the same in the randomized
     file; a tool that reads the count unsigned (`AnimCmd`) walks on into the next
     animations' commands.
+464. **The readers of a found root take it in the system code page, not as UTF-8**
+    (`hd_wardrobe.cpp`, `add_from_install`; `hd_classic.cpp`, `HDClassicRead` and
+    `read_level`) - the root through `HDNameWide`, each file name through
+    `HDNameFits`, one the code page cannot spell passed over. TEXTBOOK
+    (`std::filesystem::u8path` reads its argument as UTF-8 and throws
+    `system_error` on bytes that are not); DATA: the round's probe on a library named
+    with an umlaut - both base walks throw, the head's wardrobe lists the ASCII outfit
+    and passes over the Cyrillic one, the head's reader finds `GUN_OPTION` in
+    `JUNGLE.TR2`; under an ASCII name the reader's line is the base's.
 
 ## Credited, but not contained here
 

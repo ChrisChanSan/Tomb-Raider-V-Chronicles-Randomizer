@@ -25526,7 +25526,7 @@ static void marble_over()
 }
 
 /* The marble floors' own walk and the sky (hd_marble_math.h,
- * HDMarbleWalk, HDMarbleOpen, HDMarbleSkyTurn). */
+ * HDMarbleWalk, HDMarbleOpen, HDMarbleSkyTurn, HDMarbleSolidRun). */
 static void marble_walk()
 {
 	printf("the marble floors: a plane's own walk and the sky\n");
@@ -25606,6 +25606,37 @@ static void marble_walk()
 		turn[3] == 0.0f && turn[7] == 0.0f && turn[11] == 0.0f &&
 		turn[15] == 1.0f,
 		"marble sky: turned as the view, centred on the eye", 0, 0);
+
+	/* Where the sky goes in among a frame's noted draws (HDMarbleSolidRun):
+	 * after the run of solid draws that leads the list. The masks as
+	 * hd_render.h has them: opaque 1, alpha 2 (the solid passes 3),
+	 * additive 4, blend 8, clear 16. */
+	const unsigned int solid = 0x3;
+	const std::vector<unsigned int> none;
+	const std::vector<unsigned int> frame = { 3, 3, 1, 2, 3, 16, 8, 8, 4 };
+	const std::vector<unsigned int> glass = { 8, 3, 3 };
+	const std::vector<unsigned int> nothing = { 3, 0, 3, 8 };
+	const std::vector<unsigned int> mixed = { 3, 11, 3 };
+	const std::vector<unsigned int> solids = { 3, 3, 3 };
+
+	ok(HDMarbleSolidRun(none, solid) == 0,
+		"marble sky: no noted draw, the sky first",
+		(int)HDMarbleSolidRun(none, solid), 0);
+	ok(HDMarbleSolidRun(frame, solid) == 5,
+		"marble sky: after the solid phase, before the clear floors",
+		(int)HDMarbleSolidRun(frame, solid), 5);
+	ok(HDMarbleSolidRun(glass, solid) == 0,
+		"marble sky: a see-through draw first keeps the sky first",
+		(int)HDMarbleSolidRun(glass, solid), 0);
+	ok(HDMarbleSolidRun(nothing, solid) == 3,
+		"marble sky: a draw of no pass stays in the run",
+		(int)HDMarbleSolidRun(nothing, solid), 3);
+	ok(HDMarbleSolidRun(mixed, solid) == 1,
+		"marble sky: a draw with a blended pass ends the run",
+		(int)HDMarbleSolidRun(mixed, solid), 1);
+	ok(HDMarbleSolidRun(solids, solid) == 3,
+		"marble sky: all solid, the sky after them all",
+		(int)HDMarbleSolidRun(solids, solid), 3);
 }
 
 /* The marble floors' slopes (hd_marble_math.h): a sloped face's plane, its

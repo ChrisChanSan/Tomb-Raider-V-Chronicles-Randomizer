@@ -12,7 +12,8 @@
  */
 
 /* InterpTest - the arithmetic of the 60 FPS interpolation, checked without a
- * game. Build with bit.bat, run with no arguments.
+ * game. Build with bit.bat; run it with the path of the game's ANDREA1.TRC,
+ * or with none (see "Lara's frames, from the level").
  *
  * What it checks, and why: a short angle blended the long way round is
  * invisible almost all the time and looks like a rendering glitch when it is
@@ -68,6 +69,294 @@ static void okf(bool cond, const char* what, double got, double want)
 		g_fail++;
 		printf("  FAIL %-58s got %.4f, want %.4f\n", what, got, want);
 	}
+}
+
+/* --------------------------------------- Lara's frames, from the level -- */
+
+/* The key frame, bridge, far-pair and seam checks run on Lara's own key
+ * frames and bone table, read at run time from the player's ANDREA1.TRC
+ * (read in place, never written), so no number of the level is kept in
+ * this file. The first argument names the file; without one it is looked
+ * for in the game folder beside the repository's Preparation tree, from the
+ * EXE's folder first and the working folder second, as LipsTest finds
+ * cutseq.bin. Without the file each check block that needs it counts as one
+ * failed check that says so, and the rest of the suite runs.
+ *
+ * The walk is the randomizer's (Tr5Level::readHeader and findItems): the
+ * three texture blocks, packed or not, the 32 bytes of level switches and
+ * the main block, which is stored unpacked; in it the rooms by their sizes,
+ * then floordata, mesh data, mesh pointers, animations (40 bytes), state
+ * changes (6), ranges (8), commands (2), bones (4), frames (2) and the
+ * moveables (20). A key frame lies at its animation's frame offset plus the
+ * key times the frame size; Lara is moveable slot 0. Each table below is
+ * read only where its animation's frame size is the one named here, so a
+ * level with other frames is refused rather than measured. */
+static const char* LEVEL_REL =
+	"..\\..\\..\\Tomb5 Steam Version\\data\\ANDREA1.TRC";
+
+static short g_k1[2][33], g_k10[2][36], g_k53[2][34], g_k76[2][36];
+static short g_k91[2][36], g_k159[3][37], g_k207[2][35], g_k209[2][37];
+static short g_k210_7[36], g_k210_8[36], g_k211_0[37], g_k211_1[37];
+static short g_k212[2][37], g_k213[2][37], g_k451[2][34];
+static long g_bones[14 * 4];
+static bool g_level = false;
+
+struct LevelFile
+{
+	const unsigned char* b;
+	size_t n;
+	size_t anim, bone, frame;
+	long animN, boneN, frameN;
+	long laraAnim, laraBone;
+};
+
+static bool lv_count(const LevelFile& f, size_t* p, long* v)
+{
+	int x = 0;
+
+	if (*p > f.n || f.n - *p < 4)
+		return false;
+
+	memcpy(&x, f.b + *p, 4);
+	*p += 4;
+	*v = x;
+	return true;
+}
+
+static bool lv_skip(const LevelFile& f, size_t* p, long count, long each)
+{
+	if (count < 0 || *p > f.n)
+		return false;
+
+	const unsigned long long n =
+		(unsigned long long)count * (unsigned long long)each;
+
+	if (n > f.n - *p)
+		return false;
+
+	*p += (size_t)n;
+	return true;
+}
+
+static bool lv_walk(LevelFile* f)
+{
+	size_t p = 0;
+	bool found = false;
+	long n = 0;
+
+	for (int packed = 1; packed >= 0 && !found; packed--)
+	{
+		size_t q = 10;		/* the version and the three page counts */
+		long size = 0, comp = 0;
+		bool good = true;
+
+		for (int block = 0; block < 3 && good; block++)
+			good = lv_count(*f, &q, &size) && lv_count(*f, &q, &comp) &&
+				lv_skip(*f, &q, packed ? comp : size, 1);
+
+		found = good && lv_skip(*f, &q, 32, 1) && lv_count(*f, &q, &size) &&
+			lv_count(*f, &q, &comp) && size > 0 && size == comp &&
+			(size_t)size <= f->n - q;
+		p = q;
+	}
+
+	if (!found || !lv_skip(*f, &p, 1, 4) || !lv_count(*f, &p, &n))
+		return false;
+
+	for (long r = n, size = 0; r > 0; r--)
+		if (!lv_skip(*f, &p, 1, 4) || !lv_count(*f, &p, &size) ||
+			!lv_skip(*f, &p, size, 1))
+			return false;
+
+	/* floordata, meshes and pointers; changes, ranges and commands */
+	static const long before[3] = { 2, 2, 4 };
+	static const long between[3] = { 6, 8, 2 };
+
+	for (int i = 0; i < 3; i++)
+		if (!lv_count(*f, &p, &n) || !lv_skip(*f, &p, n, before[i]))
+			return false;
+
+	if (!lv_count(*f, &p, &f->animN))
+		return false;
+
+	f->anim = p;
+
+	if (!lv_skip(*f, &p, f->animN, 40))
+		return false;
+
+	for (int i = 0; i < 3; i++)
+		if (!lv_count(*f, &p, &n) || !lv_skip(*f, &p, n, between[i]))
+			return false;
+
+	if (!lv_count(*f, &p, &f->boneN))
+		return false;
+
+	f->bone = p;
+
+	if (!lv_skip(*f, &p, f->boneN, 4) || !lv_count(*f, &p, &f->frameN))
+		return false;
+
+	f->frame = p;
+
+	if (!lv_skip(*f, &p, f->frameN, 2) || !lv_count(*f, &p, &n) ||
+		!lv_skip(*f, &p, n, 20))
+		return false;
+
+	for (long i = 0; i < n; i++)
+	{
+		const unsigned char* m = f->b + p - (size_t)(n - i) * 20;
+		int slot = 0, bone = 0;
+		unsigned short meshes = 0, anim = 0;
+
+		memcpy(&slot, m, 4);
+		memcpy(&meshes, m + 4, 2);
+		memcpy(&bone, m + 8, 4);
+		memcpy(&anim, m + 16, 2);
+
+		if (slot == 0)
+		{
+			f->laraAnim = anim;
+			f->laraBone = bone;
+			return meshes == 15 && bone >= 0 && (long)bone + 14 * 4 <= f->boneN;
+		}
+	}
+
+	return false;
+}
+
+/* `count` keys of Lara's animation `anim` from key `first`, `size` shorts
+ * each, where `size` is the animation's own frame size. */
+static bool lara_keys(const LevelFile& f, long anim, long first, int count,
+	int size, short* out)
+{
+	const long a = f.laraAnim + anim;
+	long offset = 0;
+	size_t at = 0;
+
+	if (a < 0 || a >= f.animN)
+		return false;
+
+	at = f.anim + (size_t)a * 40;
+
+	if (!lv_count(f, &at, &offset) || offset < 0 || f.b[at + 1] != size)
+		return false;
+
+	for (int k = 0; k < count; k++)
+		for (int i = 0; i < size; i++)
+		{
+			const long s = offset / 2 + (first + k) * size + i;
+
+			if (s < 0 || s >= f.frameN)
+				return false;
+
+			memcpy(out + k * size + i, f.b + f.frame + (size_t)s * 2, 2);
+		}
+
+	return true;
+}
+
+static FILE* level_open(const char* named, char* path, size_t size)
+{
+	char* exe = 0;
+	FILE* f = 0;
+
+	if (named)
+	{
+		strcpy_s(path, size, named);
+		return fopen_s(&f, path, "rb") ? 0 : f;
+	}
+
+	if (!_get_pgmptr(&exe) && exe)
+	{
+		const char* cut = strrchr(exe, '\\');
+		const size_t dir = cut ? (size_t)(cut - exe) + 1 : 0;
+
+		if (dir && dir + strlen(LEVEL_REL) < size)
+		{
+			memcpy(path, exe, dir);
+			strcpy_s(path + dir, size - dir, LEVEL_REL);
+
+			if (!fopen_s(&f, path, "rb"))
+				return f;
+		}
+	}
+
+	strcpy_s(path, size, LEVEL_REL);
+	return fopen_s(&f, path, "rb") ? 0 : f;
+}
+
+static void level_read(const char* named)
+{
+	char path[1024];
+	FILE* fp = level_open(named, path, sizeof(path));
+	unsigned char* b = 0;
+	long n = 0;
+
+	if (fp && !fseek(fp, 0, SEEK_END) && (n = ftell(fp)) > 0 &&
+		!fseek(fp, 0, SEEK_SET))
+	{
+		b = (unsigned char*)malloc((size_t)n);
+
+		if (b && fread(b, 1, (size_t)n, fp) != (size_t)n)
+		{
+			free(b);
+			b = 0;
+		}
+	}
+
+	if (fp)
+		fclose(fp);
+
+	LevelFile f = { b, b ? (size_t)n : 0 };
+
+	/* animation, first key, keys, frame size */
+	g_level = b && lv_walk(&f) &&
+		lara_keys(f, 1, 0, 2, 33, g_k1[0]) &&
+		lara_keys(f, 10, 0, 2, 36, g_k10[0]) &&
+		lara_keys(f, 53, 0, 2, 34, g_k53[0]) &&
+		lara_keys(f, 76, 0, 2, 36, g_k76[0]) &&
+		lara_keys(f, 91, 0, 2, 36, g_k91[0]) &&
+		lara_keys(f, 159, 1, 3, 37, g_k159[0]) &&
+		lara_keys(f, 207, 3, 2, 35, g_k207[0]) &&
+		lara_keys(f, 209, 0, 2, 37, g_k209[0]) &&
+		lara_keys(f, 210, 7, 1, 36, g_k210_7) &&
+		lara_keys(f, 210, 8, 1, 36, g_k210_8) &&
+		lara_keys(f, 211, 0, 1, 37, g_k211_0) &&
+		lara_keys(f, 211, 1, 1, 37, g_k211_1) &&
+		lara_keys(f, 212, 2, 2, 37, g_k212[0]) &&
+		lara_keys(f, 213, 0, 2, 37, g_k213[0]) &&
+		lara_keys(f, 451, 25, 2, 34, g_k451[0]);
+
+	if (g_level)
+		for (int i = 0; i < 14 * 4; i++)
+		{
+			int v = 0;
+
+			memcpy(&v, b + f.bone + (size_t)(f.laraBone + i) * 4, 4);
+			g_bones[i] = v;
+		}
+
+	free(b);
+
+	if (g_level)
+		printf("Lara's frames: %s\n\n", path);
+	else
+		printf("Lara's frames: %s %s - every check on them fails;\n"
+			"  name the game's data\\ANDREA1.TRC as the first argument\n\n",
+			named ? named : path, fp ? "is not ANDREA1's level" : "not found");
+}
+
+/* Whether a block that runs on Lara's frames can run; without them it
+ * counts as one failed check. */
+static bool lara_level(const char* what)
+{
+	if (g_level)
+		return true;
+
+	g_checks++;
+	g_fail++;
+	printf("  FAIL %-58s no ANDREA1.TRC\n", what);
+	return false;
 }
 
 /* ------------------------------------------------------------- the angles -- */
@@ -4879,14 +5168,16 @@ static void key_build()
 	}
 
 	/* 5. The back jump's twist end, animation 213 key 0 to 1 in ANDREA1, its
-	 * two packed hips rotations copied from the level file (03f2 6ed1 and
-	 * 3bc0 3fb1, 98.8 degrees apart); and the forward twist's 209 key 0 to 1
-	 * (3280 7942 and 022f 5be6, 152.6 degrees). The middle frame vanilla draws
-	 * shrinks the hips to 0.70 and 0.36 of their length; built, it is a
-	 * rotation half way along. */
+	 * two packed hips rotations read from the level (98.8 degrees apart);
+	 * and the forward twist's 209 key 0 to 1 (152.6 degrees). The middle
+	 * frame vanilla draws shrinks the hips to 0.70 and 0.36 of their length;
+	 * built, it is a rotation half way along. */
+	if (lara_level("build: 5. the twists' hips (213, 209)"))
 	{
-		const short k213[2][2] = { { 0x03f2, 0x6ed1 }, { 0x3bc0, 0x3fb1 } };
-		const short k209[2][2] = { { 0x3280, 0x7942 }, { 0x022f, 0x5be6 } };
+		const short k213[2][2] = { { g_k213[0][9], g_k213[0][10] },
+			{ g_k213[1][9], g_k213[1][10] } };
+		const short k209[2][2] = { { g_k209[0][9], g_k209[0][10] },
+			{ g_k209[1][9], g_k209[1][10] } };
 		const short (*pairs[2])[2] = { k213, k209 };
 		const double turn[2] = { 98.8, 152.6 };
 		const double shrink[2] = { 0.70, 0.36 };
@@ -5072,6 +5363,12 @@ static void hips_frame(short* f, unsigned short w0, unsigned short w1)
 	f[10] = (short)w1;
 }
 
+/* The hips of a key frame read from the level, alone in a frame. */
+static void hips_key(short* f, const short* key)
+{
+	hips_frame(f, (unsigned short)key[9], (unsigned short)key[10]);
+}
+
 /* The dot product of the two turns InterpHipsTurn finds: positive where they
  * turn the same way round, negative where they turn against each other. */
 static double hips_turn_dot(const short* a0, const short* a1, const short* b0, const short* b1)
@@ -5087,27 +5384,17 @@ static double hips_turn_dot(const short* a0, const short* a1, const short* b0, c
 /* The frames between two ticks across the animation change after an early
  * half turn (interpolate_math.h, InterpBridgeFires, InterpBridgeLong and
  * InterpKeyFrameBridge): bridged from the pose the flip tick drew to the
- * pose of the current tick. The frames are ANDREA1's, copied from the level
- * file: the standing-jump twist's 210 key 8 (frame 5544, the flip frame) and
- * 211 key 0 (frame 5545) whole, fifteen nodes; the hips of 210 key 7, 211
- * key 1, the back twist's 212 keys 2 and 3 and 213 keys 0 and 1, and the
+ * pose of the current tick. The frames are ANDREA1's, read from the level:
+ * the standing-jump twist's 210 key 8 (frame 5544, the flip frame) and 211
+ * key 0 (frame 5545) whole, fifteen nodes; the hips of 210 key 7, 211 key 1,
+ * the back twist's 212 keys 2 and 3 and 213 keys 0 and 1, and the
  * running-jump twist's 207 keys 3 and 4 and 209 keys 0 and 1. */
 static void key_bridge()
 {
 	printf("the bridge across an early half turn's animation change\n");
 
-	static const short k210_8[36] =
-	{
-		-164, 137, -712, -460, -194, 197, 69, -626, -7, 14940, -11049, 3949, -3203,
-		15287, -513, 14704, 3078, 4093, -14473, 15208, 511, 14832, 1021, 12512,
-		-18479, 3276, -10441, 319, -853, -12403, 3235, -14105, 528, 1902, -16199, 20181
-	};
-	static const short k211_0[36] =
-	{
-		-153, 148, -793, -541, -194, 195, -84, -626, -7, 1459, 13018, 3949, -3203,
-		15287, -513, 14640, 3078, 4093, -14473, 15208, 511, 14784, 1021, 12512,
-		-18479, 3276, -10441, 319, -853, -12395, 3235, -14105, 528, 1902, -16207, 20181
-	};
+	const short (&k210_8)[36] = g_k210_8;
+	const short (&k211_0)[37] = g_k211_0;
 	const int nodes = 15;
 	short from[INTERP_KEYFRAME_MAX], out[INTERP_KEYFRAME_MAX];
 
@@ -5118,7 +5405,8 @@ static void key_bridge()
 	/* 1. The ends: at t 0 the bridge is the first pose and at t 1 the
 	 * second, node by node to the step of the packed form, either way round
 	 * at the hips. */
-	for (int way = 0; way < 2; way++)
+	for (int way = 0; way < 2 && lara_level("bridge: 1. the ends (210, 211)");
+		way++)
 	{
 		InterpKeyFrameBridge(from, k211_0, nodes, 0.0F, way == 1, out);
 
@@ -5140,13 +5428,14 @@ static void key_bridge()
 	 * 1), so the longer way is taken, 180.8 degrees: at t 0.5 the hips are a
 	 * rotation 90.4 degrees from each end, on the far side of the shorter
 	 * way. */
+	if (lara_level("bridge: 2. the arc from 210 to 211"))
 	{
 		short k7[11], k8[11], before0[INTERP_KEYFRAME_MAX], before1[INTERP_KEYFRAME_MAX];
 		short k211_1[11];
 
-		hips_frame(k7, 0x3c3c, 0xfcd4);
-		hips_frame(k8, 0x3a5c, 0xd4d7);
-		hips_frame(k211_1, 0x06d2, 0x9efa);
+		hips_key(k7, g_k210_7);
+		hips_key(k8, g_k210_8);
+		hips_key(k211_1, g_k211_1);
 		InterpKeyFrameTurn(k7, 1, before0);
 		InterpKeyFrameTurn(k8, 1, before1);
 
@@ -5209,18 +5498,19 @@ static void key_bridge()
 	/* The back twist 212 to 213 (its flip frame between keys 2 and 3 at a
 	 * half) turns 19.5 degrees and the running-jump twist 207 to 209 (keys 3
 	 * and 4 at a quarter) 13.5: near pairs, the shorter way. */
+	if (lara_level("bridge: the twists 212 to 213, 207 to 209"))
 	{
 		short a[11], b[11], ta[INTERP_KEYFRAME_MAX], tb[INTERP_KEYFRAME_MAX];
 		short f212[INTERP_KEYFRAME_MAX], f207[INTERP_KEYFRAME_MAX];
 		short t0[11], t1[11];
 
-		hips_frame(a, 0x066c, 0x4305);
-		hips_frame(b, 0x041a, 0x72d5);
+		hips_key(a, g_k212[0]);
+		hips_key(b, g_k212[1]);
 		InterpKeyFrameTurn(a, 1, ta);
 		InterpKeyFrameTurn(b, 1, tb);
 		InterpKeyFrameLerp(ta, tb, 1, 0.5F, f212);
-		hips_frame(t0, 0x03f2, 0x6ed1);
-		hips_frame(t1, 0x3bc0, 0x3fb1);
+		hips_key(t0, g_k213[0]);
+		hips_key(t1, g_k213[1]);
 
 		const short* pf = f212 + 9;
 		const short* pt = t0 + 9;
@@ -5232,13 +5522,13 @@ static void key_bridge()
 		okf(fabs(rot_angle(hf, ht) - 19.5) < 0.1 && !InterpBridgeLong(f212, t0, ta, tb, t0, t1),
 			"212 to 213: 19.5 degrees, the shorter way", rot_angle(hf, ht), 19.5);
 
-		hips_frame(a, 0x30db, 0x9058);
-		hips_frame(b, 0x32f8, 0x6947);
+		hips_key(a, g_k207[0]);
+		hips_key(b, g_k207[1]);
 		InterpKeyFrameTurn(a, 1, ta);
 		InterpKeyFrameTurn(b, 1, tb);
 		InterpKeyFrameLerp(ta, tb, 1, 0.25F, f207);
-		hips_frame(t0, 0x3280, 0x7942);
-		hips_frame(t1, 0x022f, 0x5be6);
+		hips_key(t0, g_k209[0]);
+		hips_key(t1, g_k209[1]);
 
 		pf = f207 + 9;
 		pt = t0 + 9;
@@ -5252,6 +5542,7 @@ static void key_bridge()
 	/* 3. The box and the root offset are the current tick's, at every
 	 * weight: what InterpRootNow reads off the drawn pair (both slots the
 	 * bridge) is the offset it reads off that tick's own frame. */
+	if (lara_level("bridge: 3. the bridge's box and root offset"))
 	{
 		const float ts[3] = { 0.25F, 0.5F, 0.75F };
 		bool box = true, offset = true;
@@ -5331,8 +5622,8 @@ static double det3(const double* m)
 /* The key pairs whose drawn rotation turns more than 90 degrees at any node
  * (interpolate_math.h, InterpDrawnRots, InterpKeyFarDrawn, InterpKeyFarFill
  * and InterpKeyFarBit), and the frame built across them (InterpKeyFrameFar).
- * The frames and Lara's bone table are ANDREA1's, copied from the level
- * file: the standing jump forward's take-off (76 keys 0 and 1), 10 keys 0
+ * The frames and Lara's bone table are ANDREA1's, read from the level:
+ * the standing jump forward's take-off (76 keys 0 and 1), 10 keys 0
  * and 1 (state AS_RUN), hitting a wall (53, keys 0 and 1), the run's first
  * pair (1 keys 0 and 1), the tightrope turn's held pair (451 keys 25 and 26)
  * and the standing jump up's take-off (91 keys 0 and 1). */
@@ -5340,57 +5631,12 @@ static void key_far_all()
 {
 	printf("key pairs far in the drawn frame, at any node\n");
 
-	static const long bones[14 * 4] =
-	{
-		2, -42, 20, 2, 0, 9, 185, 3, 0, 1, 192, -8, 3, 43, 20, 2, 0, -10, 185, 2,
-		0, 0, 193, -2, 1, -1, -49, 11, 2, 59, -142, -12, 0, 10, 95, -2, 0, 1, 101, -1,
-		3, -57, -143, -12, 0, -9, 98, -2, 0, -1, 99, -1, 1, 2, -198, -23
-	};
-	static const short k76[2][36] =
-	{
-		{ -176, 138, -451, 4, -153, 202, -8, -217, -68, 15359, -1021, 3001, -29061, 14040,
-			511, 1808, 29731, 2999, 11676, 14055, -512, 1839, -26666, 14464, 3066, 14480,
-			-14402, 303, -6, -12475, 13967, 31816, 528, 1031, -16126, 16924 },
-		{ -175, 188, -712, 0, -324, 330, -8, -412, -8, 14767, -2044, 16191, -7, -16384,
-			15136, 4101, 16207, -6145, -16384, 15184, 1021, 16303, -5, 3276, -10523, 319,
-			-6, -12464, 3235, -14039, 528, 1032, -16138, 16858, 35, 0 }
-	};
-	static const short k10[2][36] =
-	{
-		{ -102, 114, -781, -54, -322, 235, 1, -443, -5, 15919, -9215, 20320, 19956, 20297,
-			17078, 19899, 16543, 16288, -15361, 13008, 958, 3151, -12302, -12370, 1488,
-			16444, 3351, -28189, -16272, 479, 24575, 35, 0, 33, 0, 34 },
-		{ -174, 180, -782, -44, -293, 275, 4, -438, -5, 20449, 16351, -6124, 12599, -512,
-			20275, 2176, 995, 20138, 20445, 80, 14354, 14305, 12160, 3455, -19477, -12383,
-			15519, 17483, 2848, 15377, -16253, 415, -11278, 35, 0, 33 }
-	};
-	static const short k53[2][34] =
-	{
-		{ -112, 102, -764, -4, -182, 140, -9, -441, -72, 16208, 1027, 1183, -31743, 20379,
-			1327, -6188, 1872, 10232, 19607, 399, -2009, 751, -2053, 1084, -23758, 383, -6,
-			-13233, 659, 22742, 688, 2056, -15430, 20136 },
-		{ -172, 148, -761, 2, -129, 78, -8, -439, -17, 16208, 1027, 623, 28702, 20273, 304,
-			10206, 1040, 28639, 20129, 287, -3038, 783, -2053, 16191, 18256, 1112, 2565,
-			-13259, 15952, 13518, 1175, -3593, -15406, 20122 }
-	};
-	static const short k1[2][33] =
-	{
-		{ -112, 105, -787, -4, -113, 210, 1, -447, -1, 16240, 9212, 1280, 2, 20295, 16447,
-			15952, 8, 20478, 16521, 95, -12286, 447, 7148, 591, -1030, -12459, 15679, 2069,
-			256, 7, -16150, 16368, 1023 },
-		{ -115, 105, -786, 0, -142, 239, 1, -446, 6, 16240, 14333, 1248, 1, 20374, 16497,
-			15760, 5, 20479, 16489, 95, -20482, 542, -29730, 607, -1030, -12467, 15647,
-			12312, 240, 7, -16138, 16368, 4098 }
-	};
-	static const short k451[2][34] =
-	{
-		{ -306, 291, -765, 7, -194, 115, -3, -433, 12, 16264, -10253, 1039, -24569, 20410,
-			15823, -15355, 16, 12302, 20284, 895, 25587, 238, -18419, 15999, -10514, 16465,
-			-16348, 15775, -18190, 16447, -16287, 15503, -1030, 35 },
-		{ -302, 308, -765, 9, -116, 196, 2, -433, -7, 16240, -1038, 1039, -32760, 20410,
-			15887, -24562, 16352, 12302, 20295, 895, 18418, 255, 6156, 16015, -7436, 16461,
-			-16348, 15759, -18183, 16449, -16287, 15471, -3073, 35 }
-	};
+	const long (&bones)[14 * 4] = g_bones;
+	const short (&k76)[2][36] = g_k76;
+	const short (&k10)[2][36] = g_k10;
+	const short (&k53)[2][34] = g_k53;
+	const short (&k1)[2][33] = g_k1;
+	const short (&k451)[2][34] = g_k451;
 	const int nodes = 15;
 
 	/* 1. The walk over a hand-built tree: node 1 hangs off node 0, node 2
@@ -5459,6 +5705,7 @@ static void key_far_all()
 	 * - with the upper arm about 72 degrees from each key and the forearm
 	 * about 85, where vanilla's middle frame leaves the forearm's drawn frame
 	 * a determinant of cos(85.05)^2 = 0.007. */
+	if (lara_level("far: 2. the standing jump forward (76)"))
 	{
 		int node = -1;
 		float turnCos = 1.0F;
@@ -5541,6 +5788,7 @@ static void key_far_all()
 	 * parent's turn takes part of it back, and no node turns more than 83.6
 	 * in the drawn frame - near. The run's first pair, 1 key 0 to 1 (12.9 on
 	 * its own, 14.5 drawn): near. */
+	if (lara_level("far: 3. the drawn turn decides (10, 53, 1)"))
 	{
 		int node = -1;
 		float turnCos = 1.0F;
@@ -5569,6 +5817,7 @@ static void key_far_all()
 	 * is far and held. 76 carries no turn180_effect: far, and built. rich3's
 	 * 210 key 1 to 2, far only at the head, with the flip on its second key
 	 * (3992, rate 4 from 3984): the hips make it an early turn, not held. */
+	if (lara_level("far: 4. the hold (451, 76)"))
 	{
 		const long size = 34;
 		static short keys[27 * 34];
@@ -5652,16 +5901,9 @@ static void key_far_all()
 	 * frame; the way the drawn frame asks for, about 21. The same way at a
 	 * quarter and three quarters. A far pair with no such node (76) is
 	 * InterpKeyFrameLerp's frame word for word. */
+	if (lara_level("far: 6. the way round a node (91, 76)"))
 	{
-		static const short k91[2][36] =
-		{
-			{ -176, 138, -452, 4, -154, 202, -8, -217, -68, 15375, -1021, 3001, -29061, 14040,
-				511, 1808, 29731, 2999, 11676, 14056, 511, 1839, -26666, 14464, 3066, 14480,
-				-14402, 303, -6, -12475, 13967, 31816, 528, 1031, -16126, 16924 },
-			{ -113, 95, -873, 62, -156, 50, -8, -437, -12, 16224, 1027, 159, -29707, 20371,
-				14511, -9196, 16272, 26625, 20310, 15200, 6131, 367, -1029, 634, -467, 527,
-				-1030, -12475, 627, -19009, 624, 1032, -16126, 16640, 35, 0 }
-		};
+		const short (&k91)[2][36] = g_k91;
 		float a[15 * 9], b[15 * 9], m[15 * 9], g[9];
 		short built[INTERP_KEYFRAME_MAX], plain[INTERP_KEYFRAME_MAX];
 		int node = -1;
@@ -5751,50 +5993,18 @@ static double place_apart(const double* a, const double* b)
  * InterpKeySeam, INTERP_KEY_SEAM_COS, and InterpKeyFarFill, which leaves a
  * seam unmarked): a far pair where a limb turns more than 170 degrees both
  * on its own and in the drawn frame, left to vanilla's blend. The frames and
- * Lara's bone table are ANDREA1's, copied from the level file: the start of
- * the handstand from a ledge (159 keys 1, 2 and 3), the standing jump
+ * Lara's bone table are ANDREA1's, read from the level: the start of the
+ * handstand from a ledge (159 keys 1, 2 and 3), the standing jump
  * forward's take-off (76 keys 0 and 1) and the running jump's twist (209
  * keys 0 and 1). */
 static void key_seam()
 {
 	printf("a seam in the data, left to vanilla's blend\n");
 
-	static const long bones[14 * 4] =
-	{
-		2, -42, 20, 2, 0, 9, 185, 3, 0, 1, 192, -8, 3, 43, 20, 2, 0, -10, 185, 2,
-		0, 0, 193, -2, 1, -1, -49, 11, 2, 59, -142, -12, 0, 10, 95, -2, 0, 1, 101, -1,
-		3, -57, -143, -12, 0, -9, 98, -2, 0, -1, 99, -1, 1, 2, -198, -23
-	};
-	static const short k159[3][37] =
-	{
-		{ -146, 129, -726, 137, -38, 136, 2, -355, 55, 16095, -14335, 351, -3, 20417, 15344,
-			3075, 239, -5115, 20400, 15055, -3070, 336, 1017, 2873, 24032, 3816, -15824,
-			15325, 11435, 2853, 28128, 3956, -3780, 14914, 9086, 527, -27653 },
-		{ -122, 115, -877, -49, -30, 142, 3, -542, 52, 16191, -9214, 384, 19463, 20400, 15232,
-			1025, 239, -12283, 20388, 15039, -6137, 16208, 7158, 13890, 3997, 1848, 4614, 589,
-			29494, 14637, -28622, 1639, -5642, 1202, 13438, 16111, 21500 },
-		{ -142, 136, -1026, -232, 2, 258, 4, -723, 55, 15839, -1020, 1040, 18447, 20381,
-			15119, -1, 815, -11268, 20375, 15023, -9203, 15504, 14321, 434, -21462, 367, -6,
-			588, 32566, 653, -23574, 480, 1031, 594, -11063, 15855, 7169 }
-	};
-	static const short k76[2][36] =
-	{
-		{ -176, 138, -451, 4, -153, 202, -8, -217, -68, 15359, -1021, 3001, -29061, 14040,
-			511, 1808, 29731, 2999, 11676, 14055, -512, 1839, -26666, 14464, 3066, 14480,
-			-14402, 303, -6, -12475, 13967, 31816, 528, 1031, -16126, 16924 },
-		{ -175, 188, -712, 0, -324, 330, -8, -412, -8, 14767, -2044, 16191, -7, -16384,
-			15136, 4101, 16207, -6145, -16384, 15184, 1021, 16303, -5, 3276, -10523, 319,
-			-6, -12464, 3235, -14039, 528, 1032, -16138, 16858, 35, 0 }
-	};
-	static const short k209[2][37] =
-	{
-		{ -94, 163, -808, -333, -43, 264, 4, -593, 29, 12928, 31042, 1168, 20600, 15063,
-			-512, 20115, 0, 8322, 14568, 511, 20275, 13034, 15649, 2984, 17980, 2911,
-			-10252, -12299, 2471, -28215, 3216, 22551, -16346, 15471, -14332, 35, 0 },
-		{ -171, 149, -741, -118, -119, 270, -4, -456, 24, 559, 23526, 2688, 15401, 13928,
-			511, 14704, 1, 704, 21538, 12344, 511, 14608, 1023, 14127, -29633, 3089, -7194,
-			3848, -9674, -12299, 2557, -30696, 2775, -14865, -16346, 15471, -14332 }
-	};
+	const long (&bones)[14 * 4] = g_bones;
+	const short (&k159)[3][37] = g_k159;
+	const short (&k76)[2][36] = g_k76;
+	const short (&k209)[2][37] = g_k209;
 	const int nodes = 15;
 	const double kDeg = 180.0 / 3.14159265358979323846;
 
@@ -5893,6 +6103,7 @@ static void key_seam()
 	 * that line, and the upper arm shortens across the turn: its averaged
 	 * drawn frame has a determinant of 0.25 at a quarter and three quarters
 	 * and 0.0003 at a half. */
+	if (lara_level("seam: 2. the handstand from a ledge (159)"))
 	{
 		int node = -1;
 		float turnCos = 1.0F, ownCos = 1.0F, drawnCos = 1.0F;
@@ -5971,6 +6182,7 @@ static void key_seam()
 	 * 143.7 degrees on its own and 170.0 drawn, the forearm 0.4 and 170.1)
 	 * and the running jump's twist (209 key 0 to 1: the hips turn 152.6, and
 	 * keep the hips' rules). Both are far and built. */
+	if (lara_level("seam: 3. no seam (76, 209)"))
 	{
 		ok(InterpKeyFarDrawn(k76[0], k76[1], nodes, bones, 0, 0) &&
 			InterpKeySeam(k76[0], k76[1], nodes, bones, 0, 0) < 0,
@@ -6570,10 +6782,12 @@ static void zoom()
 	}
 }
 
-int main()
+int main(int argc, char** argv)
 {
 	printf("InterpTest - the arithmetic of the 60 FPS interpolation\n");
 	printf("built against TOMB5 Code" "\\" "TOMB5" "\\" "game" "\\" "interpolate_math.h\n\n");
+
+	level_read(argc > 1 && argv[1][0] ? argv[1] : 0);
 
 	angles();
 	fade();

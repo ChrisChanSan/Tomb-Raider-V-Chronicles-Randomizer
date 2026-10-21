@@ -2630,13 +2630,15 @@ face normal elsewhere. Audit round B1 could not settle that this choice rests on
 project's data alone; it stays as built and is to be re-derived by this project on its own
 A/B (RoomProbe `-glowps` over the 46 views, the face normal everywhere against the
 per-part choice), and if the file normal does not win on those numbers, TROne's own face
-normal, credited, takes its place. Re-derived in the entry "The glow's normal,
-re-derived": neither normal everywhere wins a view, and the per-part choice stands as
-this project's own. The end fade takes the asset's whole extent, so that the parts of one
-shaft do not seam at the room borders, and only where the art is cut out
-of its page in v. The presets stay unless the 55 per cent rule raises one, never past 1
-per cent clipped; three are raised. The depth fade where a shaft meets a wall comes in a
-later round with a depth texture. No sun rays, no fine modulation, no face culling of
+normal, credited, takes its place. The entry "The glow's normal, re-derived" replaced that
+fallback by a decision from the numbers on all three settings: a forced normal takes the
+per-part choice's place only on a clear win over most of the views, and a tie or a
+marginal result keeps the per-part choice. Neither normal everywhere wins a view, and the
+per-part choice stands as this project's own. The end fade takes the asset's whole extent,
+so that the parts of one shaft do not seam at the room borders, and only where the art is
+cut out of its page in v. The presets stay unless the 55 per cent rule raises one, never
+past 1 per cent clipped; three are raised. The depth fade where a shaft meets a wall comes
+in a later round with a depth texture. No sun rays, no fine modulation, no face culling of
 material 2.
 
 Open: whether a haze or mist part is spared the near fade and `|N.V|`. A rule on parts
@@ -31560,7 +31562,7 @@ branch, because the switch chain stands at the compiler's limit of nested blocks
 ModernTest's `glow_normal`, 8 checks.
 
 **Measured.** RoomProbe at 2560 x 1440 over the 46 views (the six views of the play test,
-the three of the measurement of #179 and one per sweep grouping), `-all -glow`, each view
+the four of the measurement of #179 and one per sweep grouping), `-all -glow`, each view
 under the three settings out of one build; the metrics those of the glow's entries, over
 the glow-alone picture with the scene's depth (glow pixels: a channel over 8 of 255).
 - The census of `BuildGlowParts`, identical under all three settings: 253 parts over the
@@ -31591,19 +31593,24 @@ The means over the 46 views:
   9.3 and 11.4. The shaft's parts agree, so the file normal everywhere is the shipped
   picture there.
 
-**The rule from the data.** The criterion is the one the measurement of #179 set for the
+**The rule from the data.** The aims are the ones the measurement of #179 set for the
 glow: fewer clipped, white and hue-pinned pixels, and fewer steps over 40 of 255 at equal
-means. Per view and pair of settings, the lower sum of the three shares wins when the
-sums differ by more than 0.05 percentage points (a twentieth of the pass mark of 1 per
-cent); else the fewer steps win when they differ by more than 5 per cent and by 2 or more,
-and only if the winner's mean is at least 95 per cent of the loser's; else the view is a
-tie. Applied: all 46 views are ties in all three pairs, and no setting wins a view. The
-same rule with steps over 20 of 255 in place of 40, as a check only: the shipped choice
-wins JOBY5's two sea views looking up against the face normal everywhere and loses
-ANDREA1's haze view, 43 ties. So neither forced normal wins clearly - a marginal result -
-and the per-part choice stands: it is the census's own split, the face normal exactly
-where the file's normals do not describe the card, and the file normal, which the
-renderer interpolates across the card, everywhere else.
+means. That measurement set pass marks only, so the pairwise thresholds are this project's
+own, written down for this A/B before the verdict. Per view and pair of settings, the
+lower sum of the three shares wins when the sums differ by more than 0.05 percentage
+points (a twentieth of the pass mark of 1 per cent); else the fewer steps win when they
+differ by more than 5 per cent and by 2 or more, and only if the winner's mean is at least
+95 per cent of the loser's; else the view is a tie. A forced normal replaces the per-part
+choice only if it wins clearly, on most of the views; a tie or a marginal result keeps the
+per-part choice. This decision replaces the audit's interim fallback, under which TROne's
+face normal would have taken the choice's place unless the file normal everywhere won.
+Applied: all 46 views are ties in all three pairs, and no setting wins a view. The same
+rule with steps over 20 of 255 in place of 40, as a check only: the shipped choice wins
+JOBY5's two sea views looking up against the face normal everywhere and loses ANDREA1's
+haze view, 43 ties. So neither forced normal wins clearly - a marginal result - and the
+per-part choice stands: it is the census's own split, the face normal exactly where the
+file's normals do not describe the card, and the file normal, which the renderer
+interpolates across the card, everywhere else.
 
 **Decisions.** The per-part choice stays as built, now this project's own and re-derived
 on its own A/B; nothing in the shipped output changes. The forced settings stay in the
@@ -31624,11 +31631,12 @@ round's work folder.
 **Left.** The glow is now faint enough that steps over 40 of 255 occur in 9 of the 46
 views only, and no setting moves them by more than one step in any of them, so the
 criterion separates little at the shipped strength; a stronger glow would need its own
-measurement. JOBY2's lamp cones keep the face normal
-and show 67 glow pixels in the room 17 view; whether they should show more is a question
-for the play test, not for this rule. The game is not run; nothing in it changes.
+measurement. JOBY2's lamp cones keep the face normal and show 67 glow pixels in the room
+17 view; whether they should show more is a question for the play test, not for this rule.
+The game is not run; nothing in it changes.
 
-**Commits.** `fce7d89f` (the setting, the tool and the checks) and this record.
+**Commits.** `fce7d89f` (the setting, the tool and the checks), `08f13011` (this record)
+and the record's correction after the proof.
 
 ## 3. Randomizer changes since Beta 1.0
 

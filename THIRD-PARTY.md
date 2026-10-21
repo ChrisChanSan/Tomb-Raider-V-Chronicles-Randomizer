@@ -435,7 +435,6 @@ from", carries the tables.
     views. An earlier reader of TROne had a passage on its list that a later
     provenance study classed as program-sourced (the material-2 corner normal), and
     the second TROne check could not classify it; the choice does not rest on it.
-
 32. **Where a page is looked for: its own game, the sibling games, then
     `WHITE.DDS`; a missing page is white, never black.** TROne,
     `host/render/hd_pages.cpp` (`upload_shared`, `upload2`). THIRD and PLACE.
@@ -4377,11 +4376,15 @@ carries the tables.
     53,046 disagreeing; 31 parts from 0.514 of their corners disagreeing up, the
     other 222 at most 0.486, 190 of them none. The A/B of 2026-10-22, RoomProbe at
     2560 x 1440 over the glow's 46 views under the per-part choice, the file's
-    normal everywhere and the face's everywhere, judged by the measurement of #179's
-    criterion (fewer clipped, white and hue-pinned pixels, a difference counting
-    over 0.05 percentage points; then fewer steps over 40 of 255, over 5 per cent
-    and 2 steps, at a mean no lower than 95 per cent): 46 ties in each pair, no
-    setting winning a view; the means over the views 0.067 per cent clipped under
+    normal everywhere and the face's everywhere. The aims are the measurement of
+    #179's (fewer clipped, white and hue-pinned pixels, then fewer steps over 40 of
+    255 at equal means); #179 set only pass marks, so the pairwise thresholds are
+    this project's own, set for this A/B before the verdict: a difference in the
+    three shares counts over 0.05 percentage points (a twentieth of #179's pass
+    mark of 1 per cent), then the fewer steps win over 5 per cent and by 2 or more,
+    at a mean no lower than 95 per cent of the other's; a tie or a marginal result
+    keeps the per-part choice. 46 ties in each pair, no setting winning a view; the
+    means over the views 0.067 per cent clipped under
     all three, 494.15, 494.15 and 494.17 steps, 13.05, 13.02 and 13.12 of 255. On
     the parts whose corners disagree the file's normal fades the card as if seen
     edge-on (ANDREA3 room 36's view keeps 1,622 of 64,335 glow pixels).

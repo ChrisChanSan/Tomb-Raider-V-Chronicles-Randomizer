@@ -56,6 +56,13 @@ file:
 | `TOMB5 Code/TOMB5/specific/hd/hd_object.cpp/.h` | `host/render/game_renderer.cpp`: the item bracket of `item_flush` and `draw_mesh`, `fill_unseen_joints`, `model.covered = ~0u` in `build_skinned_model` and the swap-key rule beside `item_flush` (TROne-main, copy of 2026-10-06, commit 75c4c843) | The **routing rules**, not the code: an item is drawn either wholly HD or wholly classic and never half of each; a node the model has no geometry for is drawn by NOBODY, not even classically (TROne tried the classic fallback there and took it out again after user reports of classic patches on HD bodies); a swapped mesh on a covered node loses to the model, so the model draws what the remaster drew; and a node the walk never reached keeps the last matrix it saw rather than collapsing to the origin. The seam itself is ours - TROne is a module beside a foreign engine and reads its brackets out of a stream of draw calls, this one rides on `DrawAnimatingItem`'s own node walk - and so are the skeleton test, the `mesh_bits` node ranges and the whole of the lighting. |
 | `TOMB5 Code/TOMB5/specific/hd/hd_object.cpp`, the inventory ring (`HDInvBegin` / `HDInvNode` / `HDInvEnd`) | `games/tr5/glue/hostglue_2d5.cpp`, `phd_PutPolygonsPickup`, and the `TRONE_LIGHT_EXACT_NODES` flag of `host/api/trone_host_api.h` (TROne-main, copy of 2026-10-06, commit 75c4c843) | The **idea**, not the code, and only half of it was kept: that the classic ring's off-centre projection - it moves the projection centre to each item's place on the screen - can be folded into the ITEM for the length of one draw, so that the HD path keeps one projection for the whole frame; and that the ring's light collapses to the ambient plus one sun taken from the ring's own brightness. TROne folds it into the item's own matrix as a **shear** of two rows against the third; this engine does **not**, because its shader takes the vertex normal through those same matrices and renormalises it, so a shear lights the ring by screen position (measured on the shader: 28 % too dark in the middle of the inventory row, 16 % too bright on the ammo row). The offset goes into the projection matrix instead, per draw call (`HDModelOffCentre`, `hd_model.cpp`), where the classic path has it and where a normal cannot reach it. The arithmetic was derived from TR5's own projection line (`aTransformLightClipMesh`, `specific/output.cpp`) and is written for this engine's matrices, not for TROne's float stack; the derivation stands in full over `HDInvNode` and over `HDModelOffCentre`. TROne also needs a flag to make the ring draw **exactly** the nodes it was given, because its default invents a matrix for an unseen node; ours takes `item->mesh_bits` as a mask and needs none. Not taken: TROne's scale term `f_mpersp/persp`, which corrects for a host projection built from the window's real width - TR5 computes `f_persp` from a 4:3 implied width whatever the window is, and the HD projection here is built from that very number, so the factor is exactly one (measured: `ModelProbe -ringcheck`, the bounding rectangle at the same **size** on 4:3 and on 16:9). |
 | `TOMB5 Code/TOMB5/specific/hd/hd_render.cpp`, the water marks | `host/render/game_renderer.cpp`, `hd_load` and `hd_water_mark` (TROne-main, copy of 2026-10-05) | The **road**, not the code: the remaster's geometry carries no water flag, so the classic level's own water vertices are matched to it by room-local position through a hash of the packed int16 x/y/z, per room, once at level build - and which group owns which vertex is recovered by walking the group's index runs. In its copy of 2026-10-05 TROne marked a vertex from the classic `RoomVertexMove` flag and from the room's underwater bit, one bit; in 75c4c843 it classes water, shore and underwater-dark from the engine's own split, keeps the hash for shore corners and matches water surfaces as horizontal planes. Ours marks it from `ROOMLET::nWVtx` and from the engine's own shimmer predicate, and carries three bits rather than one. |
+| `TOMB5 Code/TOMB5/specific/hd/hd_shader/hd_glow.hlsl` | TROne's rules for its glow material | The fade near the eye and the `|N.V|` term, translated to HLSL for Direct3D 9; not a line of the original is copied. The edge fade, the end fade and the per-part choice between the file's normal and the face's normal are this project's own. Origin ledger, entry 31. |
+| `TOMB5 Code/TOMB5/specific/hd/hd_vis.cpp/.h` | `host/render/hd_visibility_tr2.inc`, its TR2 visibility prototype (the copy handed over on 2026-10-14) | The **approach**, not the code: the portal walk as the room list, every listed room's art drawn whole, a group listed by its art in a listed room's box, and the count of eight triangles that makes a guest. The walk, the tables and their other rules are this project's own. Origin ledger, entries 209 and 210. |
+| `TOMB5 Code/TOMB5/game/spotcam_math.h` and its use in `game/spotcam.cpp` | `games/tr5/src/game/spotcam.cpp` (`CalculateSpotCams`, its SNAPBACK branch) and `games/tr5/glue/hostglue_input5.cpp` (the copy handed over on 2026-10-14) | The **cause and the rules**, re-derived, no code: a skipped flyby ends a SNAPBACK sequence while the frame still stands at the camera before the last, so the last camera's own place and room are tested; and the census rule for the sequences that end short. The form and the words are this project's own. Origin ledger, entry 227. |
+| `TOMB5 Code/TOMB5/specific/hd/hd_trl.cpp/.h` | its porting notes for TR4 and its measurement of the faces | The **layout** of a face's `.TRL` track file and the deform of a face by the joints such a file moves (a frame's matrix times the inverse of the bind's), both found by TROne on the data files and measured again here on the installation's own files (`LipsTest`); which column drives which joint is read out of the face's own `.TRM`. Origin ledger, entries 10 and 34. |
+| `TOMB5 Code/TOMB5/game/interpolate_math.h`, `InterpRootFlip` | its frame blend in `games/tr5/src/game/draw.cpp`, read for comparison | The **approach**, re-derived, no code: the previous frame expressed in the current one before the blend. TROne blends whole node matrices; this engine blends Euler angles and a separate offset, so that step is done by hand, two signs for half a turn. Not on the HD path, so not in the origin ledger: `MODIFICATIONS.md`, "Lara facing the wrong way for one tick in the jump twists: the early half turn". |
+| `TOMB5 Code/TOMB5/specific/hd/hd_object_rules.h`, the skeleton fit | `host/render/game_renderer.cpp`, the lambda `node_offset` used by `stub_donor` (the copy read on 2026-10-19) | The **comparison of places**, not the code: a model's node centres against the classic mesh's in the bind pose, within 256 units. Here the centres are the bind drift's own single-weight vertex means, and only a model the drift refuses is asked. Origin ledger, entries 371 and 372. |
+| `TOMB5 Code/TOMB5/specific/hd/hd_marble_math.h`, `HD_MARBLE_LEAN` | `host/render/reflection_plane.h`, `floor_plane` (the copy read on 2026-10-19) | **One number**, no code: 60 degrees as the line between a floor or ramp and a wall, TROne's own design. The census of the fifteen levels leaves every face of the mirror column on one side of the gap from 56.3 to 85 degrees, so the line chooses nothing there. Origin ledger, entry 389. |
 
 | `TOMB5 Code/TOMB5/specific/hd/hd_lara.cpp/.h`, and `hd_wardrobe.cpp/.h` with it | `host/render/game_renderer.cpp`: `lara_flush`, `lara_build_models`, `lara_load`, `draw_hair`, and `games/tr5/glue/hostglue_file5.cpp`: `RegisterLaraWardrobe` (TROne-main, copy of 2026-10-06, commit 75c4c843) | The **composite itself**: Lara is not one model but an outfit for the body, a separate `LARA_HEAD` drawn rigidly on the head node (75c4c843 splits the neck onto the parent node by default), a `HAIR_OG` braid on its own six-bone chain, a `HAND_` model chosen by the slot whose mesh sits at the hand node, and a `HOLSTER_` model for a worn weapon; an empty holster draws nothing because the straps are in the outfit; and the whole wardrobe lives in the shared `4\ITEM` folder, not in the running game's. The role table (which slot means which model) is TROne's, name for name. What is **not** TROne's: the section table - its TR5 glue of its copy of 2026-09-05 had `ANDY` and `JOBY` the wrong way round and would put the Russia outfit on Ireland (fixed in 75c4c843, which goes by `GF_YOUNGLARA` and `LaraDrawType` and records that the old mapping stood on its head) - and the outfit test, which here reads the engine's own `LaraDrawType` and its own braid predicate rather than the level's file name. Also this project's own is the split hand rule: TROne drew one hand model for both hands in its copy of 2026-09-05 (TROne-main, copy of 2026-10-06, commit 75c4c843, has a split of its own), which loses TR5's flare, torch and crowbar frames, so a frame whose two hands differ draws both models masked to one arm each. The role table and the search that finds those models live in `hd_wardrobe.cpp/.h`, which is why that file stands in this row rather than in one of its own. |
 
@@ -68,8 +75,14 @@ file:
 
 | `TOMB5 Code/TOMB5/game/modern_move.cpp/.h`, `game/modern_camera.cpp/.h`, `game/modern_state.cpp` and `Preparation/Tools/Diagnose/ModernTest.cpp` | `tests/test_controller.cpp`, `host/input/` and `docs/CONTROLS.md` (TROne-main, copy of 2026-09-13) | The modern (analog-stick) control scheme. The **design** is TROne's and is re-derived here rather than copied: the stick's direction is measured against a held reference heading and turned into the classic engine's own tank bits, so that the game logic underneath never learns that anything changed. What was taken **verbatim** is the one thing worth having verbatim - the 32 expectations of TROne's own test suite (28 `modern.*`, 4 `combatmode.*`), rescaled to this engine's units by `S()`. Not taken: TROne's code. `game/modern_move.h` carries the origin block - which TROne version, and that the taboo table of 2026-09-16 found none of the set's 32 constants derived from a Remaster binary. Since its round K32 the flow runs the other way as well: TROne's `host/input/trone_modern_core.h` is this file's core taken over under the GPL, and its orbit is this project's camera (TROne-main, copy of 2026-10-06, commit 75c4c843, `docs/CONTROLS.md` 4.7 and 4.8, `docs/LEGAL.md`); the 32 expectations cited here stand by name in its suite there (31 `modern.*` now, three new). |
 
-The HD files above name Todesengel's copyright in their own headers, beside
-our modification notice, as GPLv3 section 5(a) asks. In the last two rows the
+The HD files above that carry TROne's code or a design taken over name
+Todesengel's copyright in their own headers, beside our modification notice, as
+GPLv3 section 5(a) asks; the files that took an approach, a rule or one number
+and no code (`hd_glow.hlsl`, `hd_vis.h`, `spotcam_math.h`, `hd_trl.h`,
+`interpolate_math.h`, `hd_marble_math.h`) carry the credit line "TROne (GPLv3) by
+Todesengel1931 - https://github.com/todesengel1931" where the taking stands;
+`hd_object_rules.h`, which took a comparison and no code, names Todesengel's
+copyright at that place. In the last two rows the
 notice sits in the file that carries the taking —
 `specific/polyinsert.cpp`, `game/modern_move.h` and
 `Preparation/Tools/Diagnose/ModernTest.cpp` — and the files named beside them
@@ -264,12 +277,18 @@ Every rule, constant, table, procedure and format fact of the HD path, one entry
 each, with its origin: what it is; where it stands (by function, section or file,
 and for a rule TROne or TRForge has too, where it stands there and the copy it was
 read in); its class; and this project's own evidence for it. The classes: DATA (a
-fact about the player's files, countable on them), PICTURE (a fact measured on this
-engine's own pictures), CLASSIC (the classic engine's own code), OWN (this project's
-own design: a free choice, a count on its data, or tuned by eye on its RoomProbe
-pictures, in its play tests or on reference pictures supplied for this project, not
-in the repository), THIRD (TROne's design or code under the GPLv3, or TRForge's under
-the MIT licence, credited), PLACE (where a file is). "Free choice" says that nothing
+fact about the player's files, countable on them, or measured on this engine's own
+runs on the test machine: its `-log` runs, recordings of its play, its tools'
+timings), PICTURE (a fact measured on a picture: this engine's own pictures,
+pictures of the project's test screen, or reference pictures and photographs
+supplied for this project, none of them in the repository), CLASSIC (the classic
+engine's own code), OWN (this project's own design: a free choice, a number it set,
+a count on its data, or tuned by eye on its RoomProbe pictures, in its play tests or
+on reference pictures supplied for this project), TEXTBOOK (general knowledge of
+the craft - a law of optics, a formula of graphics, an interface's documented
+behaviour - with the numbers this project's own), THIRD (TROne's design or code
+under the GPLv3, or TRForge's under the MIT licence, credited), PLACE (where a file
+is, or a named place in a level). "Free choice" says that nothing
 of ours decides the question and this project chose. The counts are reproduced by the
 tool switch named; `MODIFICATIONS.md`, section 2.4, entry "Where the HD rules come
 from", carries the tables.
@@ -306,12 +325,12 @@ from", carries the tables.
    product put in opposite order the prelight sides with the sum in 121,606 and
    with the product in 56,907; better than the product in 14 of 15 levels
    (`TrgProbe -shadeorder`). The rule rests on these rank counts, which no scale
-   on a triple changes. Picture: RoomProbe's RICH2 X-ray view against the
-   Remaster recording of the same place, the corridor wall's and floor's mean
-   brightness at 1.13 and 1.21 of the recording's under the sum (0.20 and 0.26
-   under the product, `colour2` alone 0.61 and 0.48); it shows the shipped scale
-   is in the recording's range, and with two regions of one frame it cannot
-   tell the sum from a scaled other rule.
+   on a triple changes. Picture: RoomProbe's RICH2 X-ray view against a
+   reference picture supplied for this project of the same place, the corridor
+   wall's and floor's mean brightness at 1.13 and 1.21 of the picture's under the
+   sum (0.20 and 0.26 under the product, `colour2` alone 0.61 and 0.48); it shows
+   the shipped scale is in the picture's range, and with two regions of one
+   frame it cannot tell the sum from a scaled other rule.
 8. **The `.TRM` layout** - 44-byte part, 24- or 30-byte vertex, three bones and
    three weights, the zero word and the head geometry behind a facial rig.
    TRForge, `trf_remaster/ItemModels.h`, as a description (TROne-main's vendored
@@ -364,7 +383,8 @@ from", carries the tables.
     shape moved TROne's water. THIRD; free choice to keep TROne's numbers for
     the wind. The water's wave, swell, UV wobble and caustic, which this entry
     credited to TROne before (`MODIFICATIONS.md`, "Water in the HD rooms"),
-    are this project's own design: entries 40 to 86.
+    are this project's own design: entries 40 to 86. Audit round B1
+    (2026-10-21) confirmed the shape and its numbers as TROne's own design.
 21. **Material 16's ripple held to the part's own UV span, nothing moving in
     the vertex.** TROne, its own material 16 water rule. THIRD. Ours: `sway` is 0
     on 27 of the 28 parts; 23 of 28 live in a sub-rectangle of their page.
@@ -401,7 +421,13 @@ from", carries the tables.
 30. **The glyph quad's mip LOD bias of -0.7.** TROne, `k_ui_frag`. THIRD. Ours:
     the minification 1.8, 2.7 and 1.35 measured on this engine's output.
 31. **The glow's screen composition, near fade and `|N.V|` term.** TROne, its
-    rules for its glow material. THIRD. Ours: RoomProbe on ANDREA2 room 131.
+    rules for its glow material. THIRD. Ours: RoomProbe on ANDREA2 room 131. The
+    normal the `|N.V|` term takes, the file's where it agrees with the face (222 of
+    253 parts, `BuildGlowParts`) and the face's elsewhere, is this project's own
+    choice; after audit round B1 it is to be confirmed by this project's own A/B on
+    RoomProbe pictures, the face's normal everywhere against the per-part choice,
+    and where the file's normal does not win there, TROne's face normal is taken,
+    credited.
 32. **Where a page is looked for: its own game, the sibling games, then
     `WHITE.DDS`; a missing page is white, never black.** TROne,
     `host/render/hd_pages.cpp` (`upload_shared`, `upload2`). THIRD and PLACE.
@@ -411,7 +437,7 @@ from", carries the tables.
     `host/fs/discovery.cpp`. THIRD and PLACE. Ours: `TrgProbe -find`.
 34. **The `.TRL` track layout of the faces.** TROne, its porting notes for TR4
     and its mimic measurement. DATA. Ours: `LipsTest` over 45 files of `5\ITEM`.
-35. **The modern control's design, its 32 test expectations and six default
+35. **The modern control's design, its 32 test expectations and seven default
     constants.** TROne, `tests/test_controller.cpp`, `host/input/` and
     `docs/CONTROLS.md` (TROne-main, copy of 2026-09-13; since its round K32
     TROne carries this project's core and orbit, see the TROne section above).
@@ -806,7 +832,7 @@ carries the tables.
     the fifth play test of 2026-10-09); the reach 614 units plus 0.3 of the
     longest wet stretch, held to 614 to 1,229 (0.6 to 1.2 squares). OWN,
     free choice, set by eye on RoomProbe pictures; one curtain for the
-    objects of one foot is the owner's ask of the play test of 2026-10-09
+    objects of one foot is the ask of the play test of 2026-10-09
     (ANDREA2 room 231's two discs a strand read as two crowns turning
     alike).
 93. **The foot's foam** - a second draw of the sheet's triangles (`FootPS`),
@@ -823,7 +849,7 @@ carries the tables.
     scale; past a segment's end the way beyond it over that end's head
     (entry 117, 1 round); nothing from below; no turn. OWN, free choices, set by eye on
     RoomProbe pictures; the push and stretch away from the curtain tuned by
-    eye on reference pictures supplied for this project (the owner's sketch
+    eye on reference pictures supplied for this project (a sketch
     of a foot from above, a photograph of a real waterfall, as a look and
     no file); a pattern carried along a flow by the way it has come is
     general graphics knowledge.
@@ -859,7 +885,7 @@ carries the tables.
     ANDY3's 29 split squares of the pond's island and room 12); OWN: taking
     the ceiling's highest corner as the surface, the height
     `GetWaterHeight` breaks Lara's head out at, and keeping a split square
-    whole under the level's raised triangle, the owner's ask of the play
+    whole under the level's raised triangle, the ask of the play
     test of 2026-10-09.
 99. **No water square over an island or a rim** - a square whose dry floor
     stands more than a click (256) over that top at every corner is none.
@@ -932,7 +958,7 @@ carries the tables.
     extinction and in-scattering of a participating medium, general
     graphics knowledge; the 0.3 and the 0.6 free choices, tuned by eye on
     RoomProbe pictures and on reference pictures supplied for this project
-    (the owner's picture of the flat haze, a photograph under water, as a
+    (a picture of the flat haze, a photograph under water, as a
     look and no file).
 109. **Which body an eye under the water looks through** - an underwater
     room takes the body most of the sheet squares over it belong to, a room
@@ -998,7 +1024,7 @@ carries the tables.
     most 0.92 of the gap at the outline's widest swing; a corner alone
     between gaps is a segment of 2 units with those heads; a curtain
     without a gap keeps round ends. OWN, a rule of this project, the half
-    a reach a free choice by the owner's sketch of the foot from above
+    a reach a free choice by the sketch of the foot from above
     (two separate ovals with open water between them; reference pictures
     supplied for this project, as a look and no file), the 0.4 a free
     choice from the count of FootPS's spread (1.15 at the most).
@@ -1016,7 +1042,7 @@ carries the tables.
 119. **No gloss variant under the water** - while the frame's eye is under
     the water the gloss variant's faces draw with `RoomPS`, without the
     sheen, inside the extinction. OWN, a rule of this project; DATA for the
-    reason: at the owner's view of JOBY2's flooded base the walls, crates
+    reason: at the play test's view of JOBY2's flooded base the walls, crates
     and floor plates the gloss variant drew kept their colour against the
     faded rest (RoomProbe `-underwater`, `-noreflect`, `-glossfield`).
 120. **Lara's wet nodes in water a sheet lies over** - they take the
@@ -1026,7 +1052,7 @@ carries the tables.
     sheets the classic `LaraNodeAmbient[1]`. OWN, a rule of this project;
     DATA for the reason: ANDREA1's pool room 26 has the ambient 16, 16, 32
     under room 25's 27, 32, 41 (`ROOM_INFO`'s ambient read with the
-    randomizer's `Tr5Level`) - the lilac the owner saw on Lara under the
+    randomizer's `Tr5Level`) - the lilac the play test saw on Lara under the
     surface (ModelProbe `-shade r,g,b`).
 121. **A water room with no surface, and the deep look** - a water room no
     sheet lies over sees every point in the water (no surface depth; with
@@ -1044,7 +1070,7 @@ carries the tables.
     fraction) so that it passes against its own depth. A rule of this
     project; DATA for the reason: ANDY1's pool rats are drawn by `DrawRats`
     through `phd_PutPolygons` into the classic buckets, while the mark
-    brackets the HD objects alone (the owner's mark line counts 8 objects,
+    brackets the HD objects alone (the play test's mark line counts 8 objects,
     no rat among them; RoomProbe `-creature -nomark` shows the line on an
     unmarked stand-in, `-latemark` the same picture as the bracket's mark).
 123. **Small rings after the others** - a sheet draw takes Lara's, the
@@ -1238,7 +1264,7 @@ carries the tables.
 138. **A body's own share of the swell** - a body's sheet takes a share
     of its class's swell at its vertices (1 for every body, the table
     `kWaterBank` and the key `swell` of `hd_water.txt`), the pond 1 as
-    well since the owner's tenth play test, his choice on the look (the
+    well since the tenth play test, a choice on the look (the
     waves take a little from the edge now and then; 0 in the ninth round
     laid its surface at rest, the waves in its pixels). OWN, a rule of
     this project; DATA: the class's swell tapers to nothing only at the
@@ -1269,7 +1295,7 @@ carries the tables.
     off it stays, with the rows' heights 0 it is gone; the surface light
     of six views holds 15.7 to 30.5 % of its power in its six strongest
     frequencies against 6.1 to 12.7 % with random directions; after this
-    design the owner's four views 22.6, 10.1, 19.2 and 15.8 % fall to
+    design the play test's four views 22.6, 10.1, 19.2 and 15.8 % fall to
     18.5, 5.4, 11.3 and 11.0 % (RoomProbe pictures at 1, 3 and 5 seconds,
     a script of this round). The pieces stand at no fixed step: the place
     along the crest is bent by two slow curves of Wave2's kind, 0.15 of a
@@ -1278,7 +1304,7 @@ carries the tables.
     1.5 of its mean length and the next crests' pieces stand out of line;
     the envelope's rise is exact with both. OWN, the same design extended
     (a domain warp of the envelope's coordinate); the scales and depths
-    are free choices, set by eye on RoomProbe pictures of the owner's near
+    are free choices, set by eye on RoomProbe pictures of the play test's near
     views. DATA: at 0.3 along, pieces stretched to three times their mean
     drew long streaks on ANDY3's pond (the bridge's view 23.0 % against
     18.5 %); with the four shortest rows straight the lattice came back
@@ -1326,7 +1352,7 @@ carries the tables.
     corners blended smoothly, a common graphics idiom); the scale, push
     and drift are free choices, set by eye on the round's RoomProbe
     pictures. DATA: with every push out (a probe build of `aed63ba`) the
-    owner's swimming view shows the pieces standing in rows of dashes -
+    play test's swimming view shows the pieces standing in rows of dashes -
     the periodic pushes were the swirls and squeezes, and their periods
     brought them back.
 142. **The crests placed by a hash** - each of a sheet's eight rows is
@@ -1360,14 +1386,14 @@ carries the tables.
     square 41 to 82 on 63 degrees of freedom), neighbours correlated by
     under 0.03, a flat spectrum (largest bin 8 to 14 times the mean); a
     sine hash of the same cells kept an eighth of its values distinct. The
-    lattice the owner saw (reference pictures supplied for this project,
+    lattice the play test saw (reference pictures supplied for this project,
     not in the repository) is the beat of the long rows - the difference
     of two wave vectors, 337, 411 and 851 units for the channel's 311,
-    230 and 420 -: its cells in his picture, counted by autocorrelation,
-    188 and 160 pixels, about 330 and 280 units at his distance. Cells
+    230 and 420 -: its cells in that picture, counted by autocorrelation,
+    188 and 160 pixels, about 330 and 280 units at its distance. Cells
     one crest across drew round bumps, a pitted sheet; a sixth of the
     cells empty left flat stretches with single dimples (RoomProbe
-    pictures of the owner's swimming view, a script of this round). The
+    pictures of the play test's swimming view, a script of this round). The
     swell at the gain of 6 sank ANDY3's pond under the ground beside the
     island: 37,416 hole pixels in one of the twelve views of the holes
     count against 9,237 at most at 1.
@@ -1493,7 +1519,7 @@ carries the tables.
     set by eye on RoomProbe `-life -lifeall` pictures of ANDREA2 194's basin
     over 20 seconds; over twelve seeds its floats' mean distance from the
     spring goes from 1055 to 1127 units in 20 seconds, to 911 without it.
-    After the owner's play test of 2026-10-11: floats keep apart, no nearer
+    After the play test of 2026-10-11: floats keep apart, no nearer
     than 0.75 of their two reaches unless they part (`HDLifeClear`), so a
     current lays them side by side along a wall. OWN, a free choice set on
     RoomProbe series of ANDREA2's canal (two barrels side by side take 326
@@ -1520,7 +1546,7 @@ carries the tables.
     upstream row (the squares whose middle lies within half a square of
     the first row's middle), on one of them deep enough for that kind -
     any square of the body that is, when none upstream is. OWN, a design
-    of this project; free choices. After the owner's play test of
+    of this project; free choices. After the play test of
     2026-10-11 the float neither appears nor vanishes in open water: it
     comes back at the inlet's slot point, 384 units past the first row's
     edge along the flow, its top 64 under the surface, rises over the first
@@ -1535,7 +1561,7 @@ carries the tables.
     with the water going on under it at six of the eight ends, 256 high at
     four and 1024 at two (SectorCheck on the classic `ANDY3.TRC`); 384 is
     more than the 242 a barrel reaches across the water.
-    After the owner's second play test of 2026-10-11 a channel with a
+    After the second play test of 2026-10-11 a channel with a
     current and an inlet named in `kHDLifeInlets` is a conveyor the same
     way (`HDLifeConveyor`, `HDLifeInletRun`): its outlet is a river's, its
     floats come back at the inlet's slot point across the inlet's width,
@@ -1576,7 +1602,7 @@ carries the tables.
     speed for 4 seconds. OWN, a design of this project; the counts,
     speeds and times are free choices. DATA: 768 and 387 from `FISH2`'s
     box (173 long, 70 high): its lowest point lies 611 under the surface.
-    After the owner's play test of 2026-10-11: Lara within 1024 units of
+    After the play test of 2026-10-11: Lara within 1024 units of
     any fish, or a live splash of the game on the body's water, sends
     every fish on a dart of its own, away from the scare and turned by up
     to 25 degrees by a hash, at 2800 units a second falling off with a
@@ -1600,7 +1626,7 @@ carries the tables.
     times as fast in a flight (`HDLifeFishTurn`, `HDLifeSchool::beat`), so
     a dart turns no fish and jumps no wobble in one frame. OWN, free
     choices.
-    After the owner's second play test of 2026-10-11 a school swims in a
+    After the second play test of 2026-10-11 a school swims in a
     depth band (`HDLifeFishBand`): from 128 units under its sheet's rise
     down to `FISH2`'s reach, 87, over the floor of its body's shallowest
     deep square; calm, each fish rises and sinks 192 units round the
@@ -1621,7 +1647,7 @@ carries the tables.
     the 4096 `InitialiseItem` left). DATA: RICH2's item 33 carries flags
     0x100 in the classic level (RoomProbe `-lifetank game`), so it starts
     invisible, which the first rule took for a shot tank.
-    After the owner's sixteenth play test of 2026-10-13, his third of the life
+    After the sixteenth play test of 2026-10-13, the third of the life
     (life round 4), a dart turns off the deep water's edge, the school
     regroups off it within 10 seconds, a still Lara scares a school once, a
     tank's school never flees and a big body's school roams: entries 186
@@ -1637,7 +1663,7 @@ carries the tables.
     the counts, periods and reach are free choices. CLASSIC: the fields
     (`game\effect2.cpp`, `SetupRipple`), the ring size 32 and up to 7 more
     of the engine's own drip (`game\joby.cpp`), the eight rings a sheet
-    draw shows (`hd_render.cpp`, `kRingsPerDraw`). After the owner's play
+    draw shows (`hd_render.cpp`, `kRingsPerDraw`). After the play
     test of 2026-10-11: a drip's ring is 96 and up to 15 more - three
     quarters of a wading Lara's or more (`game\effects.cpp`, 112 to 127),
     where the engine's drip size gave a quarter of her ring's strength -
@@ -1670,7 +1696,7 @@ carries the tables.
     `ClipLine` and `AddPolyLine`. OWN, a free choice: the head's colour
     120, 160, 208, about one and a half times the middle of a wet Lara's
     drips (`TriggerLaraDrips`, 16 to 39 a channel, drawn four times that).
-    After the owner's second play test of 2026-10-11 a barrel rings once a
+    After the second play test of 2026-10-11 a barrel rings once a
     bob, at the bob's top, 2.5 to 4 seconds apart, at 240 and up to 15 more
     (the hash of the float and the bob's count), near the 255 a ripple
     slot's byte holds (`UpdateSplashes` grows a size only under 252; the
@@ -1688,7 +1714,7 @@ carries the tables.
     half of it, with no light list and the game's sun factor 0.75. OWN, a
     free choice set by eye on the round's RoomProbe pictures: at the full
     light `FISH2`'s silver reads as white glints through the sheet. After
-    the owner's play test of 2026-10-11: a river float's light and sun fall
+    the play test of 2026-10-11: a river float's light and sun fall
     to a quarter over its dive into a slot (the push takes no alpha), and a
     fish tank's fish take the light of a body of light one (255). OWN, free
     choices.
@@ -1702,17 +1728,17 @@ carries the tables.
     is 2^32 over the golden ratio, the usual multiplier that spreads
     neighbouring inputs. OWN, free choices: the second inputs' constants
     (101, 211, 307, 401, 503, 601, 7919 and a school's 7). After the
-    owner's play test of 2026-10-11 the pool is kept when the HD level is
+    play test of 2026-10-11 the pool is kept when the HD level is
     built again for the same level and its bodies come out the same
     (`HDLifeSameBodies`), so nothing is rolled anew after a lost device;
     and three more second inputs: 811 and 821 a barrel's ring period and
     phase, 907 a fish's dart. OWN, a design of this project; free choices.
     So the first sentence's rolling again after a rebuild holds only when
     the bodies come out different; with the same bodies the pool is kept.
-    After the owner's second play test of 2026-10-11: 1009 a fish's rise
+    After the second play test of 2026-10-11: 1009 a fish's rise
     phase, 1103 and 1109 a dart's depth and pitch, and 811 with the bob's
     count a barrel ring's size (821 no longer used). OWN, free choices.
-    After the owner's sixteenth play test of 2026-10-13, his third of the life
+    After the sixteenth play test of 2026-10-13, the third of the life
     (life round 4): 1201 the side a fish turns along an edge, 1301, 1303 and
     1307 a tank fish's line, period and phase, 1311 with a school's count of
     legs the tie between a roaming school's waypoints. OWN, free choices.
@@ -1744,7 +1770,12 @@ carries the tables.
     and through a floor by 52 against 1024 / 2048 (a creature's by 80 and
     40 against 1536 / 2560 per tap), the first faces below her feet lost
     27 per cent; the creatures' heights from the rest pose's box
-    (`-surveyslots`, `Tr5Level::frameBounds`).
+    (`-surveyslots`, `Tr5Level::frameBounds`). The table these terms stand in
+    (`hd_shadow.h`: the maps' sizes, boxes and depths, the darkness, the bias) is
+    this project's own (OWN): audit round B1 compared it with what is known of
+    TROne's shadow map and found every element different but the second map's
+    box and depth of 8192 units, which here are its 2048 texels at four units a
+    texel; a comparison number by number is still open.
 172. **The bulbs' haze given back** - every receive variant writes the
     factor in alpha and the fog bulbs' haze times 1 minus it in colour, and
     the receive blends ONE / SRCALPHA, so a pixel is the surface times the
@@ -2015,7 +2046,7 @@ carries the tables.
     the last (8,700 units), the crossing halved 8 times - a longer step
     passed a thin thing by, a machine's foot or a bench's rail, and took
     what lay behind it; set on the same debugger and on the true mirror
-    at the owner's eyes of the corridor and a 10-degree fan round two of
+    at the play test's eyes of the corridor and a 10-degree fan round two of
     them: 0 to 2.2 per cent of the fine march's hits more than 2 pixels
     off where the game marches (0 to 3.5 at 16 steps of 1.3 halved 5
     times), a tighter tolerance or the first crossing taken behind an
@@ -2080,7 +2111,7 @@ carries the tables.
     `HDSpringColumnInFrame`): both ends more than a unit in front of
     the eye (`HDSpringColumnFront`, the draw's own test), a weight over
     0, the box of its ends widened by their half-widths on the screen.
-    OWN, chosen on the owner's camera log at the fountain (no sheet's
+    OWN, chosen on a play-test camera log at the fountain (no sheet's
     room in the frame, ticks 262 to 287) and a fan of 29 eyes round the
     column (RoomProbe, a measuring build).
 201. **The file's spring row** - `spring <x> <z> <strength> [<seconds>]`
@@ -2121,7 +2152,7 @@ carries the tables.
     the darkening and the lamps' highlight; at the corridor's mouth its
     floor is opaque, so the copy does not show there. The mirror marched there out
     of the frame showed the ceiling glows as yellow bands (1,446 to 5,194
-    pixels at the eyes of his pictures, 0 after). Since the splash's sixth
+    pixels at the eyes of the play test's pictures, 0 after). Since the splash's sixth
     round a square counts as copied only where its floor is a clear floor
     as well (`wet_clear`, `HDGroup::clearFlats`), the one kind of floor a
     copy shows through: the corridor's mouth, opaque over its copy, marches
@@ -2190,7 +2221,7 @@ carries the tables.
     (`HDSpringCrackGround`: of the `.TRG`'s floor read 4,096 round the
     outline, the height nearest the eye lies under it by the lift).
     OWN, chosen on that fan's rows under the bottom and three cameras of
-    the owner's logs.
+    the play-test logs.
 208. **The crack's walls** (`hd_spring.hlsl`, `CrackPS`) - the floor's page
     folded over the lip (a place d down the wall takes the floor's page d
     further in along the edge's inward normal, wrapped), the floor's light
@@ -2229,7 +2260,7 @@ carries the tables.
     holder's inside, 2,377 eight or more; every such triangle counted lists
     JOBY2's room 24 in rooms 30, 31 and 33 by the slabs of its ceiling (32
     units over its box) and covers the stairwell's art with its marble at
-    all ten of the owner's stair cameras; with no link test ANDREA3's room
+    all ten of the play test's stair cameras; with no link test ANDREA3's room
     92 puts a beam into room 63 (400,730 pixels at one camera); 128 is
     `HD_OVERHANG_SLACK`; under the count of eight lie 294 pairs, stray
     triangles. Under the rule: 430 guests over the fifteen levels,
@@ -2279,7 +2310,7 @@ carries the tables.
     mirroring what the frame holds with depth; the yellow bands at RICH2's
     corridor mouth are the mirror of the corridor's cove lights, opaque art
     that writes its depth. OWN, a decision on a measurement: the additive
-    pass alone draws nothing at those eyes (at two eyes of the owner's
+    pass alone draws nothing at those eyes (at two eyes of the play test's
     pictures it holds a few pixels, at most 28 of 255, away from the
     mouth's floor), the glass left as an alpha test
     changes no pixel, and of the bands' pixels 94 to 99 per cent lie within
@@ -2298,7 +2329,7 @@ carries the tables.
     not drawn on. The plane - the height most drawn wet points stand at -
     and the 8 units of slack (a sloping corner's rounding, `kWetSlopeRise`)
     are free choices. DATA: the march's hits on a stand-in at Lara's place
-    of the owner's pictures, 2,105 to 10,433 at 960 x 540. The place mask
+    of the play test's pictures, 2,105 to 10,433 at 960 x 540. The place mask
     is written with both alpha blend factors zero over a clear 1, so it
     holds every pixel a model draws whatever alpha its shader returns (a
     gloss mask: on her body page a tenth of the texels under 64).
@@ -2326,7 +2357,7 @@ carries the tables.
     ledger class of their own to follow.
     DATA (RoomProbe `-vis 1`, its `hull:` and `covered:` lines): 13 hulls on
     nine levels and 40 covered faces on six, the old path's own; RICH2's
-    shaft at the owner's picture 2 57,426 -> 5,402 pixels of eye-step fight,
+    shaft at the play test's picture 2 57,426 -> 5,402 pixels of eye-step fight,
     ANDREA1's room 212 from room 19 4,590 -> 2,836.
 219. **A flipmap pair named by its main room** (`hd_vis.cpp`, the openings)
     - an opening whose room behind is the other room of a flipmap pair names
@@ -2335,14 +2366,14 @@ carries the tables.
     alone, so the other is never in the world. DATA (TrgProbe `-vistable`,
     `openings_twin=`): 68 such openings, ANDREA1 7, ANDY3 3, JOBY2 1, RICH1
     4, RICH2 16, RICH3 37; JOBY2's room 53 drew the crane hall's second
-    state at the owner's picture 4 (32,590 pixels).
+    state at the play test's picture 4 (32,590 pixels).
 220. **A broken-out wall beside a portal** (`hd_vis.cpp`, `wideBare` 0.3) -
     a wall face beside a portal widens it from 0.3 of its samples bare, the
     openings keeping 0.5. OWN. DATA (RoomProbe `-vis 1 -viswidebare`): JOBY2's
     broken pillar beside the portal of rooms 123 and 124 lies between 0.3 and
     0.4 bare on room 124's side, and at 0.3 room 124's record of that portal
     widens; 53, 55, 64, 72, 82 and 113 wide portals at 0.5, 0.4, 0.3, 0.25,
-    0.2 and 0.1. Alone it did not mend the owner's picture 3 (the walk from
+    0.2 and 0.1. Alone it did not mend the play test's picture 3 (the walk from
     room 123 reads room 123's record; at the rule's own commit the fight
     stayed 20,290 pixels): entry 222 does, with this share.
 221. **The window's edge** (`game/draw.cpp`, `VisFollowPortal`; `edge`
@@ -2350,7 +2381,7 @@ carries the tables.
     on an edge, or stops within 2 pixels of it at 2,560, lists the room
     behind with that strip. CLASSIC: `SetRoomBounds`' rectangle, one pixel
     out on every side, and its empty test; the tolerance OWN. DATA (the
-    owner's ROOMFLASH frames walked again, RoomProbe `-visedge`): of 181
+    play test's ROOMFLASH frames walked again, RoomProbe `-visedge`): of 181
     rooms dropped for one frame 155 were refused with an empty window, 71
     of the 102 measurable 2 pixels or less off it; at 2 pixels 81 are
     listed again, at 4 85, at 8 90. With entry 222, 85 of the 181 at 2
@@ -2366,8 +2397,8 @@ carries the tables.
     whole rectangle made 781 wide portals, its bare faces alone 55. DATA
     (TrgProbe `-vistable`, `wide_mirror=`): 119 wide portals, 55 of them by
     the record leading back (ANDREA1 7, ANDREA2 3, ANDY1 9, ANDY3 2, JOBY2 9,
-    JOBY4 1, RICH1 9, RICH2 12, RICH3 1, TITLE 2); the owner's nine pictures
-    of round 10 draw the old path's picture at 1,280 and at his 2,560.
+    JOBY4 1, RICH1 9, RICH2 12, RICH3 1, TITLE 2); the play test's nine pictures
+    of round 10 draw the old path's picture at 1,280 and at its 2,560.
 223. **The room behind the models** (`hd_render.cpp`,
     `HDRenderWaterWetRoomCopy`; `hd_wet.hlsl`, `WetMarch` why 4) - the
     frame's colour copied before the objects are drawn, while the last
@@ -2375,10 +2406,10 @@ carries the tables.
     model's place and met nothing after it takes that copy's colour at its
     first such place. OWN, a design of this project from general graphics
     knowledge (a screen-space reflection's hidden region filled from a
-    layer without the occluder). DATA: RoomProbe `-wetlara` at the owner's
+    layer without the occluder). DATA: RoomProbe `-wetlara` at the play test's
     eye and four round it, the floor pixels the march left to the stand-in
     because of her, 34,446 before and as without her after (probe pitch
-    +4.3); at the pitch his CAMLOG eye looks, -4.3: 40,972 before, 1,173
+    +4.3); at the pitch the play test's CAMLOG eye looks, -4.3: 40,972 before, 1,173
     after. The copy: 0.016 ms of GPU at 2560 x 1440.
 224. **The wet floor warmed before its first frame** (`hd_render.cpp`,
     `HDRenderWaterWarmUp`, `wet_warm_models`) - the wet floor's targets made
@@ -2507,8 +2538,8 @@ carries the tables.
     it the depth for the extinction, in place of the depth that puts every
     point in the water; an eye over that surface keeps the whole way. OWN,
     from the level's own water data (the body and the deep look's share);
-    DATA: RoomProbe `-underwater`, the frame with and without room 19, his
-    eye in room 6 0 to 116,979 surface pixels, his eye in room 123 and the
+    DATA: RoomProbe `-underwater`, the frame with and without room 19, the play test's
+    eye in room 6 0 to 116,979 surface pixels, its eye in room 123 and the
     other levels unchanged. ModernTest `water_under`.
 239. **The sea seen from below, a study** (`hd_water_look.hlsl`, `LookPS`,
     `LookShaft`; `hd_render.cpp`, `HDRenderWaterProbeLook`; RoomProbe
@@ -2537,7 +2568,7 @@ carries the tables.
     all thirteen sky levels and the vertex blocks keep it (`-skycensus`); the
     cause, the band's depth over its empty half, from the build's range sort
     and the blend's depth write. OWN, the painter's rule over that order;
-    measured at the owner's JOBY2 eye: the clear pixels 105,937 to 0.
+    measured at the play test's JOBY2 eye: the clear pixels 105,937 to 0.
 242. **The layers where the HD sky does not stand for them** (`game/draw.cpp`,
     `SkyDrawPhase`; `hd_level.cpp`, `HDFrameSkyCoversLayers`; `hd_render.cpp`,
     `HDRenderSkyCoversLayers`) - the classic flat layers left out only where a
@@ -2557,7 +2588,7 @@ carries the tables.
     page is alpha 255 on every texel of ANDY2 and ANDY3 (the `.TRC`'s misc
     block), the PSX path's tiles are 65 x 65 windows of the `SKY_GRAPHICS`
     sprites on shared object pages (the `.TRC`'s sprite table), which a sheet
-    page has no stand-in for; at the owner's ANDY3 eye 1,128 of 311,355 sky
+    page has no stand-in for; at the play test's ANDY3 eye 1,128 of 311,355 sky
     pixels stayed as the dome draws them with the flat page, 229,933 with the
     sheet's page, and the PSX tiles changed 150,748 (RoomProbe `-skylayer`,
     `-skylayerpage psx`).
@@ -2583,10 +2614,10 @@ carries the tables.
     It replaces entry 218's 'every piece answered whole'; the pushes of 218
     stay. OWN: this project's pieces and their answer (the #181 entry,
     rounds 4 to 8), applied to the visibility path's list. DATA (RoomProbe
-    `-vis 1 -viswin`, five candidates measured at the owner's places, camE
-    and the owner set of 99): ANDREA1's brick block of room 93 at camE 8,957
+    `-vis 1 -viswin`, five candidates measured at the play test's places, camE
+    and the play-test set of 99): ANDREA1's brick block of room 93 at camE 8,957
     pixels changed against the old path down to 0 (7,112 of them the block),
-    the owner's three ANDREA1 ghosts 4,853, 41,998 and 74,183 down to 0,
+    the play test's three ANDREA1 ghosts 4,853, 41,998 and 74,183 down to 0,
     JOBY2's bars by the pillar 9,339 down to 103; over the 99 cameras no
     view worse than round 10 by more than 500 pixels.
 246. **The portal the eye stands at** (`game/draw.cpp`, `VisNearPortals`) -
@@ -2595,7 +2626,7 @@ carries the tables.
     lists the room behind with the whole window of the room being walked.
     CLASSIC fact read: `SetRoomBounds` projects such a portal onto the
     screen's edges or behind the eye, and the side test skips a portal the
-    eye has passed; the rule is OWN. DATA (the owner's ROOMFLASH frames of
+    eye has passed; the rule is OWN. DATA (the play test's ROOMFLASH frames of
     round 10 walked again, RoomProbe `-visnear`): JOBY3's room 76, JOBY5's 88
     with its children and RICH2's 55 listed at their frames' eyes, 4,029,896
     of the 4,127,491 pixels of sky those frames showed.
@@ -2629,11 +2660,11 @@ carries the tables.
     drawn and the layers stay in, since the band's open pole would show the
     frame's clear as a dark disc overhead (2,576 pixels at tick 22,020,
     mean colour 10.5, 68.4, 64.8 against 23.2, 100.3, 103.6 just outside).
-    OWN, the rule, at the owner's word that the SD surface must go;
+    OWN, the rule, on the play test's finding that the SD surface must go;
     DATA: the deep look from the level's water data (`WATERLOG
     under_deep=1`: JOBY4, 132 water rooms no sheet lies over against 2;
     RICH3, 1 against 0, whose sheets leave its layers out already), JOBY4's
-    band one colour alone (entry 242); at his picture's eye (tick 22,020) the
+    band one colour alone (entry 242); at the play-test picture's eye (tick 22,020) the
     PSX tiles had changed 433,045 pixels of 518,400. ModernTest `water_look`.
 250. **The sea seen from below on the game's path** (`hd_render.cpp`,
     `HDRenderWaterLook`, `water_look_constants`, `water_look_draws`;
@@ -2648,7 +2679,7 @@ carries the tables.
     place; DATA: the top from the level's water rooms (JOBY4 -5,120, 867
     units over the remaster's art of the surface at -4,253), the colour
     from the deep look; the eleven numbers free choices set by eye at four
-    eyes of the owner's dive for the look of a reference picture supplied
+    eyes of the play test's dive for the look of a reference picture supplied
     for this project (not in the repository), not matched in brightness:
     the remaster's art and the band alone are brighter overhead than it
     (mean luma of the top third 55.2 at tick 22,020 against its 36.4), so
@@ -2661,8 +2692,8 @@ carries the tables.
     tested LESS adds the water's scattered colour where the depth buffer
     still holds its clear: the band's open poles past its last ring at 75
     degrees, no longer covered by the layers. OWN; DATA: the band's depth
-    0.99998 (`HD_SKY_MINZ` 0.996 and the sphere at 4,100 units), at his
-    picture's eye 2,576 pixels of the hole, the scattered colour 14, 32, 41
+    0.99998 (`HD_SKY_MINZ` 0.996 and the sphere at 4,100 units), at the
+    play-test picture's eye 2,576 pixels of the hole, the scattered colour 14, 32, 41
     against the band's 13, 35, 42.
 252. **RoomProbe `-underlook`, `-underlookknobs`, `-undertick` and the sky
     line's `layers out`** (`Preparation/Tools/Diagnose/RoomProbe.cpp`) - the
@@ -2674,20 +2705,20 @@ carries the tables.
     which the look is left out unseen -, and the layer rule's answer per
     level. OWN, this project's tool.
 253. **Picture 218 and the clouds' texels** (RoomProbe `-skydump` of round 1,
-    DdsProbe, the owner's log) - the picture matched to ANDREA2's tick
+    DdsProbe, a play-test log) - the picture matched to ANDREA2's tick
     25,031 (correlation 0.983); ANDREA2's opaque sheet 7109 and alpha sheet
     7101 at 13.4 units a texel, 2.15 to 6.29 and 3.00 to 8.76 screen pixels
-    a texel across from 20 to 90 degrees up at his 2,560 x 1,440 (persp
+    a texel across from 20 to 90 degrees up at the play test's 2,560 x 1,440 (persp
     1,144); ANDREA1's 7107 near-black (2, 1, 12) and its horizon sheets at
     alpha 30 at the most. DATA; no rule changed.
-254. **The vanishing surface classed over his dive** (RoomProbe `-undertick`
-    on the 1,613 CAMLOG ticks of the owner's JOBY4 play of 2026-10-17) - the
+254. **The vanishing surface classed over a play test's dive** (RoomProbe `-undertick`
+    on the 1,613 CAMLOG ticks of the JOBY4 play test of 2026-10-17) - the
     surface 0 at 34 ticks looking down at the dive's start, 2 under a
     seaweed card, and room 19 (the sea's surface art) missing from the
     portal walk at 164 ticks, reached only as a box guest of room 100: at
-    the 106 of them looking up his build's surface art was 0 and the look
+    the 106 of them looking up the played build's surface art was 0 and the look
     now keeps 8,221 to 68,223 pixels. DATA; the walk agrees with all 61 of
-    his `VISLOG` lines. No rule changed in the list: room 19's art still
+    its `VISLOG` lines. No rule changed in the list: room 19's art still
     leaves the picture and comes back within a tick at the six edges of the
     three runs (mean added luma 13.60 to 4.55 at 21,547 / 21,548, 3.83 to
     12.25 at 21,577 / 21,578, 16.66 to 5.10 at 21,937 / 21,938).
@@ -2716,7 +2747,7 @@ carries the tables.
     group holds no art, none of whose classic faces any art covers (wholly or
     in part), and whose inside holds a guest of the visibility tables (a
     linked group's art, eight triangles or more) draws none of its faces.
-    OWN, from the owner's decision on ANDY3's canopy (the art's trees replace
+    OWN, from the decision on ANDY3's canopy (the art's trees replace
     the flat faces that stood in for them). DATA (TrgProbe `-classicart
     -perface`, `-vistable -visroom`; RoomProbe `-classicroom`): of the 21
     classic rooms with faces in the fifteen levels it takes ANDY3 88, 118 and
@@ -2733,10 +2764,10 @@ carries the tables.
     draw keeps what stands 4 units (the layer's lift, `kWetLift`) over the
     floor's plane, not what stands in it: at the plane the floor's own
     triangles were kept or cut by rounding and covered the reflection.
-    OWN, from general graphics knowledge (a planar reflection's clip
-    plane); DATA: the owner's log and videos, RICH2, the same eye with the
-    clip in the floor and 4 units over it 60 to 34,574 pixels apart at his
-    hall (room 12, ticks 15389 to 15412) and 61 to 9,755 at his corridor
+    TEXTBOOK: a planar reflection's clip plane; OWN: the lift it keeps;
+    DATA: a play-test log and recordings, RICH2, the same eye with the
+    clip in the floor and 4 units over it 60 to 34,574 pixels apart at its
+    hall (room 12, ticks 15389 to 15412) and 61 to 9,755 at its corridor
     (room 46, ticks 12955 to 12975) at 960 x 540.
 259. **Rising faces are no mirror** (`hd_render.cpp`, `marble_build`) - a
     face with a corner farther than the clip's offset from its plane
@@ -2767,7 +2798,7 @@ carries the tables.
     leaves the mirror: what is left of a copy. OWN, the rule and the
     eighth a free choice; DATA: RICH2 4,558 faces and ANDREA1 12 (squares
     under rooms 174 and 175's tops), no other level; the planes -22527 and
-    1536 of the owner's two eyes gone. The centroid alone took ANDREA1
+    1536 of the play test's two eyes gone. The centroid alone took ANDREA1
     room 175's visible floor at -5592 (63,266 pixels at A175b, 960 x 540).
 262. **One floor, one height** (`hd_render.cpp`, `marble_build`,
     `kMarbleHeightJoin`) - heights within 2 units of the next are one
@@ -2775,13 +2806,13 @@ carries the tables.
     faces of one floor differ by at most 2), RICH2 33 to 24 heights, 1,834
     faces moved, the pool surround's -2816 and -2817; OWN, the rule.
 263. **The cap re-judged** (`hd_marble_planes`, default 2, unchanged) - no
-    hold of last frame's planes. DATA: 132 consecutive ticks of the owner's
-    log (RICH2 rooms 120 and 126), the drawn set changing with the same
+    hold of last frame's planes. DATA: 132 consecutive ticks of a
+    play-test log (RICH2 rooms 120 and 126), the drawn set changing with the same
     planes in view 3 times, between second floors of 2 to 3 per cent of
     the screen, and a simulated hold (twice the cover to take a place)
     leaving 2 and losing 0.18 of a screen's cover; OWN, the decision.
 264. **RICH2's banded marble in the mirror column** (`hd_gloss_pages.h`,
-    3314 and 3315, class `A`) - OWN, the owner's decision of 2026-10-17;
+    3314 and 3315, class `A`) - OWN, the decision of 2026-10-17;
     DATA: RoomProbe `-marblecensus`, three squares a page in rooms 46, 75
     and 128, two over a copy; at E190 4,342 pixels of the strip change.
 265. **The marble mirror's warm-up** (`hd_render.cpp`,
@@ -2789,7 +2820,7 @@ carries the tables.
     level the mirror's target made and the plain, gloss and glow room
     shaders drawn once with the clip plane on, and the layer's pair once,
     as the water's warm-up does. OWN, after this project's water warm-up;
-    DATA: the first marble draw at 2560 x 1440 at the owner's two eyes 42
+    DATA: the first marble draw at 2560 x 1440 at the play test's two eyes 42
     ms (median of five) before, 0.08 to 0.67 after; the load 27.7 to 48.6
     ms more over the sessions measured.
 266. **RoomProbe's marble measurement** (`Preparation/Tools/Diagnose/
@@ -2814,10 +2845,10 @@ carries the tables.
     path whose list leaves it out, with the whole screen as its window, at
     the first listed room's matrix moved by the two origins' difference
     (as `DecideStand`), its own lighting and the frame's extinction. OWN,
-    the owner's rule of 2026-10-17 ("draw always") and the place, chosen
-    over the reach walk (`draw.cpp`, beside `CarryArt`), which his dive's
+    the rule of 2026-10-17 to draw always, and the place, chosen
+    over the reach walk (`draw.cpp`, beside `CarryArt`), which the dive's
     visibility path does not run; DATA: RoomProbe `-undertick` over 306
-    eyes of his dive with and without it (164 ticks without room 19 on the
+    eyes of the dive with and without it (164 ticks without room 19 on the
     list, the six edges, round 1's 40 eyes, every 40th tick).
 269. **The surface room in the log and the probe** (`hd_level.cpp`, the
     `WATERLOG ... undergate` line's `surface=`; RoomProbe `-surfaceroom`,
@@ -2847,7 +2878,7 @@ carries the tables.
     out of the group table `HDFlipRoom` swaps. CLASSIC: FlipMap's three
     `memcpy` lines swap two rooms' records with their `MESH_INFO` lists;
     `sgRestoreGame` flips first and restores the statics' flags after.
-    OWN, the reading. DATA: the owner's logs of 2026-10-16 and 2026-10-17
+    OWN, the reading. DATA: the play-test logs of 2026-10-16 and 2026-10-17
     (the flip line in the flyby's tick, the glass sound a frame later, the
     flip right after each restored load).
 273. **The smash census and the shot after a flip** (RoomProbe
@@ -2891,8 +2922,8 @@ carries the tables.
     every square of the fifteen levels, the deepest thing a walk from
     inside a room lists 40,806 units ahead (JOBY2, a static of room 3 seen
     from room 129), the corridor's door 34,340. OWN, the margin of one
-    square and the whole sector count over it; the owner's order of
-    2026-10-18 for the extension, in HD and SD, and his 34 sectors. The
+    square and the whole sector count over it; the order of
+    2026-10-18 for the extension, in HD and SD, and its 34 sectors. The
     sprite sparks' switch-off at the plane (`S_DrawDrawSparksNEW`) moves
     with it, CLASSIC; OWN, the choice not to keep it at 20,480.
 277. **The depth curve on the shipped plane** (`3dmath.cpp`, `SetupZRange`;
@@ -2911,7 +2942,7 @@ carries the tables.
     `S_GetObjectBounds`) - the box corners counted between the near plane
     and 20,480; under eight the object is drawn clipped without the window
     test. CLASSIC: the function. OWN, the count kept; DATA: on the moved
-    plane 1,158 of 5,445 distinct camera ticks of the owner's three JOBY2
+    plane 1,158 of 5,445 distinct camera ticks of the play test's three JOBY2
     segments would change the answer of an object nearer than 20,480.
 279. **The rain's tint and the fog bulbs' circle on the shipped plane**
     (`specificfx.cpp`, `DoRain`, and `zrange_math.h`, `ZRainTint`;
@@ -2943,8 +2974,8 @@ carries the tables.
     `SetGammaRamp` acts on a full-screen exclusive swap chain only, general
     Direct3D 9 knowledge; this engine's devices are windowed in both of its
     modes (`DXCreate`, the border-less window, OWN since the port), so a
-    ramp would act in neither. DATA, this machine's adapters measured by a
-    scratch probe, read only: two outputs of one RTX 5080, both
+    ramp would act in neither. DATA, the test machine's adapters measured by a
+    scratch probe, read only: two outputs of the test machine's GPU, both
     `D3DCAPS2_FULLSCREENGAMMA` 1 and `D3DCAPS2_CANCALIBRATEGAMMA` 0; a
     windowed device's `GetGammaRamp` is all zeros, no ramp in use; the
     player's `-log` of 2026-10-17 reads `DXCreate: Full Screen Mode
@@ -2990,7 +3021,7 @@ carries the tables.
 285. **The cost** - the copy and the draw 0.0312, 0.0312 and 0.0313 ms, the
     copy back 0.0149 ms in each of three runs, medians of 200 rounds at 2560
     by 1440 on the GPU's clock (RoomProbe `-gamma 70 -gammatime 200`).
-    DATA, measured on this machine's RTX 5080.
+    DATA, measured on the test machine's GPU.
 286. **The row** (`game/menu_frame.cpp`, `menu_rows_display`,
     `MenuNumGamma`, `MenuStepGamma`; `tomb5/tomb5.cpp`, the key `gamma`) -
     a slider third on the *Display* page under *Frame rate* and *VSync*,
@@ -3024,8 +3055,8 @@ carries the tables.
     under the horizon and 75 to 79 over it, radius 1,060 at the last ring;
     32 edges a ring; RICH3's unlit sheet of one height. OWN, the rule and
     the flat disc (chosen over the sphere's apex: both cover the same hole
-    seen from inside); the owner's choice of 2026-10-18 ("A1 Weg 2", the
-    band's pole closed in its own colour).
+    seen from inside); the choice of 2026-10-18 (the second way offered for
+    item A1: the band's pole closed in its own colour).
 289. **The look without its fill** (`hd_render.cpp`, `water_look_draws`,
     `HDRenderWaterLook`; `hd_water_look.hlsl`, `gLookFill` c215 removed) -
     the third draw of the sea seen from below (the water's scattered colour
@@ -3036,7 +3067,7 @@ carries the tables.
     pole minus one just inside, the pole the black pixels of the dome
     alone, with two to four shifted control rings) at the eye of tick
     22,020, the same eye turned 72 to 89 degrees up and three looking-up
-    eyes of the owner's JOBY4 dive log of 2026-10-18 (ticks 54,078, 66,421
+    eyes of the play-test log of a JOBY4 dive of 2026-10-18 (ticks 54,078, 66,421
     and 20,843): with `hd_water` 1 6.6 before at tick 22,020 and 5.0 to
     7.7 at the steep eyes, -1.7, 1.4 and -1.3 at the three dive eyes, and
     -3.0 to -0.3 after at all nine; 0.0 to 0.5 for the dome alone; each
@@ -3054,8 +3085,8 @@ carries the tables.
     and `param[1]` under 1; clear texels in ANDREA2's grid alone, groups 65
     and 132 on page 3007, 55,877 of 103,293, 2,076 of 2,146 triangles on
     them; ANDREA1's pane 15074 in the additive run, weight 1); the 16 the
-    census's own bound of clear. OWN, the reading; the owner's choice of
-    2026-10-18 ("A5 ja Lesart C bauen").
+    census's own bound of clear. OWN, the reading; the choice of
+    2026-10-18 (item A5: yes, build reading C).
 293. **The polished floor under the water** (`hd_render.cpp`, "the polished
     floor under the water", `wet_polished`, `wet_give_way`, `g_wet_verts`;
     `hd_water_under.h`, `HDWetCellOnFace`, `HDWetGivesWay`) - a wet point
@@ -3090,7 +3121,7 @@ carries the tables.
     `HDWaterDeepLook`; `hd_render.cpp`, the water build) - a level takes
     the deep look when its fallback rooms outnumber its rooms under a
     sheet more than four times and `HDWaterSurfaceRoom` names a surface
-    room. OWN, the rule, after the owner's word of 2026-10-18 that RICH3's
+    room. OWN, the rule, after the play test's report of 2026-10-18 that RICH3's
     room 190 is an ordinary flooded room; DATA (the `WATERLOG` sweep, the
     fifteen levels): JOBY4 132 against 2 and room 19, RICH3 1 against 0
     and none; `under_deep=1` in JOBY4 alone after.
@@ -3133,9 +3164,9 @@ carries the tables.
     before, 44,754 after.
     OWN, this project's tool.
 302. **The visibility path by default** (`tomb5/tomb5.cpp`, `hd_vis` 1 at the
-    first run and for an absent key) - OWN, the owner's decision of
-    2026-10-18 after playing the path since round 9; 0 keeps the portal walk
-    with the room-art rules.
+    first run and for an absent key) - OWN, the decision of 2026-10-18
+    after the play tests had run the path since round 9; 0 keeps the portal
+    walk with the room-art rules.
 303. **The art that lies on a static** (`hd_vis.h`, `HDVisStatic`,
     `HDVisStaticCovers`, `HDVisStaticDrawnByArt`, `staticReach` 32,
     `staticStep` 64 (`HD_COVER_STEP`), `staticShare` 0.5; `hd_vis.cpp`; `hd_level.cpp`,
@@ -3193,13 +3224,13 @@ carries the tables.
 308. **The mill seen from afar kept** (`MODIFICATIONS.md`, Round 13; nothing
     in the code) - ANDY3's room 106, a guest of rooms 93 and 95, and the
     rooms the walk reaches on from it, 105, 104, 108, 107 and 113, listed
-    from the mill-wheel house's roof. OWN, the owner's decision; DATA, his
+    from the mill-wheel house's roof. OWN, the decision; DATA, a play-test
     log of 2026-10-17.
 309. **The marble mirror's plane in its clip** (`hd_render.cpp`,
     `kMarbleClipOver` 4, now a number of its own, and `HDRenderMarbleDraw`) -
     the reflection in the plane 4 units over the floor where the clip
     lies, not in the floor. OWN, the rule; DATA: RoomProbe `-marblevoid`
-    at 51 eyes (the owner's 15, round 2's 28 and 8), the floor that shows
+    at 51 eyes (the play test's 15, round 2's 28 and 8), the floor that shows
     none of the mirrored rooms 296,133 pixels before and 274,108 after,
     the strip at the walls' foot gone (RICH2 4582 350 to 2, W46 901 to 4,
     A174 1,260 to 0); what is left is floor whose mirrored room is not
@@ -3219,7 +3250,7 @@ carries the tables.
     `marble_seen_ask`, `marble_seen_read`; `hd_marble_math.h`,
     `HDMarbleSeenCover`) - an occlusion query a plane against the frame's
     depth, read the next frame. OWN, the rule; DATA: ANDREA1's church at
-    tick 283 of the owner's 2026-10-17 session, -5592 and -6120 drawn with
+    tick 283 of the play-test session of 2026-10-17, -5592 and -6120 drawn with
     0 and 1 pixels shown, -6144 left with 34,057; over 52 ticks of the
     church the ticks with under 1,000 pixels of reflection 23 before, 4
     after.
@@ -3227,7 +3258,7 @@ carries the tables.
     `HDMarbleSlotsStep`, `HDMarbleFadeStep`, `HD_MARBLE_HOLD` 0.5;
     `hd_render.cpp`, `kMarbleFadeMs` 8000/60, `kMarbleFadeLongest` 50) -
     OWN, the rule and the numbers; DATA: the stair walk of RICH2 room 45
-    (ticks 4855 to 4953 of the owner's session, steps 0, -256, -512,
+    (ticks 4855 to 4953 of the play-test session, steps 0, -256, -512,
     -768), a set change 20,387 pixels apart in one frame before, at most
     868 pixels a frame at 60 frames a second and 5,900 at 30 after
     (pixels more than 8 of 255 apart, every frame drawn), and ANDREA1's
@@ -3241,7 +3272,7 @@ carries the tables.
     `HDMarbleOverRooms`; `hd_level.cpp`, the level's portals and flip
     table) - OWN, the rule and the depth; DATA: ANDREA1's church, rooms 157
     and 186 over room 165 out of the frame's list at ticks 247 to 275 of
-    the owner's session, their reflection (the church's upper part, 2,560
+    the play-test session, their reflection (the church's upper part, 2,560
     to 4,352 units over the floor) 17,544 pixels at tick 263; the same
     rooms over room 165 beside the stairs' room 174 (ticks 449, 497, 677:
     7,737, 3,792 and 3,839 pixels of floor showing nothing, 309, 0 and 1
@@ -3268,7 +3299,7 @@ carries the tables.
     RoomProbe `-marblecracks`) - OWN, the measurement and the unit; DATA:
     the fifteen levels' kept mirror faces, 164,778 edges, 911 open: on
     another face 238, a gap of 1 to 4 units 230 (RICH2 192, rooms 26, 28,
-    75 and 134; RICH3 38), 4 to 16 135, 16 and more 308; none at the owner's
+    75 and 134; RICH3 38), 4 to 16 135, 16 and more 308; none at the play test's
     places, so no rule.
 318. **The marble counts' queries and their age** (`hd_render.cpp`,
     `marble_seen_read`, `marble_seen_ask`, `kMarbleSeenOldest` 6,
@@ -3338,7 +3369,7 @@ carries the tables.
     on, the deep look, the extinction's depth short of `kUnderNoSurface`) the look
     draws the sea's sheet and the art's additive ranges draw at weight 0; over the
     stand-in's surface, out of the water, with `hd_water` 0 and in every other level
-    nothing changes. OWN, the rule, after the owner's word of 2026-10-18 that only the
+    nothing changes. OWN, the rule, after the play-test note of 2026-10-18 that only the
     shape and the colour are too strong. DATA (RoomProbe, TrgProbe and DdsProbe on the
     player's files, JOBY4): the art is room 19's part 3, material 16 in the additive
     pass, page 3255, its box x -6,608 to 55,136, z 39,944 to 99,327, its plane y -4,269;
@@ -3367,7 +3398,7 @@ carries the tables.
     the shafts 24 and the lit underside 0.24 in place of 0.2, 8 and 0.12. PICTURE (the
     photographs as above, each cut to the photograph and 960 wide): their brightest
     tenth 7.7 times their darkest, their mean luma 116 and 53, their pattern's spread
-    (16-pixel windows over the mean luma) 0.071 and 0.156 against 0.118 in the owner's
+    (16-pixel windows over the mean luma) 0.071 and 0.156 against 0.118 in the play test's
     two pictures of the art with the player cut out. OWN: the band, 0.60 to 1.33 of
     each eye's spread before (the photographs over the art), and the strengths: the
     carry 1.5 to 3.0 (1.5 to 2.3 before), the mean luma at most 96 of 255, every eye's
@@ -3401,7 +3432,7 @@ carries the tables.
     the 16 the census's own bound of clear. CLASSIC: a face with effects
     bit 0 drawn as draw type 2 (`output.cpp`, `phd_PutPolygons`), draw
     type 0 drawn into the depth buffer (`AddQuadZBuffer`). PICTURE (RoomProbe
-    `-calltrace`, the marble floors on, and the owner's pictures of
+    `-calltrace`, the marble floors on, and the play test's pictures of
     2026-10-18): the grid's one blended draw call without a depth write,
     its back faces and the hall's mirror over its bars. OWN: the frame
     half's place among the solid ranges, and 500 per mille in the
@@ -3425,7 +3456,7 @@ carries the tables.
     14 in the additive run, weight 0.8181, page 16103). DATA (the `.MAP`,
     the `.TRG`, the page's texels, the classic mesh 495's 16 additive
     quads); PICTURE (RoomProbe `-glow -addmat 14` at the trview eye of the
-    owner's picture: 5.7 levels on average over 10,861 pixels).
+    play test's picture: 5.7 levels on average over 10,861 pixels).
 337. **The 74 see-through parts' classic faces** (`MODIFICATIONS.md`, the
     windows' Round 4; nothing in the code) - per part the classic room
     faces and static faces at its place, by draw type, and its pixels at a
@@ -3510,7 +3541,7 @@ carries the tables.
     block of `MenuFrameRun`) - the value written `"%d%%"` where the sign has
     room and `"%d"` where it has not; `MenuSettleSlider`'s `MENULOG` value
     stays `"%d"`. OWN, the form; the answer of 2026-10-18 to how the number
-    should read ("Prozent", percent). CLASSIC: the glyph is the classic
+    should read (with a percent sign). CLASSIC: the glyph is the classic
     font's row 4 of `game/chardef.inc`, 15 wide. DATA: the HD glyph is the
     player's `FONT0_OG.DDS` matched at run time (score 1.000, FontProbe
     `-match`); nothing of it is copied here.
@@ -3526,8 +3557,8 @@ carries the tables.
     `MenuSliderSignFits`) - on every shape narrower than about 1.46:1, 4:3,
     5:4 and 1:1 among them, the number stands without the sign rather than
     cross the edge, move the bar or the number, condense the font or borrow
-    a glyph. OWN, the decision, on the answer "so wie jetzt" (as it is now)
-    to where the number stands.
+    a glyph. OWN, the decision, on the answer to keep it as it is now, to
+    where the number stands.
 350. **The sliders' span, `MENU_SLIDER_TOP`** (`game/menu_frame.h`; the six
     slider steps in `game/menu_frame.cpp`) - one definition, 100, named by
     every step's top and by the reads' hold. CLASSIC: 100 is the value at
@@ -3543,7 +3574,7 @@ carries the tables.
     keys as `ulong` through `MenuSliderHeldUlong`, which sends a value over
     the span through the same rule; the registry not written by it. OWN, the
     rule; the answer of 2026-10-18 to whether the volumes should be clamped
-    at the read ("ja", yes): the volumes go to the nearer end. The fallbacks
+    at the read (yes): the volumes go to the nearer end. The fallbacks
     of the four tomb5 keys are their reads' own as they stood: `cam_speed`
     the nearer end, the other three their middle, 50.
 352. **MenuTest's `slider_sign_room` and `slider_reads`, and `slider_numbers`
@@ -3563,7 +3594,7 @@ carries the tables.
     range` set before the step and the sky's `GAME_FOV - range`
     (`camera.cpp`, `BinocularCamera`; `draw.cpp`), the entry at 128 and the
     exit to `GAME_FOV` (`control.cpp`, `newinv2.cpp`, `camera.cpp`), and so
-    the widest zoom, `GAME_FOV - 7 * 128` = 13664. DATA: the owner's `-log`
+    the widest zoom, `GAME_FOV - 7 * 128` = 13664. DATA: a play test's `-log`
     of a zoom in JOBY2 at 165 Hz (`ALTERFOV`, `ARMLOG`, `FPSLOG` lines): 448
     units a tick, five or six frames on one value, the entry and the exit
     drawn as camera cuts. OWN: the blend with the camera's own
@@ -3628,11 +3659,12 @@ carries the tables.
     settings, absent and above 1 as 1. OWN. PICTURE (RoomProbe `-gpu 3 -gpuall` at
     2,560 x 1,440, three processes per eye: 0.015 to 0.057 ms outside the bulbs,
     0.281 ms with the eye inside one).
-364. **His reference picture's fog, as numbers, and the lumps of the mill**
+364. **A reference picture's fog, as numbers, and the lumps of the mill**
     (`MODIFICATIONS.md`, "Volumetric fog from the fog bulbs"; nothing in the code) -
     the lumps' luma band, hue and edge; the lumps are the `.TRG`'s material 15 parts of
-    book 3273 in the additive pass. PICTURE (the owner's picture, measured and not
-    kept; RoomProbe `-calltrace all` and `-glow`). DATA (TrgProbe `-mat 15`).
+    book 3273 in the additive pass. PICTURE (a reference picture supplied for this
+    project, measured and not kept; RoomProbe `-calltrace all` and `-glow`). DATA
+    (TrgProbe `-mat 15`).
 365. **RoomProbe's `-fogbulbs`, `-fogprofile`, `-hdfog` (`-fog 0|1`) and `-fogpass`,
     and ModernTest's `fog_body`** (`Preparation/Tools/Diagnose/RoomProbe.cpp`,
     namespace `probefog`; `ModernTest.cpp`) - the level's bulbs and the frame's, one
@@ -3665,7 +3697,7 @@ carries the tables.
     -addmat 14`): the luma kept to the tenth of a level, the hue the
     classic's. OWN: the margin the census's (Round 4), the area weighting,
     the luma kept (Rec. 601), the select, the rule over a colour, the
-    owner's order of 2026-10-18 ("einen blauen Teint").
+    order of 2026-10-18 for a blue tint.
 367. **The glass pieces of a broken static show** (`hd_debris_rules.h`,
     `HDGlassBand`, `HDGlassShardGain`, `HDGlassFramePage`,
     `HDGlassWholePage`; `hd_debris.h`, `HDDebrisPartLook`, the glass's
@@ -3681,8 +3713,8 @@ carries the tables.
     46 (gain 2.3), ANDREA1's 7, 11, 28. PICTURE (RoomProbe `-debris`, the
     first second of the flight at the break's eye). OWN: the gain the
     band's top over its middle - the pieces reach the top where the art's
-    pane adds the band's middle - for the owner's order ("ein extra
-    Boost").
+    pane adds the band's middle - for the order of an extra
+    boost.
 368. **The two numbers of the glass's pages read by both** (`hd_debris_rules.h`,
     `HD_GLASS_CLEAR_BELOW`, `HD_GLASS_FRAME_PERMILLE`, moved from
     `hd_render.cpp`) - the split's and the whole glass's page tests, the
@@ -3758,7 +3790,7 @@ carries the tables.
     `tomb5.cpp`, the value `hd_vis_rev` beside `hd_vis`, the `HDLOG
     settings` line's `hd_vis=`) - a registry without the revision has its
     `hd_vis` moved to 1 and both written back; from the revision on the
-    value is kept as set, above 1 read as 0. DATA: the engine's own
+    value is kept as set, above 1 read as 0. OWN, read in this engine's own
     settings code and its history - the first-run block of the earlier
     builds wrote 0 until `02937171`, which wrote and read 1, none wrote a
     revision,
@@ -3820,7 +3852,7 @@ carries the tables.
 385. **Every plane mirrored** (`hd_render.cpp`, `HDRenderMarbleDraw`,
     `g_marble_cap`, `g_marble_slots`; `hd_marble_math.h`, `HDMarblePlanesCap`,
     `HD_MARBLE_PLANES_MOST`; `tomb5.cpp`, `hd_marble_ceiling`) - every plane
-    that shows is mirrored, up to a ceiling of 64. OWN, the owner's
+    that shows is mirrored, up to a ceiling of 64. OWN, the
     decision of 2026-10-18 and the ceiling a free choice over the data;
     DATA: RoomProbe `-marblelist` at the census eyes (four views from every
     room with a flat mirror floor of half a square or more), at most 39
@@ -3830,7 +3862,7 @@ carries the tables.
 386. **No plane fades out while the places can take every plane**
     (`hd_marble_math.h`, `HDMarbleSlotsStep`) - a plane gives its place up
     only while the empty places cannot take every plane waiting. OWN; DATA:
-    RoomProbe `-marblesim` over round 3's walks of the owner's log, RICH2's
+    RoomProbe `-marblesim` over round 3's walks of a play-test log, RICH2's
     stair 8 fade-out frames of a showing plane before, none after.
 387. **The mirror's scissor and the draws it leaves out** (`hd_render.cpp`,
     `marble_scissor`, `marble_box_out`, `kMarbleScissorMargin`;
@@ -3838,10 +3870,10 @@ carries the tables.
     plane's mirrored draws cut to its faces' box on the screen turned as
     the target is, two pixels of the frame wider, and a room, stand range
     or room over whose box lies past the mirrored view, under its clip or
-    beside the scissor not drawn. OWN, from general graphics knowledge
-    (scissoring and box culling); the target's turn and rows are the
+    beside the scissor not drawn. TEXTBOOK: scissoring and box culling;
+    OWN: the two pixels; the target's turn and rows are the
     record's (entry 234); DATA: md5-identical pictures at the cap of 2 at
-    three of the owner's eyes, RICH2's draw calls at tick 5222 1,340 for 8
+    three of the play test's eyes, RICH2's draw calls at tick 5222 1,340 for 8
     planes before and 792 for 9 after.
 388. **The least a plane shows** (`hd_marble_math.h`, `HDMarbleShown`,
     `HD_MARBLE_LEAST` 0.004; `hd_render.cpp`, `g_marble_least`) - a plane
@@ -3862,9 +3894,10 @@ carries the tables.
     TROne (GPLv3) by Todesengel1931 - https://github.com/todesengel1931 -
     takes floors and ramps up to 60 degrees by a normal's height over half
     its length (`host/render/reflection_plane.h`, `floor_plane`), read on
-    2026-10-19 in the copy the owner named for this round; no code was
-    taken. The census's gap (56.3 to 85 degrees) does not choose a line
-    inside it: 60 is TROne's line, taken as its number and credited here.
+    2026-10-19 in the copy named for this round; no code was taken, and
+    audit round B1 confirmed the line as TROne's own design. The census's gap
+    (56.3 to 85 degrees) does not choose a line inside it: 60 is TROne's line,
+    taken as its number and credited here.
 390. **A slope's faces share a plane by their corners** (`hd_marble_math.h`,
     `HDMarbleTiltFits`; `hd_render.cpp`, `marble_build`) - a sloped face
     joins a plane found already where its corners lie within the clip's
@@ -3878,7 +3911,7 @@ carries the tables.
     `-reload` at RICH2 tick 5222, 30 sloped planes before the reload and
     0 after it with the base, 55 and 55 and the picture md5-identical now.
 392. **ANDREA1's church mosaic in the mirror column** (`hd_gloss_pages.h`,
-    169, 170 and 183, class `A`) - OWN, the owner's note of 2026-10-18;
+    169, 170 and 183, class `A`) - OWN, a play-test note of 2026-10-18;
     DATA: RoomProbe `-marblesteep -marblepages 169,170,183`, faces of them
     facing up only in rooms 165 and 177 of the fifteen levels (162 flat
     faces at -6144); PICTURE: DdsProbe over the three pages (a mosaic
@@ -3890,7 +3923,7 @@ carries the tables.
     `HDMarbleBuildAfterSwitch`; `tomb5.cpp`, `hd_marble` on a first run) -
     the row writes `hd_marble` and hands it to the renderer at once; a
     level built with the mirror keeps its build until the next load. OWN,
-    the owner's wish of 2026-10-18; the menu's own row and registry
+    a play-test wish of 2026-10-18; the menu's own row and registry
     patterns.
 394. **RoomProbe `-marblelist`, `-marblesteep`, `-marbleslopes`,
     `-marbleleast` and `-marbletread`; ModernTest's `marble_every` and
@@ -3931,7 +3964,7 @@ carries the tables.
     keeps the whole way, so the surface fades out over the playable area as the sea
     entry's Round 5 keeps it. DATA (JOBY4: the basin of room 7 at y 12,032, the
     sheet's plane at -4,269, 134 of its 137 rooms water rooms). OWN, the rule, after
-    the owner's word of 2026-10-18 that the room over the playable area is without
+    the play test's report of 2026-10-18 that the room over the playable area is without
     colour: at an eye 68 units under the basin the rooms over its horizon were hue 188
     against the water's 200, a line of 7.7 of luma, 0.8 after; the eyes over the basin
     draw the pictures of before byte for byte (RoomProbe).
@@ -3969,8 +4002,8 @@ carries the tables.
     bound kept their alpha and they added 3.0 levels at the eyes where the
     classic's glass adds 14.2 (band 7.2 to 28.9, GlassHue); added whole 7.9
     to 8.1 (RoomProbe `-glow -addmat 14`). OWN: the table keyed by page, as
-    the sheen's page table is (`hd_gloss_pages.h`), the owner's order of
-    2026-10-20 ("Andrea1 das Glas lass dem mal ein gruenen Teint geben").
+    the sheen's page table is (`hd_gloss_pages.h`), the order of
+    2026-10-20 to give ANDREA1's glass a green tint.
 402. **The table's hue on the classic's saturation** (`hd_debris_rules.h`,
     `HDGlassTintHue`; `hd_render.cpp`, `HDRenderGlassTint`) - the tint a
     draw call takes from the classic glass at its place (entry 366) turned
@@ -3978,14 +4011,14 @@ carries the tables.
     HSV hexcone (hue, saturation, value to red, green, blue). DATA: the
     classic glass at the panes hue 201, saturation 0.57; the art's texels
     there hue 197 to 203; no green in either (the record's table). OWN: the
-    hue 120 for the owner's "gruen" - his look decision of 2026-10-20 - and
+    hue 120 for the green asked for - a look decision of 2026-10-20 - and
     the saturation the classic's, the luma the art's add.
 403. **A piece on a page of the table flies whole and tinted** (`hd_debris.h`,
     the piece's glass and look) - a piece's triangle on such a page is the
     additive run's whole glass and its look (entry 367) turns to the
     table's hue. PICTURE (RoomProbe `-debris 198:2` against `-smash 198:2`):
     at the break the pieces add 18.1 levels, hue 123, saturation 0.58,
-    where they added 3.0 at hue 189. OWN, the owner's order above.
+    where they added 3.0 at hue 189. OWN, the order above.
 404. **RoomProbe's `look` column and ModernTest's `glass_look`**
     (`Preparation/Tools/Diagnose/RoomProbe.cpp`, the `-glasshue` line's
     end and summary; `ModernTest.cpp`, `glass_look`, 17 checks, and the
@@ -4037,7 +4070,8 @@ carries the tables.
     additive parts of material 1 in ANDY3's groups 10, 15 and 17, 24,576 triangles,
     page drifting at 0.02, 0.01, drawn at weight 1; not the book 3,273, which is the
     rain rings on the water. Corrects 364. PICTURE (RoomProbe `-addmat 15` and
-    `-addmat 1` at the eye of the owner's picture, found among his logged eyes).
+    `-addmat 1` at the eye of the reference picture, found among the play test's
+    logged eyes).
     DATA (TrgProbe `-all -mat 1`; RoomProbe `-fogart` at the fifteen levels).
 411. **The art's mist: the flow material drifting on both axes, in the air**
     (`specific/hd/hd_fog.h`, `HDFogArtMist`; `hd_render.cpp`, `fog_add_weight`,
@@ -4050,8 +4084,8 @@ carries the tables.
     criterion.
 412. **The band's top, 33 of 255** (`hd_fog.h`, `HD_FOG_TOP`) - the 95th percentile
     of the comparison picture's wisps over the ground under them (a grey opening of
-    1/26 of the picture's height), its median 13.6. PICTURE (the owner's comparison
-    picture, measured and not kept). OWN: the opening, the percentile.
+    1/26 of the picture's height), its median 13.6. PICTURE (a reference picture
+    supplied for this project, measured and not kept). OWN: the opening, the percentile.
 413. **The mist's weight, 0.35** (`hd_fog.h`, `HD_FOG_ART_WEIGHT`, `HDFogArtWeight`) -
     the top over the most the mist adds at weight 1, 94.3 at the 95th percentile of
     its pixels at the brightest of three eyes of ANDY3's mill (83.9 and 91.2 at the
@@ -4104,7 +4138,7 @@ carries the tables.
     another; over the 14 bindings every glass triangle with a partner meets
     it at exactly 180 degrees, except RICH1's `DOOR_TYPE2`, whose range
     spreads 99 to 173 and stays two-sided, and RICH1's oval doors, all
-    facing +y. NUMBER: 135 degrees, halfway between the two sides of a pane
+    facing +y. OWN, the number: 135 degrees, halfway between the two sides of a pane
     (180) and two faces meeting at a box's corner (90). TEXTBOOK: a
     reflection's matrix has a negative determinant and turns the winding.
     OWN: the per-range test, so no range is cut for it.
@@ -4117,7 +4151,7 @@ carries the tables.
     see-through face is added once. DATA: RICH2's cabinet carries its pane
     in part 0's additive run (material 0) twice, 24 triangles a door, one
     unit behind the glass run's pane on the same texture corners; no other
-    of the 14 bindings has an additive run on a glass node. NUMBER: a 32nd
+    of the 14 bindings has an additive run on a glass node. OWN, the number: a 32nd
     of the edge, 10 units at those triangles (longest edge 319): the copies
     lie a 319th off, and the door's pane and sheet, 11 units apart, stay
     two surfaces.
@@ -4210,10 +4244,10 @@ carries the tables.
     `-itempush`, entry 375). OWN: the same fraction the other way.
 431. **The tie measure of a room** (RoomProbe `-ties`, `-push`) - a
     surface moved by 1/20,000 of its distance either way, the pixels that
-    change by more than 8 counted. THIRD (this project): the doors' tie
-    measure of the round that drew them one-sided (ModelProbe
-    `-itempush`). OWN: the classic faces' count with the stencil of
-    `-coincide`, the shift grown with the distance.
+    change by more than 8 counted. OWN: the doors' tie measure of the
+    round that drew them one-sided (ModelProbe `-itempush`), and the classic
+    faces' count with the stencil of `-coincide`, the shift grown with the
+    distance.
 432. **RICH1's catwalk, measured** (no code) - the lattice between rooms 72
     and 70 is in both groups' art in the plane y -3,072, each facing its
     own room, and the renderer draws cut-out ranges two-sided
@@ -4241,8 +4275,8 @@ carries the tables.
     apart). DATA: the cells' mean light, taken from the cells'
     hash itself (`CellHash`, this project's) over 128 by 128 cells and 4 by 4 places
     each above the noise's floor of 0.62: 0.0537, a lit cell 18.6 times it. OWN: the
-    bound, after the owner's word of 2026-10-20 that the sun in JOBY4 is still far too
-    strong; at the eye of his play test (tick 20,282, room 123, 26.5 degrees up)
+    bound, after the play test's report of 2026-10-20 that the sun in JOBY4 is still
+    far too strong; at the eye of that play test (tick 20,282, room 123, 26.5 degrees up)
     245,208 of 3,686,400 pixels at 2,560 x 1,440 were burnt to white by the shafts, at
     10 of 30 clocks 2 seconds apart, none after at any clock, and the dive's eyes stay
     in their band (RoomProbe, `MODIFICATIONS.md`, the sea seen from below, Round 11).
@@ -4264,8 +4298,8 @@ carries the tables.
     carries (`gLookSun`). PICTURE: 395's photograph. OWN: the strength - the light of
     395's power 8.75 at strength 4 spread to the power 3.57 (1.88), then the largest
     half step down that keeps every eye under the sheet in its band (1.5; 1.75 leaves
-    one eye under), after the owner's word of 2026-10-20 that the sun in JOBY4 is
-    still far too strong; at his eye the glow halves 135 to 147 pixels out at 960 wide
+    one eye under), after the play test's report of 2026-10-20 that the sun in JOBY4 is
+    still far too strong; at its eye the glow halves 135 to 147 pixels out at 960 wide
     (129 before) against the photograph's 178 (RoomProbe, `MODIFICATIONS.md`, the sea
     seen from below, Round 11).
 438. **RoomProbe's `disc` numbers and ModernTest's disc checks**
@@ -4276,7 +4310,7 @@ carries the tables.
     `marble_plane_rooms`, `g_marble_walk` 3, `marble_over_world`) - each plane's mirror
     draws the rooms found from the drawn rooms holding its faces through every portal to
     three portals, a room taken only where the plane's mirrored view can show its box.
-    OWN; DATA: RoomProbe at the changes of the frame's room list in the owner's play log
+    OWN; DATA: RoomProbe at the changes of the frame's room list in the play-test log
     of 2026-10-20 (the list rebuilt from its `ROOMLIST` lines, each change drawn before
     and after at its eye, the mirror on and off): RICH2 45 of 140 changes moved the mirror
     (10,357 pixels at 960 x 540) before, 18 (565) after; ANDREA1 2 of 129 before, none
@@ -4304,16 +4338,18 @@ carries the tables.
     RoomProbe `-skycensus` over the fifteen levels (only opaque and alpha sky parts; RICH3
     two opaque parts, TITLE two opaque groups); GPU timestamps round the sky, 2,560 x
     1,440: R4920 0.46 to 0.27 ms, R5222 1.37 to 0.89, A717 0.32 to 0.19, the lobby 0.63 to
-    0.66; the pictures md5-identical to the sky drawn first at his 73 places (146) and at
-    round 2's eyes and his ticks with the sky's groups (57); one row each way the least
-    that keeps them so (without it 4 of 146 differ by a pixel).
+    0.66; the pictures md5-identical to the sky drawn first at the play test's 73
+    places (146) and at round 2's eyes and its ticks with the sky's groups (57); one
+    row each way the least that keeps them so (without it 4 of 146 differ by a
+    pixel).
 443. **RoomProbe `-marblepop` and the `marblerooms` line; ModernTest's six checks of
     `HDMarbleSolidRun`** (`Preparation/Tools/Diagnose/`) - the walk's pops in the tool:
     each change of the frame's room list drawn at its frame's eye with the rooms before
     and after, the mirror on and off; the rooms each drawn plane's mirror draws
-    (`HDRenderMarblePlaneGroups`). OWN; DATA: his RICH2 walk (frames 85000 to 93000, 173
-    changes) 75 moving the mirror (91,846 pixels) with the base's mirror, 45 (13,290) with
-    the head's; ANDREA1 (117599 to 121000, 98 changes) 6 (734) and 4 (712).
+    (`HDRenderMarblePlaneGroups`). OWN; DATA: a play test's RICH2 walk (frames 85000
+    to 93000, 173 changes) 75 moving the mirror (91,846 pixels) with the base's
+    mirror, 45 (13,290) with the head's; ANDREA1 (117599 to 121000, 98 changes) 6
+    (734) and 4 (712).
 
 ## Credited, but not contained here
 
@@ -4373,3 +4409,13 @@ rendered or played, and neither can reconstruct a level file. They are a
 survey of geometry, not a copy of it. But they ARE derived from the game's
 level design, so calling this project entirely free of Tomb Raider data
 would be overstating it.
+
+**The diagnostic tests read the levels; they do not carry them.** `InterpTest`
+reads Lara's key frames and her bone table out of the player's own `ANDREA1.TRC`
+at run time, read only, as `LipsTest` reads the faces' track files and
+`cutseq.bin`; without the file the checks that need them fail and say so. What
+the tests keep in their source are measured values cited as such - among them a
+few root offsets of Lara's animations (three numbers each), the portal between
+ANDREA1's rooms 2 and 57, frame numbers, and the counts `LipsTest` expects of
+the player's files - the same kind of measurement this page cites throughout. No
+level, frame table or model can be rebuilt from them.

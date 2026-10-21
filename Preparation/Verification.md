@@ -103,7 +103,7 @@ beside it, and says so when the two disagree.
   which can show rain or snow gets a new draw - six of the thirteen can,
   and those are the ones to compare. The run names the result in its own
   notes.
-- **A missing view window (LevelFix, `SightWindow`).** Every run on
+- **A missing view window (LevelFix, `SightWindow`, #214).** Every run on
   ANDREA2 writes the window between rooms 231 and 102 over the arch, so
   ANDREA2 differs from a build without it on every seed and with no
   switches at all: 64 bytes longer, one 32-byte record at the end of each
@@ -112,7 +112,7 @@ beside it, and says so when the two disagree.
   size words. Every other room, every byte in front of the rooms and
   behind them, every other level and every `.hdm` stay byte-identical -
   the entry records no HD cut.
-- **A trigger set to one-shot (LevelFix, `TriggerOneShot`).** Every run
+- **A trigger set to one-shot (LevelFix, `TriggerOneShot`, #223).** Every run
   on RICH2 sets the one-shot bit on the two floor-laser triggers of room
   5, so RICH2 differs from a build without it on every seed and with no
   switches at all: the same size, exactly two bytes, each the high byte
@@ -126,6 +126,14 @@ beside it, and says so when the two disagree.
   from, so a `cross` run places a different set. Byte-identity with a
   build lacking the cyborg is claimed when the two new rows are
   deselected - the case to run when checking that claim.
+- **Not the build id.** `RANDO_BUILD_ID` (`TR5Randomizer/src/core/
+  BuildId.h`) moved from 19 to 20 because #214 and #223 change what a seed
+  writes, and `RANDO_VERSION_STRING` became `Beta_3.0` with it. Neither
+  enters the seed string or a level file: the two stand at the head of
+  `spoiler.txt`, in the GUI and in the version resources only. Measured at
+  seed 380 over the thirteen levels, plain and with `mix cross allsanity 8
+  weapons items20 weather`: all 78 files (`.trc`, `.hdm`, log) of the
+  `Randomize.exe` before the bump and after it byte-identical.
 
 In every one of these the difference is EXPECTED. What still has to hold
 is the other half of the recipe: the same seed twice must give the same

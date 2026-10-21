@@ -1128,9 +1128,39 @@ void HDRenderAdditiveOnly(int material);
  * none of the glow shader's fades (hd_glow.hlsl) - the comparison pictures
  * out of the same build. `noShader` takes effect at the next
  * HDRenderLevelBegin, because the glow's draw calls are split by part at
- * level build; the other two may change at any time. The engine never calls
+ * level build; the other two may change at any time. `normal` is the normal
+ * the glow's |N.V| term takes (HDGlowFaceNormal): HD_GLOW_NORMAL_PART, the
+ * renderer's own per-part choice, HD_GLOW_NORMAL_FILE or HD_GLOW_NORMAL_FACE
+ * for every part; it takes effect at the next HDRenderLevelBegin as well,
+ * because the choice is made per part at level build. The engine never calls
  * it and there is no option and no registry key for it. */
-void HDRenderGlowOverride(int sum, int noAniso, int noShader);
+void HDRenderGlowOverride(int sum, int noAniso, int noShader, int normal);
+
+/* Which normal a glow part's |N.V| term takes (hd_glow.hlsl, gGlowMode.y). */
+enum
+{
+	HD_GLOW_NORMAL_PART = 0,	// the file's where it agrees with the faces
+	HD_GLOW_NORMAL_FILE = 1,	// the file's normal on every part
+	HD_GLOW_NORMAL_FACE = 2		// the face's normal on every part
+};
+
+/* True where a glow part takes the face normal. `corners` is the number of
+ * the part's triangle corners the level build looked at and `disagree` those
+ * whose file normal is more than the agreement limit off the face's. Per
+ * part, a part takes the face normal when more than half of its corners
+ * disagree, because there the file normal does not describe the card; the
+ * two forced settings exist so that the choice can be measured against both.
+ * A mode it does not know is the per-part choice. */
+inline bool HDGlowFaceNormal(int mode, int disagree, int corners)
+{
+	if (mode == HD_GLOW_NORMAL_FILE)
+		return false;
+
+	if (mode == HD_GLOW_NORMAL_FACE)
+		return true;
+
+	return disagree * 2 > corners;
+}
 
 /* What the level build decided for one glow part (hd_render.cpp,
  * BuildGlowParts), for the diagnostic tool alone. */

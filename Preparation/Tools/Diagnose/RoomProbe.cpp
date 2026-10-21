@@ -190,6 +190,12 @@
  *                     shader (0) - the before picture out of the same build.
  *                     The additive block lists what the level build decided
  *                     for every glow part.
+ *     -glowface shipped|file|face
+ *                     the normal the glow's |N.V| term takes: the file's
+ *                     where it agrees with the faces and the face's
+ *                     elsewhere (shipped, the renderer's own), or the
+ *                     file's or the face's on every part - the same views
+ *                     measured under each choice out of the same build.
  *     -cull none|opaque
  *                     the opaque room ranges - pass 0 with no alpha test, no
  *                     water and no sky - drawn with their back faces culled
@@ -18443,6 +18449,7 @@ static int ProbeMain(int argc, char** argv)
 			"without the scene's depth\n");
 		printf("       -stackedseas  -fastswing  -addmat <material>\n");
 		printf("       -glowblend add|screen  -aniso 0|1  -glowps 0|1\n");
+		printf("       -glowface shipped|file|face\n");
 		printf("       -scissor <l,t,r,b>\n");
 		printf("       -devicecycle   the run on three devices, Alt+Enter's "
 			"way; -crash <folder>   the crash seam's own test\n");
@@ -18583,8 +18590,10 @@ static int ProbeMain(int argc, char** argv)
 	// Draw the .TRG's sky group(s) behind the room, and only them.
 	bool sky = false, skyOnly = false;
 	bool wibbleGiven = false;
-	// -glowblend, -aniso and -glowps, handed to HDRenderGlowOverride together.
+	// -glowblend, -aniso, -glowps and -glowface, handed to
+	// HDRenderGlowOverride together.
 	int glowSum = 0, glowNoAniso = 0, glowNoShader = 0;
+	int glowNormal = HD_GLOW_NORMAL_PART;
 
 	// The portal walk offline. A seed of -1 means the switch was
 	// not given and nothing below changes.
@@ -19065,17 +19074,33 @@ static int ProbeMain(int argc, char** argv)
 		else if (!strcmp(argv[at], "-glowblend") && at + 1 < argc)
 		{
 			glowSum = !strcmp(argv[++at], "add") ? 1 : 0;
-			HDRenderGlowOverride(glowSum, glowNoAniso, glowNoShader);
+			HDRenderGlowOverride(glowSum, glowNoAniso, glowNoShader,
+				glowNormal);
 		}
 		else if (!strcmp(argv[at], "-aniso") && at + 1 < argc)
 		{
 			glowNoAniso = atoi(argv[++at]) ? 0 : 1;
-			HDRenderGlowOverride(glowSum, glowNoAniso, glowNoShader);
+			HDRenderGlowOverride(glowSum, glowNoAniso, glowNoShader,
+				glowNormal);
 		}
-		else if (!strcmp(argv[at], "-glowps") && at + 1 < argc)
+		else if ((!strcmp(argv[at], "-glowps") ||
+			!strcmp(argv[at], "-glowface")) && at + 1 < argc)
 		{
-			glowNoShader = atoi(argv[++at]) ? 0 : 1;
-			HDRenderGlowOverride(glowSum, glowNoAniso, glowNoShader);
+			// One branch for both: the chain stands at the compiler's
+			// limit of nested blocks (C1061).
+			if (!strcmp(argv[at], "-glowps"))
+				glowNoShader = atoi(argv[++at]) ? 0 : 1;
+			else
+			{
+				const char* which = argv[++at];
+
+				glowNormal = !strcmp(which, "file") ? HD_GLOW_NORMAL_FILE
+					: !strcmp(which, "face") ? HD_GLOW_NORMAL_FACE
+					: HD_GLOW_NORMAL_PART;
+			}
+
+			HDRenderGlowOverride(glowSum, glowNoAniso, glowNoShader,
+				glowNormal);
 		}
 		else if (!strcmp(argv[at], "-noshore"))
 			HDRenderShoreOverride(1);

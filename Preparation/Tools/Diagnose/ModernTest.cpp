@@ -118,6 +118,8 @@
 #include "../../../TOMB5 Code/TOMB5/specific/zrange_math.h"
 // The skeleton fit and the pocket: the object path's rules (object_rules).
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_object_rules.h"
+// The glow's normal: the per-part choice and its two settings (glow_normal).
+#include "../../../TOMB5 Code/TOMB5/specific/hd/hd_render.h"
 #include <string.h>
 #include <algorithm>
 #include <chrono>
@@ -27335,6 +27337,38 @@ static void object_rules()
 	}
 }
 
+/* The glow's normal (HDGlowFaceNormal, hd_render.h): per part, the face
+ * normal where more than half of the corners disagree, and the two forced
+ * settings the measurement compares it with. */
+static void glow_normal()
+{
+	ok(!HDGlowFaceNormal(HD_GLOW_NORMAL_PART, 0, 40),
+		"glow normal: a part whose corners agree takes the file normal",
+		HDGlowFaceNormal(HD_GLOW_NORMAL_PART, 0, 40), 0);
+	ok(HDGlowFaceNormal(HD_GLOW_NORMAL_PART, 21, 40),
+		"glow normal: more than half disagreeing takes the face normal",
+		HDGlowFaceNormal(HD_GLOW_NORMAL_PART, 21, 40), 1);
+	ok(!HDGlowFaceNormal(HD_GLOW_NORMAL_PART, 20, 40),
+		"glow normal: exactly half disagreeing keeps the file normal",
+		HDGlowFaceNormal(HD_GLOW_NORMAL_PART, 20, 40), 0);
+	ok(!HDGlowFaceNormal(HD_GLOW_NORMAL_PART, 0, 0),
+		"glow normal: a part with no corners keeps the file normal",
+		HDGlowFaceNormal(HD_GLOW_NORMAL_PART, 0, 0), 0);
+	ok(!HDGlowFaceNormal(HD_GLOW_NORMAL_FILE, 40, 40),
+		"glow normal: file everywhere, even where every corner disagrees",
+		HDGlowFaceNormal(HD_GLOW_NORMAL_FILE, 40, 40), 0);
+	ok(HDGlowFaceNormal(HD_GLOW_NORMAL_FACE, 0, 40),
+		"glow normal: face everywhere, even where every corner agrees",
+		HDGlowFaceNormal(HD_GLOW_NORMAL_FACE, 0, 40), 1);
+	ok(HDGlowFaceNormal(7, 21, 40) && !HDGlowFaceNormal(-1, 0, 40),
+		"glow normal: a mode it does not know is the per-part choice",
+		HDGlowFaceNormal(7, 21, 40), 1);
+	ok(HDGlowFaceNormal(HD_GLOW_NORMAL_PART, 3, 5) &&
+		!HDGlowFaceNormal(HD_GLOW_NORMAL_PART, 3, 7),
+		"glow normal: the share decides, not the count of disagreeing corners",
+		HDGlowFaceNormal(HD_GLOW_NORMAL_PART, 3, 7), 0);
+}
+
 int main()
 {
 	printf("ModernTest - the arithmetic of the modern control\n");
@@ -27540,6 +27574,7 @@ int main()
 	fog_body();
 	fog_art();
 	object_rules();
+	glow_normal();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

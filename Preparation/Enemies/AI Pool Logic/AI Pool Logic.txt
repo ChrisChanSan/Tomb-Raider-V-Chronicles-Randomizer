@@ -83,7 +83,7 @@ On the drop (DropBaddyPickups, game\box.cpp) the engine clears the low
 OCB bits of the wall pickups, OCB 2 and 9. In game that is not enough: a
 wall pickup an enemy carried off is either gone or lies at a wrong
 position, still with its wall-pickup identity, and cannot be collected
-(observed by the project owner; the cause is not measured yet). That is
+(observed in a play test; the cause is not measured yet). That is
 why the placement keeps wall pickups away from enemies and the secret
 lists warn against it. Every other OCB is kept as it is: a hidden pickup (OCB 1)
 dropped that way keeps its hidden-pickup manner, but a plinth pickup

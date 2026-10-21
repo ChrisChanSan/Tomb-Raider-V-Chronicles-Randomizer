@@ -3181,7 +3181,8 @@ static void circling()
 	 * measured against a thumb that kept breaking out of the circle (twice
 	 * into a wall, four windows of it) and raised to 5461. This is the
 	 * shipped rate, on the measured circle. */
-	ok(now.worst_error <= 3822 + 128, "the shipped rate leaves no lag on his own circle",
+	ok(now.worst_error <= 3822 + 128,
+		"the shipped rate leaves no lag on the measured circle",
 		now.worst_error, 3822);
 
 	spin_run(3822, 86, 1, MODERN_TURN_RATE_TRONE, &was);
@@ -3729,7 +3730,7 @@ static void spin_sweep()
 	ok(c.forward_at == 0, "...and the old rate had the same lock at 18 deg/tick",
 		c.forward_at, 0);
 	printf("            the same at the old 3277 - the lock moved UP 12 deg/tick,"
-		" out of his measured range\n");
+		" out of the measured range\n");
 	printf("  starts that never reach the run: %ld of 216 now, %ld then"
 		" (the six speeds are not the old lock's own)\n", never_new, never_old);
 }
@@ -4266,7 +4267,8 @@ static void tank_sector()
 		stick_at(thumb[i], 120, &x, &y);
 		sector = ModernTankSector(x, y, MODERN_TANK_SECTOR_NONE, &ox, &oy);
 
-		ok(sector == MODERN_TANK_SECTOR_TURN, "his measured thumb is a pure turn",
+		ok(sector == MODERN_TANK_SECTOR_TURN,
+			"the measured thumb is a pure turn",
 			sector, MODERN_TANK_SECTOR_TURN);
 		ok(oy == 0, "...and no step bit goes out with it", oy, 0);
 		ok(absl(ox) == 120, "...at the stick's own magnitude, not its component",
@@ -4275,7 +4277,7 @@ static void tank_sector()
 			ox, thumb[i] < 0.0 ? -120 : 120);
 	}
 
-	printf("  his four measured angles (%.0f, %.0f, %+.0f, %+.0f deg) all turn;"
+	printf("  the four measured angles (%.0f, %.0f, %+.0f, %+.0f deg) all turn;"
 		" the sector is +-%.0f deg of the horizontal\n",
 		thumb[0], thumb[1], thumb[2], thumb[3], turn_deg);
 
@@ -7309,8 +7311,9 @@ static void camera_orbit()
 	ok(yaw == (short)-16384, "...and the offset takes all of it, which is what keeps the view still",
 		yaw, -16384);
 
-	/* And the whole of his spin video: ten seconds of her spinning on the spot
-	 * at her own 3277 a tick, and the camera does not move by one unit. */
+	/* And the whole of a play test's spin video: ten seconds of her spinning
+	 * on the spot at her own 3277 a tick, and the camera does not move by one
+	 * unit. */
 	ModernCameraReset(&st);
 	ModernCameraUpdate(&cfg, &st, 0, 0, 0, 0, 0, &yaw, &pitch);
 

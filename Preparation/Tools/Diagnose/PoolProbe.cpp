@@ -538,8 +538,9 @@ static void grid_run()
 	 * wherever the old one said yes, and the new one goes on saying yes where
 	 * the old one had stopped. Budget 3878 MiB and a cache of 465 MiB are
 	 * measured values from a real run. */
-	printf("(i) his own numbers - budget 3878 MiB, cache 465 + spent, "
-		"avail_virtual 3000 MiB, largest free block 1000 MiB\n\n");
+	printf("(i) the measured run's numbers - budget 3878 MiB, "
+		"cache 465 + spent, avail_virtual 3000 MiB, "
+		"largest free block 1000 MiB\n\n");
 	printf("  spent  card room  addr room   old   new   refused         fits\n");
 
 	static const double spents[] = { 0, 10, 20, 40, 52, 60, 63, 64, 70, 100, 200 };
@@ -648,10 +649,11 @@ static void grid_run()
 	ask_of(ask, 465.0, 0.0, 3878.0, 3000.0, 1000.0, 1);
 	HDRedressDecide(&ask, &verdict);
 
-	printf("\n(vi) with 3000 MiB of address space free and his own budget, a "
-		"level has room for %d changes of %.0f MiB\n", verdict.fits,
+	printf("\n(vi) with 3000 MiB of address space free and the measured "
+		"run's budget, a level has room for %d changes of %.0f MiB\n",
+		verdict.fits,
 		HD_REDRESS_WORST / kMiB);
-	printf("     (the old rule gave him %d, and a measured play log was "
+	printf("     (the old rule gave that run %d, and a measured play log was "
 		"stopped at the sixth)\n",
 		(int)(HD_REDRESS_ALLOWANCE / HD_REDRESS_WORST));
 }

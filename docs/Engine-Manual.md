@@ -1582,7 +1582,12 @@ see *Lara in HD* below for which of her stays classic and why.
   the screen; where a pane is seen edge-on, which also lets a round shaft read
   as a column of light; at the sides of a pane cut from the middle of its
   texture; and at the ends of a shaft whose panes stop in mid-air or on the
-  floor. Where a shaft meets a wall or the floor it is still cut off sharply.
+  floor. Whether a pane is seen edge-on is read from the direction the art
+  stores for its surface, smooth across the pane, except on the few panes
+  whose stored direction does not match their own shape (31 of 253), where it
+  is read from the pane itself. Measured against either reading on every pane
+  over the same 46 views, neither drew a cleaner glow, so the choice stands.
+  Where a shaft meets a wall or the floor it is still cut off sharply.
   The same fades also take most of the light out of a haze or mist drawn as
   panes all through a room, the kind that hangs around the camera wherever it
   stands, and such a haze keeps them: the mist of the church in the Labyrinth,

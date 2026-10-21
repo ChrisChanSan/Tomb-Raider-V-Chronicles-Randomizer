@@ -10640,7 +10640,7 @@ static void hd_feet()
 {
 	const feet_world who[] = {
 		{ "LARA", 0 },
-		{ "SHOTGUN_ANIM", 3 },		// the one-handed gun's weapon item
+		{ "SHOTGUN_ANIM", 3 },		// the shotgun's weapon item
 		{ "SWAT_PLUS_MIP", 36 },
 		{ "BLUE_GUARD", 37 },
 		{ "MAFIA2", 51 },

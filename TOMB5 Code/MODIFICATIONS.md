@@ -12365,9 +12365,9 @@ id 0; ANDREA1 - MAFIA2 id 4, BLUE_GUARD2 id 0, and none of the four Tomb Raider 
 guests (their steps are 447 and 438; the import maps every guest id to its own base or to
 the mute 411). Commands are read only by `AnimateItem` (`game/control.cpp`) and
 `AnimateLara` (`game/laramisc.cpp`); an arm's animation runs none, so the pistols', Uzis'
-and revolver's id 0 never plays, while a one-handed gun's weapon item (SHOTGUN_ANIM) goes
-through `AnimateItem` (`game/lara1gun.cpp`). Ids 0, 4 and 17 are played from animation
-commands only.
+and revolver's id 0 never plays, while the weapon item of a long gun (SHOTGUN_ANIM;
+the shotgun and the HK share `game/lara1gun.cpp`) goes through `AnimateItem`. Ids 0, 4
+and 17 are played from animation commands only.
 
 The sets, measured with a harness that links the engine's own `hqsfx.cpp` and
 `hd_feet.cpp` against the randomizer's level reader, the base's and the head's, over the
@@ -12397,7 +12397,10 @@ emitter of ids 0 and 4 is an item animated by `AnimateItem`, which names it. Wha
 walks on is a fact of what is drawn at that step: drawn classic she wears the engine's
 own boots, and the ordinary chain is what the classic engine plays; drawn HD she wears
 the outfit, and the outfit's feet choose. A footstep mod is a mod whose recording on a
-footstep sample differs from the unmodded bank's, byte for byte.
+footstep sample differs from the unmodded bank's, byte for byte, and stands in that
+sample's slot: the load loop holds every payload to its length rule, and a take it
+refused keeps the level's own recording, so the test asks the loop's verdict first
+(`HDFeetNoteSample`) and a refused take counts as no mod there.
 
 **Decisions.** (1) The draw asked is `HDLaraDrawActive()` - Lara's body drawn HD, which
 is `HDDrawn()` with her HD composite built and `hd_objects` on - not `HDDrawn()` alone: a
@@ -12407,7 +12410,7 @@ copy: the ordinary set now IS the mod's, so the copy would hold the same bytes t
 this keeps the footsteps' memory at the base's figure. (3) The boots ask every take of
 both ids, so a mod that replaces only the landing or some steps still leaves the HD
 boots whole; they are all or nothing per id and held to the load loop's length rule
-(`HDFeetNoteSample`). (4) The weapon item of a one-handed gun keeps the ordinary set
+(`HDFeetNoteSample`). (4) The weapon item of the shotgun or the HK keeps the ordinary set
 like every emitter that is not Lara. (5) `AnimateLara` sets `SfxCommandCaller` and its
 four companions around her sounds: Lara's `SFXLOG` lines now carry `obj=0 room= anim=
 type= rflags=` like everyone else's. (6) The choice follows at the next step, never
@@ -12422,7 +12425,7 @@ and the installation only.
 the head: ModernTest 16,140 and 16,306, MenuTest 44,917 and 44,917, InterpTest 754 and
 754, LipsTest 299 and 299 with the player's `.OBJ` folder, 272 and 272 without, 0 failed
 each. ModernTest's `hd_feet` (164 checks): `HDFeetPick` over nine emitters (Lara, the
-one-handed gun's weapon item, SWAT_PLUS_MIP, BLUE_GUARD, MAFIA2, HITMAN, BLUE_GUARD2,
+shotgun's weapon item, SWAT_PLUS_MIP, BLUE_GUARD, MAFIA2, HITMAN, BLUE_GUARD2,
 CYBORG, no caller) times both draws, both outfits, with and without a footstep mod and
 ids 0 and 4, against an expectation written out on its own; the ids the sets do not own;
 a level without id 4 or without sets; F12 through `HDSwitchStep` itself; and
@@ -12430,20 +12433,29 @@ a level without id 4 or without sets; F12 through `HDSwitchStep` itself; and
 gate, no sample is redirected at the load, the step and the floor ask Lara's draw. The
 harness's step table, base against head, every emitter, both draws, both outfits: at the
 base every emitter took the bare entries under a barefoot outfit in either draw; at the
-head only Lara, only drawn HD. Not played: the head was not run in the game.
+head only Lara, only drawn HD. The refused take, simulated in the same harness over
+ANDREA1 with the footstep mod: with all four steps refused, the bare entries pointed at
+the level's own boots before the loop's verdict was asked (7,056 bytes of the classic
+recordings) and take the bank's five barefoot recordings after it (22,394 bytes in new
+slots), the unmodded boots loaded for the mod's landing either way; with the first step
+refused the same; with none refused, and in every case above, the output is unchanged.
+Not played: the head was not run in the game.
 
 **Left.** Three comments outside this round's files still describe the load-time split:
 `specific/hqsfx.h` at `HQSfxPayloadBoots` ("Null means keep the level's own"),
 `specific/hd/hd_outfitmenu.cpp` at the F4 apply ("two shorts in the level's sound map")
 and `specific/hd/hd_level.cpp` above `HDLevelBuild` ("whenever hd_enable is on"). The
 FEET line is written at the load; an F4 change is in its own `HDLOG f4` line. Whether
-the one-handed gun's weapon item should walk on Lara's set too is a question for the
+the shotgun's or the HK's weapon item should walk on Lara's set too is a question for the
 play test. In the randomized RICH1, DOOR_TYPE4 (slot 290) animation 655 lists 2,650
-commands including ids 0 and 4 (the classic level: 64); not followed here.
+commands including ids 0 and 4 (the classic level: 64); it is probably Lara's crawl
+roll among the animation sets the randomizer appends to a level, a known fault of that
+level's set; not followed here.
 
 **Commits.** `b9b64d5d` (the sets in memory), `57d462f3` (the choice per step and the
 caller), `574afdd6` (the floor layer), `c3e5c85b` (the checks and the FEET line),
-`62995fda` (a comment), and the records.
+`62995fda` (a comment), and the records; then `122192e1` (a footstep mod is what the
+load loop loaded) and the records' corrections.
 
 ### The soft motion of the chest: an optional secondary motion for the HD Lara
 2026-10-02

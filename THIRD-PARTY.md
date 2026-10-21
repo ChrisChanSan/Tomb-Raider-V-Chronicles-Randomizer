@@ -4391,6 +4391,13 @@ carries the tables.
     (`hd_feet.cpp`, `HDFeetSay`, `HDFeetInfoName`; `hd_level.cpp`, `HDLevelBuild`;
     `Preparation/Tools/Diagnose/ModernTest.cpp`) - one line per level load behind
     `-log`, and 164 checks of the pure rules with three gate checks. OWN.
+452. **A footstep mod is what the load loop loaded** (`hd_feet.cpp`, `chain_differs`,
+    `HDFeetNoteSample`; `specific/file.cpp`, `LoadSamples`) - the loop tells each
+    sample whether it took the ordinary chain's payload; a take it refused by its
+    length rule holds the level's own recording and counts as no mod. OWN; DATA: the
+    same harness with the loop's refusal simulated over ANDREA1 and a footstep mod -
+    all four steps refused, the bare entries on 7,056 bytes of the level's own boots
+    without the verdict and on the bank's 22,394 bytes of barefoot recordings with it.
 
 ## Credited, but not contained here
 

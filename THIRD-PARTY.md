@@ -4398,6 +4398,14 @@ carries the tables.
     same harness with the loop's refusal simulated over ANDREA1 and a footstep mod -
     all four steps refused, the bare entries on 7,056 bytes of the level's own boots
     without the verdict and on the bank's 22,394 bytes of barefoot recordings with it.
+453. **A footstep mod's bare set only whole** (`hd_feet.cpp`, `HDFeetLevelBuild`) - the
+    first take of id 0 decides whether the ordinary set is a footstep mod's, and every
+    take of id 0 must have reached its slot before the bare entries point at it; a
+    later refused take sends the bare set to the bank's barefoot recordings, as the
+    boots are all or nothing per id. OWN; DATA: the same harness over ANDREA1 and a
+    footstep mod with takes 1 and 2 refused - the bare entries on 48,610 bytes with
+    3,686 of the level's own boots in them without the rule, on the bank's 22,394 bytes
+    with it.
 
 ## Credited, but not contained here
 

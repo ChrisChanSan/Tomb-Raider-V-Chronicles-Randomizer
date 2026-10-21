@@ -56,9 +56,13 @@ namespace
 	char g_whyNot[160];
 	char g_ordinary[160];		// where the ordinary set's id 0 came from
 
-	/* The decoded size of each of the level's own samples, noted by
-	 * LoadSamples' loop. Only the footsteps' entries are ever read. */
+	/* The decoded size of each of the level's own samples, and whether the
+	 * loop took the ordinary chain's payload for it, noted by LoadSamples'
+	 * loop. Only the footsteps' entries are ever read, and only below the
+	 * level's sample count, so a later level's shorter list never reads an
+	 * earlier level's notes. */
 	long g_pcm[MAX_SAMPLES];
+	bool g_took[MAX_SAMPLES];
 
 	/* One recording into one DS_Buffers slot. The payload has been through
 	 * SfxRiffCheck, so it is mono 16 bit PCM with a data chunk inside the
@@ -110,15 +114,25 @@ namespace
 
 	/* Whether the ordinary chain plays something else than the unmodded bank
 	 * for one of the level's samples. 1 it does, 0 it does not; -1 when the
-	 * chain has no recording for it and -2 when the unmodded bank has none to
-	 * measure it against.
+	 * slot holds no recording of the chain - the chain has none for it, or
+	 * the load loop refused it by the length rule and kept the level's own -
+	 * and -2 when the unmodded bank has none to measure it against.
+	 *
+	 * The loop's verdict first: the payload is asked again here without the
+	 * length, so on its own it would answer for a recording that never
+	 * reached the slot, and the bare entries would point at the level's own
+	 * boots.
 	 *
 	 * The chain first, and the order cannot change the verdict: with no mod
 	 * bank both answers come out of the same read buffer, and there they are
 	 * the same bytes by construction. Where they differ - a mod's bank, or a
 	 * loose .wav, which is a buffer of its own - there is no sharing. */
-	int chain_differs(long sample)
+	int chain_differs(long sample, int next)
 	{
+		if (sample < 0 || sample >= next || sample >= MAX_SAMPLES ||
+			!g_took[sample])
+			return -1;
+
 		long chainBytes = 0, plainBytes = 0;
 		SfxRiffParts cp, pp;
 		const char* chain = HQSfxPayload(sample, 0, &chainBytes, &cp);
@@ -166,10 +180,13 @@ namespace
 	}
 }
 
-void HDFeetNoteSample(int levelSample, long pcmBytes22k)
+void HDFeetNoteSample(int levelSample, long pcmBytes22k, bool chainTaken)
 {
 	if (levelSample >= 0 && levelSample < MAX_SAMPLES)
+	{
 		g_pcm[levelSample] = pcmBytes22k;
+		g_took[levelSample] = chainTaken;
+	}
 }
 
 void HDFeetLevelEnd()
@@ -283,7 +300,7 @@ void HDFeetLevelBuild(short* lut, SAMPLE_INFO* infos, int infoCount, int spare,
 	char modWho[160];
 
 	{
-		const int first = chain_differs(own.number);
+		const int first = chain_differs(own.number, next);
 		/* Which kind of mod it is, for the log alone - the rule has already
 		 * decided. A loose .wav wins inside the chain, so when there is one
 		 * it is the name to print even if a mod's bank is played as well. */
@@ -291,8 +308,10 @@ void HDFeetLevelBuild(short* lut, SAMPLE_INFO* infos, int infoCount, int spare,
 		const bool overlaid = *wav != 0;
 
 		snprintf(modWho, sizeof(modWho), "%s", overlaid ? wav : HQSfxSource());
-		snprintf(g_ordinary, sizeof(g_ordinary), "%s", overlaid ? wav
-			: first == -1 ? "the level's own" : HQSfxSource());
+		/* Where the slot holds the level's own recording, that is the
+		 * ordinary set, whatever the chain offered for it. */
+		snprintf(g_ordinary, sizeof(g_ordinary), "%s",
+			first == -1 ? "the level's own" : overlaid ? wav : HQSfxSource());
 
 		if (first > 0)
 		{
@@ -306,7 +325,8 @@ void HDFeetLevelBuild(short* lut, SAMPLE_INFO* infos, int infoCount, int spare,
 			modWhy = "there is no unmodded bank to compare it against";
 		}
 		else if (first == -1)
-			modWhy = "the chain has no sound id 0 at all";
+			modWhy = "sound id 0 plays the level's own recording - the chain "
+				"has none for it, or the load refused it by its length";
 		else
 			modWhy = "it carries the install's own sound id 0, byte for byte";
 
@@ -397,14 +417,14 @@ void HDFeetLevelBuild(short* lut, SAMPLE_INFO* infos, int infoCount, int spare,
 	bool footMod = false;
 
 	for (int i = 0; i < ownTakes && !footMod; i++)
-		footMod = chain_differs(own.number + i) > 0;
+		footMod = chain_differs(own.number + i, next) > 0;
 
 	if (g_ownLand >= 0)
 	{
 		const SAMPLE_INFO& land = infos[g_ownLand];
 
 		for (int i = 0; i < takes_of(land) && !footMod; i++)
-			footMod = chain_differs(land.number + i) > 0;
+			footMod = chain_differs(land.number + i, next) > 0;
 	}
 
 	int bootsLoaded = 0;

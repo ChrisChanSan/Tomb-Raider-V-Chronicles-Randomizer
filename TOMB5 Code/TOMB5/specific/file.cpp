@@ -1708,9 +1708,10 @@ bool LoadSamples()
 		 * classic draw and for every emitter but Lara is the chain's, as
 		 * without the HD build. The other sets of Lara's footsteps are
 		 * hd_feet.cpp's, built after this loop; it holds the unmodded boots
-		 * to the same length rule, so it is told each sample's size. */
-		HDFeetNoteSample(i, uncomp_size);
+		 * to the same length rule, so it is told each sample's size, and it
+		 * tells a footstep mod by what this loop took, so it is told that. */
 		char* hq = HQSfxPayload(i, uncomp_size, &hqSize, &hqWhere);
+		HDFeetNoteSample(i, uncomp_size, hq != 0);
 
 		if (hq)
 		{

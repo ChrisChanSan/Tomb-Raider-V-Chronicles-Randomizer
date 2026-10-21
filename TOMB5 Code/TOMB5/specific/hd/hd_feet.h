@@ -45,8 +45,8 @@
 //
 // Who walks. Ids 0 and 4 are not Lara's alone: measured with AnimCmd, a guard
 // (BLUE_GUARD, BLUE_GUARD2, SWAT_PLUS_MIP on the guard's animation), MAFIA2,
-// HITMAN and CYBORG play them from their own animations, and the weapon item
-// of a one-handed gun carries id 0 as well. They all keep the level's own
+// HITMAN and CYBORG play them from their own animations, and the shotgun's
+// weapon item carries id 0 as well. They all keep the level's own
 // entry whatever Lara wears; only a step whose caller is Lara herself is ever
 // redirected. The caller is SfxCommandCaller (game\sound.h), which AnimateItem
 // and AnimateLara set around every sound of an animation command.
@@ -173,10 +173,13 @@ inline bool HDFeetQuietRule(bool drawnHD, bool bare, bool haveBare)
 void HDFeetLevelBuild(short* lut, SAMPLE_INFO* infos, int infoCount, int spare,
 	int next);
 
-/* The decoded size of one of the level's own samples, from LoadSamples' loop,
- * so that the unmodded boots are held to the same length rule the loop holds
- * every bank sample to. Stores a number and decides nothing. */
-void HDFeetNoteSample(int levelSample, long pcmBytes22k);
+/* One of the level's own samples as LoadSamples' loop left it: its decoded
+ * size, so that the unmodded boots are held to the same length rule the loop
+ * holds every bank sample to, and whether the loop took the ordinary chain's
+ * payload for it. A take the loop refused holds the level's own recording,
+ * and a mod's recording that never reached the slot is no mod. Stores two
+ * facts and decides nothing. */
+void HDFeetNoteSample(int levelSample, long pcmBytes22k, bool chainTaken);
 
 // Thrown away with the level. The tables themselves are game_malloc's.
 void HDFeetLevelEnd();

@@ -32,15 +32,15 @@
  * The last column is the mirror column: 1 where the page's floors facing
  * up are a planar mirror (hd_render.cpp, "the marble floors"). A line of
  * class A names that column alone and nothing of the sheen. The 40 pages
- * of the column are the polished floors of the Rome levels, RICHCUT2 and
- * the title, looked at by eye on the thirty largest floor pages of each
- * level (RoomProbe -marblecensus, DdsProbe), RICH2's banded black marble at
- * the corridor's end and in room 128, three squares a page, and ANDREA1's
- * church mosaic (169, 170, 183: atlases whose other parts are walls; of
- * the fifteen levels only rooms 165 and 177 hold faces of them facing up,
- * RoomProbe -marblesteep); the pages the sheen bars are among them, the
- * mirror being no sheen. The comment over a line names what the page
- * shows and where.
+ * of the column are the polished floors of the Rome levels, RICH (the VCI
+ * levels), RICHCUT2 and the title, looked at by eye on the thirty largest
+ * floor pages of each level (RoomProbe -marblecensus, DdsProbe), RICH2's
+ * banded black marble at the corridor's end and in room 128, three squares
+ * a page, and ANDREA1's church mosaic (169, 170, 183: atlases whose other
+ * parts are walls; of the fifteen levels only rooms 165 and 177 hold faces
+ * of them facing up, RoomProbe -marblesteep); the pages the sheen bars are
+ * among them, the mirror being no sheen. The comment over a line names
+ * what the page shows and where.
  *
  * Kept sorted by page number. */
 

@@ -29,8 +29,10 @@
  * dump and keeps the line ("dump=none" at the end of crash.txt). The module
  * and offset are what the build's own .pdb resolves to a source line.
  *
- * MiniDumpNormal: the threads' stacks and the loaded modules, a few hundred
- * kilobytes - enough for the faulting line and its callers, no game data.
+ * MiniDumpNormal: the threads' stacks and the loaded modules - 31,860
+ * bytes from RoomProbe -crash's child, more from the engine with its
+ * more threads and modules - enough for the faulting line and its
+ * callers, no game data.
  * The filter returns EXCEPTION_CONTINUE_SEARCH, so Windows' own report
  * follows as before.
  *

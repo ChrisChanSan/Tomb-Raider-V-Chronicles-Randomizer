@@ -115,12 +115,13 @@ inline long KeySchemeMouseBit(long code)
 inline const char* KeySchemeMouseName(long code, int german)
 {
 	static const char* const english[KEY_MOUSE_BUTTONS] = { "Mouse L", "Mouse R", "Mouse M", "Mouse 4", "Mouse 5" };
-	static const char* const deutsch[KEY_MOUSE_BUTTONS] = { "Maus L", "Maus R", "Maus M", "Maus 4", "Maus 5" };
+	static const char* const germanNames[KEY_MOUSE_BUTTONS] = { "Maus L",
+		"Maus R", "Maus M", "Maus 4", "Maus 5" };
 
 	if (!KeySchemeIsMouse(code))
 		return 0;
 
-	return (german ? deutsch : english)[code - KEY_MOUSE_FIRST];
+	return (german ? germanNames : english)[code - KEY_MOUSE_FIRST];
 }
 
 /* The Modern default row, in the engine's own slot order: 0-3

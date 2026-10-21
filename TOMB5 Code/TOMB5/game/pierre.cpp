@@ -444,8 +444,9 @@ void PierreControl(short item_number)
 		{
 			// Drop what he carries first, then vanish.
 			//
-			// GetCarriedItems (setup.cpp) attaches every pickup within 512
-			// units to the nearest enemy at level start: RemoveDrawnItem,
+			// GetCarriedItems (setup.cpp) attaches, at level start, each pickup
+			// but a wall grab in an enemy's room within 512 units of him to the
+			// first enemy in item order that reaches it: RemoveDrawnItem,
 			// room_number = NO_ROOM - the item then exists only as his
 			// cargo. On a normal death CreatureDie releases it via
 			// DropBaddyPickups; this flight exit however calls KillItem

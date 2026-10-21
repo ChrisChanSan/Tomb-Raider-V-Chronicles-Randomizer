@@ -392,6 +392,11 @@ namespace
         int  skippedNonPlayable = 0;
         std::string scriptNote;      // what SCRIPT.DAT yielded on the last run
 
+        // The edition of the TR3 files the last run read (Tr3Edition in
+        // DataFolder.h): taken once a run, in the Copy phase.
+        Tr3Edition::Verdict tr3Edition;
+        Tr3Edition::Verdict goldEdition;
+
         // A run does not go through in one piece but step by step: one level
         // per frame. Otherwise the window freezes for the duration of all 15
         // levels, Windows reports "not responding", and it looks like a
@@ -610,6 +615,22 @@ static bool guestFilesThere(const App& a, const char* source)
     return false;
 }
 
+// Does this run read TR3 files at all? A guest in the pool, or the TR3
+// outfits switched on with a TR3 level folder there.
+static bool runReadsTr3(const App& a)
+{
+    return guestFilesThere(a, "tr3") ||
+           (a.optOutfits && a.optOutfitsTr3 && !tr3Folder(a).empty());
+}
+
+// Whether a file the run reads is of no known edition.
+static bool tr3EditionUnknown(const App& a)
+{
+    return runReadsTr3(a) &&
+           (!a.tr3Edition.unknown.empty() ||
+            (guestFilesThere(a, "tr3gold") && !a.goldEdition.unknown.empty()));
+}
+
 // Cache for the packages extracted from Tomb Raider 3.
 //
 // Lies next to the program. The files are created on the machine of whoever
@@ -642,6 +663,37 @@ static std::wstring cacheDir(const App& a)
         }
     }
     return dir;
+}
+
+// The edition of the TR3 files this run reads, once a run: the four levels
+// the guests and the TR3 outfits come from and the bank, and Gold's level -
+// each checked by size and SHA-256 against Tr3Checksums.csv (a file in
+// data\ wins, the baked copy is the floor), the hashes kept in the package
+// cache beside them. Never a reason to stop.
+static void checkTr3Editions(App& a)
+{
+    std::string csv, err;
+    DataFile::Source src = DataFile::Source::Embedded;
+    DataFile::read(a.payloadDir(), "Tr3Checksums.csv", csv, src, err);
+
+    std::vector<std::wstring> tr3, gold;
+    const std::wstring t = tr3Folder(a);
+    if (!t.empty())
+    {
+        for (const wchar_t* f : { L"CRASH.TR2", L"ROOFS.TR2", L"ANTARC.TR2",
+                                  L"NEVADA.TR2" })
+            tr3.push_back(PathUtil::join(t, f));
+        const std::wstring bank = Tr3Source::resolveBank(t);
+        if (!bank.empty()) tr3.push_back(bank);
+    }
+    const std::wstring g = goldFolder(a);
+    if (!g.empty()) gold.push_back(PathUtil::join(g, L"chunnel.TR2"));
+
+    // No TR3 folder, no cache folder: nothing is created for nothing.
+    const std::wstring cache =
+        (tr3.empty() && gold.empty()) ? std::wstring() : cacheDir(a);
+    a.tr3Edition = Tr3Edition::check(csv, "tr3", tr3, cache);
+    a.goldEdition = Tr3Edition::check(csv, "tr3gold", gold, cache);
 }
 
 
@@ -1340,6 +1392,20 @@ static std::wstring cacheDir(const App& a)
             line("");
         }
 
+        //--------------------------------------------------------------------
+        // The Tomb Raider III files the guests and the TR3 outfits came
+        // from: absent, or the edition Tr3Checksums.csv knows them as. A
+        // file of no known edition was read all the same, and says so here.
+        //--------------------------------------------------------------------
+        line("TR3 SOURCES");
+        std::fprintf(f, "  TR3 source:         %s\r\n",
+                     Tr3Edition::describe(a.tr3Edition).c_str());
+        std::fprintf(f, "  TR3 Gold source:    %s\r\n",
+                     Tr3Edition::describe(a.goldEdition).c_str());
+        if (tr3EditionUnknown(a))
+            std::fprintf(f, "  WARNING: %s\r\n", Tr3Edition::warning());
+        line("");
+
         line("LEVELS");
         for (const LevelRow& r : a.levels)
         {
@@ -1423,6 +1489,8 @@ static std::wstring cacheDir(const App& a)
                     a.scriptNote += (a.scriptNote.empty() ? "" : "  |  ") + rSum;
             }
 
+            checkTr3Editions(a);
+
             a.phase = App::Phase::Levels;
             a.stepIndex = 0;
             return;
@@ -1442,7 +1510,14 @@ static std::wstring cacheDir(const App& a)
             a.phaseText = r.name;
 
             std::string e;
-            if (doLevel(a, r, a.effectiveSeed(), e)) ++a.doneCount;
+            if (doLevel(a, r, a.effectiveSeed(), e))
+            {
+                ++a.doneCount;
+                // Done all the same, and said where the player looks.
+                if (tr3EditionUnknown(a))
+                    r.result = std::string("WARNING: ") +
+                               Tr3Edition::warning() + " - " + r.result;
+            }
             else { ++a.failCount; r.result = "ERROR: " + e; }
 
             ++a.stepIndex;
@@ -1493,7 +1568,13 @@ static std::wstring cacheDir(const App& a)
                           a.doneCount, a.failCount ? T(" - with errors, see spoiler.txt") : "",
                           spoiler ? T("Details are in spoiler.txt next to the program.")
                                   : T("spoiler.txt could not be written."));
-            setStatus(a, buf, a.failCount > 0);
+            // The warning in the line the player reads, not only in the
+            // rows' tooltips.
+            if (tr3EditionUnknown(a))
+                setStatus(a, std::string(buf) + " " + T("WARNING: ") +
+                          Tr3Edition::warning() + ".", true);
+            else
+                setStatus(a, buf, a.failCount > 0);
             a.phaseText.clear();
             a.phase = App::Phase::Idle;
             return;
@@ -2631,6 +2712,14 @@ static void drawUi(App& a, HWND hwnd)
             else if (r.result == "skipped")
             {
                 ImGui::TextDisabled(T("skipped"));
+            }
+            else if (r.result.rfind("WARNING", 0) == 0)
+            {
+                // Done, with something to read: a TR3 file of no known
+                // edition (Tr3Edition). Amber, as the "modified" state.
+                ImGui::TextColored(ImVec4(1, .75f, .3f, 1), T("done, warning"));
+                if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort))
+                    ImGui::SetTooltip(T("%s"), r.result.c_str());
             }
             else
             {

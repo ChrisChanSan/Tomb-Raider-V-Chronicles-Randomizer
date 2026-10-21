@@ -445,6 +445,36 @@ int main(int argc, char** argv)
                     "levels, in data or in the SFX beside DATA) - the "
                     "Tomb Raider 3 guests stay out of the pool\n");
 
+    // The edition of the TR3 files, by size and SHA-256 (Tr3Edition in
+    // DataFolder.h): named, or warned about - never a reason to stop.
+    if (!tr3Dir.empty() || !tr3GoldDir.empty())
+    {
+        std::string csv, csvErr;
+        DataFile::Source csvSrc = DataFile::Source::Embedded;
+        DataFile::read(PathUtil::join(PathUtil::exeDir(), L"data"),
+                       "Tr3Checksums.csv", csv, csvSrc, csvErr);
+
+        std::vector<std::wstring> t3, gd;
+        if (!tr3Dir.empty())
+        {
+            for (const wchar_t* f : { L"CRASH.TR2", L"ROOFS.TR2",
+                                      L"ANTARC.TR2", L"NEVADA.TR2" })
+                t3.push_back(tr3Dir + L"\\" + f);
+            const std::wstring bank = Tr3Source::resolveBank(tr3Dir);
+            if (!bank.empty()) t3.push_back(bank);
+        }
+        if (!tr3GoldDir.empty()) gd.push_back(tr3GoldDir + L"\\chunnel.TR2");
+
+        const Tr3Edition::Verdict v3 = Tr3Edition::check(csv, "tr3", t3, cache);
+        const Tr3Edition::Verdict vg =
+            Tr3Edition::check(csv, "tr3gold", gd, cache);
+        std::printf("  TR3 source: %s\n  TR3 Gold source: %s\n",
+                    Tr3Edition::describe(v3).c_str(),
+                    Tr3Edition::describe(vg).c_str());
+        if (!v3.unknown.empty() || !vg.unknown.empty())
+            std::printf("  WARNING: %s\n", Tr3Edition::warning());
+    }
+
     RandoOptions opt;
     opt.addEnemies = enemies > 0;
     opt.enemiesPerLevel = enemies;

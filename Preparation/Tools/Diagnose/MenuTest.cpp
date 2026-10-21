@@ -1777,7 +1777,7 @@ static void controls_mouse_rows()
 	// other three repeating the English, as every other row of the table.
 	{
 		static const char* const names[2] = { "Mouse sensitivity", "Invert mouse" };
-		static const char* const deutsch[2] = { "Mausempfindlichkeit", "Maus invertieren" };
+		static const char* const german[2] = { "Mausempfindlichkeit", "Maus invertieren" };
 
 		for (i = 0; i < 2; i++)
 		{
@@ -1796,7 +1796,7 @@ static void controls_mouse_rows()
 			n = tree_quoted(at, col, 5);
 			check(n, 5, "rows: five columns, one per language");
 			check(strcmp(col[0], names[i]), 0, "rows: the English column is the label itself");
-			check(strcmp(col[2], deutsch[i]), 0, "rows: the German column is its translation");
+			check(strcmp(col[2], german[i]), 0, "rows: the German column is its translation");
 			check(!strcmp(col[1], names[i]) && !strcmp(col[3], names[i]) && !strcmp(col[4], names[i]), 1,
 				"rows: French, Italian and Spanish repeat the English");
 			check((int)strlen(col[2]) <= (int)strlen("Kamerageschwindigkeit"), 1,
@@ -1969,7 +1969,7 @@ static void graphics_softbody_row()
 	// and the two values the table already had.
 	{
 		static const char* const names[3] = { "Body physics", "Subtle", "Normal" };
-		static const char* const deutsch[3] = { "K\\xF6rperphysik", "Dezent", "Normal" };
+		static const char* const german[3] = { "K\\xF6rperphysik", "Dezent", "Normal" };
 
 		for (i = 0; i < 3; i++)
 		{
@@ -1988,7 +1988,7 @@ static void graphics_softbody_row()
 			n = tree_quoted(at, col, 5);
 			check(n, 5, "softbody row: five columns, one per language");
 			check(strcmp(col[0], names[i]), 0, "softbody row: the English column is the string itself");
-			check(strcmp(col[2], deutsch[i]), 0, "softbody row: the German column is its translation");
+			check(strcmp(col[2], german[i]), 0, "softbody row: the German column is its translation");
 			check(!strcmp(col[1], names[i]) && !strcmp(col[3], names[i]) && !strcmp(col[4], names[i]), 1,
 				"softbody row: French, Italian and Spanish repeat the English");
 			check((int)strlen(col[2]) <= (int)strlen("Kamerageschwindigkeit"), 1,

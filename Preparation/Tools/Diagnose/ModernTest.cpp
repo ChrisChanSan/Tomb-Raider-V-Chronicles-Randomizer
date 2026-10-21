@@ -3153,7 +3153,7 @@ static void circling()
 	 * deflection quantise the angle by up to half a degree a tick. */
 	ok(absl(now.worst_cstep - 3822) <= 128, "...the course steps with the stick and no further",
 		now.worst_cstep, 3822);
-	ok(now.worst_cstep < 0x4000, "...a long way under what a flick used to need",
+	ok(now.worst_cstep < 0x4000, "...a long way under a quarter turn (0x4000)",
 		now.worst_cstep, 0x4000);
 
 	/* What the two halves are worth separately, which is the answer to why
@@ -7195,13 +7195,11 @@ static void camera_cut_reaim()
  * way the translation is, for exactly the same reason - a feel number
  * nobody can re-measure is a number nobody can change.
  *
- * None of the expectations below comes from TROne. Their orbit (TROne-main,
- * copy of 2026-09-13) held a world angle and never returned behind the
- * player at all; ours holds a world angle too and lets it fall back behind
- * her (game\modern_camera.h); since its round K32 TROne runs this orbit
- * itself (copy of 2026-10-06, commit 75c4c843). The numbers here come from
- * two
- * places and the comments say which: the design's four governing sentences,
+ * None of the expectations below comes from TROne, whose orbit (TROne-main,
+ * copy of 2026-10-06, commit 75c4c843) is a design of its own. Ours holds a
+ * world angle and lets it fall back behind her (game\modern_camera.h). The
+ * numbers here come from two places and the comments say which: the
+ * design's four governing sentences,
  * quoted in full in game\modern_camera.h, and the classic camera's own
  * limits, measured out of game\camera.cpp before a line of the orbit was
  * written. */
@@ -7455,6 +7453,7 @@ static void camera_speed()
 	ok(yaw * 30 * 360 >= 359 * 65536 && yaw * 30 * 360 <= 361 * 65536,
 		"...which is 360 deg/s, a full turn in one second",
 		yaw * 30 * 360 / 65536, 360);
+	/* 125 deg/s is this project's own floor for the top speed. */
 	ok(yaw * 30 * 360 / 65536 > 125,
 		"and past 125 deg/s, a circle in under three seconds, at the top",
 		yaw * 30 * 360 / 65536, 125);
@@ -11704,7 +11703,7 @@ static void hd_build_gate()
 	n = hd_switch_count(level, "return g_level_active;");
 	ok(n == 1, "hd build gate: HDLevelBuilt is the rooms' build", n, 1);
 
-	// The #203 key: valid only past the build gate.
+	// The level's key: valid only past the build gate.
 	n = hd_switch_count(level,
 		"if (!wadName || !*wadName || !HDEnabled())");
 	ok(n == 1, "hd build gate: the level's key asks the build gate", n, 1);
@@ -11779,7 +11778,7 @@ static long load_keep_at(const char* text, const char* from, const char* what)
 }
 
 /* A save load inside the level, in the engine's own text: the classic texture
- * pages kept with the HD data on round 2's key, the decoded loading picture
+ * pages kept with the HD data on the level's key, the decoded loading picture
  * kept on its file, and the loading picture drawn under every bar frame.
  * LoadLevel, FreeLevel, LoadTextures and the screen code need the game and
  * a device, so their lines are counted where they stand; the bookkeeping of
@@ -25010,7 +25009,7 @@ static void spring_crack()
 		"the same crack", 1, 1);
 	ok(crack_print(a) == 0xDA93C1A4u && a.points == 60 && a.branches == 4 &&
 		a.round == 0, "spring crack: the fountain's outline as every build "
-		"makes it (60 points, 4 branches, the first round)",
+		"makes it (60 points, 4 branches, hash round 0)",
 		(long)crack_print(a), (long)0xDA93C1A4u);
 
 	// Any spring: the counts and sizes in range, one simple polygon.

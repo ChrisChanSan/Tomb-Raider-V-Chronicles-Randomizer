@@ -133,8 +133,8 @@ int main(int argc, char** argv)
     {
         if (!sameName(name, k.level)) continue;
 
-        // FOUND: the same search on a fresh copy of the source, for the
-        // sectors and the file positions of the words.
+        // The FOUND lines: the same search on a fresh copy of the source,
+        // for the sectors and the file positions of the words.
         Tr5Level src;
         std::vector<Tr5OneShotHit> hits;
         if (!src.load(toW(argv[1]), err) ||
@@ -149,7 +149,7 @@ int main(int argc, char** argv)
                         "%04X -> %04X\n", k.room, h.sx, h.sz, h.item,
                         h.fileAt, h.before, h.after);
 
-        // SET: the saved file, read back.
+        // The SET line: the saved file, read back.
         Tr5Level out;
         int named = 0, missing = 0;
         if (!out.load(toW(argv[3]), err))
@@ -166,7 +166,7 @@ int main(int argc, char** argv)
             ok = false;
         }
 
-        // BYTES: source against result.
+        // The BYTES line: source against result.
         if (otherEntries(name))
         {
             std::printf("  BYTES  skipped - %d other entr(ies) of this level "

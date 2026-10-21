@@ -61,9 +61,10 @@
 // quad and the window are then both widened by HD_FONT_MARGIN in the same
 // ratio, so that the drop shadow is not cut off at the rectangle's edge.
 //
-// Everything here is dead while the registry setting hd_enable is 0: no file
-// is opened, no match runs, HDFontGlyphAt returns nothing and DrawChar takes
-// the classic branch it always took.
+// Everything here is dead with hd_build 0 or no installation: no file is
+// opened, no match runs, HDFontGlyphAt returns nothing and DrawChar takes
+// the classic branch it always took. With the HD textures row (hd_enable)
+// off, HDFontGlyphAt returns nothing as well.
 
 struct IDirect3DTexture9;
 

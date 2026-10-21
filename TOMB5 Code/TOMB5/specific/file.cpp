@@ -891,8 +891,8 @@ static bool LoadTexturesMisc()
 	 * classic font page is in hand as pixels, and the HD path needs it as the
 	 * template it looks for in the remaster's glyph atlas, not as a picture
 	 * to draw. This runs on the load thread, so no Direct3D here; the texture
-	 * is made later on the main thread by HDFontBuild. With hd_enable off the
-	 * call returns at once and copies nothing. */
+	 * is made later on the main thread by HDFontBuild. With hd_build 0 or no
+	 * installation the call returns at once and copies nothing. */
 	HDFontLevelPage(TextureData);
 
 	nTex = nTextures++;
@@ -1646,8 +1646,8 @@ bool LoadSamples()
 	 * only HDFeetBare ever writes an index above it.
 	 *
 	 * Only with the HD build on: sixteen bytes shift every later allocation in
-	 * the bump allocator, and with HD off the memory layout stays exactly
-	 * that of the classic engine. */
+	 * the bump allocator, and with hd_build 0 or no installation the memory
+	 * layout stays exactly that of the classic engine. */
 	const long spare = HDEnabled() ? HD_FEET_SPARE_INFOS : 0;
 
 	sample_infos = (SAMPLE_INFO*)game_malloc((num_infos + spare) * sizeof(SAMPLE_INFO));
@@ -1976,7 +1976,7 @@ unsigned int __stdcall LoadLevel(void* name)
 	LoadLogStep(&g_loadlog_thread, 0);
 	// The level about to be read, for HDLevelUnload inside FreeLevel: the HD
 	// data of the same level stay in memory (hd_levelkey.h). Nothing with
-	// hd_enable off.
+	// hd_build 0 or no installation.
 	HDLevelKeyNext((const char*)name);
 	// The classic texture pages stay with the HD data (TexturePagesKeep).
 	g_pages_kept = TexturePagesKeep();
@@ -2075,10 +2075,10 @@ unsigned int __stdcall LoadLevel(void* name)
 		// The HD side of the level. Here and not earlier because this is the
 		// first moment the rooms, the meshes and the object slots are all in
 		// memory - and in the randomized state, which is the state the models
-		// have to be bound against. With the registry setting hd_enable at 0,
-		// the shipped default, it reads only the level's .hdm sidecar, whose
-		// sound line serves the sound bank bridge with HD off - see
-		// HDEnabled in specific\hd\hd_level.cpp.
+		// have to be bound against. With hd_build 0 or no installation it
+		// reads only the level's .hdm sidecar, whose sound line serves the
+		// sound bank bridge either way - see HDEnabled in
+		// specific\hd\hd_level.cpp.
 		HDLevelLoad((const char*)name);
 		S_LoadBar();
 		LoadLogStep(&g_loadlog_thread, "hd_load");
@@ -2219,10 +2219,11 @@ static void WarmUpLevel()
 		}
 	}
 
-	// The HD pages of this level. HDPageCacheSlots() is 0 with hd_enable off
-	// and before a level is built, so this is one call and a loop that does
-	// not run. A page in D3DPOOL_DEFAULT is already on the card and PreLoad
-	// is documented to be ignored for it - correct either way, no test here.
+	// The HD pages of this level. HDPageCacheSlots() is 0 with hd_build 0 or
+	// no installation and before a level is built, so this is one call and a
+	// loop that does not run. A page in D3DPOOL_DEFAULT is already on the
+	// card and PreLoad is documented to be ignored for it - correct either
+	// way, no test here.
 	for (int i = 0, n = HDPageCacheSlots(); i < n; i++)
 	{
 		IDirect3DTexture9* tex = HDPageCacheSlotTexture(i);
@@ -2450,8 +2451,8 @@ long S_LoadLevelFile(long num)
 		// not in HDLevelLoad on the load thread, for the same reason as
 		// aInit() above. HDLevelLoad has already read the .TRG's numbers and
 		// bound the models; this makes the Direct3D objects, which belong to
-		// the thread that owns the device. Nothing happens while hd_enable
-		// is 0.
+		// the thread that owns the device. Nothing happens with hd_build 0 or
+		// no installation.
 		HDLevelBuild();
 		Log("S_LoadLevelFile: HD build done");
 		S_LoadScreenStep(LOADSTEP_BUILD);

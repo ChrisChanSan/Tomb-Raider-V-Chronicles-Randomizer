@@ -2814,8 +2814,8 @@ alone.
   `2e3867532e2e3971991f5bd039227d2e` are unchanged.
 - ModernTest 10808, MenuTest 35547, InterpTest 635 checks, LipsTest 270 with the `.OBJ`
   folder and 243 without, 0 failed. Not measured: the game; the first things to look
-  at there are ANDREA2 room 131 and the title flyby against the Remaster, ANDY2 room 6
-  as before, and the lamp cones and window glows of the other levels.
+  at there are ANDREA2 room 131 and the title flyby against the reference recording,
+  ANDY2 room 6 as before, and the lamp cones and window glows of the other levels.
 
 **Unchanged.** `hd_enable` 0 and `-glowps 0`: no glow part, no gain. The shaders, the
 four fades, screen composition, the anisotropic filter, the stacked seas and the
@@ -3141,8 +3141,8 @@ of the fifteen levels at `-hdwater 0`, `1` at `-hdwater 1`.
 
 **Picture 218 - measured.** The play test's picture of red roofs and two domes under heavy
 grey clouds is ANDREA2, not ANDREA1: room 150 at tick 25,031 of the play test's ANDREA2
-visit after ANDREA1's second (log line 151,693; eye 53,498, -9,505, 25,785, yaw 78.6, 30.6
-degrees up, still from tick 25,000 to 25,045), grey-level correlation 0.983 at 320 x 180,
+visit after ANDREA1's second (eye 53,498, -9,505, 25,785, yaw 78.6, 30.6 degrees up,
+still from tick 25,000 to 25,045), grey-level correlation 0.983 at 320 x 180,
 Lara's third left out, over every second of the 522 ticks of that visit looking up 10
 degrees or more. What draws its sky: the sheet 7109 in the opaque pass at 2,441 units over
 the camera (grey storm clouds, alpha 253 to 255, mean colour 92, 115, 135), the alpha
@@ -9683,18 +9683,17 @@ the fifteen levels as shipped.
 2026-10-18
 
 **What.** Reported on 2026-10-18 after playing reading C, put into English: the window's
-bars are half see-through and the panes are missing ("Die Fenster Staebe sind halb
-durchsichtig, und die Scheiben fehlen"); one can see into the window as into an object
-in a modelling program, and the reflection goes through it too; and RICH2's bridge in the
-lobby has a glass pane like ANDREA2's, "only without the dirt on it", likely the same
-general problem. Reference pictures supplied for this project (not in the repository)
-show the window from above Lara's ledge and from the hall side, with single bar pieces
-floating, the hall's floor seen through a near bar, the fountain's water through the
-grid and a bar seen as a hollow body, and the bridge in trview. ANDREA2's grid is now
-drawn in two halves: its bars solid, with the depth write, among the alpha pass's solid
-ranges; its panes in the glass's phase, added ONE / ONE as the classic adds its glass.
-Every other glass of the fifteen levels is drawn as it was. The bridge is measured and
-left (below).
+bars are half see-through and the panes are missing; one can see into the window as into
+an object in a modelling program, and the reflection goes through it too; and RICH2's
+bridge in the lobby has a glass pane like ANDREA2's, "only without the dirt on it", likely
+the same general problem. Reference pictures supplied for this project (not in the
+repository) show the window from above Lara's ledge and from the hall side, with single
+bar pieces floating, the hall's floor seen through a near bar, the fountain's water
+through the grid and a bar seen as a hollow body, and the bridge in trview. ANDREA2's
+grid is now drawn in two halves: its bars solid, with the depth write, among the alpha
+pass's solid ranges; its panes in the glass's phase, added ONE / ONE as the classic adds
+its glass. Every other glass of the fifteen levels is drawn as it was. The bridge is
+measured and left (below).
 
 **Cause.** RoomProbe `-calltrace 3007` at the eyes (the marble floors on, `-marble 1`):
 the grid was one draw call, 2,146 triangles, in the glass phase, with the blend
@@ -20394,7 +20393,7 @@ this project, not in the repository, measured as numbers only.
 level's first frame, has `cam_uw=0`), so the eye is found by content: RoomProbe drew every
 second `CAMLOG` tick from 20,097 to 20,371 at 320 x 180 with the whole look, and each
 picture's luma was correlated with the play test's (Lara, the pickups and the weed, which
-the probe does not draw, left out). The best, 0.840, is tick 20,282 (log line 110,625):
+the probe does not draw, left out). The best, 0.840, is tick 20,282:
 room 123, the eye at x 27,438, y 14,487, z 60,726, 26.5 degrees up, looking west (yaw
 -86.6), the overhang at the upper left and the rock below as in the play test's picture.
 Drawn at the play test's 2,560 x 1,440 and at 1,280 x 720, `-time 3`, `-black`, each term
@@ -31129,10 +31128,10 @@ ModernTest's group `fog_art`.
 
 **Why.** The play test of 2026-10-20, on the build of 2026-10-19, with a picture of
 ANDY3's mill and the lumps circled, and a reference picture supplied for this project of
-the pond under the mill's wheelhouse (both not in the repository): there is no fog, I also
-made a picture; these yellow balls are still a leftover of the earlier reference work;
-that is not a cloud, it is meant to be fog; the reference picture has the balls too, only
-somewhat weaker; ANDY1 was our first attempt to set that right.
+the pond under the mill's wheelhouse (both not in the repository): there is no fog (a
+picture of it came with the report); these yellow balls are still a leftover of the
+earlier reference work; that is not a cloud, it is meant to be fog; the reference picture
+has the balls too, only somewhat weaker; ANDY1 was our first attempt to set that right.
 
 **Measured: why no fog showed.** The play-test log (the ANDY3 segment) holds one
 frame line for the level, `bulbs=6`, and nothing of the pass, which wrote no line; the
@@ -31440,6 +31439,13 @@ file. The decisions taken on the list for this round are stated under *Decisions
   them; the barefoot landing on the bank's own takes; a "The machine:" paragraph; "your
   own installation" for what the HD path reads; `be.bat` as the build route that checks
   the shaders.
+- The review's follow-up (`2e8be55c`, `4a35c94a` and the record's own commit). The last
+  comments that named `hd_enable` as the gate where the code asks `HDEnabled()` name
+  `hd_build` and an installation (`hd_level.cpp`, `hd_feet.h`); ModernTest's and
+  PoolProbe's texts and two Preparation notes name no person; one German quotation and
+  two in-log line numbers left this record; the ledger names no scratch tool and says
+  that its TROne verdicts rest on the notes of earlier permitted readings; the README
+  says that the four gigabytes of address space are those of 64-bit Windows.
 
 **Decisions.**
 
@@ -31480,7 +31486,7 @@ and the graphics card's own time; the figures in the manual and the README are t
 2560 x 1440. Line numbers in older entries refer to their own commit and were not
 refreshed.
 
-**Checked.** `be.bat` exit 0, `release/PCtomb5.exe` built Oct 21 2026 23:08:48 with
+**Checked.** `be.bat` exit 0, `release/PCtomb5.exe` built Oct 22 2026 00:11:27 with
 `Beta_3.0` in its version resource; `broom`, `btrg`, `bmodel`, `bmap`, `bmt`, `bmenu`,
 `bit` and `blips` exit 0; `b1.bat` and `b2.bat` exit 0. ModernTest 16,140 checks, MenuTest
 44,917, InterpTest 754 with the player's `ANDREA1.TRC` (711 checks and its 11 frame blocks
@@ -31494,8 +31500,8 @@ round's head with the first commit under `TOMB5/` and scans each file for the no
 Every added line of the round is within its file's width.
 
 **Commits.** `56ae33de`, `6bee428f`, `5c76a312`, `7bac8520`, `d0e980a8`, `983dc242`,
-`6c990e6f`, `0fc25137`, `d73318a0`, `3bea74ff` (code, shaders, tests and version),
-`8d39cd1c`, `d325666e`, `1da57ef4` (documents) and this record.
+`6c990e6f`, `0fc25137`, `d73318a0`, `3bea74ff`, `2e8be55c`, `4a35c94a` (code, shaders,
+tests and version), `8d39cd1c`, `d325666e`, `1da57ef4` (documents) and this record.
 
 ## 3. Randomizer changes since Beta 1.0
 

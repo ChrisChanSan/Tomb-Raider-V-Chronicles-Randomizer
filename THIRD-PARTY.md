@@ -384,7 +384,8 @@ from", carries the tables.
     the wind. The water's wave, swell, UV wobble and caustic, which this entry
     credited to TROne before (`MODIFICATIONS.md`, "Water in the HD rooms"),
     are this project's own design: entries 40 to 86. Audit round B1
-    (2026-10-21) confirmed the shape and its numbers as TROne's own design.
+    (2026-10-21), from the notes of earlier permitted readings, found the shape
+    and its numbers to be TROne's own design.
 21. **Material 16's ripple held to the part's own UV span, nothing moving in
     the vertex.** TROne, its own material 16 water rule. THIRD. Ours: `sway` is 0
     on 27 of the 28 parts; 23 of 28 live in a sub-rectangle of their page.
@@ -1772,8 +1773,9 @@ carries the tables.
     27 per cent; the creatures' heights from the rest pose's box
     (`-surveyslots`, `Tr5Level::frameBounds`). The table these terms stand in
     (`hd_shadow.h`: the maps' sizes, boxes and depths, the darkness, the bias) is
-    this project's own (OWN): audit round B1 compared it with what is known of
-    TROne's shadow map and found every element different but the second map's
+    this project's own (OWN): audit round B1, from the notes of earlier permitted
+    readings, compared it with what is known of TROne's shadow map and found
+    every element different but the second map's
     box and depth of 8192 units, which here are its 2048 texels at four units a
     texel; a comparison number by number is still open.
 172. **The bulbs' haze given back** - every receive variant writes the
@@ -3330,7 +3332,7 @@ carries the tables.
     face the count left out takes them with it. DATA: the part is the
     pairing's (`HDStaticPiecePaired`, `hd_cover.h`); at ANDREA2's
     window every centroid lies 0 to 26 units off a face, over the game's 58
-    statics with a part at most 151 (DebrisMeasure). OWN, the rule.
+    statics with a part at most 151 (a scratch census, not kept). OWN, the rule.
 322. **One place, its triangles dealt by a hash** (`HDDebrisSamePlace`,
     `HDDebrisPlaces`, `HDDebrisDeal`, `HDDebrisHash`) - faces with the same
     corners share the place's triangles by a hash of the triangle's number.
@@ -3691,7 +3693,7 @@ carries the tables.
     room's ambient)
     and its split (`drawroom.cpp`, `polyinsert.cpp`). DATA: the classic
     glass of the fifteen classic files at the place of the 181 material 14
-    parts (GlassHue, a scratch census: ANDREA2's panes 11.4, 27.5, 38.1,
+    parts (a scratch census, not kept: ANDREA2's panes 11.4, 27.5, 38.1,
     the bridge's 6.3, 11.9, 11.2) and the art's add there (grey, 16, 17,
     16). PICTURE (RoomProbe, the glass half against none and `-glow
     -addmat 14`): the luma kept to the tenth of a level, the hue the
@@ -3895,7 +3897,8 @@ carries the tables.
     takes floors and ramps up to 60 degrees by a normal's height over half
     its length (`host/render/reflection_plane.h`, `floor_plane`), read on
     2026-10-19 in the copy named for this round; no code was taken, and
-    audit round B1 confirmed the line as TROne's own design. The census's gap
+    audit round B1, from the notes of earlier permitted readings, found the
+    line to be TROne's own design. The census's gap
     (56.3 to 85 degrees) does not choose a line inside it: 60 is TROne's line,
     taken as its number and credited here.
 390. **A slope's faces share a plane by their corners** (`hd_marble_math.h`,
@@ -3998,12 +4001,13 @@ carries the tables.
     material 14 parts, added whole whatever clear texels it marks, as entry
     339's whole glass is. Its one line, page 15074, ANDREA1's arched windows
     (statics 50, 66 and 68). DATA: the page marks 0.12 % of its texels clear
-    (HdAdd, the page through the engine's resolvers), so the clear-texel
-    bound kept their alpha and they added 3.0 levels at the eyes where the
-    classic's glass adds 14.2 (band 7.2 to 28.9, GlassHue); added whole 7.9
-    to 8.1 (RoomProbe `-glow -addmat 14`). OWN: the table keyed by page, as
-    the sheen's page table is (`hd_gloss_pages.h`), the order of
-    2026-10-20 to give ANDREA1's glass a green tint.
+    (a scratch census, not kept, the page through the engine's resolvers),
+    so the clear-texel bound kept their alpha and they added 3.0 levels at
+    the eyes where the classic's glass adds 14.2 (band 7.2 to 28.9, the same
+    kind of census); added whole 7.9 to 8.1 (RoomProbe `-glow -addmat 14`).
+    OWN: the table keyed by page, as the sheen's page table is
+    (`hd_gloss_pages.h`), the order of 2026-10-20 to give ANDREA1's glass a
+    green tint.
 402. **The table's hue on the classic's saturation** (`hd_debris_rules.h`,
     `HDGlassTintHue`; `hd_render.cpp`, `HDRenderGlassTint`) - the tint a
     draw call takes from the classic glass at its place (entry 366) turned

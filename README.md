@@ -801,11 +801,12 @@ from it at run time and none of them ships here either.
 
 **The machine:** Windows 10 or 11 (the engine is tested on Windows 11; the
 XAudio2 it uses comes with Windows 10). `PCtomb5.exe` is a 32-bit program on
-Direct3D 9 and XAudio2, so it has four gigabytes of address space whatever the
-machine holds. The HD path also needs a graphics card with shader model 3.0
-(vertex and pixel shader 3.0, at least 512 pixel shader instruction slots, the
-UBYTE4 vertex type and A8R8G8B8 textures); a card that lacks one of them plays
-the classic art, with the reason in the log. Measured on the test machine at
+Direct3D 9 and XAudio2, marked large-address-aware, so on 64-bit Windows it has
+four gigabytes of address space whatever the machine holds. The HD path also
+needs a graphics card with shader model 3.0 (vertex and pixel shader 3.0, at
+least 512 pixel shader instruction slots, the UBYTE4 vertex type and A8R8G8B8
+textures); a card that lacks one of them plays the classic art, with the reason
+in the log. Measured on the test machine at
 2560 x 1440 and 165 Hz, over eight levels and the title with HD on: a level's
 HD pages took 232 to 475 MiB of video memory (an installed outfit mod's pages
 among them) and its HD geometry 10 to 62 MiB more, the program used at most

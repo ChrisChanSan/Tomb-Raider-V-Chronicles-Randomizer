@@ -12457,22 +12457,24 @@ Not played: the head was not run in the game.
 **Left.** Three comments outside this round's files still describe the load-time split:
 `specific/hqsfx.h` at `HQSfxPayloadBoots` ("Null means keep the level's own"),
 `specific/hd/hd_outfitmenu.cpp` at the F4 apply ("two shorts in the level's sound map")
-and `specific/hd/hd_level.cpp` above `HDLevelBuild` ("whenever hd_enable is on"). The
-FEET line is written at the load; an F4 change is in its own `HDLOG f4` line. Whether
-the shotgun's weapon item should walk on Lara's set too is a question for the play test.
-A footstep mod whose own landing the loop refused keeps the level's own landing in the
-bare set, which is the ordinary landing by Decision (2); it is not held to the steps'
-rule. A mod whose takes of id 0 all reached their slots but only some differ from the
-bank's is a mod's own mix and is taken as it stands. In the randomized RICH1, DOOR_TYPE4
-(slot 290) animation 655 lists 2,650 commands including ids 0 and 4 (the classic level:
-64); it is probably Lara's crawl roll among the animation sets the randomizer appends to
-a level, a known fault of that level's set; not followed here.
+and `specific/hd/hd_level.cpp` above `HDLevelBuild` ("whenever hd_enable is on"). The FEET
+line is written at the load; an F4 change is in its own `HDLOG f4` line. Whether the
+shotgun's weapon item should walk on Lara's set too is a question for the play test. A
+footstep mod whose own landing the loop refused keeps the level's own landing in the bare
+set, which is the ordinary landing by Decision (2); it is not held to the steps' rule. A
+mod whose takes of id 0 all reached their slots but only some differ from the bank's is a
+mod's own mix and is taken as it stands. In the randomized RICH1, DOOR_TYPE4 (slot 290)
+animation 655 lists 2,650 commands including ids 0 and 4 (the classic level: 64); measured
+in #230, 655 is the slot's own first animation, whose command count the original level
+carries as 0xAAAA - the engine reads it as a negative short and runs nothing, the AnimCmd
+tool reads it unsigned and walks into the commands of the animations the randomizer
+appends.
 
 **Commits.** `b9b64d5d` (the sets in memory), `57d462f3` (the choice per step and the
 caller), `574afdd6` (the floor layer), `c3e5c85b` (the checks and the FEET line),
-`62995fda` (a comment), and the records; then `122192e1` (a footstep mod is what the
-load loop loaded) and the records' corrections; then the bare set held whole, and the
-records.
+`62995fda` (a comment), and the records; then `122192e1` (a footstep mod is what the load
+loop loaded) and the records' corrections; then `d52f9707` (the bare set held whole) and
+the records.
 
 ### The soft motion of the chest: an optional secondary motion for the HD Lara
 2026-10-02

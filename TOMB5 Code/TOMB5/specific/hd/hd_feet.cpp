@@ -295,6 +295,7 @@ void HDFeetLevelBuild(short* lut, SAMPLE_INFO* infos, int infoCount, int spare,
 	 * SfxProbe's own line reads "a mod's <NNNN>.wav replaces BANK sample
 	 * NNNN", and 0000..0003 and 0010 are the boots. */
 	bool useMod = false;
+	bool holed = false;
 	const char* modWhy = "";
 	/* A copy and not the pointer: HQSfxWavSource hands back a buffer of its own
 	 * that the next call on it overwrites. */
@@ -332,6 +333,7 @@ void HDFeetLevelBuild(short* lut, SAMPLE_INFO* infos, int infoCount, int spare,
 				"load refused it by its length; a set with a hole is no set",
 				hole);
 			modWhy = holeWhy;
+			holed = true;
 		}
 		else if (first > 0)
 		{
@@ -354,8 +356,9 @@ void HDFeetLevelBuild(short* lut, SAMPLE_INFO* infos, int infoCount, int spare,
 		// the ruler are the same bank and the answer is not news.
 		if (HQSfxFromMod() || overlaid)
 			Log("SFXLOG footsteps: %s %s - %s", modWho,
-				useMod ? "supplies the bare set" : "is not a footstep mod",
-				modWhy);
+				useMod ? "supplies the bare set"
+				: holed ? "is a footstep mod with a hole"
+				: "is not a footstep mod", modWhy);
 	}
 
 	const char* where = useMod ? modWho : HQSfxPlainSource();

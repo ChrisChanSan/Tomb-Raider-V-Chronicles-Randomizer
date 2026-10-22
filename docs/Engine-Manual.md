@@ -1763,7 +1763,7 @@ see *Lara in HD* below for which of her stays classic and why.
   option's tiles cut small windows out of other pages, which the HD page
   cannot fill). Deepsea Dive's sky is a single colour with nothing over it.
   With the water sheets its two moving layers - the old low-resolution sea
-  surface seen from below - are no longer drawn: the surface overhead is the
+  surface seen from below - are not drawn: the surface overhead is the
   Remaster's own art of the sea and this engine's own look of it, drawn
   with the sky: a soft glow overhead, the sun's faint light through it and
   broad faint shafts of light fanning down through the open water, which the

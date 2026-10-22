@@ -26847,8 +26847,8 @@ bool HDRenderSky(const D3DMATRIX* world)
  * below on the level's classic page, and JOBY4 takes the deep look, whose
  * surface the remaster's art of room 19 and HDRenderWaterLook draw
  * instead. The look comes only with the sheets (g_caustic_on); with
- * them off the layers stay in, as before, drawn
- * over the band and its closed pole (HDRenderSkyCaps).
+ * them off the layers stay in, drawn over the band
+ * and its closed pole (HDRenderSkyCaps).
  * RICH3 takes the deep look too (its one water room no sheet lies over,
  * the flipped room 190, against none under a sheet), and its sheets leave
  * the layers out already. */

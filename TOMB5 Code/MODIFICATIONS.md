@@ -32409,8 +32409,8 @@ ModernTest check fail by design; from the second on all pass; each commit builds
 **Commits.** `e2db9c0e` (the row, the value and the gates), `1fb5a32e` (the tool's
 override and the checks), `be295ecb` (the removed name in two halves), `3f659f30` (this
 record and the manuals), `2b32b20e` (four tool comments, the manual's water sentence and
-this record's counts) and this record's last commit (this list and one word of the
-tools manual's `-hdwater` line).
+this record's counts), `aa61c8ac` (this list and one word of the tools manual's
+`-hdwater` line) and a wording commit at the merge (two inherited history phrases).
 
 ## 3. Randomizer changes since Beta 1.0
 

@@ -4590,7 +4590,7 @@ carries the tables.
     that repeat the English with their reasons, the file's format and the order file,
     table, literal. OWN: the translations, the format and the order; DATA: the
     vocabulary and register of the game's own language files where the game names the
-    thing (ammunition, level, options, load and save, targeting), read on the player's
+    thing (ammunition, level, options), read on the player's
     files and never copied, and the census of where each key is drawn with its widths on
     the font's own glyph table.
 

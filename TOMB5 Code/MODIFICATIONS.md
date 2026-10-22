@@ -32791,8 +32791,8 @@ shows, copied bounded (`snprintf`) so that a longer string of another file is cu
 buffer's 63 bytes instead of running past them; the buffer holds the longest of the five
 names (37) and the F12 notice's every column. (2) The pad words are the play test's; the
 four *Steuerkreuz* chords run past the value column, and the word stays (Left). (3)
-Vocabulary and register: the game's file first where it names the thing - French *Visée*,
-*Munitions*, *niveau*, *Charger*; Italian *Puntamento*, *Munizioni*, *livello*, *Scatto*,
+Vocabulary and register: the game's file first where it names the thing - French
+*Munitions*, *niveau*; Italian *Munizioni*, *livello*, *Scatto*,
 the file's imperatives (*Salta livello*, *Cura*); Spanish *Munición*, *nivel*, *Mirar*,
 the file's infinitives - and the play test's German words as the meaning. *on* and *off*
 are *activé*/*désactivé*, *attivo*/*disattivo* and *activo*/*inactivo*: the Spanish
@@ -32874,7 +32874,8 @@ a UTF-16 file, a NUL byte and the sample's log line, and the shipped file: `keys
 french=134 german=134 italian=134 spanish=134 skipped=0`, 28 checks, 0 failed. With no
 file present the German column and the English literals are the base's but for the eight
 pad words, the four removed rows and the two new rows, whose German is the literal they
-printed before; with the shipped file the words are the table's. No draw, sound or data
+printed before, and the two language names with their accents (`LanguageName`); with the
+shipped file the words are the table's. No draw, sound or data
 path changed: nothing under `specific/hd/` is touched, `specific/audio.cpp` changes in its
 comment only, and `Gameflow->Language` keeps its values - so `hd_build` 0, the classic
 draw, the HQ music and the HQ `MAIN.SFX` path are the base's by construction. No line

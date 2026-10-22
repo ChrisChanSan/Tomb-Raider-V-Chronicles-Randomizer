@@ -32756,8 +32756,8 @@ per space, an accented letter as its base letter):
 | value, 192 | 183.2 *level and run decide* | 186.2 *par niveau et partie* | 186.2 *nach Level und Lauf* | 176.2 *Stivali - manca qui* | 188.2 *Descalza - falta aquí* |
 | pad behind *Mod+*, 192 | 176.8 *Mod+Stick R Down* | 186.8 *Mod+Stick R gauche* | 180.8 *Mod+Stick R rechts* (see below) | 152.8 *Mod+Stick R giù* | 185.4 *Mod+Cruceta arriba* |
 | centred line, 512 | 310.6 | 325.6 *Randomizer et portage Windows 11* | 313.8 | 351.0 *Randomizer e porting per Windows 11* | 365.0 *Randomizer y adaptación a Windows 11* |
-| caption, 512 and 63 bytes | 84.8 *HD is off* | 118.4 *HD désactivé* | 94.8 *HD ist aus* | 116.4 *HD disattivo* | 108.4 *HD inactivo* |
-| F4 head or shine value, 192 | 188.8 *TR5 hair (outfit.txt)* | 179.8 *à tresse (outfit.txt)* | 189.8 *mit Zopf (outfit.txt)* | 190.4 *propria (predefinito)* | 171.4 *1.00/128 (outfit.txt)* |
+| caption, 512 and 63 bytes | 84.8 *HD is off* | 118.4 *HD désactivé* | 94.8 *HD ist aus* | 116.4 *HD disattivo* | 141.4 *HD desactivado* |
+| F4 head or shine value, 192 | 188.8 *TR5 hair (outfit.txt)* | 190.2 *à tresse (par défaut)* | 189.8 *mit Zopf (outfit.txt)* | 190.4 *propria (predefinito)* | 171.4 *1.00/128 (outfit.txt)* |
 
 The four German d-pad names fit the value column alone (*Steuerkreuz rechts* 172.4,
 *unten* 168.4, *links* 160.4, *oben* 157.4) and run past it behind *Mod+* (222.4, 218.4,
@@ -32799,8 +32799,13 @@ are *activé*/*désactivé*, *attivo*/*disattivo* and *activo*/*inactivo*: the S
 *activo*/*inactivo*; the French restart is *(relancer)*, *(redémarrage)* being too wide.
 Italian and Spanish shorten left and right in the pad's names (*sx*/*dx*, *izq.*/*der.*)
 and Italian names its mode rows *Modo ...* (*Modalità combattimento* was 6.4 units over);
-the d-pad is *Croix*, *Croce* and *Cruceta*; the F4 head words are *à tresse*, *treccia*,
-*trenza*, and the Spanish tier *default* is *estándar* (*predeterminado* ran over). (4)
+the d-pad is *Flèche*, *Freccia* and *Cruceta*, named after its arrows so that French and
+Italian do not call it by the Cross button's *Croix* and *Croce* on the same page; the F4
+head words are *à tresse*, *treccia*, *trenza*, the French tier *default* is *par défaut*
+(*défaut* alone reads as a flaw) and the Spanish *estándar* (*predeterminado* ran over).
+The review of the words gave *Telecamera di morte* for the death camera, *Première
+personne* beside *Troisième personne*, *Lissage caméra*, *Modo agachado* and the notice
+*HD desactivado*; the Spanish *activo*/*inactivo* of the values stay. (4)
 *Display (60)* and *Original* get rows because their French, Italian or Spanish word
 differs (*Écran (60)*, *Originale*); their German is the English word, so the German
 output is unchanged. (5) The Credits' name lines stay English (the play test's answer).
@@ -32881,7 +32886,8 @@ have no German entry. The Credits screen's lines of names stay as written.
 
 **Commits.** `824afc2d` (the captions from the language file, the buffer, the pad words),
 `255d5c18` (the French, Italian and Spanish words), `e27bb3df` (`extrastrings.txt`),
-`51b772cf` (Japanese for the HQ audio) and this record.
+`51b772cf` (Japanese for the HQ audio), this record and the review's fix pass (the
+words above, a check's message, the manual's sentence on the folder test).
 
 ## 3. Randomizer changes since Beta 1.0
 

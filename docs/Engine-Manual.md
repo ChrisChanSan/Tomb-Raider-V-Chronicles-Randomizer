@@ -1332,9 +1332,10 @@ Only files in the true TR5 PC text layout are accepted; the game checks the
 file's **header**, not its name. `JAPAN.DAT` and `DUTCH.DAT` ship with every
 edition of TR5 and are in fact Tomb Raider 4 files, so they are skipped
 silently, and some Steam-edition language files are rejected the same way.
-Japanese is offered when the folder `audio\HQ JP` holds the Japanese HQ
-soundtrack (below): it plays the Japanese HQ audio with English text, and no
-Japanese text file is loaded at all. Dutch stays skipped.
+Japanese is offered when the folder `audio\HQ JP` exists (below; only the
+folder is tested, and a track missing from it falls back to HQ EN): it plays the
+Japanese HQ audio with English text, and no Japanese text file is loaded at all.
+Dutch stays skipped.
 
 The engine's own words - the options pages, the F4 outfit window, the Credits
 screen's headings, the pad's names, the F12 notice - are French, German, Italian

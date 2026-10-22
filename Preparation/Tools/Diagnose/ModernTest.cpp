@@ -12351,9 +12351,12 @@ static void caption_rows()
 		const bool pad = w.kind == PAD || w.kind == PADWIDE;
 		const char* before = pad ? "Mod+" : "";
 
+		// 0: no row, 1: a row without this German word, 2: both.
+		const long found = !have ? 0 : strstr(row, w.source) ? 2 : 1;
+
 		snprintf(what, sizeof(what), "captions: \"%s\" has one row, "
-			"German in it", w.key);
-		ok(have && strstr(row, w.source) != 0, what, have, 1);
+			"German in it (0 no row, 1 other German)", w.key);
+		ok(found == 2, what, found, 2);
 
 		// A caption's buffer holds every column of its row.
 		if (w.kind == NOTICE)
@@ -12380,9 +12383,10 @@ static void caption_rows()
 			ok(caption_share(chord) > 960, what, caption_share(chord), 961);
 		}
 
-		// The German word, then the English key, which French, Italian and
-		// Spanish draw as English does; a label with the row's mark behind
-		// it, the widest any label of the window is drawn.
+		// The German word, then the English key as English draws it, a
+		// label with the row's mark behind it, the widest any label of the
+		// window is drawn; French, Italian and Spanish are measured against
+		// their columns in caption_columns.
 		char german[96];
 		char english[96];
 

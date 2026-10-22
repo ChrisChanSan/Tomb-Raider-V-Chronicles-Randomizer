@@ -1651,7 +1651,7 @@ const char* CustomText(const char* engl)
 		{ "Sprint mode", "Mode sprint", "Sprintmodus", "Modo scatto",
 			"Modo carrera" },
 		{ "Duck mode", "Mode accroupi", "Duckmodus", "Modo abbassamento",
-			"Modo agacharse" },
+			"Modo agachado" },
 		// "Modi" is both the page title for these five mode rows and the
 		// tab's own label: one literal, one row, exactly as "Key bindings"
 		// and "Credits" are above.
@@ -1722,10 +1722,10 @@ const char* CustomText(const char* engl)
 		{ "Field of view", "Champ de vision", "Sichtfeld", "Campo visivo",
 			"Campo de visi\xF3n" },
 		{ "Death camera", "Cam\xE9ra de mort", "Todeskamera",
-			"Telecamera morte", "C\xE1mara de muerte" },
+			"Telecamera di morte", "C\xE1mara de muerte" },
 		{ "Follow head bone", "Suivre la t\xEAte", "Kopfknochen folgen",
 			"Segui la testa", "Seguir la cabeza" },
-		{ "Camera damping", "Amorti cam\xE9ra", "Kamerad\xE4mpfung",
+		{ "Camera damping", "Lissage cam\xE9ra", "Kamerad\xE4mpfung",
 			"Fluidit\xE0 telecamera", "Suavizado de c\xE1mara" },
 		{ "Body", "Corps", "K\xF6rper", "Corpo", "Cuerpo" },
 		{ "Frame rate", "Fr\xE9quence d'images", "Bildrate",
@@ -1808,8 +1808,8 @@ const char* CustomText(const char* engl)
 		{ "Light", "L\xE9ger", "Leicht", "Leggero", "Ligero" },
 		{ "Medium", "Moyen", "Mittel", "Medio", "Medio" },
 		{ "Strong", "Fort", "Stark", "Forte", "Fuerte" },
-		{ "First person", "Vue subjective", "Ego-Sicht", "Prima persona",
-			"Primera persona" },
+		{ "First person", "Premi\xE8re personne", "Ego-Sicht",
+			"Prima persona", "Primera persona" },
 		{ "Third person", "Troisi\xE8me personne", "Dritte Person",
 			"Terza persona", "Tercera persona" },
 		{ "still", "immobile", "ruhig", "fermo", "quieto" },
@@ -1873,13 +1873,14 @@ const char* CustomText(const char* engl)
 		{ "measured", "mesur\xE9", "gemessen", "misurato", "medido" },
 		{ "table", "table", "Tabelle", "tabella", "tabla" },
 		{ "list", "liste", "Liste", "lista", "lista" },
-		{ "default", "d\xE9" "faut", "Standard", "predefinito", "est\xE1ndar" },
+		{ "default", "par d\xE9" "faut", "Standard", "predefinito",
+			"est\xE1ndar" },
 		// The notice at the top of the screen when the HD/SD key has
 		// nothing to switch (specific\hd\hd_switch.cpp). It borrows the
 		// ammo hotkeys' caption, whose buffer holds 63 letters
 		// (specific\input.cpp).
 		{ "HD is off", "HD d\xE9sactiv\xE9", "HD ist aus", "HD disattivo",
-			"HD inactivo" },
+			"HD desactivado" },
 		// The Credits screen's headings (tomb5\troyestuff.cpp), each drawn
 		// centred across the screen; its title is "Credits" above. The
 		// names under them are names and have no rows.
@@ -1911,7 +1912,9 @@ const char* CustomText(const char* engl)
 		// "Mod+", as a chord prints it, in every language but for the four
 		// German "Steuerkreuz" names, which are wider than the column there.
 		// French, Italian and Spanish name the stick "Stick R" as German
-		// does; Italian and Spanish shorten left and right ("sx"/"dx",
+		// does; French and Italian name the d-pad after its arrows, a word
+		// apart from the Cross button's, as German and Spanish keep theirs
+		// apart; Italian and Spanish shorten left and right ("sx"/"dx",
 		// "izq."/"der.") so that a chord fits.
 		{ "Square", "Carr\xE9", "Quadrat", "Quadrato", "Cuadrado" },
 		{ "Cross", "Croix", "Kreuz", "Croce", "Cruz" },
@@ -1926,14 +1929,14 @@ const char* CustomText(const char* engl)
 			"Stick R izq." },
 		{ "Stick R Right", "Stick R droite", "Stick R rechts", "Stick R dx",
 			"Stick R der." },
-		{ "D-Pad Up", "Croix haut", "Steuerkreuz oben", "Croce su",
-			"Cruceta arriba" },
-		{ "D-Pad Down", "Croix bas", "Steuerkreuz unten", "Croce gi\xF9",
-			"Cruceta abajo" },
-		{ "D-Pad Left", "Croix gauche", "Steuerkreuz links", "Croce sx",
-			"Cruceta izq." },
-		{ "D-Pad Right", "Croix droite", "Steuerkreuz rechts", "Croce dx",
-			"Cruceta der." },
+		{ "D-Pad Up", "Fl\xE8" "che haut", "Steuerkreuz oben",
+			"Freccia su", "Cruceta arriba" },
+		{ "D-Pad Down", "Fl\xE8" "che bas", "Steuerkreuz unten",
+			"Freccia gi\xF9", "Cruceta abajo" },
+		{ "D-Pad Left", "Fl\xE8" "che gauche", "Steuerkreuz links",
+			"Freccia sx", "Cruceta izq." },
+		{ "D-Pad Right", "Fl\xE8" "che droite", "Steuerkreuz rechts",
+			"Freccia dx", "Cruceta der." },
 	};
 
 	long column;

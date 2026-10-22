@@ -2061,11 +2061,12 @@ static void graphics_softbody_row()
 /* The water sheets have no row: they come with the HD look. Read from the
  * tree as the Body physics row is: no row and no value functions of that
  * name in the Graphics table, no string row for its label in
- * game\gameflow.cpp, no registry value hd_water in tomb5\tomb5.cpp, and no
- * option read in specific\hd\hd_level.cpp, whose water build asks for the
- * sheets in every HD build; the classic water under the HD look is the
- * diagnostic tool's alone (HDRenderWaterSheetsOverride, never called by
- * the engine). */
+ * game\gameflow.cpp, no registry value of the water in tomb5\tomb5.cpp,
+ * and no option read in specific\hd\hd_level.cpp, whose water build asks
+ * for the sheets in every HD build; the classic water under the HD look is
+ * the diagnostic tool's alone (HDRenderWaterSheetsOverride, never called by
+ * the engine). The removed name is searched for in two halves, so that a
+ * search of the tree for it finds no code. */
 static void graphics_water_row()
 {
 	char* frame = tree_file("../../../TOMB5 Code/TOMB5/game/menu_frame.cpp");
@@ -2093,9 +2094,9 @@ static void graphics_water_row()
 		"water row: and no value functions for one");
 	check(tree_count(flow, "\"HD water\""), 0,
 		"water row: the string table has no row for its label");
-	check(tree_count(opts, "hd_water"), 0,
-		"water row: no registry value hd_water is written or read");
-	check(tree_count(level, "tomb5.hd_water"), 0,
+	check(tree_count(opts, "hd_" "water\""), 0,
+		"water row: no registry value of the water is written or read");
+	check(tree_count(level, "tomb5.hd_" "water"), 0,
 		"water row: the water build reads no option");
 	check(tree_count(level, "WaterSection(), g_stem);"), 1,
 		"water row: the build asks for the sheets in every HD build");

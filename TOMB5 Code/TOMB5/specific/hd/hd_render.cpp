@@ -3728,8 +3728,8 @@ namespace
 	 * The depth is the frame's INTZ texture (HDRenderWaterDepthBind), which
 	 * the engine binds in a level that built water sheets and RoomProbe for
 	 * every picture - so the sheets are asked as well, and the tool draws
-	 * the pass where the game does. Without them - tomb5.hd_water 0, a level
-	 * with no water square, a device without INTZ - the pass draws nothing
+	 * the pass where the game does. Without them - a level with no water
+	 * square, a device without INTZ - the pass draws nothing
 	 * and the haze stays as it was. The breath is anchored in the world
 	 * through the first room drawn in the bracket: its matrix gives the
 	 * world's axes in view space and the eye in the room's own coordinates,
@@ -12646,9 +12646,8 @@ namespace
 	std::vector<float> g_caustic_top;	// per group, room local y
 	// Per group, 1 for a water room looked through a river's body.
 	std::vector<unsigned char> g_caustic_river;
-	/* Whether that caustic is drawn: only with the sheets. With
-	 * tomb5.hd_water 0 the floors under a surface carry no caustic, as
-	 * without the sheets. */
+	/* Whether that caustic is drawn: only with the sheets. Without them
+	 * the floors under a surface carry no caustic. */
 	bool g_caustic_on = false;
 	std::unordered_set<unsigned long long> g_sheet_at;
 	// The squares that draw a sheet, by world square (WaterKey, y 0): the
@@ -16296,9 +16295,9 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 				s.wz = rm.originZ + sz * 1024;
 
 				/* The water's top, and the rivers' sinks, with the sheets
-				 * alone: with tomb5.hd_water 0 the bodies stand at the
-				 * squares' floors and carry no current, as without them -
-				 * their rows move the remaster's water art (step 6). */
+				 * alone: without them the bodies stand at the squares'
+				 * floors and carry no current - their rows move the
+				 * remaster's water art (step 6). */
 				s.wy = rm.floor[at] * 256;
 				s.sink = -1;
 				s.pit = pit;
@@ -16747,8 +16746,8 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 			g_wlevel.rowsUnmatched++;
 	}
 
-	// A lift is the sheets' alone: with tomb5.hd_water 0 nothing stands
-	// lifted, a file's row included.
+	// A lift is the sheets' alone: without them nothing stands lifted, a
+	// file's row included.
 	for (size_t b = 0; !sheets && b < g_wbodies.size(); b++)
 		g_wbodies[b].info.lift = 0;
 
@@ -20183,8 +20182,8 @@ float HDRenderWaterDiscPower()
 
 /* The sea seen from below on the game's path: the look of the study above
  * at the strengths of HDWaterLookKnobs, drawn by HDFrameSky right after the
- * sky in a level that takes the deep look, with the sheets on
- * (tomb5.hd_water, which g_caustic_on holds) and the eye under the water.
+ * sky in a level that takes the deep look, with the sheets on (which
+ * g_caustic_on holds) and the eye under the water.
  * `under` is a frame block with its under-the-water fields filled as
  * HDFrameDraw fills them (the eye's room, its world y, world up in view
  * space); the extinction and the water's scattered colour come from it
@@ -24561,7 +24560,7 @@ bool HDRenderWaterSegLine(int at, const char* stem, char* out, size_t size)
  * art's falling water gave (see "the foot of a waterfall": the art lands
  * apart from the classic object), within kFootSnap - the same square that
  * takes the art's feet for the classic ones. False where none lies so near,
- * and with no sheets (tomb5.hd_water 0 lays no curtain). */
+ * and with no sheets (a build without them lays no curtain). */
 bool HDRenderWaterFootNearest(float x, float z, float* nx, float* nz)
 {
 	float best = kFootSnap * kFootSnap;
@@ -25777,7 +25776,7 @@ namespace
 			/* z, RoomVS's flood gate: 1 where the body draws its sheet and
 			 * hides the remaster's art, so the flood lays no swell, wobble or
 			 * surface caustic on the bank (hd_room.hlsl, "the flood under a
-			 * sheet"); 0 with tomb5.hd_water 0, which builds no sheet. */
+			 * sheet"); 0 in a build without sheets. */
 			const HDRenderWaterBody& info = g_wbodies[(size_t)body].info;
 			float swell[4];
 
@@ -25807,7 +25806,7 @@ namespace
 	}
 
 	/* The room's water constants, vertex side: the caustic under a surface
-	 * (zero with tomb5.hd_water 0, see g_caustic_on), the eye in room
+	 * (zero without the sheets, see g_caustic_on), the eye in room
 	 * coordinates, the swell and the four rows. Called by prepare() for
 	 * every room. */
 	/* Whether the floor under a river takes its caustic from RiverPS,
@@ -26839,8 +26838,8 @@ bool HDRenderSky(const D3DMATRIX* world)
  * one flat colour; JOBY4's script layers are the sea's surface seen from
  * below on the level's classic page, and JOBY4 takes the deep look, whose
  * surface the remaster's art of room 19 and HDRenderWaterLook draw
- * instead. The look comes only with the sheets (g_caustic_on,
- * tomb5.hd_water); with them off the layers stay in, as before, drawn
+ * instead. The look comes only with the sheets (g_caustic_on); with
+ * them off the layers stay in, as before, drawn
  * over the band and its closed pole (HDRenderSkyCaps).
  * RICH3 takes the deep look too (its one water room no sheet lies over,
  * the flipped room 190, against none under a sheet), and its sheets leave

@@ -17306,7 +17306,6 @@ static void ProbeLevelKey(const char* root, const char* stem, double budgetMiB,
 	ProbeFileStamp(g_water_file, &k->waterFile);
 	snprintf(k->install, sizeof(k->install), "%s", root);
 	k->air = g_air_option;
-	k->water = g_hdwater == 1 ? 1 : 0;
 	k->budgetMb = (long)budgetMiB;
 	snprintf(k->format, sizeof(k->format), "%s",
 		pageFormat == HD_PAGE_FORMAT_DXT5 ? "dxt5" : "rgba");

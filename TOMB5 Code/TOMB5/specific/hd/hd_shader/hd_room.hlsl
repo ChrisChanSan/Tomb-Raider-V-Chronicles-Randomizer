@@ -1337,7 +1337,7 @@ VS_OUT RoomVS(float4 inPos : POSITION, float4 inNormal : NORMAL,
 	 * pictures) - and the swell, the wobble and the surface caustic would
 	 * tear it. So none of the three is laid on there; the colour shimmer
 	 * keeps `shimmerOn` as the classic path does. 0 in every room without a
-	 * sheet and with tomb5.hd_water 0: nothing changes there. */
+	 * sheet: nothing changes there. */
 	float water = gMotion.w * saturate(max(gWaterMode.y * inFlags.x,
 		surfaceOn)) * (1.0f - gSwell.z);
 	/* The wave at this vertex - see WaveSum, with the rows of this room's

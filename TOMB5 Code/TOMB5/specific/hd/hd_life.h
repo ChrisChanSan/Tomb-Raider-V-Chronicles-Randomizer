@@ -17,7 +17,7 @@
  * hd_life_rules.h). An item-less pool, built at level load out of the
  * sheets' bodies and rolled with GetRandomDraw, never saved, drawn as HD
  * models through the frame's object list. Nothing of it runs or allocates
- * without the sheets (tomb5.hd_water 0, tomb5.hd_enable 0).
+ * without the sheets (a level that built none, tomb5.hd_enable 0).
  *
  * The order of a level: HDLifeModelPlan inside HDObjectLevelBuild (the
  * models go into the level's one model list), HDLifeLevelBegin after it,

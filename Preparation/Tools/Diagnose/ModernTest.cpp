@@ -26751,7 +26751,6 @@ static void level_key_base(HDLevelKey* k)
 	k->waterFile.written = 134040000000000000LL;
 	key_set(k->install, "D:\\Remastered\\5");
 	k->air = 2;
-	k->water = 1;
 	k->objects = 1;
 	key_set(k->format, "rgba");
 }
@@ -26791,7 +26790,6 @@ static void level_key()
 		{ "the I-III bundle found", [](HDLevelKey* k)
 			{ key_set(k->installTr3, "E:\\I-III\\3"); }, "install_tr3" },
 		{ "hd_air 2 to 1", [](HDLevelKey* k) { k->air = 1; }, "hd_air" },
-		{ "hd_water off", [](HDLevelKey* k) { k->water = 0; }, "hd_water" },
 		{ "hd_objects off", [](HDLevelKey* k) { k->objects = 0; },
 			"hd_objects" },
 		{ "a texture budget set", [](HDLevelKey* k) { k->budgetMb = 2048; },

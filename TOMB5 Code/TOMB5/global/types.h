@@ -2878,22 +2878,6 @@ struct tomb5_options	//only bools or ulongs because that's what registry likes
 	 * hd_softbody.h for the strengths). Registry: hd_softbody. */
 	ulong hd_softbody;
 
-	/* The water sheets of the HD path: on, the default, every water
-	 * square the sheet can cover - over an underwater room, in a room
-	 * drawn HD - gets this project's own water surface, with the caustic
-	 * on the floor under it outside the night levels (ANDY1 to ANDY3,
-	 * hd_render.cpp kWaterMoon), and the classic water face there is not
-	 * restored, nor the remaster's own water art over it drawn (unless an
-	 * hd_water.txt row says art keep); a water plane with no underwater
-	 * room below keeps its faces. Off, no sheet is built, the caustic
-	 * under it is off and the classic faces are restored as without it;
-	 * what stays is the caustic's shape and footprint fade on the
-	 * remaster's own marked water art and the wave rows on that art, which
-	 * live in the compiled shaders. Taken at the start of a level. Dead
-	 * with hd_build 0 (specific\hd\hd_level.cpp,
-	 * BuildWaterSheets). Registry: hd_water. */
-	bool hd_water;
-
 	/* The air of the rooms in an HD level: 1, the default, the remaster's
 	 * art of a room that stands in the air of a room its own room has no
 	 * portal, door or vertical link with, and that an intrusion box holds

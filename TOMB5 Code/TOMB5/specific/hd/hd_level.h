@@ -306,7 +306,7 @@ bool HDWaterFrameFor(const TEXTURESTRUCT* tex, TEXTURESTRUCT* out);
 
 /* Whether the classic sprite of a ripple (x, y, z and flags of a
  * RIPPLE_STRUCT) is left out because a water sheet draws its ring there:
- * HD on, tomb5.hd_water and tomb5.hd_motion on, a ripple of the kind the
+ * HD on, tomb5.hd_motion on, a ripple of the kind the
  * rings are made of and a drawing sheet under it (hd_level.cpp,
  * RippleIsRing). The only caller is S_DrawSplashes
  * (specific\specificfx.cpp); with hd_enable off it is false at its first
@@ -322,7 +322,7 @@ void HDWaterFallsTick();
 /* The water's own splash and a fish tank's spray (hd_render.cpp, "the
  * cards"). HDWaterSplash is SetupSplash's (game\effect2.cpp), after the
  * classic struct is filled: true when the HD form takes the splash - HD
- * on, tomb5.hd_water and tomb5.hd_motion on, the cards ready and a drawing
+ * on, tomb5.hd_motion on, the cards ready and a drawing
  * sheet under it -, and S_DrawSplashes then leaves that splash's sprites
  * out (flags bit 0x10). HDWaterSpray is TriggerFishtankSpray's
  * (game\tower.cpp), after the classic spark is made: true when the cards
@@ -337,7 +337,7 @@ bool HDWaterSpray(long x, long y, long z, long strength);
 /* A breaking fish tank's water (hd_render.cpp, "the tank's water"):
  * DrawScaledSpike's (game\traps.cpp) for a FISHTANK, before the classic
  * mesh is drawn - true when the HD path draws this tank's water this
- * frame (HD on, tomb5.hd_water and tomb5.hd_motion on, the cards ready
+ * frame (HD on, tomb5.hd_motion on, the cards ready
  * and the level's FISHTANK mesh known), and the classic mesh is then left
  * out. Reads the item only. With hd_enable off it is false at its first
  * test. */

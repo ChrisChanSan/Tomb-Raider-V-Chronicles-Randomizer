@@ -59,7 +59,7 @@ inline float HDWaterSnellCos(float n)
  * the PSX sky's dark teal SKY_GRAPHICS tiles, or the bright surface page
  * with the PSX sky off); the surface over it is the remaster's art of the
  * sea and the look of HDRenderWaterLook, which fills the band's open
- * poles. Without the sheets (tomb5.hd_water 0) no look is drawn, and the
+ * poles. Without the sheets no look is drawn, and the
  * layers stay to cover the poles. `sheet`, `opaqueBand` and `deep` are 0
  * or 1; `deep` is 1 only for the deep look with the sheets on. */
 inline bool HDSkyLayersLeftOut(int sheet, int opaqueBand, int deep)

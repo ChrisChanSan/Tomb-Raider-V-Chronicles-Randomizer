@@ -258,10 +258,6 @@ void init_tomb5_stuff()
 		tomb5.hd_softbody = 0;							//off
 		REG_WriteLong(buf, tomb5.hd_softbody);
 
-		sprintf(buf, "hd_water");
-		tomb5.hd_water = 1;								//on
-		REG_WriteBool(buf, tomb5.hd_water);
-
 		sprintf(buf, "hd_air");
 		tomb5.hd_air = 1;								//on
 		REG_WriteLong(buf, tomb5.hd_air);
@@ -529,10 +525,6 @@ void init_tomb5_stuff()
 		REG_ReadLong(buf, tomb5.hd_softbody, 0);
 		if (tomb5.hd_softbody > 3)
 			tomb5.hd_softbody = 0;
-
-		// Absent - every older registry - reads as on.
-		sprintf(buf, "hd_water");
-		REG_ReadBool(buf, tomb5.hd_water, 1);
 
 		// Absent - every older registry - reads as 1, the default.
 		sprintf(buf, "hd_air");
@@ -861,9 +853,6 @@ void save_new_tomb5_settings()
 
 	sprintf(buf, "hd_softbody");
 	REG_WriteLong(buf, tomb5.hd_softbody);
-
-	sprintf(buf, "hd_water");
-	REG_WriteBool(buf, tomb5.hd_water);
 
 	sprintf(buf, "hd_air");
 	REG_WriteLong(buf, tomb5.hd_air);

@@ -1488,8 +1488,8 @@ bool HDRenderWaterBodyInfo(int at, HDRenderWaterBody* out);
 void HDRenderWaterLevelInfo(HDRenderWaterLevel* out);
 const char* HDRenderWaterClassName(int cls);
 const char* HDRenderWaterSectionName(int section);
-/* The WATERLOG line of the level (body -1, `option` the tomb5.hd_water the
- * build ran with) or of one body - the engine's -log and RoomProbe -hdwater
+/* The WATERLOG line of the level (body -1, `option` the `sheets` the build
+ * ran with) or of one body - the engine's -log and RoomProbe -hdwater
  * print the same text. False for a body that does not exist. */
 bool HDRenderWaterLogLine(int body, const char* stem, int option, char* out,
 	size_t size);
@@ -1718,7 +1718,7 @@ bool HDRenderWaterTank(int item, float x, float y, float z, int yRot,
  * tank's water runs over. HDRenderWaterWetTanks hands in, before
  * HDRenderSetWaterSheets, every FISHTANK of the level - its item, room,
  * place and turn; the sheets' build lays the floor its water would reach
- * (with the sheets alone: tomb5.hd_water 0 lays none), after
+ * (with the sheets alone: a build without them lays none), after
  * HDRenderWaterTankMesh. HDRenderWaterWet sets a tank's state each frame:
  * 0 whole, 1 pouring (ControlFishtank runs it), 2 shot and done; `flags1`
  * its item_flags[1]; `age` the seconds since it broke, or under 0, and the
@@ -1829,7 +1829,7 @@ bool HDRenderWaterProbeStand(float x, float z, float height, float offX,
 bool HDRenderWaterProbeLook(const float* view, float persp, float centreX,
 	float centreY, float eyeX, float eyeZ, const float* knobs, double* gpuMs);
 /* The same look on the game's path, drawn by HDFrameSky right after the
- * sky in a level that takes the deep look, with tomb5.hd_water on and the
+ * sky in a level that takes the deep look, with the sheets on and the
  * eye under the water (`under`: a frame block with its under-the-water
  * fields filled), its surface the water's top over the dive
  * (HDWaterLookDepth). `knobs` 0 for HDWaterLookKnobs' own; the device's

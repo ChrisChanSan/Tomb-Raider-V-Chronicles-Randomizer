@@ -32404,7 +32404,9 @@ InterpTest 754, LipsTest 299 with the lips' objects and 272 without; 0 failed. A
 tool builds exit 0. At the first commit alone 23 MenuTest checks (the row's) and one
 ModernTest check fail by design; from the second on all pass; each commit builds.
 
-**Left.** The game is not run; the play test sees the page and the water.
+**Left.** The game is not run; the play test sees the page and the water. The round's
+two questions - whether the manual names the old value again, whether the value is
+deleted at the next save - are settled in #238.
 
 **Commits.** `e2db9c0e` (the row, the value and the gates), `1fb5a32e` (the tool's
 override and the checks), `be295ecb` (the removed name in two halves), `3f659f30` (this
@@ -32560,6 +32562,85 @@ The decimal point of the F4 window's shine numbers, and a shine value whose expo
 credits, the pad's names and the ammo captions), this record, `65c8bee0` (a comment in the
 outfit window names the tier tag *list*) and the commit that adds `65c8bee0` here, and a
 wording commit at the merge (the header's comments, the README and this entry's Left).
+
+### The old water value leaves the registry at the next save (#238)
+2026-10-22
+
+**What.** `save_new_tomb5_settings()` (`tomb5/tomb5.cpp`), the function that writes every
+tomb5 option, now deletes the value `hd_water` from the options' registry key while the
+key is open. An older build wrote that value for the water sheets' options row, which
+#236 removed; since then it was neither read nor written and stayed in a player's key.
+It goes at the first save after this build: the first change of an options row that
+saves the tomb5 options. A new helper `REG_DeleteValue` (`specific/registry.cpp`,
+`specific/registry.h`) removes one value from the open key, beside `REG_WriteLong`,
+`REG_WriteBool` and `REG_WriteString`. The read path (`init_tomb5_stuff()`) and the
+first run's defaults are unchanged and do not name the value.
+
+**Why.** The play test, answering round #236's two questions: "1. No. 2. Yes." The
+questions were whether the Engine Manual should name the old value again for players who
+search for it (no), and whether the leftover value should be deleted from a player's
+registry at the next save or stay ignored (deleted).
+
+**Measured.** At `0d24d6f2`, read from the sources; the registry was not opened.
+- The save's callers: one, `MenuAfterChange` (`game/menu_frame.cpp`), at every change of
+  an options row whose save is `MENU_SAVE_TOMB5` (47 rows of the menu table). Nothing
+  else calls it.
+- The key: the save opens it first (`OpenRegistry("tomb5")`, the key
+  `Software\Core Design\Tomb Raider Chronicles\tomb5` under `HKEY_CURRENT_USER`) and
+  closes it last; every write between runs on the open handle. `REG_OpenKey` opens it
+  with `RegCreateKeyEx` and `KEY_ALL_ACCESS`, which holds `KEY_SET_VALUE`, the right
+  `RegDeleteValue` needs.
+- The delete: `RegDeleteValue` returns `ERROR_SUCCESS` when it removed the value and
+  `ERROR_FILE_NOT_FOUND` when the key holds no value of that name, and changes nothing
+  else. An absent value is the usual case here - every key a build since #236 created,
+  and every key after its first save under this build - so the result is not asked, as
+  the writes do not ask theirs.
+- The name (not followed by a letter, a digit, `_` or `.`), at the base: engine code 0,
+  tools 0, manuals 0, this record 155 (150 before #236's entry, 5 in it), the ledger 6.
+  The suites spell it in two halves: MenuTest asserts that `tomb5/tomb5.cpp` holds no
+  name with its closing quote (the water row family), MenuTest and ModernTest that
+  `hd_level.cpp` and `hd_life.cpp` hold no `tomb5.` field of that name. A plain literal
+  in the save would trip the first: measured, one MenuTest check fails with it.
+- At the head: engine code 1, the comment line over the deletion in the save (the
+  literal under it is in two halves, see Decisions); tools 0; manuals 0; this record 156,
+  the base's 155 and one line of this entry; the ledger 6. So a search of the tree finds
+  this one code site, the record and the ledger.
+
+**The rule.** The options' key holds only values this build reads: a value an older
+build wrote and this one no longer reads is deleted by the save, in the open key, and
+named nowhere else in the engine; the read path never asks for it. A delete is not
+checked for success, because the value's absence is the state it makes.
+
+**Decisions.** (1) The deletion sits at the end of the save, before the key is closed,
+and only there: the read path stays as #236 left it, and the first run, whose key was
+just created, has nothing to delete. (2) The call's literal is written in the suites' two
+halves (`"hd_" "water"`, one string to the compiler), because MenuTest searches the file
+for the name with its closing quote, and MenuTest is not this round's to change; the
+comment over the call names the value plainly, so a search of the tree finds the
+deletion site, and says why the literal is split. (3) The Engine Manual keeps not naming
+the value (the play test's answer 1); its registry section says in one sentence that a
+water value of an older build is removed at the next save. (4) The helper takes the
+value's name as `char*`, as its neighbours do.
+
+**Checked.** ModernTest `registry_old_water` (one check): the save's body holds the
+call with the name, and the file names the value once and deletes a value once - so the
+read path and the first run hold neither. Two changes by hand made it fail: the literal
+spelled plainly (and MenuTest's water row check with it) and the call taken out. The
+nine builds of `Preparation/Tools/Diagnose` exit 0 (`be`, `broom`, `btrg`, `bmodel`,
+`bmap`, `bmt`, `bmenu`, `bit`, `blips`). The suites at the base and at the head:
+ModernTest 16,699 and 16,700, MenuTest 44,931 and 44,931, InterpTest 754 and 754 with the
+player's `ANDREA1.TRC`, LipsTest 299 and 299 with the `.OBJ` folder, 272 and 272 without
+(the cutseq file named by hand), 0 failed each. No draw, sound, data or option path
+changed: `init_tomb5_stuff()`, the menu, the string table and everything under
+`specific/hd/` are untouched, so the parity holds by construction - with the HD look off
+the game draws and sounds as the classic engine does. No line asking `g_level_active`,
+`HDEnabled()` or `HDDrawn()` was edited. Not played, and no registry was read or written:
+the deletion is proven by reading and by the build.
+
+**Left.** The game is not run; the play test sees the value gone from the key after a
+change on the options page.
+
+**Commits.** `a40c0876` (the helper, the deletion and the check) and this record.
 
 ## 3. Randomizer changes since Beta 1.0
 
@@ -32817,3 +32898,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #234 | The captions in German, and Lara's weapon item steps as she does (#234) |
 | #236 | The water sheets are part of the HD look; their row goes (#236) |
 | #237 | Two words renamed; the credits, the pad's names and the ammo captions in German (#237) |
+| #238 | The old water value leaves the registry at the next save (#238) |

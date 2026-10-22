@@ -11337,6 +11337,29 @@ static void glass_body(const char* text, const char* head, char* out,
 	out[n] = 0;
 }
 
+/* The water value an older build wrote into the options' registry key is
+ * deleted by the save (tomb5\tomb5.cpp, save_new_tomb5_settings), right
+ * where the key is open, and the file names it nowhere else: neither the
+ * read nor the first run's defaults ask for it. Read from the tree; the
+ * registry is not opened. One number holds the three counts, the save's
+ * call by hundreds, the name by tens, the delete calls by ones. */
+static void registry_old_water()
+{
+	char* opts = hd_switch_text("../../tomb5/tomb5.cpp");
+	static char save[16384];
+	long n;
+
+	glass_body(opts, "void save_new_tomb5_settings()", save, sizeof(save));
+	n = hd_switch_count(save, "sprintf(buf,\"hd_\"\"water\");"
+		"REG_DeleteValue(buf);") * 100 +
+		hd_switch_count(opts, "\"hd_\" \"water\"") * 10 +
+		hd_switch_count(opts, "REG_DeleteValue(");
+	ok(n == 111, "registry: the old water value is deleted at the save "
+		"and named nowhere else", n, 111);
+
+	free(opts);
+}
+
 /* The split of a see-through draw call (hd_render.cpp, GlassSplits) and the
  * additive run's glass (AddGlass): their numbers and their bodies read out
  * of the engine's text, and their rules run over the census of the fifteen
@@ -28219,6 +28242,7 @@ int main()
 	hd_switch();
 	hd_switch_option();
 	hd_switch_wiring();
+	registry_old_water();
 	hd_feet();
 	glass_split();
 	glass_hue();

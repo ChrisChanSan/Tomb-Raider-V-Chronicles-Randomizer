@@ -32556,7 +32556,8 @@ a shine value whose exponent an `outfit.txt` writes with many digits, stay as #2
 them.
 
 **Commits.** `88e9d5c1` (the two words and the shorter English F4 values), `e5962dd6` (the
-credits, the pad's names and the ammo captions) and this record.
+credits, the pad's names and the ammo captions), this record, `65c8bee0` (a comment in
+the outfit window names the tier tag *list*) and the commit that adds `65c8bee0` here.
 
 ## 3. Randomizer changes since Beta 1.0
 

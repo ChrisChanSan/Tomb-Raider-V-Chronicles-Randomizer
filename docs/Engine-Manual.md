@@ -2018,8 +2018,8 @@ it.
   a frame has no HD painting the original tile is drawn and nothing is
   missing.
 - **The water sheets: this engine's own water surface**, part of the HD look:
-  every level drawn HD has them, with no option of their own (a `hd_water`
-  value an older build left in the registry is ignored). A *water square* is
+  every level drawn HD has them, with no option of their own (the game reads
+  no registry value for them). A *water square* is
   a 1024-unit square of a room that is not under water and whose room below
   is an underwater room - the very link Lara dives through - and its surface
   is the top of that water there, where Lara's head breaks the surface. A

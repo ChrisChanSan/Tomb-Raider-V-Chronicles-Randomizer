@@ -2056,7 +2056,7 @@ static void graphics_softbody_row()
 	free(draw);
 }
 
-/* ------------------------------------------------ the HD water row, gone -- */
+/* ------------------------------------------------------ no HD water row -- */
 
 /* The water sheets have no row: they come with the HD look. Read from the
  * tree as the Body physics row is: no row and no value functions of that
@@ -2065,7 +2065,7 @@ static void graphics_softbody_row()
  * and no option read in specific\hd\hd_level.cpp, whose water build asks
  * for the sheets in every HD build; the classic water under the HD look is
  * the diagnostic tool's alone (HDRenderWaterSheetsOverride, never called by
- * the engine). The removed name is searched for in two halves, so that a
+ * the engine). The searched name is spelled in two halves, so that a
  * search of the tree for it finds no code. */
 static void graphics_water_row()
 {

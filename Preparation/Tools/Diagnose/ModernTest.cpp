@@ -11271,9 +11271,9 @@ static void hd_switch_wiring()
 	 * the hooks of the ripple, the splash, the spray, the falls and the
 	 * tank ask the draw (HDLevelActive) and the motion and nothing else;
 	 * the classic water under the HD look is the diagnostic tool's
-	 * override, off by default and never set by the engine. The removed
-	 * option's name is searched for in two halves, so that a search of the
-	 * tree for it finds no code. */
+	 * override, off by default and never set by the engine. The searched
+	 * name is spelled in two halves, so that a search of the tree for it
+	 * finds no code. */
 	char* render = hd_switch_text("hd_render.cpp");
 
 	n = hd_switch_count(level, "tomb5.hd_" "water") +

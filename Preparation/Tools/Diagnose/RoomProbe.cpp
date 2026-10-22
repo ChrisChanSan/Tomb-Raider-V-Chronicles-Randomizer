@@ -587,7 +587,7 @@
  *                     the game builds them, 0 with the bodies, their wave
  *                     on the remaster's water art and no sheet and no
  *                     caustic under them - the classic water under the
- *                     HD look, a state the game no longer has; the tool
+ *                     HD look, a state the game does not have; the tool
  *                     asks for it through HDRenderWaterSheetsOverride,
  *                     which the game never calls. A room
  *                     counts as drawn HD by the engine's own test (a

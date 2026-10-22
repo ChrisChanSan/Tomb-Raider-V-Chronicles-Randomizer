@@ -32364,7 +32364,7 @@ followed by a letter, a digit, `_` or `.`; `hd_water.txt`, `hd_water_under.h` an
   ModernTest's key row, the life's gate and a check label (3 lines).
 
 Value lines per file, before and after: engine code and comments 59 in 14 files to 0;
-tools 11 to 0; the manuals 15 to 1 (the sentence that says an old value is ignored); this
+tools 11 to 0; the manuals 15 to 0; this
 record 151 to 150 before this entry and the ledger 6 to 6, all history but the
 chapter's list of settings.
 
@@ -32382,7 +32382,8 @@ the override before the build.
 **Decisions.** The registry value is ignored rather than deleted: the engine writes
 nothing to a player's registry for it. The log field stays (above). The suites search for
 the removed name in two halves, so that a search of the tree finds it only in this
-record, the ledger and the manual's one sentence.
+record and the ledger. The manual says that the game reads no registry value for the
+water, without the value's name.
 
 **Checked.** RoomProbe of `fa6b57e1` against the head's, every picture md5-compared:
 the six classic views (`-classicroom N -classiconly`, the HD look off) 6 of 6
@@ -32400,8 +32401,8 @@ by no engine file), MenuTest 44,938 to 44,931 (the water row family 13 to 7 chec
 of the row's absence; the Graphics table 16 to 15 rows, one order check fewer; the paging
 measured: two pages, eight and seven, the second starting at *Mono screen style*),
 InterpTest 754, LipsTest 299 with the lips' objects and 272 without; 0 failed. All nine
-tool builds exit 0. Between the first and the third commit MenuTest's row checks and
-one ModernTest check fail by design; each commit builds.
+tool builds exit 0. At the first commit alone 23 MenuTest checks (the row's) and one
+ModernTest check fail by design; from the second on all pass; each commit builds.
 
 **Left.** The game is not run; the play test sees the page and the water.
 

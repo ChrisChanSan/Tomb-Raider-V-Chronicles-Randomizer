@@ -11936,6 +11936,258 @@ static void hd_build_gate()
 	free(opts);
 }
 
+/* The words the project draws, in German (game\gameflow.cpp, CustomText's
+ * table), read out of the sources: every literal the F4 outfit window hands
+ * to CustomText has its row, the phrases of its head and shine rows have
+ * theirs but for a file's and a key's name, the F12 notice goes through it,
+ * and each German word stands in its row and fits its column on the game
+ * font's own widths (game\chardef.inc, added up as GetStringLength does). A
+ * label is held to "Kamerageschwindigkeit", the widest label of the table;
+ * a value to the value column, which game\menu_frame.cpp measures as 240
+ * pixels where "Mod+Stick R Down" is 215; a centred line to the screen. */
+struct caption_glyph
+{
+	float u, v;
+	short w, h, y;
+	unsigned char top, bottom;
+};
+
+static const caption_glyph caption_font[106] =
+{
+#include "../../../TOMB5 Code/TOMB5/game/chardef.inc"
+};
+
+static long caption_width(const char* s)
+{
+	long n = 0;
+
+	for (; *s; s++)
+	{
+		int c = (unsigned char)*s;
+
+		// An umlaut is drawn as its base letter with the accent over it.
+		if (c == 0xE4 || c == 0xF6 || c == 0xFC)
+			c = c == 0xE4 ? 'a' : c == 0xF6 ? 'o' : 'u';
+		else if (c == 0xC4 || c == 0xD6 || c == 0xDC)
+			c = c == 0xC4 ? 'A' : c == 0xD6 ? 'O' : 'U';
+
+		if (c == ' ')
+			n += 8;
+		else if (c < ' ')
+			n += caption_font[c + 74].w;
+		else if (c <= '~')
+			n += caption_font[c - '!'].w;
+		else
+			return 100000;	// a byte the font has no glyph for
+	}
+
+	return n;
+}
+
+// The row of `key` as text, from its brace to the brace that closes it.
+static bool caption_row(const char* flow, const char* key, char* row,
+	size_t size)
+{
+	char at[96];
+
+	snprintf(at, sizeof(at), "{ \"%s\",", key);
+
+	const char* p = flow ? strstr(flow, at) : 0;
+	const char* e = p ? strstr(p, "},") : 0;
+
+	if (!e || hd_switch_count(flow, at) != 1 || (size_t)(e - p) >= size)
+		return false;
+
+	memcpy(row, p, (size_t)(e - p));
+	row[e - p] = 0;
+	return true;
+}
+
+static void caption_rows()
+{
+	char* flow = hd_switch_text("../../game/gameflow.cpp");
+	char* outfit = hd_switch_text("hd_outfitmenu.cpp");
+	char* robe = hd_switch_text("hd_wardrobe.cpp");
+	char* sw = hd_switch_text("hd_switch.cpp");
+	char row[512];
+	char what[160];
+	int n;
+
+	ok(flow && outfit && robe && sw, "captions: the four files are read",
+		!!flow + !!outfit + !!robe + !!sw, 4);
+
+	enum { LABEL, VALUE, LINE, NOTICE };
+	struct word
+	{
+		const char* key;
+		const char* source;	// the German column as the table spells it
+		const char* german;	// and as the font draws it
+		int kind;
+	};
+	static const word words[] = {
+		{ "HD build", "\"HD-Aufbau\"", "HD-Aufbau", LABEL },
+		{ "Reflections", "\"Spiegelungen\"", "Spiegelungen", LABEL },
+		{ "Outfit", "\"Outfit\"", "Outfit", LINE },
+		{ "Level facts", "\"Levelvorgabe\"", "Levelvorgabe *", LABEL },
+		{ "the level and the run decide", "\"nach Level und Lauf\"",
+			"nach Level und Lauf", VALUE },
+		{ "Footsteps", "\"Schritte\"", "Schritte", LABEL },
+		{ "Head", "\"Kopf\"", "Kopf", LABEL },
+		{ "Shine", "\"Glanz\"", "Glanz", LABEL },
+		{ "Skin glow", "\"Hautglanz\"", "Hautglanz", LABEL },
+		{ "as the outfit says", "\"laut Outfit\"", "laut Outfit", VALUE },
+		{ "Bare", "\"Barfuss\"", "Barfuss", VALUE },
+		{ "Boots", "\"Stiefel\"", "Stiefel", VALUE },
+		{ "Bare - no second set in this level", "\"Barfuss - fehlt hier\"",
+			"Barfuss - fehlt hier", VALUE },
+		{ "Boots - no second set in this level", "\"Stiefel - fehlt hier\"",
+			"Stiefel - fehlt hier", VALUE },
+		{ "applies at the next level",
+			"\"gilt ab dem n\\xE4\" \"chsten Level\"",
+			"gilt ab dem n\xE4" "chsten Level", LINE },
+		{ "TR5 head", "\"TR5-Kopf\"", "TR5-Kopf", VALUE },
+		{ "TR5 hair", "\"TR5-Haar\"", "TR5-Haar", VALUE },
+		{ "own head", "\"eigener\"", "eigener", VALUE },
+		{ "measured", "\"gemessen\"", "gemessen", VALUE },
+		{ "the table", "\"Tabelle\"", "Tabelle", VALUE },
+		{ "the list", "\"Liste\"", "Liste", VALUE },
+		{ "the default", "\"Standard\"", "Standard", VALUE },
+		{ "HD is off", "\"HD ist aus\"", "HD ist aus", NOTICE },
+	};
+	const long label = caption_width("Kamerageschwindigkeit");
+	const long probe = caption_width("Mod+Stick R Down");
+
+	for (const word& w : words)
+	{
+		const bool have = caption_row(flow, w.key, row, sizeof(row));
+		const long width = caption_width(w.german);
+		bool fits;
+
+		snprintf(what, sizeof(what), "captions: \"%s\" has one row, "
+			"German in it", w.key);
+		ok(have && strstr(row, w.source) != 0, what, have, 1);
+
+		if (w.kind == LABEL)
+			fits = width <= label;
+		else if (w.kind == VALUE)
+			fits = width * 215 <= 240 * probe;
+		else if (w.kind == LINE)
+			fits = width * 215 <= 640 * probe;
+		else
+			fits = strlen(w.german) <= 11;
+
+		snprintf(what, sizeof(what), "captions: \"%s\" fits its column",
+			w.german);
+		ok(fits, what, width, w.kind == LABEL ? label : probe);
+	}
+
+	// Every literal the window hands to CustomText has its row.
+	for (const char* p = outfit ? strstr(outfit, "CustomText(") : 0; p;
+		p = strstr(p + 1, "CustomText("))
+	{
+		const char* q = p + 11;
+		int depth = 1;
+
+		for (; *q && depth; q++)
+		{
+			if (*q == '(')
+				depth++;
+			else if (*q == ')')
+				depth--;
+			else if (*q == '"')
+			{
+				const char* end = strchr(q + 1, '"');
+				char lit[96];
+
+				if (!end || end - q - 1 >= (long)sizeof(lit))
+					break;
+
+				memcpy(lit, q + 1, (size_t)(end - q - 1));
+				lit[end - q - 1] = 0;
+				snprintf(what, sizeof(what), "captions: F4's \"%s\" has a "
+					"row", lit);
+				ok(caption_row(flow, lit, row, sizeof(row)), what, 0, 1);
+				q = end;
+			}
+		}
+	}
+
+	// The head and shine phrases: through CustomText at every call, and a
+	// row for each word but the file's name and the key's.
+	n = hd_switch_count(outfit, "HDWardrobeHeadPhrase(");
+	ok(n == 1 && hd_switch_count(outfit, "CustomText(HDWardrobeHeadPhrase(")
+		== n, "captions: the head phrase goes through CustomText", n, 1);
+	n = hd_switch_count(outfit, "HDWardrobeFromWord(");
+	ok(n == 3 && hd_switch_count(outfit, "CustomText(HDWardrobeFromWord(")
+		== n, "captions: the three from-words go through CustomText", n, 3);
+
+	{
+		const char* fns[2] = { "const char* HDWardrobeHeadPhrase(int head)",
+			"const char* HDWardrobeFromWord(int from)" };
+
+		for (const char* fn : fns)
+		{
+			const char* p = robe ? strstr(robe, fn) : 0;
+			const char* end = p ? strstr(p, "\n}") : 0;
+
+			for (const char* r = p ? strstr(p, "return \"") : 0;
+				r && r < end; r = strstr(r + 1, "return \""))
+			{
+				const char* q = r + 8;
+				const char* e = strchr(q, '"');
+				char lit[64];
+
+				if (!e || e - q >= (long)sizeof(lit))
+					break;
+
+				memcpy(lit, q, (size_t)(e - q));
+				lit[e - q] = 0;
+
+				const bool name = !strcmp(lit, "outfit.txt") ||
+					!strcmp(lit, "origin");
+
+				snprintf(what, sizeof(what), "captions: the phrase \"%s\" %s",
+					lit, name ? "is a name, no row" : "has a row");
+				ok(caption_row(flow, lit, row, sizeof(row)) != name, what,
+					name, 0);
+			}
+		}
+	}
+
+	// The widest head value the window can build fits the value column.
+	{
+		const char* heads[3] = { "TR5-Kopf", "TR5-Haar", "eigener" };
+		const char* froms[7] = { "gemessen", "Tabelle", "outfit.txt",
+			"origin", "Liste", "Standard", 0 };
+		long widest = 0;
+
+		for (const char* h : heads)
+			for (int f = 0; froms[f]; f++)
+			{
+				char line[64];
+
+				snprintf(line, sizeof(line), "%s (%s)", h, froms[f]);
+
+				if (caption_width(line) > widest)
+					widest = caption_width(line);
+			}
+
+		ok(widest * 215 <= 240 * probe,
+			"captions: the widest German head value fits", widest, probe);
+	}
+
+	// The F12 notice: through CustomText, no raw literal left.
+	n = hd_switch_count(sw,
+		"strcpy(ammo_change_buf, CustomText(\"HD is off\"));");
+	ok(n == 1 && hd_switch_count(sw, "strcpy(ammo_change_buf, \"") == 0,
+		"captions: the F12 notice goes through CustomText", n, 1);
+
+	free(flow);
+	free(outfit);
+	free(robe);
+	free(sw);
+}
+
 // Where `what` first stands in `text` from `from` on, or -1.
 static long load_keep_at(const char* text, const char* from, const char* what)
 {
@@ -27655,6 +27907,7 @@ int main()
 	glass_hue();
 	glass_look();
 	hd_build_gate();
+	caption_rows();
 	load_keep();
 	load_mode();
 	load_brake();

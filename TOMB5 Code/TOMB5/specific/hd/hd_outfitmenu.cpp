@@ -407,8 +407,11 @@ void HDOutfitMenu()
 		{
 			const HDWardrobeEntry* e = entry_of(selection);
 
+			/* The phrases through CustomText, as every caption of this
+			 * window; the log lines that print them stay English. */
 			snprintf(buffer, sizeof(buffer), "%s (%s)",
-				HDWardrobeHeadPhrase(e->head), HDWardrobeFromWord(e->fromHead));
+				CustomText(HDWardrobeHeadPhrase(e->head)),
+				CustomText(HDWardrobeFromWord(e->fromHead)));
 			PrintString(phd_centerx + (phd_centerx >> 2), y, 6, buffer, 0);
 		}
 
@@ -438,7 +441,7 @@ void HDOutfitMenu()
 			const HDWardrobeEntry* e = entry_of(selection);
 
 			snprintf(buffer, sizeof(buffer), "%.2f/%.0f (%s)", e->sheen,
-				e->sheenPower, HDWardrobeFromWord(e->fromSheen));
+				e->sheenPower, CustomText(HDWardrobeFromWord(e->fromSheen)));
 			PrintString(phd_centerx + (phd_centerx >> 2), y, 6, buffer, 0);
 		}
 
@@ -454,7 +457,8 @@ void HDOutfitMenu()
 			const HDWardrobeEntry* e = entry_of(selection);
 
 			snprintf(buffer, sizeof(buffer), "%.2f/%.0f (%s)", e->skinSheen,
-				e->skinSheenPower, HDWardrobeFromWord(e->fromSkinSheen));
+				e->skinSheenPower,
+				CustomText(HDWardrobeFromWord(e->fromSkinSheen)));
 			PrintString(phd_centerx + (phd_centerx >> 2), y, 6, buffer, 0);
 		}
 

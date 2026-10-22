@@ -164,10 +164,12 @@ void HDSwitchInput(bool key, bool pad, bool live)
 	 * to switch until that row is on again and a level is loaded. Shown
 	 * where the switch line names the cause hd_build=0, in the caption the
 	 * ammo hotkeys use at the top of the screen (specific\input.cpp), for
-	 * the same 30 drawn frames; its buffer holds eleven letters. */
+	 * the same 30 drawn frames; its buffer holds eleven letters. The words
+	 * come through CustomText (game\gameflow.cpp), whose row for them is
+	 * ten letters or fewer in every language. */
 	if (what == HD_SWITCH_NOTHING && !tomb5.hd_build)
 	{
-		strcpy(ammo_change_buf, "HD is off");
+		strcpy(ammo_change_buf, CustomText("HD is off"));
 		ammo_change_timer = 30;
 	}
 

@@ -1457,6 +1457,13 @@ const char* CustomText(const char* engl)
 		{ "Shimmer",         "Shimmer",         "Schimmern",      "Shimmer",            "Shimmer" },
 		{ "Distance fog",    "Distance fog",    "Distanznebel",   "Distance fog",       "Distance fog" },
 		{ "UW Effect",       "UW Effect",       "Unterwasser-Effekt", "UW Effect",      "UW Effect" },
+		// The build gate above "HD textures" and the polished floors'
+		// mirror under "HD water"; their values are "on"/"off" of this
+		// table. "HD-Aufbau" names what the gate switches: whether a level
+		// is built with its HD data at all.
+		{ "HD build", "HD build", "HD-Aufbau", "HD build", "HD build" },
+		{ "Reflections", "Reflections", "Spiegelungen", "Reflections",
+			"Reflections" },
 		// Values, not row labels - "on/off", "Circle" etc. reused across many
 		// rows. "PSX"/"TR4"/"TR5" and "Original" are not here for the same
 		// reason as above: they fall back to English.
@@ -1477,6 +1484,62 @@ const char* CustomText(const char* engl)
 		{ "animated",        "animated",        "animiert",       "animated",           "animated" },
 		{ "on (restart)",    "on (restart)",    "an (Neustart)",  "on (restart)",       "on (restart)" },
 		{ "off (restart)",   "off (restart)",   "aus (Neustart)", "off (restart)",      "off (restart)" },
+		// The F4 outfit window (specific\hd\hd_outfitmenu.cpp): its title,
+		// the first row's name and value, the four labels under the list,
+		// their values, and the line under them. It draws in the options
+		// page's two columns, so a label is held to "Kamerageschwindigkeit"
+		// and a value to the value column "Mod+Stick R Down" was measured
+		// against (game\menu_frame.cpp, MenuValBinding): every German word
+		// below fits it. "Outfit" is the German word as well and stands
+		// here so that every word of the window has its row. "Barfuss" is
+		// written with "ss" because the font has no sharp s.
+		{ "Outfit", "Outfit", "Outfit", "Outfit", "Outfit" },
+		{ "Level facts", "Level facts", "Levelvorgabe", "Level facts",
+			"Level facts" },
+		{ "the level and the run decide", "the level and the run decide",
+			"nach Level und Lauf", "the level and the run decide",
+			"the level and the run decide" },
+		{ "Footsteps", "Footsteps", "Schritte", "Footsteps", "Footsteps" },
+		{ "Head", "Head", "Kopf", "Head", "Head" },
+		{ "Shine", "Shine", "Glanz", "Shine", "Shine" },
+		{ "Skin glow", "Skin glow", "Hautglanz", "Skin glow", "Skin glow" },
+		{ "as the outfit says", "as the outfit says", "laut Outfit",
+			"as the outfit says", "as the outfit says" },
+		{ "Bare", "Bare", "Barfuss", "Bare", "Bare" },
+		{ "Boots", "Boots", "Stiefel", "Boots", "Boots" },
+		{ "Bare - no second set in this level",
+			"Bare - no second set in this level", "Barfuss - fehlt hier",
+			"Bare - no second set in this level",
+			"Bare - no second set in this level" },
+		{ "Boots - no second set in this level",
+			"Boots - no second set in this level", "Stiefel - fehlt hier",
+			"Boots - no second set in this level",
+			"Boots - no second set in this level" },
+		// "n\xE4" "chsten" is split for the same reason as "berspringen"
+		// above: 'c' is a hex digit.
+		{ "applies at the next level", "applies at the next level",
+			"gilt ab dem n\xE4" "chsten Level", "applies at the next level",
+			"applies at the next level" },
+		// The head row's and the two shine rows' words, which the window
+		// asks HDWardrobeHeadPhrase and HDWardrobeFromWord for
+		// (specific\hd\hd_wardrobe.cpp) and passes through here; the log
+		// lines that print the same words stay English. The row's label
+		// already says "Kopf", so the outfit's own head is "eigener".
+		// "outfit.txt" and "origin" are a file's name and the key of a
+		// mod.txt line and fall back to themselves, as "PSX" does.
+		{ "TR5 head", "TR5 head", "TR5-Kopf", "TR5 head", "TR5 head" },
+		{ "TR5 hair", "TR5 hair", "TR5-Haar", "TR5 hair", "TR5 hair" },
+		{ "own head", "own head", "eigener", "own head", "own head" },
+		{ "measured", "measured", "gemessen", "measured", "measured" },
+		{ "the table", "the table", "Tabelle", "the table", "the table" },
+		{ "the list", "the list", "Liste", "the list", "the list" },
+		{ "the default", "the default", "Standard", "the default",
+			"the default" },
+		// The notice at the top of the screen when the HD/SD key has
+		// nothing to switch (specific\hd\hd_switch.cpp). It borrows the
+		// ammo hotkeys' caption, whose buffer holds eleven letters
+		// (specific\input.cpp); "HD ist aus" is ten.
+		{ "HD is off", "HD is off", "HD ist aus", "HD is off", "HD is off" },
 	};
 
 	long column;

@@ -56,7 +56,7 @@ file:
 | `TOMB5 Code/TOMB5/specific/hd/hd_object.cpp/.h` | `host/render/game_renderer.cpp`: the item bracket of `item_flush` and `draw_mesh`, `fill_unseen_joints`, `model.covered = ~0u` in `build_skinned_model` and the swap-key rule beside `item_flush` (TROne-main, copy of 2026-10-06, commit 75c4c843) | The **routing rules**, not the code: an item is drawn either wholly HD or wholly classic and never half of each; a node the model has no geometry for is drawn by NOBODY, not even classically (TROne tried the classic fallback there and took it out again after user reports of classic patches on HD bodies); a swapped mesh on a covered node loses to the model, so the model draws what the remaster drew; and a node the walk never reached keeps the last matrix it saw rather than collapsing to the origin. The seam itself is ours - TROne is a module beside a foreign engine and reads its brackets out of a stream of draw calls, this one rides on `DrawAnimatingItem`'s own node walk - and so are the skeleton test, the `mesh_bits` node ranges and the whole of the lighting. |
 | `TOMB5 Code/TOMB5/specific/hd/hd_object.cpp`, the inventory ring (`HDInvBegin` / `HDInvNode` / `HDInvEnd`) | `games/tr5/glue/hostglue_2d5.cpp`, `phd_PutPolygonsPickup`, and the `TRONE_LIGHT_EXACT_NODES` flag of `host/api/trone_host_api.h` (TROne-main, copy of 2026-10-06, commit 75c4c843) | The **idea**, not the code, and only half of it was kept: that the classic ring's off-centre projection - it moves the projection centre to each item's place on the screen - can be folded into the ITEM for the length of one draw, so that the HD path keeps one projection for the whole frame; and that the ring's light collapses to the ambient plus one sun taken from the ring's own brightness. TROne folds it into the item's own matrix as a **shear** of two rows against the third; this engine does **not**, because its shader takes the vertex normal through those same matrices and renormalises it, so a shear lights the ring by screen position (measured on the shader: 28 % too dark in the middle of the inventory row, 16 % too bright on the ammo row). The offset goes into the projection matrix instead, per draw call (`HDModelOffCentre`, `hd_model.cpp`), where the classic path has it and where a normal cannot reach it. The arithmetic was derived from TR5's own projection line (`aTransformLightClipMesh`, `specific/output.cpp`) and is written for this engine's matrices, not for TROne's float stack; the derivation stands in full over `HDInvNode` and over `HDModelOffCentre`. TROne also needs a flag to make the ring draw **exactly** the nodes it was given, because its default invents a matrix for an unseen node; ours takes `item->mesh_bits` as a mask and needs none. Not taken: TROne's scale term `f_mpersp/persp`, which corrects for a host projection built from the window's real width - TR5 computes `f_persp` from a 4:3 implied width whatever the window is, and the HD projection here is built from that very number, so the factor is exactly one (measured: `ModelProbe -ringcheck`, the bounding rectangle at the same **size** on 4:3 and on 16:9). |
 | `TOMB5 Code/TOMB5/specific/hd/hd_render.cpp`, the water marks | `host/render/game_renderer.cpp`, `hd_load` and `hd_water_mark` (TROne-main, copy of 2026-10-05) | The **road**, not the code: the remaster's geometry carries no water flag, so the classic level's own water vertices are matched to it by room-local position through a hash of the packed int16 x/y/z, per room, once at level build - and which group owns which vertex is recovered by walking the group's index runs. In its copy of 2026-10-05 TROne marked a vertex from the classic `RoomVertexMove` flag and from the room's underwater bit, one bit; in 75c4c843 it classes water, shore and underwater-dark from the engine's own split, keeps the hash for shore corners and matches water surfaces as horizontal planes. Ours marks it from `ROOMLET::nWVtx` and from the engine's own shimmer predicate, and carries three bits rather than one. |
-| `TOMB5 Code/TOMB5/specific/hd/hd_shader/hd_glow.hlsl` | TROne's rules for its glow material | The fade near the eye and the `|N.V|` term, translated to HLSL for Direct3D 9; not a line of the original is copied. The edge fade and the end fade are this project's own; the per-part choice between the file's normal and the face's normal is to be re-derived by this project, its class unclear until then. Origin ledger, entry 31. |
+| `TOMB5 Code/TOMB5/specific/hd/hd_shader/hd_glow.hlsl` | TROne's rules for its glow material | The fade near the eye and the `|N.V|` term, translated to HLSL for Direct3D 9; not a line of the original is copied. The edge fade and the end fade are this project's own, and so is the per-part choice between the file's normal and the face's normal, re-derived on this project's own measurement. Origin ledger, entries 31 and 475. |
 | `TOMB5 Code/TOMB5/specific/hd/hd_vis.cpp/.h` | `host/render/hd_visibility_tr2.inc`, its TR2 visibility prototype (the copy handed over on 2026-10-14) | The **approach**, not the code: the portal walk as the room list, every listed room's art drawn whole, a group listed by its art in a listed room's box, and the count of eight triangles that makes a guest. The walk, the tables and their other rules are this project's own. Origin ledger, entries 209 and 210. |
 | `TOMB5 Code/TOMB5/game/spotcam_math.h` and its use in `game/spotcam.cpp` | `games/tr5/src/game/spotcam.cpp` (`CalculateSpotCams`, its SNAPBACK branch) and `games/tr5/glue/hostglue_input5.cpp` (the copy handed over on 2026-10-14) | The **cause and the rules**, re-derived, no code: a skipped flyby ends a SNAPBACK sequence while the frame still stands at the camera before the last, so the last camera's own place and room are tested; and the census rule for the sequences that end short. The form and the words are this project's own. Origin ledger, entry 227. |
 | `TOMB5 Code/TOMB5/specific/hd/hd_trl.cpp/.h` | its porting notes for TR4 and its measurement of the faces | The **layout** of a face's `.TRL` track file and the deform of a face by the joints such a file moves (a frame's matrix times the inverse of the bind's), both found by TROne on the data files and measured again here on the installation's own files (`LipsTest`); which column drives which joint is read out of the face's own `.TRM`. Origin ledger, entries 10 and 34. |
@@ -430,21 +430,14 @@ from", carries the tables.
     the minification 1.8, 2.7 and 1.35 measured on this engine's output.
 31. **The glow's screen composition, near fade and `|N.V|` term.** TROne, its
     rules for its glow material. THIRD. Ours: RoomProbe on ANDREA2 room 131. The
-    normal the `|N.V|` term takes, the file's where it agrees with the face (222 of
-    253 parts, `BuildGlowParts`) and the face's elsewhere (`hd_glow.hlsl` 205 to
-    215), is TO BE RE-DERIVED BY THIS PROJECT: an earlier reader of TROne had a
-    passage on its list that a later provenance study classed as program-sourced
-    (the material-2 corner normal), and the second TROne check of 2026-10-22
-    could not classify it, because the region lies inside a shader string, which
-    this project's rule closes. The choice stands meanwhile on this project's own
-    data (the measurement of #179: `|N.f|` 0.91 to 1.00 on the interpolated
-    normal; 222 of 253 parts agreeing). The re-derivation is an A/B with RoomProbe
-    over the glow's 46 views, the face's normal everywhere against the shipped
-    per-part choice, which needs one switch: a face-normal-everywhere flag in
-    `HDRenderGlowOverride` (`hd_render.cpp` 5532, `hd_render.h` 1133) consulted in
-    `BuildGlowParts` (`hd_render.cpp` 3187), and a RoomProbe argument beside
-    `-glowps` (`RoomProbe.cpp` 19075). Class until then: THIRD for the near fade
-    and the `|N.V|` term as before; the normal choice UNCLEAR, to be re-derived.
+    normal the `|N.V|` term takes, the file's where it agrees with the faces and
+    the face's where more than half of a part's corners disagree (`BuildGlowParts`,
+    `HDGlowFaceNormal`; `hd_glow.hlsl` 205 to 215), is OWN, re-derived by this
+    project on its own A/B of 2026-10-22 (entry 475): the per-part choice against
+    the file's normal and the face's normal on every part, over the glow's 46
+    views. An earlier reader of TROne had a passage on its list that a later
+    provenance study classed as program-sourced (the material-2 corner normal), and
+    the second TROne check could not classify it; the choice does not rest on it.
 32. **Where a page is looked for: its own game, the sibling games, then
     `WHITE.DDS`; a missing page is white, never black.** TROne,
     `host/render/hd_pages.cpp` (`upload_shared`, `upload2`). THIRD and PLACE.
@@ -4554,6 +4547,29 @@ carries the tables.
     footstep mod with takes 1 and 2 refused - the bare entries on 48,610 bytes with
     3,686 of the level's own boots in them without the rule, on the bank's 22,394 bytes
     with it.
+475. **The glow's normal, per part** (`hd_render.h`, `HDGlowFaceNormal`;
+    `hd_render.cpp`, `BuildGlowParts`, `g_glow_normal`) - a glow part's `|N.V|`
+    takes the face's normal where more than half of its corners are more than the
+    agreement limit off their face, and the file's interpolated normal elsewhere.
+    OWN; DATA: the census over the fifteen levels, 253 parts, 208,476 corners,
+    53,046 disagreeing; 31 parts from 0.514 of their corners disagreeing up, the
+    other 222 at most 0.486, 190 of them none. The A/B of 2026-10-22, RoomProbe at
+    2560 x 1440 over the glow's 46 views under the per-part choice, the file's
+    normal everywhere and the face's everywhere. The aims are the measurement of
+    #179's (fewer clipped, white and hue-pinned pixels, then fewer steps over 40 of
+    255 at equal means); #179 set only pass marks, so the pairwise thresholds are
+    this project's own, set for this A/B before the verdict: a difference in the
+    three shares counts over 0.05 percentage points (a twentieth of #179's pass
+    mark of 1 per cent), then the fewer steps win over 5 per cent and by 2 or more,
+    at a mean no lower than 95 per cent of the other's; a tie or a marginal result
+    keeps the per-part choice. 46 ties in each pair, no setting winning a view; the
+    means over the views 0.067 per cent clipped under
+    all three, 494.15, 494.15 and 494.17 steps, 13.05, 13.02 and 13.12 of 255. On
+    the parts whose corners disagree the file's normal fades the card as if seen
+    edge-on (ANDREA3 room 36's view keeps 1,622 of 64,335 glow pixels).
+476. **RoomProbe `-glowface shipped|file|face`; ModernTest's `glow_normal`**
+    (`Preparation/Tools/Diagnose/`) - the normal forced on every glow part before
+    the level is built, for the A/B, and 8 checks of `HDGlowFaceNormal`. OWN.
 
 ## Credited, but not contained here
 

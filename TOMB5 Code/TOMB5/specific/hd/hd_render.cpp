@@ -3015,6 +3015,9 @@ namespace
 	/* HDRenderGlowOverride: material 2 drawn with the room pixel shader, its
 	 * draw calls not split by part. False in the engine. */
 	bool g_glow_no_shader = false;
+	/* HDRenderGlowOverride: the normal every glow part's |N.V| takes
+	 * (HDGlowFaceNormal). The per-part choice in the engine. */
+	int g_glow_normal = HD_GLOW_NORMAL_PART;
 
 	const float kGlowEdgeBelow = 0.9f;
 	const float kGlowEdgeShare = 0.15f;
@@ -3184,7 +3187,8 @@ namespace
 					continue;
 
 				glow.edge = (float)(glow.u1 - glow.u0) < kGlowEdgeBelow * 255.0f;
-				glow.face = glow.disagree * 2 > glow.corners;
+				glow.face = HDGlowFaceNormal(g_glow_normal, glow.disagree,
+					glow.corners);
 
 				glowOf[g][p] = (int)g_glow_parts.size();
 				g_glow_parts.push_back(glow);
@@ -5529,11 +5533,12 @@ void HDRenderAdditiveOnly(int material)
 	g_add_only = material >= 0 ? material : -1;
 }
 
-void HDRenderGlowOverride(int sum, int noAniso, int noShader)
+void HDRenderGlowOverride(int sum, int noAniso, int noShader, int normal)
 {
 	g_glow_sum = sum ? true : false;
 	g_glow_no_aniso = noAniso ? true : false;
 	g_glow_no_shader = noShader ? true : false;
+	g_glow_normal = normal;
 }
 
 int HDRenderGlowPartCount()

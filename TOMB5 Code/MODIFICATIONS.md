@@ -2630,11 +2630,15 @@ face normal elsewhere. Audit round B1 could not settle that this choice rests on
 project's data alone; it stays as built and is to be re-derived by this project on its own
 A/B (RoomProbe `-glowps` over the 46 views, the face normal everywhere against the
 per-part choice), and if the file normal does not win on those numbers, TROne's own face
-normal, credited, takes its place. The end fade takes the asset's whole extent, so that
-the parts of one shaft do not seam at the room borders, and only where the art is cut out
-of its page in v. The presets stay unless the 55 per cent rule raises one, never past 1
-per cent clipped; three are raised. The depth fade where a shaft meets a wall comes in a
-later round with a depth texture. No sun rays, no fine modulation, no face culling of
+normal, credited, takes its place. The entry "The glow's normal, re-derived" replaced that
+fallback by a decision from the numbers on all three settings: a forced normal takes the
+per-part choice's place only on a clear win over most of the views, and a tie or a
+marginal result keeps the per-part choice. Neither normal everywhere wins a view, and the
+per-part choice stands as this project's own. The end fade takes the asset's whole extent,
+so that the parts of one shaft do not seam at the room borders, and only where the art is
+cut out of its page in v. The presets stay unless the 55 per cent rule raises one, never
+past 1 per cent clipped; three are raised. The depth fade where a shaft meets a wall comes
+in a later round with a depth texture. No sun rays, no fine modulation, no face culling of
 material 2.
 
 Open: whether a haze or mist part is spared the near fade and `|N.V|`. A rule on parts
@@ -31862,14 +31866,11 @@ Not run: the build from the Visual Studio window, which skips the shader guard; 
 RoomProbe water census of the manual's water numbers; the check that TROne's commit
 `75c4c843` is public, which needs the network. Not measured: frame times at 1920 x 1080
 and the graphics card's own time; the figures in the manual and the README are those of
-2560 x 1440. Open from the decisions: the re-derivation of the glow's normal choice
-(F-018), an A/B with RoomProbe over the glow's 46 views, which needs one switch, a
-face-normal-everywhere flag in `HDRenderGlowOverride` consulted in `BuildGlowParts` and a
-RoomProbe argument beside `-glowps`. For rounds of their own: the stale gate comments of
-`hd_level.cpp`'s level load (about lines 6744 to 6756 and 6897), which only a gate round
-edits, and section 3's bullets for the other randomizer files changed since Beta 1.0,
-which need a documentation round. Line numbers in older entries refer to their own
-commit and were not refreshed.
+2560 x 1440. The glow's normal choice (F-018) is re-derived in #233. For rounds of
+their own: the stale gate comments of `hd_level.cpp`'s level load (about lines 6744 to
+6756 and 6897), which only a gate round edits, and section 3's bullets for the other
+randomizer files changed since Beta 1.0, which need a documentation round. Line numbers
+in older entries refer to their own commit and were not refreshed.
 
 **Checked.** `be.bat` exit 0, `release/PCtomb5.exe` built Oct 22 2026 00:37:40, MD5
 `d731ef5125172f5758e277688bfc9181`, with `Beta_3.0` in its version resource; `broom`,
@@ -31890,6 +31891,113 @@ within its file's width.
 shaders, tests and version), `8d39cd1c`, `d325666e`, `1da57ef4`, `c8c163d0`, `6ee2088e`,
 `c2bd3deb`, `00291c94` (documents) and this record, whose last commit writes the F-018
 verdicts of the second TROne check.
+
+### The glow's normal, re-derived (#233)
+2026-10-22
+
+**What.** The normal the glow's `|N.V|` term takes is now this project's own choice on
+its own measurement. The renderer keeps what it drew: per part, the file's normal where
+the file's normals agree with the faces and the face's normal where more than half of a
+part's corners disagree. What is new is a setting that forces either normal on every part,
+for the diagnostic tool alone, and the A/B it made possible over the glow's 46 views.
+Nothing that the game draws changes.
+
+**Why.** Audit round B1 left the choice "to be re-derived by this project": an earlier
+reader of TROne had a program-sourced passage on its list, and the second TROne check
+could not classify it. The audit's rule for such a chain is that it is re-derived on
+this project's own data, not re-tuned by taste, and the play test ordered the round as the
+glow A/B: a switch, the measurement over the 46 views, then the ledger on "derived by
+this project". The tool could not force either normal on every part: the choice is made
+per part when the level is built.
+
+**How.** `specific/hd/hd_render.h`: `HDGlowFaceNormal(mode, disagree, corners)`, the
+decision as a pure function, with `HD_GLOW_NORMAL_PART` (the per-part choice),
+`HD_GLOW_NORMAL_FILE` and `HD_GLOW_NORMAL_FACE`; `HDRenderGlowOverride` takes the mode as
+a fourth value. `specific/hd/hd_render.cpp`: `g_glow_normal` beside `g_glow_no_shader`,
+`HD_GLOW_NORMAL_PART` in the engine, which never calls the override; `BuildGlowParts`
+takes the part's choice from the function where it took `disagree * 2 > corners`, and
+counts the corners and the disagreeing ones as before. The shader and its constants are
+unchanged: `out[9]` still carries the part's choice to `gGlowMode.y`. Tools: RoomProbe
+`-glowface shipped|file|face`, set before the level is built and parsed in `-glowps`'s
+branch, because the switch chain stands at the compiler's limit of nested blocks;
+ModernTest's `glow_normal`, 8 checks.
+
+**Measured.** RoomProbe at 2560 x 1440 over the 46 views (the six views of the play test,
+the four of the measurement of #179 and one per sweep grouping), `-all -glow`, each view
+under the three settings out of one build; the metrics those of the glow's entries, over
+the glow-alone picture with the scene's depth (glow pixels: a channel over 8 of 255).
+- The census of `BuildGlowParts`, identical under all three settings: 253 parts over the
+  fifteen levels, 208,476 corners, 53,046 of them more than the agreement limit off their
+  face. 31 parts have more than half of their corners disagreeing, from 0.514 of them up;
+  the other 222 at most 0.486 (ANDY3 room 126), 190 of them none. The per-part choice
+  puts the face normal on exactly those 31: JOBY2's 21 lamp cones, ANDREA3's seven window
+  slabs of page 3232, ANDY2 room 34, ANDY3 room 150 and TITLE room 43.
+- The file normal everywhere draws other pixels than the shipped choice in 6 views, the
+  face normal everywhere in 41. On the parts whose file normals disagree, the file normal
+  fades the card as if it were seen edge-on: ANDREA3's slabs keep 36,515 of 79,263 glow
+  pixels in the room 20 view, 42,800 of 57,839 in room 34's and 1,622 of 64,335 in room
+  36's; ANDY2 room 34 30,927 of 41,515. JOBY2's room 17 view goes the other way, 13,613
+  glow pixels with the file normal against 67.
+
+The means over the 46 views:
+
+| setting | glow px | clipped % | white % | hue-pinned % | steps > 40 | steps > 20 | mean /255 |
+|---|---|---|---|---|---|---|---|
+| shipped | 274,315 | 0.067 | 0.027 | 0.000 | 494.15 | 1754.2 | 13.050 |
+| file everywhere | 271,760 | 0.067 | 0.027 | 0.000 | 494.15 | 1754.2 | 13.022 |
+| face everywhere | 275,335 | 0.067 | 0.027 | 0.000 | 494.17 | 1792.3 | 13.116 |
+
+- RICH1 room 3's column profile (the glow picture's mean per image column across the
+  shaft): from the corridor, largest step between neighbouring columns 0.90 of 255 with
+  the shipped choice and 0.54 with the face normal, roughness (the summed second
+  difference over the mean) 11.3 and 10.1; in the sweep view 0.70 and 0.45, but roughness
+  9.3 and 11.4. The shaft's parts agree, so the file normal everywhere is the shipped
+  picture there.
+
+**The rule from the data.** The aims are the ones the measurement of #179 set for the
+glow: fewer clipped, white and hue-pinned pixels, and fewer steps over 40 of 255 at equal
+means. That measurement set pass marks only, so the pairwise thresholds are this project's
+own, written down for this A/B before the verdict. Per view and pair of settings, the
+lower sum of the three shares wins when the sums differ by more than 0.05 percentage
+points (a twentieth of the pass mark of 1 per cent); else the fewer steps win when they
+differ by more than 5 per cent and by 2 or more, and only if the winner's mean is at least
+95 per cent of the loser's; else the view is a tie. A forced normal replaces the per-part
+choice only if it wins clearly, on most of the views; a tie or a marginal result keeps the
+per-part choice. This decision replaces the audit's interim fallback, under which TROne's
+face normal would have taken the choice's place unless the file normal everywhere won.
+Applied: all 46 views are ties in all three pairs, and no setting wins a view. The same
+rule with steps over 20 of 255 in place of 40, as a check only: the shipped choice wins
+JOBY5's two sea views looking up against the face normal everywhere and loses ANDREA1's
+haze view, 43 ties. So neither forced normal wins clearly - a marginal result - and the
+per-part choice stands: it is the census's own split, the face normal exactly where the
+file's normals do not describe the card, and the file normal, which the renderer
+interpolates across the card, everywhere else.
+
+**Decisions.** The per-part choice stays as built, now this project's own and re-derived
+on its own A/B; nothing in the shipped output changes. The forced settings stay in the
+tool for the next measurement.
+
+**Checked.** With the setting unset all 276 pictures of the 46 views (six each: full,
+opaque, alpha, additive, glow, glow without depth) are md5-identical, decoded pixels, to
+the base's (`5b35ee49`), and the tool's `glow:` and `glow part:` lines are identical.
+`hd_build` 0 and `hd_enable` 0 are not touched: the setting is read only in
+`BuildGlowParts`, reached behind `HDEnabled`, and only the tool sets it. The face
+setting run again on 18 views drew 108 of 108 pictures identical. ModernTest 16,140 to
+16,148 checks, MenuTest 44,917, InterpTest 754 with the player's `ANDREA1.TRC`, LipsTest
+299 with the `.OBJ` folder and 272 without (the cutseq file named by hand), 0 failed each,
+at the base and at the head. `be`, `broom`, `btrg`, `bmodel`, `bmap`, `bmt`, `bmenu`,
+`bit` and `blips` exit 0. The per-view table, the census and the profiles are in the
+round's work folder.
+
+**Left.** The glow is now faint enough that steps over 40 of 255 occur in 9 of the 46
+views only, and no setting moves them by more than one step in any of them, so the
+criterion separates little at the shipped strength; a stronger glow would need its own
+measurement. JOBY2's lamp cones keep the face normal and show 67 glow pixels in the room
+17 view; whether they should show more is a question for the play test, not for this rule.
+The game is not run; nothing in it changes.
+
+**Commits.** `fce7d89f` (the setting, the tool and the checks), `08f13011` (this record)
+and the record's correction after the proof.
 
 ## 3. Randomizer changes since Beta 1.0
 
@@ -32143,3 +32251,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #230 | The installation gate: the HD build row and the TR3 sources (#230) |
 | #231 | Audit round B1 (#231) |
 | #232 | Lara's footstep follows the draw and her outfit, and nobody else's does (#232) |
+| #233 | The glow's normal, re-derived (#233) |

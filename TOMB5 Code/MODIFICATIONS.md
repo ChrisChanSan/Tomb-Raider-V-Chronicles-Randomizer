@@ -29169,26 +29169,25 @@ with a Cyrillic, a CJK and a Latin-1 ("Tomb Über") name:
 | no override, this machine's Steam | both roots found | the same roots and the same notes, line for line |
 | the root the search now finds in a library with a Latin-1 name, walked by the wardrobe (`4\ITEM`: an ASCII and a Cyrillic outfit file) and by the classic object reader (`3\DATA`: `JUNGLE.TR2`) | both readers throw `system_error` | the wardrobe lists the ASCII outfit and passes over the Cyrillic one; the reader finds `GUN_OPTION` in `JUNGLE.TR2`; the same tree under an ASCII name: the reader's line the base's, the base's wardrobe walk still throwing on the Cyrillic file name |
 
-The second Mods row is a finding of this round: the scan kept its paths in the code
-page (`path::string()`) and asked the file system about them through `u8path`, which
-throws on any byte that is not UTF-8, so a German umlaut in a mod's folder name ended
-the game at the first level load - with `hd_build` 0 as well, since the sound bank
-chain scans the Mods folder first. The last row came out of the round's check of its
-own work: the base's search passed such a library over, and once it found the root, the
-wardrobe's walk (`hd_wardrobe.cpp`, `add_from_install`) and the classic reader's
-(`hd_classic.cpp`, `HDClassicRead`) read its code-page spelling back as UTF-8 through
-`u8path`, which throws on it, with no catch above them - the end of the game at the
-first HD level build. An override path with such a letter reached the same throw at
-the base; the wardrobe also read each file name through `path::string()`, which threw
-on a Cyrillic one. The price of the HD build for a player who never
-presses F12, from the play test's log (eight levels and the title): 1.25 to 4.78 s more
-per level load, median 2.8 s; 232 to 475 MiB of texture pages and 10 to 62 MiB of room
-buffers on the card; 7 to 17 MiB of managed model buffers. On the randomizer side, with
-the Remastered folder `3` as the TR3 path, the GUI greyed the guests but its planner
-kept them (it got the raw path), and every level that drew one became an ERROR row
-"(sounds): MAIN.SFX not readable"; the command line ended with exit code 1 (Andrea1,
-seed 380, `mix cross allsanity 8 weapons outfit-tr3`: "Raptor (sounds): MAIN.SFX not
-readable").
+The second Mods row is a finding of this round: the scan kept its paths in the code page
+(`path::string()`) and asked the file system about them through `u8path`, which throws on
+any byte that is not UTF-8, so a German umlaut in a mod's folder name ended the game at
+the first level load - with `hd_build` 0 as well, since the sound bank chain scans the
+Mods folder first. The last row came out of the round's check of its own work: the base's
+search passed such a library over, and once it found the root, the wardrobe's walk
+(`hd_wardrobe.cpp`, `add_from_install`) and the classic reader's (`hd_classic.cpp`,
+`HDClassicRead`) read its code-page spelling back as UTF-8 through `u8path`, which throws
+on it, with no catch above them - the end of the game at the first HD level build. An
+override path with such a letter reached the same throw at the base; the wardrobe also
+read each file name through `path::string()`, which threw on a Cyrillic one. The price of
+the HD build for a player who never presses F12, from the play test's log (nine loads, the
+title twice and seven levels): 1.25 to 4.78 s more per level load, median 3.2 s; 232 to
+475 MiB of texture pages and 10 to 62 MiB of room buffers on the card; 7 to 17 MiB of
+managed model buffers. On the randomizer side, with the Remastered folder `3` as the TR3
+path, the GUI greyed the guests but its planner kept them (it got the raw path), and every
+level that drew one became an ERROR row "(sounds): MAIN.SFX not readable"; the command
+line ended with exit code 1 (Andrea1, seed 380, `mix cross allsanity 8 weapons
+outfit-tr3`: "Raptor (sounds): MAIN.SFX not readable").
 
 **The rule from the data.** A name is compared wide and turned into the code page only
 where a narrow file call needs it, and only when it survives the trip there and back

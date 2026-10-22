@@ -4433,13 +4433,12 @@ carries the tables.
     once that chain ran.
 453. **The HD build row and its next value** (`game/menu_frame.cpp`, `MenuValHdBuild`,
     `MenuStepHdBuild`; `tomb5/tomb5.cpp` and `.h`, `tomb5_hd_build_next`;
-    `specific/file.cpp`, the top of `S_LoadLevelFile`) - on and off, default on, above
-    *HD textures*; the gate takes the row's value at the next load, before
-    `HDLevelKeyEarly` asks it, and the save writes the row's value as `hd_build`. OWN;
-    DATA: the price the manuals and the README give, from the play test's log (eight
-    levels and the title, measurement M4): 1.25 to 4.78 s per load, median 2.8 s,
-    232 to 475 MiB of pages and 10 to 62 MiB of room buffers on the card, 7 to 17 MiB of
-    model buffers.
+    `specific/file.cpp`, the top of `S_LoadLevelFile`) - on and off, default on, above *HD
+    textures*; the gate takes the row's value at the next load, before `HDLevelKeyEarly`
+    asks it, and the save writes the row's value as `hd_build`. OWN; DATA: the price the
+    manuals and the README give, from the play test's log (nine loads, the title twice and
+    seven levels, measurement M4): 1.25 to 4.78 s per load, median 3.2 s, 232 to 475 MiB
+    of pages and 10 to 62 MiB of room buffers on the card, 7 to 17 MiB of model buffers.
 454. **"HD is off" in the ammo caption** (`hd_switch.cpp`, `HDSwitchInput`) - a press
     with the gate off and nothing to switch shows it for 30 drawn frames. OWN: the
     words and the condition, the switch line's `hd_build=0` cause, in the caption the

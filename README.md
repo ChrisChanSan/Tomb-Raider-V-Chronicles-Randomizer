@@ -795,15 +795,15 @@ reads them where they lie, on your own machine, while the game runs. Without
 them the game runs exactly as the original did, with the classic art, the
 classic sound bank and the classic 640x480 loading screens.
 
-The HD art is built at every level load whether you look at it or not, so
-that F12 switches between the classic and the HD look at once. That has a
-price, measured over eight levels and the title: **1.25 to 4.78 seconds more
-per level load** (2.8 in the middle), 232 to 475 MiB of texture pages and 10 to
-62 MiB of room buffers on the graphics card, and 7 to 17 MiB of model buffers in
-the program. If you play classic anyway, switch **Options → Graphics → HD build**
-off: from the next level load on nothing of the HD art is built, the loads are
-as short as without the Remaster, and F12 says *HD is off*. Switch it on again
-and the next level load builds it again.
+The HD art is built at every level load whether you look at it or not, so that
+F12 switches between the classic and the HD look at once. That has a price,
+measured over nine loads, the title twice and seven levels: **1.25 to 4.78
+seconds more per level load** (3.2 in the middle), 232 to 475 MiB of texture
+pages and 10 to 62 MiB of room buffers on the graphics card, and 7 to 17 MiB of
+model buffers in the program. If you play classic anyway, switch **Options →
+Graphics → HD build** off: from the next level load on nothing of the HD art is
+built, the loads are as short as without the Remaster, and F12 says *HD is off*.
+Switch it on again and the next level load builds it again.
 
 The four Tomb Raider III guests (T-Rex, raptor, compy, vulture) likewise need
 your own **Tomb Raider III** installation - the original release, or the game

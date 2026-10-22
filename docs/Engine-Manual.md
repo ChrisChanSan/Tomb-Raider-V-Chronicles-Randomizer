@@ -478,6 +478,13 @@ prints the same buttons as numbers, so read *Touchpad* as `Joy 14`, R1 as
 Square as `Joy 2` / `Joy 3` / `Joy 4` / `Joy 1`. Whatever the page calls them,
 the binding page shows you the name your own pad's page uses.
 
+With the **Language** row on German the shapes, the directions and the words among the
+names are German: *Quadrat*, *Kreuz*, *Kreis* and *Dreieck*, *PS-Taste*, *Ansicht* and
+*Menü* for the Xbox pad's View and Menu buttons, *Stick R Hoch*, *Stick R Runter*, *Stick
+R Links* and *Stick R Rechts*, and the same four for the *D-Pad*. Letters and numbers
+(*L2*, *RT*, *A*), the `Joy` numbers and the names printed on the pad (*Share*,
+*Options*, *Touchpad*) stay as they are in every language.
+
 With the Modifier unbound — every One-key pad, and the two XInput-ordered
 Separate pages — no chord can ever fire, and every plain role reads exactly
 as it would with no chords at all.
@@ -730,6 +737,9 @@ below for the six settings on that tab, and the sections after it for the
 never turns up while paging through settings and no paging arrows are drawn
 across the names. It lists names only; the web addresses
 live in `README.txt`, because the game font cannot draw every character.
+With the **Language** row on German its title and headings are German - *Credits*,
+*TOMB5-Engine*, *TR3-Gegner aus tomb3*, *Randomizer und Windows-11-Port*, *Mitwirkende*,
+*Werkzeuge und Bibliotheken*; the names stay as they are.
 
 ---
 
@@ -820,6 +830,10 @@ chords** above for binding one of them to a pad chord.
 - **Ammotype hotkeys**: the option governs **only** the ammunition cycling -
   pressing a weapon's number again while it is already out. Drawing a weapon
   and the medipacks work whether it is on or off.
+  The caption a cycle shows at the top of the screen - *Normal* or *Wideshot*
+  for the shotgun, *Burst*, *Sniper* or *Rapid* for the HK - reads *Normal*,
+  *Breitschuss*, *Salve*, *Einzelfeuer* and *Dauerfeuer* with the **Language**
+  row on German.
 
   **One key per weapon, the same key in every level:** 1 pistols,
   2 shotgun, 3 uzis, 4 revolver, 5 HK, 6 crossbow (the Grappling Gun in
@@ -2718,7 +2732,7 @@ values, in the same key as every other setting
 | Value | Type | Meaning |
 |---|---|---|
 | `hd_enable` | DWORD | The options row *HD textures* writes this, and so does the *HD / SD* key (F12): it is the **look**, `1` HD and `0` classic, of the world and the interface alike (**The HD/SD switch** below says what it switches). `0` is the default, so a new game starts classic. The row and the key are one value: a press of F12 turns the row, the row turns what F12 would, and both are saved at once, so the next game starts as you left it. It decides nothing about what is loaded - that is `hd_build`. |
-| `hd_build` | DWORD | The options row *HD build* (German *HD-Aufbau*; Graphics, right above *HD textures*) writes this: *on* `1`, *off* `0`, any other value set by hand shows as *on* and stays as it is until the row is stepped. A step takes effect at the **next level load** - the level on screen keeps what it was loaded with, built or not, until you leave it or load a savegame - and is saved at once. Whether the HD art is **built** at all, `1` by default: with `1`, every level's HD art is read and built at its load whenever your installation is found, whatever `hd_enable` says, so the switch between the two looks is always ready - at the price of the HD load's time and memory even while you play classic (measured over nine loads, the title twice and seven levels: 1.25 to 4.78 seconds more per level load, 3.2 seconds in the middle, 232 to 475 MiB of texture pages and 10 to 62 MiB of room buffers on the card, 7 to 17 MiB of model buffers in the program). The footsteps follow the look and not this value: drawn classic, Lara's steps are the level's own - a sound mod's, if one replaces them - as with `0` (see **Footsteps**). Set it to `0` and nothing of the HD art is opened or built: the loads are as short as without the Remaster, the engine is the classic one, and the *HD textures* row and F12 have nothing to switch - F12 shows *HD is off* (in German *HD ist aus*) at the top of the screen for a second instead. The HD font, once drawn in a session, stays on screen after the row turns the build off while *HD textures* is on, until the game is restarted. A level left with `1` gives its HD data back at the next load, whatever this says. One HD-adjacent thing never asks either value: the 44.1 kHz sound bank, which is opened out of your remaster installation in any case - see **HQ sounds** - and whose search also reads `hd_install` and `hd_install_tr3` below and walks your Steam libraries. Written into the registry with its default the first time the game reads its settings. |
+| `hd_build` | DWORD | The options row *HD build* (German *HD-Installation*; Graphics, right above *HD textures*) writes this: *on* `1`, *off* `0`, any other value set by hand shows as *on* and stays as it is until the row is stepped. A step takes effect at the **next level load** - the level on screen keeps what it was loaded with, built or not, until you leave it or load a savegame - and is saved at once. Whether the HD art is **built** at all, `1` by default: with `1`, every level's HD art is read and built at its load whenever your installation is found, whatever `hd_enable` says, so the switch between the two looks is always ready - at the price of the HD load's time and memory even while you play classic (measured over nine loads, the title twice and seven levels: 1.25 to 4.78 seconds more per level load, 3.2 seconds in the middle, 232 to 475 MiB of texture pages and 10 to 62 MiB of room buffers on the card, 7 to 17 MiB of model buffers in the program). The footsteps follow the look and not this value: drawn classic, Lara's steps are the level's own - a sound mod's, if one replaces them - as with `0` (see **Footsteps**). Set it to `0` and nothing of the HD art is opened or built: the loads are as short as without the Remaster, the engine is the classic one, and the *HD textures* row and F12 have nothing to switch - F12 shows *HD is off* (in German *HD ist aus*) at the top of the screen for a second instead. The HD font, once drawn in a session, stays on screen after the row turns the build off while *HD textures* is on, until the game is restarted. A level left with `1` gives its HD data back at the next load, whatever this says. One HD-adjacent thing never asks either value: the 44.1 kHz sound bank, which is opened out of your remaster installation in any case - see **HQ sounds** - and whose search also reads `hd_install` and `hd_install_tr3` below and walks your Steam libraries. Written into the registry with its default the first time the game reads its settings. |
 | `hd_objects` | DWORD | HD models for the objects **and for Lara**, `1` by default. There is no options row for it: it is not a matter of taste but a way back if one level's models ever go wrong. Set it to `0` and the rooms stay HD while every object and Lara draw the classic way. Lara has no key of her own on purpose — she is a model like the rest of them and a level's models are one buffer, so a second switch would only be a second way to end up with half a picture. Changes nothing on screen while `hd_enable` is off; with `hd_build` on, `0` still keeps the models out of the load. |
 | `hd_motion` | DWORD | What **moves** in an HD room, `1` by default: water and waterfalls scrolling, ivy, banners, grass and kelp swaying in the wind, and a small ripple over a water surface, the slow travel of light along a shaft or a lamp cone, the four-page animated pictures (the twenty-seven flipbook surfaces of five levels), the longer loops of fourteen to thirty pages (the turning fan shadows of the 13th Floor, the monitor wall of the Security Breach cutscene, the flames, smoke and rain rings - 168 surfaces in nine levels; set to `0` they show their first page) and the ripple over the Remaster's own still-water sheets — in short, everything this chapter says stops with `hd_motion`. All of it comes from the Remaster's own art — the artists marked which surfaces flow and which vertices bend, and this reads those marks. Like `hd_objects` it has no options row and is a way back rather than a taste: set it to `0` and an HD room stands perfectly still. Does nothing at all while `hd_enable` is off. |
 | `hd_reflect` | DWORD | The **gloss** of metal, marble, ice and glass in an HD room, `1` by default: a highlight from the level's lamps where they hang - worked out once per level for every spot, so it stays by its lamp and runs on across doorways - and a reflection of the surface's own light that grows the flatter you look at it, on floors, walls, crates and ducts alike, never more than two and a half times the surface's own lit colour and never to white. Not a mirror: nothing is drawn twice. Which surfaces shine, in this order: the gloss the Remaster's artists gave a surface themselves (its own strength); your file `hd_gloss.txt`; a list of texture pages built into the engine; and the pages that lie on floors whose footsteps sound of metal, marble or ice - in every room that wears them. RICH2's lobby pages and every see-through floor stay exactly as they were. **`hd_gloss.txt`** lies beside the executable, where `SCRIPT.DAT` and `Balance.txt` are, and is read at every level load, so a change shows at the next one. One texture page per line: the page number, a class (`metal`, `marble`, `ice`, `glass` or `custom`) and optionally strength (above 0, up to 1), exponent (1 to 255, the tighter the highlight the higher) and F0 (0 to 1, how much it reflects face on), where `-` or leaving a number out takes the class's own; a `custom` page names all three. `-<page>` takes a page out (a surface the artists gave a gloss keeps it), `#` starts a comment, and a line that cannot be read is counted and skipped; a file saved as UTF-8 with or without a byte order mark reads the same - for example `140 metal 0.6 32` or `-3149 # the girders stay matt`. The page numbers of a room are in the `GLOSSLOG` lines of a `-log` run. Like `hd_motion` it has no options row and is a way back rather than a taste; set it to `0` and the picture is the one without any gloss. Does nothing while `hd_enable` is off. |
@@ -4378,9 +4392,9 @@ Under the list stand four rows about the **highlighted** body. *Footsteps* is
 the only one of them you can change; the other three are facts, and they are
 there because a value you wrote yourself somewhere else is worth nothing if
 the game will not say whether it arrived — each ends with the word for which
-tier answered (*the default*, *measured*, *the table*, *outfit.txt*, *origin*,
-*the list*). With the **Language** row on German the window speaks German:
-*Outfit*, *Levelvorgabe* with *nach Level und Lauf*, *Schritte* (*Stiefel*,
+tier answered (*default*, *measured*, *table*, *outfit.txt*, *origin*,
+*list*). With the **Language** row on German the window speaks German:
+*Outfit*, *Leveleigen* with *nach Level und Lauf*, *Schritte* (*Stiefel*,
 *Barfuss*, *Stiefel - fehlt hier*, *Barfuss - fehlt hier*), *Kopf* (*eigener*,
 *TR5*, *mit Zopf*), *Glanz*, *Hautglanz*, *laut Outfit*, *gilt ab dem nächsten
 Level*, and the tiers *Standard*, *gemessen*, *Tabelle*, *outfit.txt*,
@@ -4389,7 +4403,7 @@ Level*, and the tiers *Standard*, *gemessen*, *Tabelle*, *outfit.txt*,
 | row | says |
 |---|---|
 | *Footsteps* | **Boots** or **Bare** for this outfit — left and right change it. On *Level facts* there is nothing to hang the choice on, so it reads *as the outfit says* and the keys do nothing. If the level has no room for a second set of recordings, or nothing to take one from, the row is greyed and says so. |
-| *Head* | whose head this body wears — *own head*, *TR5 head* or *TR5 hair*. A body drawn for Tomb Raider I-III carries headgear and no hair, so it is given TR5's instead; the row says so before you pick it. |
+| *Head* | whose head this body wears — *own*, *TR5* or *TR5 hair*. A body drawn for Tomb Raider I-III carries headgear and no hair, so it is given TR5's instead; the row says so before you pick it. |
 | *Shine* | the body's own specular strength and its exponent. |
 | *Skin glow* | the same two numbers for Lara's **skin** — her face, her neck, her bare hands. |
 

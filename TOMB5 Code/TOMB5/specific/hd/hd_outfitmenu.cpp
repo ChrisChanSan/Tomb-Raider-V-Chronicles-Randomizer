@@ -108,6 +108,20 @@ namespace
 		return HDModsName(e->mod);
 	}
 
+	/* The head row's word: HDWardrobeHeadPhrase's without "head", which the
+	 * row's label already says, so that the word and its tier in brackets
+	 * stay inside the value column at every screen width. The log lines keep
+	 * the phrase. */
+	const char* head_word(int head)
+	{
+		switch (head)
+		{
+		case HD_WARDROBE_HEAD_TR5: return "TR5";
+		case HD_WARDROBE_HEAD_HAIR: return "TR5 hair";
+		default: return "own";
+		}
+	}
+
 	// Which row the registry's key is on, or 0 - "Level facts" - when there
 	// is none or this machine's scan has not got it.
 	int row_of_key(const char* key)
@@ -349,7 +363,7 @@ void HDOutfitMenu()
 				PrintString(phd_centerx >> 2, y, colour, buffer, 0);
 				PrintString(phd_centerx + (phd_centerx >> 2), y,
 					row == selection ? 1 : 6,
-					(char*)CustomText("the level and the run decide"), 0);
+					(char*)CustomText("level and run decide"), 0);
 			}
 			else
 			{
@@ -378,8 +392,8 @@ void HDOutfitMenu()
 				(char*)CustomText("as the outfit says"), 0);
 		else if (!HDFeetAvailable())
 			PrintString(phd_centerx + (phd_centerx >> 2), y, 3,
-				(char*)CustomText(bare ? "Bare - no second set in this level"
-					: "Boots - no second set in this level"), 0);
+				(char*)CustomText(bare ? "Bare - no 2nd set"
+					: "Boots - no 2nd set"), 0);
 		else
 			PrintString(phd_centerx + (phd_centerx >> 2), y, 6,
 				(char*)CustomText(bare ? "Bare" : "Boots"), 0);
@@ -407,28 +421,29 @@ void HDOutfitMenu()
 		{
 			const HDWardrobeEntry* e = entry_of(selection);
 
-			/* The phrases through CustomText, as every caption of this
-			 * window; the log lines that print them stay English. */
+			/* The words through CustomText, as every caption of this
+			 * window; the log lines that print the phrases stay English. */
 			snprintf(buffer, sizeof(buffer), "%s (%s)",
-				CustomText(HDWardrobeHeadPhrase(e->head)),
-				CustomText(HDWardrobeFromWord(e->fromHead)));
+				CustomText(head_word(e->head)),
+				CustomText(HDWardrobeFromTag(e->fromHead)));
 			PrintString(phd_centerx + (phd_centerx >> 2), y, 6, buffer, 0);
 		}
 
 		/* What the body is made of: two more facts of the highlighted body
 		 * and its neighbours' opposite in the same way the head row is -
 		 * nothing in this menu changes them. They stand here because they
-		 * are the two the player can change himself, in a list file, and a
-		 * value he has written is worth nothing if the game will not say
-		 * whether it arrived, so the clause after each says which tier
-		 * answered, and "the list" is the one that means his own line was
-		 * read. Shine is the clothes, glow is her skin.
+		 * are the two the player can change in a list file, and a value
+		 * written there is worth nothing if the game will not say whether
+		 * it arrived, so the clause after each says which tier answered,
+		 * and "list" is the one that means the player's own line was read.
+		 * Shine is the clothes, glow is her skin.
 		 *
-		 * The phrase form, HDWardrobeFromWord, is used rather than the
-		 * one-word tag, the same the head row above uses, so that one tier
-		 * does not read as two different things across the three rows of
-		 * one window. The tag belongs where a column or a log field is
-		 * counted in characters. */
+		 * The one-word tag, HDWardrobeFromTag, is used, the same the head
+		 * row above uses, so that one tier does not read as two different
+		 * things across the three rows of one window. It is the tag and not
+		 * the phrase because the value column is counted: "own (outfit.txt)"
+		 * fits it at every screen width, "own head (the default)" would
+		 * not. */
 		y += font_height;
 
 		PrintString(phd_centerx >> 2, y, 6, (char*)CustomText("Shine"), 0);
@@ -441,7 +456,7 @@ void HDOutfitMenu()
 			const HDWardrobeEntry* e = entry_of(selection);
 
 			snprintf(buffer, sizeof(buffer), "%.2f/%.0f (%s)", e->sheen,
-				e->sheenPower, CustomText(HDWardrobeFromWord(e->fromSheen)));
+				e->sheenPower, CustomText(HDWardrobeFromTag(e->fromSheen)));
 			PrintString(phd_centerx + (phd_centerx >> 2), y, 6, buffer, 0);
 		}
 
@@ -458,7 +473,7 @@ void HDOutfitMenu()
 
 			snprintf(buffer, sizeof(buffer), "%.2f/%.0f (%s)", e->skinSheen,
 				e->skinSheenPower,
-				CustomText(HDWardrobeFromWord(e->fromSkinSheen)));
+				CustomText(HDWardrobeFromTag(e->fromSkinSheen)));
 			PrintString(phd_centerx + (phd_centerx >> 2), y, 6, buffer, 0);
 		}
 

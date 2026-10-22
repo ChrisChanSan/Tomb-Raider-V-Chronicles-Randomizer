@@ -1457,9 +1457,10 @@ const char* CustomText(const char* engl)
 		{ "UW Effect",       "UW Effect",       "Unterwasser-Effekt", "UW Effect",      "UW Effect" },
 		// The build gate above "HD textures" and the polished floors'
 		// mirror under "Body physics"; their values are "on"/"off" of this
-		// table. "HD-Aufbau" names what the gate switches: whether a level
-		// is built with its HD data at all.
-		{ "HD build", "HD build", "HD-Aufbau", "HD build", "HD build" },
+		// table. "HD-Installation" names what the gate switches: whether a
+		// level is built with the HD data of the installation at all.
+		{ "HD build", "HD build", "HD-Installation", "HD build",
+			"HD build" },
 		{ "Reflections", "Reflections", "Spiegelungen", "Reflections",
 			"Reflections" },
 		// Values, not row labels - "on/off", "Circle" etc. reused across many
@@ -1491,15 +1492,17 @@ const char* CustomText(const char* engl)
 		// pixels wide at most and a space W / 80 (game\text.cpp, InitFont
 		// and GetStringLength), so a value whose glyph units plus 6.4 per
 		// space stay at or under 192 fits at every screen width W: every
-		// German value below does. "Outfit" is the German word as well and
-		// stands here so that every word of the window has its row.
-		// "Barfuss" is written with "ss" because the font has no sharp s.
+		// German value below does, and so does every English one: the
+		// window's own English words are chosen to fit as well. "Outfit" is
+		// the German word as well and stands here so that every word of the
+		// window has its row. "Barfuss" is written with "ss" because the
+		// font has no sharp s.
 		{ "Outfit", "Outfit", "Outfit", "Outfit", "Outfit" },
-		{ "Level facts", "Level facts", "Levelvorgabe", "Level facts",
+		{ "Level facts", "Level facts", "Leveleigen", "Level facts",
 			"Level facts" },
-		{ "the level and the run decide", "the level and the run decide",
-			"nach Level und Lauf", "the level and the run decide",
-			"the level and the run decide" },
+		{ "level and run decide", "level and run decide",
+			"nach Level und Lauf", "level and run decide",
+			"level and run decide" },
 		{ "Footsteps", "Footsteps", "Schritte", "Footsteps", "Footsteps" },
 		{ "Head", "Head", "Kopf", "Head", "Head" },
 		{ "Shine", "Shine", "Glanz", "Shine", "Shine" },
@@ -1508,42 +1511,93 @@ const char* CustomText(const char* engl)
 			"as the outfit says", "as the outfit says" },
 		{ "Bare", "Bare", "Barfuss", "Bare", "Bare" },
 		{ "Boots", "Boots", "Stiefel", "Boots", "Boots" },
-		{ "Bare - no second set in this level",
-			"Bare - no second set in this level", "Barfuss - fehlt hier",
-			"Bare - no second set in this level",
-			"Bare - no second set in this level" },
-		{ "Boots - no second set in this level",
-			"Boots - no second set in this level", "Stiefel - fehlt hier",
-			"Boots - no second set in this level",
-			"Boots - no second set in this level" },
+		{ "Bare - no 2nd set", "Bare - no 2nd set", "Barfuss - fehlt hier",
+			"Bare - no 2nd set", "Bare - no 2nd set" },
+		{ "Boots - no 2nd set", "Boots - no 2nd set", "Stiefel - fehlt hier",
+			"Boots - no 2nd set", "Boots - no 2nd set" },
 		// "n\xE4" "chsten" is split for the same reason as "berspringen"
 		// above: 'c' is a hex digit.
 		{ "applies at the next level", "applies at the next level",
 			"gilt ab dem n\xE4" "chsten Level", "applies at the next level",
 			"applies at the next level" },
-		// The head row's and the two shine rows' words, which the window
-		// asks HDWardrobeHeadPhrase and HDWardrobeFromWord for
-		// (specific\hd\hd_wardrobe.cpp) and passes through here; the log
-		// lines that print the same words stay English. The row's label
-		// already says "Kopf", so the outfit's own head is "eigener", TR5's
-		// head "TR5" and its own head under TR5's braid "mit Zopf", short
-		// enough that each, with "(outfit.txt)" behind it, stays within the
-		// 192 units of the value column at every screen width.
-		// "outfit.txt" and "origin" are a file's name and the key of a
-		// mod.txt line and fall back to themselves, as "PSX" does.
-		{ "TR5 head", "TR5 head", "TR5", "TR5 head", "TR5 head" },
+		// The head row's and the two shine rows' words: the window's own
+		// head words (specific\hd\hd_outfitmenu.cpp, head_word) and the
+		// one-word tiers it asks HDWardrobeFromTag for
+		// (specific\hd\hd_wardrobe.cpp), passed through here. The row's
+		// label already says "Head", so the outfit's own head is "own"
+		// ("eigener"), TR5's head "TR5" and its own head under TR5's braid
+		// "TR5 hair" ("mit Zopf"), short enough that each, with
+		// "(outfit.txt)" behind it, stays within the 192 units of the value
+		// column at every screen width, in English and in German. "TR5" is
+		// the same in German, and "outfit.txt" and "origin" are a file's
+		// name and the key of a mod.txt line: all three fall back to
+		// themselves, as "PSX" does.
 		{ "TR5 hair", "TR5 hair", "mit Zopf", "TR5 hair", "TR5 hair" },
-		{ "own head", "own head", "eigener", "own head", "own head" },
+		{ "own", "own", "eigener", "own", "own" },
 		{ "measured", "measured", "gemessen", "measured", "measured" },
-		{ "the table", "the table", "Tabelle", "the table", "the table" },
-		{ "the list", "the list", "Liste", "the list", "the list" },
-		{ "the default", "the default", "Standard", "the default",
-			"the default" },
+		{ "table", "table", "Tabelle", "table", "table" },
+		{ "list", "list", "Liste", "list", "list" },
+		{ "default", "default", "Standard", "default", "default" },
 		// The notice at the top of the screen when the HD/SD key has
 		// nothing to switch (specific\hd\hd_switch.cpp). It borrows the
 		// ammo hotkeys' caption, whose buffer holds eleven letters
 		// (specific\input.cpp); "HD ist aus" is ten.
 		{ "HD is off", "HD is off", "HD ist aus", "HD is off", "HD is off" },
+		// The Credits screen's headings (tomb5\troyestuff.cpp), each drawn
+		// centred across the screen; its title is "Credits" above. The
+		// names under them are names and have no rows.
+		{ "TOMB5 Engine", "TOMB5 Engine", "TOMB5-Engine", "TOMB5 Engine",
+			"TOMB5 Engine" },
+		{ "TR3 Enemies from tomb3", "TR3 Enemies from tomb3",
+			"TR3-Gegner aus tomb3", "TR3 Enemies from tomb3",
+			"TR3 Enemies from tomb3" },
+		{ "Randomizer and Windows 11 Port", "Randomizer and Windows 11 Port",
+			"Randomizer und Windows-11-Port", "Randomizer and Windows 11 Port",
+			"Randomizer and Windows 11 Port" },
+		{ "Contributors", "Contributors", "Mitwirkende", "Contributors",
+			"Contributors" },
+		{ "Tools and Libraries", "Tools and Libraries",
+			"Werkzeuge und Bibliotheken", "Tools and Libraries",
+			"Tools and Libraries" },
+		// The pad's button names in the Key bindings' value column
+		// (specific\input.cpp, JoyButtonName, through game\menu_frame.cpp,
+		// MenuValBinding). The PS5 pad's shapes are the German shapes
+		// ("Circle" is above, a value of its own as well); the stick's and
+		// the d-pad's directions are the German keyboard table's arrow
+		// keys, "Hoch", "Runter", "Links", "Rechts"; the Xbox pad's View
+		// and Menu buttons are "Ansicht" ("View" is above, the page's
+		// caption, the same word) and "Men\xFC". A letter, a number and a
+		// name printed on the pad ("Share", "Options", "Touchpad",
+		// "Joy 13") fall back to themselves. Every German name fits the
+		// value column at every screen width behind "Mod+".
+		{ "Square", "Square", "Quadrat", "Square", "Square" },
+		{ "Cross", "Cross", "Kreuz", "Cross", "Cross" },
+		{ "Triangle", "Triangle", "Dreieck", "Triangle", "Triangle" },
+		{ "PS Button", "PS Button", "PS-Taste", "PS Button", "PS Button" },
+		{ "Menu", "Menu", "Men\xFC", "Menu", "Menu" },
+		{ "Stick R Up", "Stick R Up", "Stick R Hoch", "Stick R Up",
+			"Stick R Up" },
+		{ "Stick R Down", "Stick R Down", "Stick R Runter", "Stick R Down",
+			"Stick R Down" },
+		{ "Stick R Left", "Stick R Left", "Stick R Links", "Stick R Left",
+			"Stick R Left" },
+		{ "Stick R Right", "Stick R Right", "Stick R Rechts", "Stick R Right",
+			"Stick R Right" },
+		{ "D-Pad Up", "D-Pad Up", "D-Pad Hoch", "D-Pad Up", "D-Pad Up" },
+		{ "D-Pad Down", "D-Pad Down", "D-Pad Runter", "D-Pad Down",
+			"D-Pad Down" },
+		{ "D-Pad Left", "D-Pad Left", "D-Pad Links", "D-Pad Left",
+			"D-Pad Left" },
+		{ "D-Pad Right", "D-Pad Right", "D-Pad Rechts", "D-Pad Right",
+			"D-Pad Right" },
+		// The ammo hotkeys' captions (specific\input.cpp), copied into the
+		// caption's buffer of twelve bytes, so no column holds more than
+		// eleven letters; "Normal" is above. The HK's three modes are the
+		// fire selector's German words.
+		{ "Wideshot", "Wideshot", "Breitschuss", "Wideshot", "Wideshot" },
+		{ "Burst", "Burst", "Salve", "Burst", "Burst" },
+		{ "Sniper", "Sniper", "Einzelfeuer", "Sniper", "Sniper" },
+		{ "Rapid", "Rapid", "Dauerfeuer", "Rapid", "Rapid" },
 	};
 
 	long column;

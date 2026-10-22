@@ -32296,13 +32296,13 @@ ordinary chain; drawn classic: the ordinary chain) and the index rule. The harne
 step table as above. No line asking `g_level_active`, `HDEnabled()` or `HDDrawn()` was
 edited. Not played: the head was not run in the game.
 
-**Left.** English that stays outside these pages: the Credits screen's headings
-(`tomb5/troyestuff.cpp`), the ammo hotkeys' captions *Normal*, *Wideshot*, *Burst*,
-*Sniper*, *Rapid* (`specific/input.cpp`, the engine's own), the pad's button names in the
-Key bindings' value column and the decimal point of the F4 window's shine numbers. The
-English F4 values named above run past the value column, as they did before; so can a
-shine value whose exponent an `outfit.txt` writes with many digits. #232's
-Decision (4) records the shotgun as it was decided then; its Left says what changed.
+**Left.** English that stays outside these pages: the decimal point of the F4 window's
+shine numbers; a shine value whose exponent an `outfit.txt` writes with many digits can
+run past the value column. The Credits screen's headings, the ammo hotkeys' captions
+*Normal*, *Wideshot*, *Burst*, *Sniper*, *Rapid*, the pad's button names in the Key
+bindings' value column and the English F4 values that ran past the value column are
+settled in #237. #232's Decision (4) records the shotgun as it was decided then; its Left
+says what changed.
 
 **Commits.** `cadc598b` (the captions in German and the notice), `a7e16445` (the weapon
 item's step and its checks), `aea7137f` (this record), `fd3d460b` (the head words and the
@@ -32411,6 +32411,155 @@ override and the checks), `be295ecb` (the removed name in two halves), `3f659f30
 record and the manuals), `2b32b20e` (four tool comments, the manual's water sentence and
 this record's counts), `aa61c8ac` (this list and one word of the tools manual's
 `-hdwater` line) and a wording commit at the merge (two inherited history phrases).
+
+### Two words renamed; the credits, the pad's names and the ammo captions in German (#237)
+2026-10-22
+
+**What.** Four things. (1) The options row *HD build* reads *HD-Installation* in German
+(it read *HD-Aufbau*), and the F4 window's first row *Level facts* reads *Leveleigen* (it
+read *Levelvorgabe*); its value *nach Level und Lauf* stays, and so do *TR5* and *mit
+Zopf*. (2) The English values of the F4 window that ran past the value column have shorter
+words of the same meaning: *level and run decide*, *Bare - no 2nd set* and *Boots - no 2nd
+set*. The head row draws the window's own head word (`head_word`,
+`specific/hd/hd_outfitmenu.cpp`: *own*, *TR5*, *TR5 hair*) and the head, shine and skin
+glow rows the one-word tier of `HDWardrobeFromTag` (*default*, *measured*, *table*,
+*outfit.txt*, *origin*, *list*); the log lines keep the wardrobe's phrases. The German
+rows follow the new English keys, the key of a row being the English literal; the row of
+*TR5 head* goes, because *TR5* is the same in German and falls back to itself. (3) The
+Credits screen's title and its five headings (`CreditsScreen`, `tomb5/troyestuff.cpp`),
+the pad's button names in the Key bindings' value column (`MenuValBinding`,
+`game/menu_frame.cpp`) and the ammo hotkeys' captions (`DoWeaponRequest`,
+`specific/input.cpp`) go through `CustomText`, and every word among them has its German
+row: 22 new rows, the table from 115 rows to 136. (4) ModernTest's `caption_rows` measures
+the English key of every row as well as its German word, and checks the new rows, their
+routing and every name of the pad's four pages.
+
+**Why.** The play test, answering round #234's questions: "1. 'HD-Installation' 2.
+'Leveleigen' 3. Yes. 4. Yes. 5. Translate those too." and, asked whether *Leveleigen* is
+the row's name or its value: "The row's name instead of 'Levelvorgabe'. I find that fits
+better." The questions were: is *HD-Aufbau* the word for the *HD build* row; are the F4
+words right, *Levelvorgabe* for *Level facts* above all; are the head words *TR5* and *mit
+Zopf* right; should the English F4 values that run past the right edge be shortened;
+should the Credits headings and the pad's button names get German too. Only German is
+translated by this project; French, Italian and Spanish keep the English word, as every
+row of the table does.
+
+**Measured.** Where each string of item (3) was drawn and through which path, read out of
+the sources at the first commit of this round: 16 strings of the Credits screen, the 48
+distinct names of the pad's four pages with the chord's *Mod* and the unbound mark `---`,
+and the five ammo captions. None of them came from the game's language file; every one was
+a raw literal of the project's own path. The Credits screen is a screen of its own
+(`MenuRunLegacy` hands it to `CreditsScreen`), which printed its title and headings in
+gold and its names in white, all raw, although the options row that opens it draws
+*Credits* through `CustomText`. `JoyButtonName` returns a literal of the page's table
+(`JoyNamesPS5DInput`, `JoyNamesPS5XInput`, `JoyNamesXbox`, `JoyNamesGeneric`, each closed
+by the stick's and the d-pad's four directions), and `MenuValBinding`, its only reader,
+printed it raw, alone or behind *Mod+* or `---+`. The value column's other words were
+already German or the language file's: the keyboard's names come from the German keyboard
+table, the mouse's from `KeySchemeMouseName`, *Waiting* from the language file.
+`DoWeaponRequest` copied the five captions raw into the twelve bytes of `ammo_change_buf`,
+which `game/health.cpp` draws centred at the top of the screen; only the F12 notice went
+through `CustomText` (#234).
+
+| string | drawn where | path before | path now | German now |
+|---|---|---|---|---|
+| Credits | the Credits screen's title | raw literal | `CustomText`, the options row's own row | *Credits* |
+| TOMB5 Engine | Credits heading | raw literal | `CustomText` | *TOMB5-Engine* |
+| TR3 Enemies from tomb3 | Credits heading | raw literal | `CustomText` | *TR3-Gegner aus tomb3* |
+| Randomizer and Windows 11 Port | Credits heading | raw literal | `CustomText` | *Randomizer und Windows-11-Port* |
+| Contributors | Credits heading | raw literal | `CustomText` | *Mitwirkende* |
+| Tools and Libraries | Credits heading | raw literal | `CustomText` | *Werkzeuge und Bibliotheken* |
+| five lines of names | Credits names | raw literal | raw literal | names, unchanged |
+| Troye and contributors, with Claude AI by Anthropic, trview by chreden, Dear ImGui by Omar Cornut, stb by Sean Barrett | Credits names with English joining words | raw literal | raw literal | English, unchanged (Left) |
+| Square, Cross, Circle, Triangle | Key bindings value column, PS5 pages | raw literal | `CustomText` | *Quadrat*, *Kreuz*, *Kreis* (its row was there), *Dreieck* |
+| PS Button | PS5 page, DirectInput | raw literal | `CustomText` | *PS-Taste* |
+| View, Menu | Xbox page | raw literal | `CustomText` | *Ansicht* (the *View* row was there), `Men\xFC` |
+| Stick R Up, Down, Left, Right | every page | raw literal | `CustomText` | *Stick R Hoch*, *Runter*, *Links*, *Rechts* |
+| D-Pad Up, Down, Left, Right | every page | raw literal | `CustomText` | *D-Pad Hoch*, *Runter*, *Links*, *Rechts* |
+| L1 R1 L2 R2 L3 R3, A B X Y, LB RB LT RT | the pages | raw literal | `CustomText`, no row | letters and numbers, unchanged |
+| Share, Options, Touchpad | PS5 pages | raw literal | `CustomText`, no row | names printed on the pad, unchanged |
+| Joy 1 to Joy 16 | the generic page and unnamed bits | raw literal | `CustomText`, no row | unchanged |
+| Mod, `---` | the chord's prefix, the unbound mark | raw literal | raw literal | unchanged |
+| Waiting | a binding waiting for its key | language file `TXT_Waiting` | language file | the language file's own |
+| the keys' and the mouse's names | Key bindings value column | the German keyboard table, `KeySchemeMouseName` | unchanged | German already |
+| Normal, Wideshot | ammo caption, shotgun | raw literal | `CustomText` | *Normal* (its row was there), *Breitschuss* |
+| Burst, Sniper, Rapid | ammo caption, HK | raw literal | `CustomText` | *Salve*, *Einzelfeuer*, *Dauerfeuer* |
+
+Widths in #234's units (glyph units of `game/chardef.inc` plus 6.4 per space, an umlaut as
+its base letter): the value column holds 192 at every screen width, the label column 223
+(*Kamerageschwindigkeit*), a centred line 512. The English F4 values before and after:
+
+| English before | units | English after | units | German | units |
+|---|---|---|---|---|---|
+| the level and the run decide | 254.0 | level and run decide | 183.2 | nach Level und Lauf | 186.2 |
+| Bare - no second set in this level | 299.8 | Bare - no 2nd set | 157.6 | Barfuss - fehlt hier | 181.2 |
+| Boots - no second set in this level | 307.8 | Boots - no 2nd set | 165.6 | Stiefel - fehlt hier | 168.2 |
+| own head (the default), the widest head value | 209.2 | TR5 hair (outfit.txt), the widest now | 188.8 | mit Zopf (outfit.txt) | 189.8 |
+| TR5 head (outfit.txt) | 192.8 | TR5 (outfit.txt) | 144.4 | TR5 (outfit.txt) | 144.4 |
+| 1.00/128 (the default), a shine value | 184.8 | 1.00/128 (default) | 149.4 | 1.00/128 (Standard) | 168.4 |
+
+The new German words: *HD-Installation* 141.0 and *Leveleigen* with its mark 106.4 of the
+label column's 223; the widest pad name behind *Mod+*, *Mod+Stick R Runter*, 188.8 of 192
+(English *Mod+Stick R Down* 176.8); the widest Credits heading *Randomizer und
+Windows-11-Port* 313.8 of 512 (English 310.6); the longest ammo captions *Breitschuss* and
+*Einzelfeuer*, eleven letters in the twelve bytes.
+
+**The rule.** #234's, carried on: a word the project draws has its row, and its German
+word and its English key both fit the column it is drawn in, at every screen width. A
+pad's button that is a letter or a number, an unnamed bit (*Joy 13*) and a name printed on
+the pad (*Share*, *Options*, *Touchpad*) is a name and has no row; a pad's name is
+measured behind *Mod+*, as a chord prints it; every column of an ammo caption's row holds
+eleven letters at most.
+
+**Decisions.** (1) *HD-Installation* and *Leveleigen* are the play test's words. (2) The
+English values are shortened in the window and nowhere else: the log lines that print the
+wardrobe's phrases keep them, and `hd_wardrobe.cpp` is untouched. The tiers take
+`HDWardrobeFromTag`, the form the wardrobe already keeps for a counted column, in all
+three rows alike; the head word drops "head", which the row's label says, as the German
+*eigener* does. (3) The Credits title's row is the options row's own, so Italian and
+Spanish now read *Crediti* and *Creditos* on the screen as on the row that opens it;
+German and French stay *Credits*. (4) The pad's shapes are the German shapes; the stick's
+and the d-pad's directions are the German keyboard table's arrow keys (*Hoch*, *Runter*,
+*Links*, *Rechts*) behind *Stick R* and *D-Pad*, which stay as they are; the PS button is
+*PS-Taste*; the Xbox pad's View button takes the existing *View* row's *Ansicht*, which is
+its German name, and Menu `Men\xFC`. (5) The ammo captions: *Breitschuss* for the
+shotgun's wideshot, and the fire selector's German words for the HK's three modes,
+*Einzelfeuer*, *Salve*, *Dauerfeuer*; *Normal* had its row. They are written as the F12
+notice is, `strcpy(ammo_change_buf, CustomText(...))`, every column of their rows short
+enough for the buffer. (6) The names are routed in `MenuValBinding`, their only reader,
+and `JoyButtonName` keeps the English name. (7) The Credits screen's names stay as they
+are written, the lines with English joining words among them: they are not headings.
+
+**Checked.** The nine builds of `Preparation/Tools/Diagnose` exit 0 (`be`, `broom`,
+`btrg`, `bmodel`, `bmap`, `bmt`, `bmenu`, `bit`, `blips`). The suites at the base and at
+the head: ModernTest 16,525 and 16,699, MenuTest 44,931 and 44,931, InterpTest 754 and 754
+with the player's `ANDREA1.TRC`, LipsTest 299 and 299 with the `.OBJ` folder, 272 and 272
+without (the cutseq file named by hand), 0 failed each. `caption_rows` gains 24 checks at
+the first commit (the English key of every row, the head words and tiers the window draws,
+the widest head and shine value in both languages) and 150 at the second (every new row
+once with its German, its width in both languages, the caption buffer's bytes, a row for
+every literal the Credits screen and the ammo hotkeys hand to `CustomText`, the routing at
+each place, and every one of the 48 pad names: 15 words with rows, 33 names without). Five
+changes by hand - a German direction too wide in the table, an ammo word of fourteen
+letters, a pad name without a row, a heading drawn raw, an F4 literal without a row - made
+seven of them fail. Words only: no draw, sound or data path changed, only the strings
+handed to the same calls at the same places, so `hd_build` 0 and the classic draw are the
+base's by construction. No line asking `g_level_active`, `HDEnabled()` or `HDDrawn()` was
+edited. Not played: the head was not run in the game.
+
+**Left.** The Credits screen's lines of names with English joining words (*Troye and
+contributors*, *with Claude AI by Anthropic*, *trview by chreden*, *Dear ImGui by Omar
+Cornut*, *stb by Sean Barrett*) stay English; whether they get German is a question for
+the play test. `HDWardrobeHeadPhrase` (`hd_wardrobe.h`) has no caller since the window
+prints the head word itself; it stays, with the header's three comments and the README's
+head words corrected at the merge, until a later round removes it or gives it a reader.
+The decimal point of the F4 window's shine numbers, and a shine value whose exponent an
+`outfit.txt` writes with many digits, stay as #234 left them.
+
+**Commits.** `88e9d5c1` (the two words and the shorter English F4 values), `e5962dd6` (the
+credits, the pad's names and the ammo captions), this record, `65c8bee0` (a comment in the
+outfit window names the tier tag *list*) and the commit that adds `65c8bee0` here, and a
+wording commit at the merge (the header's comments, the README and this entry's Left).
 
 ## 3. Randomizer changes since Beta 1.0
 
@@ -32667,3 +32816,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #233 | The glow's normal, re-derived (#233) |
 | #234 | The captions in German, and Lara's weapon item steps as she does (#234) |
 | #236 | The water sheets are part of the HD look; their row goes (#236) |
+| #237 | Two words renamed; the credits, the pad's names and the ammo captions in German (#237) |

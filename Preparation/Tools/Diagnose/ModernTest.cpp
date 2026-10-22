@@ -12036,10 +12036,11 @@ static void hd_build_gate()
 
 /* The words the project draws, in German (game\gameflow.cpp, CustomText's
  * table), read out of the sources: every literal the F4 outfit window hands
- * to CustomText has its row, the phrases of its head and shine rows have
- * theirs but for a file's and a key's name, the F12 notice goes through it,
- * and each German word stands in its row and fits its column on the game
- * font's own widths (game\chardef.inc, added up as GetStringLength does). A
+ * to CustomText has its row, the words of its head and shine rows have
+ * theirs but for a file's and a key's name and "TR5", the F12 notice goes
+ * through it, and each German word stands in its row and fits its column on
+ * the game font's own widths (game\chardef.inc, added up as GetStringLength
+ * does), and so does its English key, which the other languages draw. A
  * label is held to "Kamerageschwindigkeit", the widest label of the table;
  * a value to the value column, at least 0.375 of the screen's width W; a
  * centred line to the screen. InitFont scales a glyph to w * (W - 1) / 512
@@ -12127,11 +12128,11 @@ static void caption_rows()
 		int kind;
 	};
 	static const word words[] = {
-		{ "HD build", "\"HD-Aufbau\"", "HD-Aufbau", LABEL },
+		{ "HD build", "\"HD-Installation\"", "HD-Installation", LABEL },
 		{ "Reflections", "\"Spiegelungen\"", "Spiegelungen", LABEL },
 		{ "Outfit", "\"Outfit\"", "Outfit", LINE },
-		{ "Level facts", "\"Levelvorgabe\"", "Levelvorgabe *", LABEL },
-		{ "the level and the run decide", "\"nach Level und Lauf\"",
+		{ "Level facts", "\"Leveleigen\"", "Leveleigen *", LABEL },
+		{ "level and run decide", "\"nach Level und Lauf\"",
 			"nach Level und Lauf", VALUE },
 		{ "Footsteps", "\"Schritte\"", "Schritte", LABEL },
 		{ "Head", "\"Kopf\"", "Kopf", LABEL },
@@ -12140,20 +12141,19 @@ static void caption_rows()
 		{ "as the outfit says", "\"laut Outfit\"", "laut Outfit", VALUE },
 		{ "Bare", "\"Barfuss\"", "Barfuss", VALUE },
 		{ "Boots", "\"Stiefel\"", "Stiefel", VALUE },
-		{ "Bare - no second set in this level", "\"Barfuss - fehlt hier\"",
+		{ "Bare - no 2nd set", "\"Barfuss - fehlt hier\"",
 			"Barfuss - fehlt hier", VALUE },
-		{ "Boots - no second set in this level", "\"Stiefel - fehlt hier\"",
+		{ "Boots - no 2nd set", "\"Stiefel - fehlt hier\"",
 			"Stiefel - fehlt hier", VALUE },
 		{ "applies at the next level",
 			"\"gilt ab dem n\\xE4\" \"chsten Level\"",
 			"gilt ab dem n\xE4" "chsten Level", LINE },
-		{ "TR5 head", "\"TR5\"", "TR5", VALUE },
 		{ "TR5 hair", "\"mit Zopf\"", "mit Zopf", VALUE },
-		{ "own head", "\"eigener\"", "eigener", VALUE },
+		{ "own", "\"eigener\"", "eigener", VALUE },
 		{ "measured", "\"gemessen\"", "gemessen", VALUE },
-		{ "the table", "\"Tabelle\"", "Tabelle", VALUE },
-		{ "the list", "\"Liste\"", "Liste", VALUE },
-		{ "the default", "\"Standard\"", "Standard", VALUE },
+		{ "table", "\"Tabelle\"", "Tabelle", VALUE },
+		{ "list", "\"Liste\"", "Liste", VALUE },
+		{ "default", "\"Standard\"", "Standard", VALUE },
 		{ "HD is off", "\"HD ist aus\"", "HD ist aus", NOTICE },
 	};
 	const long label = caption_share("Kamerageschwindigkeit");
@@ -12161,23 +12161,33 @@ static void caption_rows()
 	for (const word& w : words)
 	{
 		const bool have = caption_row(flow, w.key, row, sizeof(row));
-		const long share = caption_share(w.german);
 		const long room = w.kind == LABEL ? label : w.kind == VALUE ? 960 :
 			w.kind == LINE ? 2560 : 0;
-		bool fits;
 
 		snprintf(what, sizeof(what), "captions: \"%s\" has one row, "
 			"German in it", w.key);
 		ok(have && strstr(row, w.source) != 0, what, have, 1);
 
-		if (w.kind == NOTICE)
-			fits = strlen(w.german) <= 11;
-		else
-			fits = share <= room;
+		// The German word, then the English key, which French, Italian and
+		// Spanish draw as English does; a label with the row's mark behind
+		// it, the widest any label of the window is drawn.
+		char english[96];
 
-		snprintf(what, sizeof(what), "captions: \"%s\" fits its column",
-			w.german);
-		ok(fits, what, share, room);
+		snprintf(english, sizeof(english), "%s%s", w.key,
+			w.kind == LABEL ? " *" : "");
+
+		const char* both[2] = { w.german, english };
+
+		for (const char* s : both)
+		{
+			const long share = caption_share(s);
+			const bool fits = w.kind == NOTICE ? strlen(s) <= 11 :
+				share <= room;
+
+			snprintf(what, sizeof(what), "captions: \"%s\" fits its column",
+				s);
+			ok(fits, what, share, room);
+		}
 	}
 
 	// Every literal the window hands to CustomText has its row.
@@ -12211,23 +12221,35 @@ static void caption_rows()
 		}
 	}
 
-	// The head and shine phrases: through CustomText at every call, and a
-	// row for each word but the file's name and the key's.
-	n = hd_switch_count(outfit, "HDWardrobeHeadPhrase(");
-	ok(n == 1 && hd_switch_count(outfit, "CustomText(HDWardrobeHeadPhrase(")
-		== n, "captions: the head phrase goes through CustomText", n, 1);
-	n = hd_switch_count(outfit, "HDWardrobeFromWord(");
-	ok(n == 3 && hd_switch_count(outfit, "CustomText(HDWardrobeFromWord(")
-		== n, "captions: the three from-words go through CustomText", n, 3);
+	// The head and shine words: the window's own head words and the one-word
+	// tiers, through CustomText at every call; the phrases are the log's.
+	n = hd_switch_count(outfit, "head_word(e->head)");
+	ok(n == 1 && hd_switch_count(outfit, "CustomText(head_word(e->head))")
+		== n, "captions: the head word goes through CustomText", n, 1);
+	n = hd_switch_count(outfit, "HDWardrobeFromTag(");
+	ok(n == 3 && hd_switch_count(outfit, "CustomText(HDWardrobeFromTag(")
+		== n, "captions: the three tiers go through CustomText", n, 3);
+	n = hd_switch_count(outfit, "HDWardrobeHeadPhrase(") +
+		hd_switch_count(outfit, "HDWardrobeFromWord(");
+	ok(n == 0, "captions: the window draws no phrase", n, 0);
 
+	// A row for each word but the file's name, the key's, "TR5" (the same
+	// in German) and the tag's "?" for a tier it does not know.
 	{
-		const char* fns[2] = { "const char* HDWardrobeHeadPhrase(int head)",
-			"const char* HDWardrobeFromWord(int from)" };
-
-		for (const char* fn : fns)
+		struct fn_in
 		{
-			const char* p = robe ? strstr(robe, fn) : 0;
-			const char* end = p ? strstr(p, "\n}") : 0;
+			const char* text;
+			const char* fn;
+		};
+		const fn_in fns[2] = {
+			{ outfit, "const char* head_word(int head)" },
+			{ robe, "const char* HDWardrobeFromTag(int from)" } };
+		int words_seen = 0;
+
+		for (const fn_in& f : fns)
+		{
+			const char* p = f.text ? strstr(f.text, f.fn) : 0;
+			const char* end = p ? strstr(p, "\n\t}") : 0;
 
 			for (const char* r = p ? strstr(p, "return \"") : 0;
 				r && r < end; r = strstr(r + 1, "return \""))
@@ -12241,38 +12263,60 @@ static void caption_rows()
 
 				memcpy(lit, q, (size_t)(e - q));
 				lit[e - q] = 0;
+				words_seen++;
 
 				const bool name = !strcmp(lit, "outfit.txt") ||
-					!strcmp(lit, "origin");
+					!strcmp(lit, "origin") || !strcmp(lit, "TR5") ||
+					!strcmp(lit, "?");
 
-				snprintf(what, sizeof(what), "captions: the phrase \"%s\" %s",
+				snprintf(what, sizeof(what), "captions: the word \"%s\" %s",
 					lit, name ? "is a name, no row" : "has a row");
 				ok(caption_row(flow, lit, row, sizeof(row)) != name, what,
 					name, 0);
 			}
 		}
+
+		ok(words_seen == 10, "captions: three head words and seven tags",
+			words_seen, 10);
 	}
 
-	// The widest head value the window can build fits the value column.
+	// The widest head value the window can build fits the value column, in
+	// German and in English; the shine rows put a number before the same
+	// tier, "1.00/128" wider than any number of the wardrobe's table.
 	{
-		const char* heads[3] = { "TR5", "mit Zopf", "eigener" };
-		const char* froms[7] = { "gemessen", "Tabelle", "outfit.txt",
-			"origin", "Liste", "Standard", 0 };
-		long widest = 0;
+		const char* heads[2][4] = { { "TR5", "mit Zopf", "eigener", 0 },
+			{ "TR5", "TR5 hair", "own", 0 } };
+		const char* froms[2][7] = { { "gemessen", "Tabelle", "outfit.txt",
+			"origin", "Liste", "Standard", 0 }, { "measured", "table",
+			"outfit.txt", "origin", "list", "default", 0 } };
+		const char* lang[2] = { "German", "English" };
 
-		for (const char* h : heads)
-			for (int f = 0; froms[f]; f++)
-			{
-				char line[64];
+		for (int l = 0; l < 2; l++)
+		{
+			long widest = 0;
 
-				snprintf(line, sizeof(line), "%s (%s)", h, froms[f]);
+			for (int h = 0; heads[l][h]; h++)
+				for (int f = 0; froms[l][f]; f++)
+				{
+					char line[64];
 
-				if (caption_share(line) > widest)
-					widest = caption_share(line);
-			}
+					snprintf(line, sizeof(line), "%s (%s)", heads[l][h],
+						froms[l][f]);
 
-		ok(widest <= 960,
-			"captions: the widest German head value fits", widest, 960);
+					if (caption_share(line) > widest)
+						widest = caption_share(line);
+
+					snprintf(line, sizeof(line), "1.00/128 (%s)",
+						froms[l][f]);
+
+					if (caption_share(line) > widest)
+						widest = caption_share(line);
+				}
+
+			snprintf(what, sizeof(what), "captions: the widest %s head or "
+				"shine value fits", lang[l]);
+			ok(widest <= 960, what, widest, 960);
+		}
 	}
 
 	// The F12 notice: through CustomText, no raw literal left.

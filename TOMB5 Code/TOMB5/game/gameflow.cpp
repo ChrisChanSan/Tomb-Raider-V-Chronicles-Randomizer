@@ -1457,9 +1457,10 @@ const char* CustomText(const char* engl)
 		{ "UW Effect",       "UW Effect",       "Unterwasser-Effekt", "UW Effect",      "UW Effect" },
 		// The build gate above "HD textures" and the polished floors'
 		// mirror under "Body physics"; their values are "on"/"off" of this
-		// table. "HD-Aufbau" names what the gate switches: whether a level
-		// is built with its HD data at all.
-		{ "HD build", "HD build", "HD-Aufbau", "HD build", "HD build" },
+		// table. "HD-Installation" names what the gate switches: whether a
+		// level is built with the HD data of the installation at all.
+		{ "HD build", "HD build", "HD-Installation", "HD build",
+			"HD build" },
 		{ "Reflections", "Reflections", "Spiegelungen", "Reflections",
 			"Reflections" },
 		// Values, not row labels - "on/off", "Circle" etc. reused across many
@@ -1491,15 +1492,17 @@ const char* CustomText(const char* engl)
 		// pixels wide at most and a space W / 80 (game\text.cpp, InitFont
 		// and GetStringLength), so a value whose glyph units plus 6.4 per
 		// space stay at or under 192 fits at every screen width W: every
-		// German value below does. "Outfit" is the German word as well and
-		// stands here so that every word of the window has its row.
-		// "Barfuss" is written with "ss" because the font has no sharp s.
+		// German value below does, and so does every English one: the
+		// window's own English words are chosen to fit as well. "Outfit" is
+		// the German word as well and stands here so that every word of the
+		// window has its row. "Barfuss" is written with "ss" because the
+		// font has no sharp s.
 		{ "Outfit", "Outfit", "Outfit", "Outfit", "Outfit" },
-		{ "Level facts", "Level facts", "Levelvorgabe", "Level facts",
+		{ "Level facts", "Level facts", "Leveleigen", "Level facts",
 			"Level facts" },
-		{ "the level and the run decide", "the level and the run decide",
-			"nach Level und Lauf", "the level and the run decide",
-			"the level and the run decide" },
+		{ "level and run decide", "level and run decide",
+			"nach Level und Lauf", "level and run decide",
+			"level and run decide" },
 		{ "Footsteps", "Footsteps", "Schritte", "Footsteps", "Footsteps" },
 		{ "Head", "Head", "Kopf", "Head", "Head" },
 		{ "Shine", "Shine", "Glanz", "Shine", "Shine" },
@@ -1508,37 +1511,33 @@ const char* CustomText(const char* engl)
 			"as the outfit says", "as the outfit says" },
 		{ "Bare", "Bare", "Barfuss", "Bare", "Bare" },
 		{ "Boots", "Boots", "Stiefel", "Boots", "Boots" },
-		{ "Bare - no second set in this level",
-			"Bare - no second set in this level", "Barfuss - fehlt hier",
-			"Bare - no second set in this level",
-			"Bare - no second set in this level" },
-		{ "Boots - no second set in this level",
-			"Boots - no second set in this level", "Stiefel - fehlt hier",
-			"Boots - no second set in this level",
-			"Boots - no second set in this level" },
+		{ "Bare - no 2nd set", "Bare - no 2nd set", "Barfuss - fehlt hier",
+			"Bare - no 2nd set", "Bare - no 2nd set" },
+		{ "Boots - no 2nd set", "Boots - no 2nd set", "Stiefel - fehlt hier",
+			"Boots - no 2nd set", "Boots - no 2nd set" },
 		// "n\xE4" "chsten" is split for the same reason as "berspringen"
 		// above: 'c' is a hex digit.
 		{ "applies at the next level", "applies at the next level",
 			"gilt ab dem n\xE4" "chsten Level", "applies at the next level",
 			"applies at the next level" },
-		// The head row's and the two shine rows' words, which the window
-		// asks HDWardrobeHeadPhrase and HDWardrobeFromWord for
-		// (specific\hd\hd_wardrobe.cpp) and passes through here; the log
-		// lines that print the same words stay English. The row's label
-		// already says "Kopf", so the outfit's own head is "eigener", TR5's
-		// head "TR5" and its own head under TR5's braid "mit Zopf", short
-		// enough that each, with "(outfit.txt)" behind it, stays within the
-		// 192 units of the value column at every screen width.
-		// "outfit.txt" and "origin" are a file's name and the key of a
-		// mod.txt line and fall back to themselves, as "PSX" does.
-		{ "TR5 head", "TR5 head", "TR5", "TR5 head", "TR5 head" },
+		// The head row's and the two shine rows' words: the window's own
+		// head words (specific\hd\hd_outfitmenu.cpp, head_word) and the
+		// one-word tiers it asks HDWardrobeFromTag for
+		// (specific\hd\hd_wardrobe.cpp), passed through here. The row's
+		// label already says "Head", so the outfit's own head is "own"
+		// ("eigener"), TR5's head "TR5" and its own head under TR5's braid
+		// "TR5 hair" ("mit Zopf"), short enough that each, with
+		// "(outfit.txt)" behind it, stays within the 192 units of the value
+		// column at every screen width, in English and in German. "TR5" is
+		// the same in German, and "outfit.txt" and "origin" are a file's
+		// name and the key of a mod.txt line: all three fall back to
+		// themselves, as "PSX" does.
 		{ "TR5 hair", "TR5 hair", "mit Zopf", "TR5 hair", "TR5 hair" },
-		{ "own head", "own head", "eigener", "own head", "own head" },
+		{ "own", "own", "eigener", "own", "own" },
 		{ "measured", "measured", "gemessen", "measured", "measured" },
-		{ "the table", "the table", "Tabelle", "the table", "the table" },
-		{ "the list", "the list", "Liste", "the list", "the list" },
-		{ "the default", "the default", "Standard", "the default",
-			"the default" },
+		{ "table", "table", "Tabelle", "table", "table" },
+		{ "list", "list", "Liste", "list", "list" },
+		{ "default", "default", "Standard", "default", "default" },
 		// The notice at the top of the screen when the HD/SD key has
 		// nothing to switch (specific\hd\hd_switch.cpp). It borrows the
 		// ammo hotkeys' caption, whose buffer holds eleven letters

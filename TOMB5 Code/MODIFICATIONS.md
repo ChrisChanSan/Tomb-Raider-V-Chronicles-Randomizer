@@ -11285,7 +11285,7 @@ against `5\ITEM` and then `4\ITEM`, `<slot>` being the engine's own symbol conca
 case-insensitively. Twenty-four of the 471 slot names resolve this way and 23 of those
 are loaded by at least one shipped level: the pistols, the uzi, the shotgun, the HK, the
 grapple and its bolt, both medipacks, the lasersight, the binoculars, the flare in both
-forms, the crowbar, the burning torch, the two shell casings, the compass and the
+forms, the crowbar, the burning torch, the two shell casings, the Timex-TMX and the
 crossbow ammunition. The hand table is asked first and a line may name levels: a third
 field lists level stems, space separated, case-insensitive, 0 meaning every level -
 `BINOCULARS_ITEM` -> `EXTRA5_BINOCULARS_ITEM_RICH` in RICH1, RICH2 and RICH3, and

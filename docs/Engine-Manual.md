@@ -778,8 +778,8 @@ Worth spelling out:
   middle by default, which changes nothing. Further right the whole picture
   is lighter, further left darker. See **Gamma** below.
 - **Cheats** unlocks DOZY and five hotkey rows on the
-  *Key bindings* page (below). The classic cheat words still need the compass
-  in hand.
+  *Key bindings* page (below). The classic cheat words still need the Timex-TMX
+  in hand (the inventory's watch; the data call its slot the compass).
 
 ### Cheats and the cheat hotkeys
 
@@ -796,7 +796,7 @@ Modern's own step-left key cannot do it on its own, because holding it is
 part of what keeps her flying.
 
 The inventory words — **G U N S**, **I T E M**, **S K I P**, **H E A L**,
-**B I T S** — are the original's and still spelt out with the compass in
+**B I T S** — are the original's and still spelt out with the Timex-TMX in
 hand, but under Modern the keyboard scheme owns S, A, E and P, which can make
 them awkward to type there (GUNS and SKIP above all). The words stay as they are; four
 of the five (all but BITS, which has no cheat effect of its own) get a second
@@ -3089,7 +3089,7 @@ table and the hand table are both silent, the engine tries the slot's name
 with `EXTRA5_`, then `EXTRA_`, then `EXTRA4_` in front of it, in each of the
 two `ITEM` folders. This is how the pistols, the uzi, the shotgun, the HK, the
 grapple, both medipacks, the lasersight, the binoculars, the flare pack, the
-crowbar, the burning torch and the compass all draw HD
+crowbar, the burning torch and the Timex-TMX all draw HD
 without a single level having to say so.
 
 Four more slots the rule finds a model for get one that is **built and never
@@ -3248,9 +3248,9 @@ bright as the classic one was. No room light, no torch, no fog bulbs: the
 bulbs of the room Lara is standing in would sit in front of her medipacks.
 
 **What stays classic on the ring**, per level, is three things and always the
-same three: the compass and the two passport pages, load and save. The passport
-pages have no model in the remaster at all. The compass has one, but in a
-campaign level it names a piece of the mesh tree TR5's compass does not have,
+same three: the Timex-TMX and the two passport pages, load and save. The passport
+pages have no model in the remaster at all. The Timex-TMX has one, but in a
+campaign level it names a piece of the mesh tree TR5's Timex-TMX does not have,
 so the skeleton test refuses it — the same test that protects an enemy in a
 randomized level. Both then draw exactly as they always did, needle and all,
 and the ring has no hole in it. Everything else on the ring is HD: in the

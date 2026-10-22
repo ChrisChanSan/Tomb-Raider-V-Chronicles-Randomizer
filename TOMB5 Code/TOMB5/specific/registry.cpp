@@ -281,6 +281,11 @@ bool REG_ReadString(char* SubKeyName, char* value, ulong size, const char* defau
 	return 0;
 }
 
+void REG_DeleteValue(char* SubKeyName)
+{
+	RegDeleteValue(phkResult, SubKeyName);
+}
+
 bool LoadSettings()
 {
 	ulong key;

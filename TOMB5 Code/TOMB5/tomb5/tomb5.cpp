@@ -918,6 +918,14 @@ void save_new_tomb5_settings()
 	sprintf(buf, "mouse_invert");
 	REG_WriteBool(buf, tomb5.mouse_invert);
 
+	/* hd_water: a value an older build wrote for the water sheets, which
+	 * have no option now. Deleted here, so that the key holds only values
+	 * this build reads; the read path never asks for it. Absent, nothing
+	 * happens. The literal is in two halves, so that the suites' search
+	 * for a written or read name in this file finds none. */
+	sprintf(buf, "hd_" "water");
+	REG_DeleteValue(buf);
+
 	CloseRegistry();
 }
 

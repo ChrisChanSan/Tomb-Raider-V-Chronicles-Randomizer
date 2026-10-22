@@ -40,6 +40,11 @@ bool REG_ReadBool(char* SubKeyname, bool& value, bool defaultValue);
 // hd_install_tr3 and hd_texture_format.
 void REG_WriteString(char* SubKeyName, const char* value);
 bool REG_ReadString(char* SubKeyName, char* value, ulong size, const char* defaultValue);
+// Removes one value from the open key. The result is not asked, as the
+// writes above do not ask theirs: a value that is not there
+// (ERROR_FILE_NOT_FOUND) is the usual case and no error. For a value an
+// older build wrote and this one no longer reads.
+void REG_DeleteValue(char* SubKeyName);
 bool LoadSettings();
 void SaveSettings();
 bool SaveSetup(HWND hDlg);

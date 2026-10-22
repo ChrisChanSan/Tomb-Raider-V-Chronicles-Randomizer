@@ -71,4 +71,4 @@ extern long joystick_raw_ly;
 extern long joystick_read_fire;
 extern long joystick_is_xinput;
 extern short ammo_change_timer;
-extern char ammo_change_buf[12];
+extern char ammo_change_buf[64];

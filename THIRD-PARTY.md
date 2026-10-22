@@ -4583,6 +4583,16 @@ carries the tables.
     *Spiegelungen*, the F4 window's words, the wardrobe's phrases as the window
     shows them, *HD ist aus*; widths on the font's own glyph table. OWN; DATA: the
     census of every caption, value and hint the options pages and the F4 window draw.
+479. **The French, Italian and Spanish words of the project's captions, and
+    `extrastrings.txt`** (`game/gameflow.cpp`, `CustomText`'s table, `LoadExtraStrings`,
+    `ExtraStringsParse`; `Preparation/extrastrings.txt`; ModernTest's `caption_columns`
+    and `extra_strings`) - every row of the table in all four languages, the twenty cells
+    that repeat the English with their reasons, the file's format and the order file,
+    table, literal. OWN: the translations, the format and the order; DATA: the
+    vocabulary and register of the game's own language files where the game names the
+    thing (ammunition, level, options), read on the player's
+    files and never copied, and the census of where each key is drawn with its widths on
+    the font's own glyph table.
 
 ## Credited, but not contained here
 

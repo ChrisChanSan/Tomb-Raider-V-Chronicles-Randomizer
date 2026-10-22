@@ -12082,6 +12082,49 @@ static const caption_glyph caption_font[106] =
 #include "../../../TOMB5 Code/TOMB5/game/chardef.inc"
 };
 
+/* The accented letters: AccentToCode (game\text.cpp) maps a Latin-1 byte to
+ * the font's code 128..173, and AccentTable's row of that code
+ * (game\accent.inc) names the base letter PrintString draws with the mark
+ * over it; a row of two spaces is a letter the font has no picture for. The
+ * map is read out of text.cpp itself (caption_accents_read), the rows are
+ * the engine's own file. */
+static const char caption_accent[46][2] =
+{
+#include "../../../TOMB5 Code/TOMB5/game/accent.inc"
+};
+static unsigned char caption_code_of[256];
+
+// The Latin-1 bytes AccentToCode maps, out of its source; how many.
+static int caption_accents_read()
+{
+	char* text = hd_switch_text("../../game/text.cpp");
+	const char* p = text ? strstr(text, "static void AccentToCode") : 0;
+	const char* end = p ? strstr(p, "\n}") : 0;
+	int n = 0;
+
+	memset(caption_code_of, 0, sizeof(caption_code_of));
+
+	for (p = p ? strstr(p, "(uchar)'") : 0; p && p < end;
+		p = strstr(p + 1, "(uchar)'"))
+	{
+		const int byte = (unsigned char)p[8];
+		const char* code = strstr(p, "128 + ");
+
+		if (!code || code > end)
+			break;
+
+		// The first test of the chain that matches a byte is the one taken.
+		if (!caption_code_of[byte])
+		{
+			caption_code_of[byte] = (unsigned char)(128 + atoi(code + 6));
+			n++;
+		}
+	}
+
+	free(text);
+	return n;
+}
+
 // Five per glyph unit (W / 512) and 32 per space (W / 80), in W / 2560.
 static long caption_share(const char* s)
 {
@@ -12091,11 +12134,18 @@ static long caption_share(const char* s)
 	{
 		int c = (unsigned char)*s;
 
-		// An umlaut is drawn as its base letter with the accent over it.
-		if (c == 0xE4 || c == 0xF6 || c == 0xFC)
-			c = c == 0xE4 ? 'a' : c == 0xF6 ? 'o' : 'u';
-		else if (c == 0xC4 || c == 0xD6 || c == 0xDC)
-			c = c == 0xC4 ? 'A' : c == 0xD6 ? 'O' : 'U';
+		// An accented letter is drawn as its base letter with the accent
+		// over it; a font code 128..173 stands for itself.
+		if (c > '~')
+		{
+			const int code = caption_code_of[c] ? caption_code_of[c] : c;
+
+			if (code < 128 || code > 173 || caption_accent[code - 128][0] ==
+				' ')
+				return 100000;	// a byte the font has no glyph for
+
+			c = caption_accent[code - 128][0];
+		}
 
 		if (c == ' ')
 			n += 32;
@@ -12215,11 +12265,17 @@ static void caption_rows()
 		"captions: the seven files are read", !!flow + !!outfit + !!robe +
 		!!sw + !!troye + !!frame + !!input, 7);
 
+	n = caption_accents_read();
+	ok(n == 33, "captions: AccentToCode maps 33 accented letters", n, 33);
+
 	/* A label of the options page or the F4 window, a value of the value
-	 * column, a line centred across the screen, the ammo caption's buffer
-	 * of twelve bytes, and a pad's button name, measured behind "Mod+" as
-	 * a chord prints it. */
-	enum { LABEL, VALUE, LINE, NOTICE, PAD };
+	 * column, a line centred across the screen, the caption at the top of
+	 * the screen (a centred line in a buffer of 64 bytes), and a pad's
+	 * button name, measured behind "Mod+" as a chord prints it. The four
+	 * d-pad names behind "Steuerkreuz" fit the column alone and are wider
+	 * than it behind "Mod+": they are checked as such, so a fifth name
+	 * over the column, or one of the four made short enough, shows here. */
+	enum { LABEL, VALUE, LINE, NOTICE, PAD, PADWIDE };
 	struct word
 	{
 		const char* key;
@@ -12272,19 +12328,18 @@ static void caption_rows()
 		{ "PS Button", "\"PS-Taste\"", "PS-Taste", PAD },
 		{ "View", "\"Ansicht\"", "Ansicht", PAD },
 		{ "Menu", "\"Men\\xFC\"", "Men\xFC", PAD },
-		{ "Stick R Up", "\"Stick R Hoch\"", "Stick R Hoch", PAD },
-		{ "Stick R Down", "\"Stick R Runter\"", "Stick R Runter", PAD },
-		{ "Stick R Left", "\"Stick R Links\"", "Stick R Links", PAD },
-		{ "Stick R Right", "\"Stick R Rechts\"", "Stick R Rechts", PAD },
-		{ "D-Pad Up", "\"D-Pad Hoch\"", "D-Pad Hoch", PAD },
-		{ "D-Pad Down", "\"D-Pad Runter\"", "D-Pad Runter", PAD },
-		{ "D-Pad Left", "\"D-Pad Links\"", "D-Pad Links", PAD },
-		{ "D-Pad Right", "\"D-Pad Rechts\"", "D-Pad Rechts", PAD },
-		{ "Normal", "\"Normal\"", "Normal", NOTICE },
-		{ "Wideshot", "\"Breitschuss\"", "Breitschuss", NOTICE },
-		{ "Burst", "\"Salve\"", "Salve", NOTICE },
-		{ "Sniper", "\"Einzelfeuer\"", "Einzelfeuer", NOTICE },
-		{ "Rapid", "\"Dauerfeuer\"", "Dauerfeuer", NOTICE },
+		{ "Stick R Up", "\"Stick R oben\"", "Stick R oben", PAD },
+		{ "Stick R Down", "\"Stick R unten\"", "Stick R unten", PAD },
+		{ "Stick R Left", "\"Stick R links\"", "Stick R links", PAD },
+		{ "Stick R Right", "\"Stick R rechts\"", "Stick R rechts", PAD },
+		{ "D-Pad Up", "\"Steuerkreuz oben\"", "Steuerkreuz oben", PADWIDE },
+		{ "D-Pad Down", "\"Steuerkreuz unten\"", "Steuerkreuz unten",
+			PADWIDE },
+		{ "D-Pad Left", "\"Steuerkreuz links\"", "Steuerkreuz links",
+			PADWIDE },
+		{ "D-Pad Right", "\"Steuerkreuz rechts\"", "Steuerkreuz rechts",
+			PADWIDE },
+		{ "Normal", "\"Normal\"", "Normal", VALUE },
 	};
 	const long label = caption_share("Kamerageschwindigkeit");
 
@@ -12292,25 +12347,46 @@ static void caption_rows()
 	{
 		const bool have = caption_row(flow, w.key, row, sizeof(row));
 		const long room = w.kind == LABEL ? label : w.kind == VALUE ? 960 :
-			w.kind == LINE ? 2560 : w.kind == PAD ? 960 : 0;
-		const char* before = w.kind == PAD ? "Mod+" : "";
+			w.kind == LINE || w.kind == NOTICE ? 2560 : 960;
+		const bool pad = w.kind == PAD || w.kind == PADWIDE;
+		const char* before = pad ? "Mod+" : "";
+
+		// 0: no row, 1: a row without this German word, 2: both.
+		const long found = !have ? 0 : strstr(row, w.source) ? 2 : 1;
 
 		snprintf(what, sizeof(what), "captions: \"%s\" has one row, "
-			"German in it", w.key);
-		ok(have && strstr(row, w.source) != 0, what, have, 1);
+			"German in it (0 no row, 1 other German)", w.key);
+		ok(found == 2, what, found, 2);
 
 		// A caption's buffer holds every column of its row.
 		if (w.kind == NOTICE)
 		{
 			snprintf(what, sizeof(what), "captions: every column of \"%s\" "
-				"fits twelve bytes", w.key);
-			ok(have && caption_longest(row) <= 11, what,
-				have ? caption_longest(row) : -1, 11);
+				"fits the caption's 64 bytes", w.key);
+			ok(have && caption_longest(row) <= 63, what,
+				have ? caption_longest(row) : -1, 63);
 		}
 
-		// The German word, then the English key, which French, Italian and
-		// Spanish draw as English does; a label with the row's mark behind
-		// it, the widest any label of the window is drawn.
+		// A d-pad name behind "Steuerkreuz": alone in the column, and wider
+		// than it behind "Mod+".
+		if (w.kind == PADWIDE)
+		{
+			char chord[96];
+
+			snprintf(chord, sizeof(chord), "Mod+%s", w.german);
+			snprintf(what, sizeof(what), "captions: \"%s\" fits its column "
+				"alone", w.german);
+			ok(caption_share(w.german) <= 960, what,
+				caption_share(w.german), 960);
+			snprintf(what, sizeof(what), "captions: \"%s\" is wider than "
+				"the column, as recorded", chord);
+			ok(caption_share(chord) > 960, what, caption_share(chord), 961);
+		}
+
+		// The German word, then the English key as English draws it, a
+		// label with the row's mark behind it, the widest any label of the
+		// window is drawn; French, Italian and Spanish are measured against
+		// their columns in caption_columns.
 		char german[96];
 		char english[96];
 
@@ -12322,9 +12398,12 @@ static void caption_rows()
 
 		for (const char* s : both)
 		{
+			if (w.kind == PADWIDE && s == german)
+				continue;	// measured alone and behind "Mod+" above
+
 			const long share = caption_share(s);
-			const bool fits = w.kind == NOTICE ? strlen(s) <= 11 :
-				share <= room;
+			const bool fits = share <= room &&
+				(w.kind != NOTICE || strlen(s) <= 63);
 
 			snprintf(what, sizeof(what), "captions: \"%s\" fits its column",
 				s);
@@ -12332,11 +12411,10 @@ static void caption_rows()
 		}
 	}
 
-	// Every literal the window, the Credits screen and the ammo hotkeys
-	// hand to CustomText has its row.
+	// Every literal the window and the Credits screen hand to CustomText
+	// has its row.
 	caption_literals(outfit, flow, "F4's");
 	caption_literals(troye, flow, "the Credits'");
-	caption_literals(input, flow, "the ammo caption's");
 
 	// The Credits screen draws its title and its headings, the gold rows,
 	// through CustomText and none raw.
@@ -12344,10 +12422,83 @@ static void caption_rows()
 	ok(n == 6 && hd_switch_count(troye, "6, \"") == 0, "captions: the "
 		"Credits' title and five headings go through CustomText", n, 6);
 
-	// The ammo hotkeys' five captions, and no raw one left.
-	n = hd_switch_count(input, "strcpy(ammo_change_buf, CustomText(\"");
-	ok(n == 5 && hd_switch_count(input, "sprintf(ammo_change_buf, \"") == 0,
-		"captions: the five ammo captions go through CustomText", n, 5);
+	/* The ammo hotkeys' five captions are the language file's own names,
+	 * the strings the inventory shows (game\newinv2.cpp): each mode the
+	 * cycle sets is followed by the string that names it - W_AMMO1 is the
+	 * sniper mode, W_AMMO2 the burst, W_AMMO3 the rapid fire
+	 * (game\lara1gun.cpp, FireHK) - and no word of the project's goes in. */
+	{
+		static const char* const sets[5][2] = {
+			{ "lara.shotgun_type_carried |= W_AMMO1;",
+				"AmmoCaption(TXT_Shotgun_Normal_Ammo);" },
+			{ "lara.shotgun_type_carried |= W_AMMO2;",
+				"AmmoCaption(TXT_Shotgun_Wideshot_Ammo);" },
+			{ "lara.hk_type_carried |= W_AMMO2;",
+				"AmmoCaption(TXT_HKSTRING3);" },
+			{ "lara.hk_type_carried |= W_AMMO1;",
+				"AmmoCaption(TXT_HKSTRING2);" },
+			{ "lara.hk_type_carried |= W_AMMO3;",
+				"AmmoCaption(TXT_HKSTRING4);" },
+		};
+
+		for (const auto& s : sets)
+		{
+			const char* at = input ? strstr(input, s[0]) : 0;
+			const char* call = at ? strstr(at, s[1]) : 0;
+
+			snprintf(what, sizeof(what), "captions: %s shows %s", s[0], s[1]);
+			ok(hd_switch_count(input, s[0]) == 1 &&
+				hd_switch_count(input, s[1]) == 1 && call && call - at < 80,
+				what, call ? (long)(call - at) : -1, 1);
+		}
+
+		n = hd_switch_count(input, "AmmoCaption(TXT_");
+		ok(n == 5 && hd_switch_count(input, "CustomText(") == 0 &&
+			hd_switch_count(input, "strcpy(ammo_change_buf") == 0,
+			"captions: five captions from the language file, no word of "
+			"the table's", n, 5);
+
+		const char* fn = input ? strstr(input, "static void AmmoCaption(long "
+			"txt)") : 0;
+		const char* end = fn ? strstr(fn, "\n}") : 0;
+		const char* cp = fn ? strstr(fn, "snprintf(ammo_change_buf, "
+			"sizeof(ammo_change_buf), \"%s\",") : 0;
+		const char* src = fn ? strstr(fn, "SCRIPT_TEXT(txt));") : 0;
+
+		ok(cp && src && cp < end && src < end, "captions: the caption copies "
+			"the string, bounded by its buffer", cp && src, 1);
+	}
+
+	/* No row for the four captions the language file names now, and the
+	 * buffer: the same size in the definition and the declaration, room
+	 * for the longest of the five names in the game's language files
+	 * (37 bytes, measured) and its end. */
+	{
+		static const char* const gone[4] = { "Wideshot", "Burst", "Sniper",
+			"Rapid" };
+		char* head = hd_switch_text("../input.h");
+
+		for (const char* g : gone)
+		{
+			char at[32];
+
+			snprintf(at, sizeof(at), "{ \"%s\",", g);
+			snprintf(what, sizeof(what), "captions: \"%s\" has no row", g);
+			ok(!hd_switch_count(flow, at), what, hd_switch_count(flow, at),
+				0);
+		}
+
+		const char* def = input ? strstr(input, "char ammo_change_buf[") : 0;
+		const char* ext = head ? strstr(head, "extern char ammo_change_buf[")
+			: 0;
+		const long size = def ? atol(def + 21) : 0;
+		const long size_h = ext ? atol(ext + 28) : 0;
+
+		ok(size == 64 && size_h == size && size >= 37 + 1,
+			"captions: the caption's buffer holds 63 bytes and its end",
+			size * 1000 + size_h, 64064);
+		free(head);
+	}
 
 	// The pad's names: the value column passes every one through
 	// CustomText, alone and in a chord.
@@ -12531,6 +12682,914 @@ static void caption_rows()
 }
 
 // Where `what` first stands in `text` from `from` on, or -1.
+/* Every row of CustomText's table in all five columns (game\gameflow.cpp):
+ * where each key is drawn, read out of the sources (the census of the
+ * record) - a label of the options page or the F4 window (held to
+ * "Kamerageschwindigkeit", the F4 window's first label with its mark " *"),
+ * a value of the value column (192 units), a pad's name behind "Mod+" (192),
+ * a line centred across the screen (512), the caption at the top (512 and
+ * 63 bytes), and the F4 window's head and shine values, which it composes
+ * from a head word and a tier - and every word of the row fits there on the
+ * game font's widths at every screen width, in every language. A French,
+ * Italian or Spanish cell repeats the English only where the language uses
+ * that word itself (caption_same, with the reason); every accented letter
+ * is one the font composes; every hex escape of the table ends where it
+ * should. */
+enum caption_column
+{
+	CC_LABEL, CC_MARKED, CC_VALUE, CC_PAD, CC_LINE, CC_CAPTION, CC_HEAD,
+	CC_TIER
+};
+enum caption_file
+{
+	CF_FRAME, CF_OUTFIT, CF_ROBE, CF_SWITCH, CF_TROYE, CF_INPUT, CF_FLOW,
+	CF_LOADSAVE, CF_COUNT
+};
+struct caption_site
+{
+	const char* key;
+	int column;
+	int file;
+	const char* at;	// occurs in the file; 0: a literal handed to CustomText
+};
+static const caption_site caption_sites[] =
+{
+	{ "Language", CC_LABEL, CF_FRAME, "MENU_VALUE(\"Language\"," },
+	{ "Level Select", CC_LABEL, CF_FRAME, "MENU_VALUE(\"Level Select\"," },
+	{ "Level Select", CC_LINE, CF_FLOW, "CustomText(\"Level Select\")" },
+	{ "Pause", CC_LABEL, CF_FRAME, "MENU_BIND(\"Pause\"," },
+	{ "Gallery", CC_LINE, CF_LOADSAVE, "CustomText(\"Gallery\")" },
+	{ "tomb5 options", CC_LINE, CF_FRAME, "MENU_TAB(\"tomb5 options\"," },
+	{ "tomb5 options", CC_LINE, CF_FRAME, "{ \"tomb5 options\"," },
+	{ "Credits", CC_LINE, CF_FRAME, "MENU_TAB(\"Credits\"," },
+	{ "Credits", CC_LINE, CF_TROYE, "CustomText(\"Credits\")" },
+	{ "Controls", CC_LINE, CF_FRAME, "MENU_TAB(\"Controls\"," },
+	{ "Controls", CC_LINE, CF_FRAME, "{ \"Controls\"," },
+	{ "Control type", CC_LABEL, CF_FRAME, "MENU_VALUE(\"Control type\"," },
+	{ "Tank", CC_VALUE, CF_FRAME, 0 },
+	{ "Modern", CC_VALUE, CF_FRAME, 0 },
+	{ "Combat mode", CC_LABEL, CF_FRAME, "MENU_VALUE(\"Combat mode\"," },
+	{ "Toggle", CC_VALUE, CF_FRAME, 0 },
+	{ "Hold", CC_VALUE, CF_FRAME, 0 },
+	{ "Action", CC_LABEL, CF_FRAME, "MENU_VALUE(\"Action\"," },
+	{ "One key", CC_VALUE, CF_FRAME, 0 },
+	{ "Separate", CC_VALUE, CF_FRAME, 0 },
+	{ "Secondary", CC_LABEL, CF_FRAME, "MENU_BIND(\"Secondary\"," },
+	{ "Sprint mode", CC_LABEL, CF_FRAME, "MENU_VALUE(\"Sprint mode\"," },
+	{ "Duck mode", CC_LABEL, CF_FRAME, "MENU_VALUE(\"Duck mode\"," },
+	{ "Grab mode", CC_LABEL, CF_FRAME, "MENU_VALUE(\"Grab mode\"," },
+	{ "Ledge hang", CC_LABEL, CF_FRAME, "MENU_VALUE_IF(\"Ledge hang\"," },
+	{ "Modes", CC_LINE, CF_FRAME, "MENU_TAB(\"Modes\"," },
+	{ "Modes", CC_LINE, CF_FRAME, "{ \"Modes\"," },
+	{ "Crossbow", CC_LABEL, CF_FRAME, "MENU_BIND(\"Crossbow\"," },
+	{ "Fly mode", CC_LABEL, CF_FRAME, "MENU_BIND(\"Fly mode\"," },
+	{ "All weapons", CC_LABEL, CF_FRAME, "MENU_BIND(\"All weapons\"," },
+	{ "All items", CC_LABEL, CF_FRAME, "MENU_BIND(\"All items\"," },
+	{ "Heal", CC_LABEL, CF_FRAME, "MENU_BIND(\"Heal\"," },
+	{ "Skip level", CC_LABEL, CF_FRAME, "MENU_BIND(\"Skip level\"," },
+	{ "Modifier", CC_LABEL, CF_FRAME, "MENU_BIND(\"Modifier\"," },
+	{ "Camera speed", CC_LABEL, CF_FRAME, "MENU_SLIDER(\"Camera speed\"," },
+	{ "Audio", CC_LINE, CF_FRAME, "MENU_TAB(\"Audio\"," },
+	{ "Audio", CC_LINE, CF_FRAME, "{ \"Audio\"," },
+	{ "Graphics", CC_LINE, CF_FRAME, "MENU_TAB(\"Graphics\"," },
+	{ "Graphics", CC_LINE, CF_FRAME, "{ \"Graphics\"," },
+	{ "Display", CC_LINE, CF_FRAME, "MENU_TAB(\"Display\"," },
+	{ "Display", CC_LINE, CF_FRAME, "{ \"Display\"," },
+	{ "Display", CC_VALUE, CF_FRAME, 0 },
+	{ "Display (60)", CC_VALUE, CF_FRAME, 0 },
+	{ "Key bindings", CC_LINE, CF_FRAME, "MENU_TAB(\"Key bindings\"," },
+	{ "Key bindings", CC_LINE, CF_FRAME, "{ \"Key bindings\"," },
+	{ "Reset to defaults", CC_LINE, CF_FRAME,
+		"MENU_ACTION(\"Reset to defaults\"," },
+	{ "Control layout", CC_LABEL, CF_FRAME, "MENU_VALUE(\"Control layout\"," },
+	{ "Dead zone", CC_LABEL, CF_FRAME, "MENU_SLIDER(\"Dead zone\"," },
+	{ "Mouse sensitivity", CC_LABEL, CF_FRAME,
+		"MENU_SLIDER(\"Mouse sensitivity\"," },
+	{ "Invert mouse", CC_LABEL, CF_FRAME, "MENU_VALUE_IF(\"Invert mouse\"," },
+	{ "HUD", CC_LINE, CF_FRAME, "MENU_TAB(\"HUD\"," },
+	{ "HUD", CC_LINE, CF_FRAME, "{ \"HUD\"," },
+	{ "View", CC_LINE, CF_FRAME, "MENU_TAB(\"View\"," },
+	{ "View", CC_LINE, CF_FRAME, "{ \"View\"," },
+	{ "View", CC_PAD, CF_INPUT, 0 },
+	{ "First person view", CC_LABEL, CF_FRAME,
+		"MENU_VALUE(\"First person view\"," },
+	{ "Field of view", CC_LABEL, CF_FRAME, "MENU_VALUE(\"Field of view\"," },
+	{ "Death camera", CC_LABEL, CF_FRAME, "MENU_VALUE(\"Death camera\"," },
+	{ "Follow head bone", CC_LABEL, CF_FRAME,
+		"MENU_VALUE(\"Follow head bone\"," },
+	{ "Camera damping", CC_LABEL, CF_FRAME, "MENU_VALUE(\"Camera damping\"," },
+	{ "Body", CC_LABEL, CF_FRAME, "MENU_VALUE(\"Body\"," },
+	{ "Frame rate", CC_LABEL, CF_FRAME, "MENU_VALUE(\"Frame rate\"," },
+	{ "VSync", CC_LABEL, CF_FRAME, "MENU_VALUE(\"VSync\"," },
+	{ "Ammotype hotkeys", CC_LABEL, CF_FRAME,
+		"MENU_VALUE(\"Ammotype hotkeys\"," },
+	{ "Look transparency", CC_LABEL, CF_FRAME,
+		"MENU_VALUE(\"Look transparency\"," },
+	{ "Static lighting", CC_LABEL, CF_FRAME,
+		"MENU_VALUE(\"Static lighting\"," },
+	{ "Footprints", CC_LABEL, CF_FRAME, "MENU_VALUE(\"Footprints\"," },
+	{ "Shadow mode", CC_LABEL, CF_FRAME, "MENU_VALUE(\"Shadow mode\"," },
+	{ "Fix climb up delay", CC_LABEL, CF_FRAME,
+		"MENU_VALUE(\"Fix climb up delay\"," },
+	{ "Flexible crawling", CC_LABEL, CF_FRAME,
+		"MENU_VALUE(\"Flexible crawling\"," },
+	{ "Cutscene skipper", CC_LABEL, CF_FRAME,
+		"MENU_VALUE(\"Cutscene skipper\"," },
+	{ "Cheats", CC_LABEL, CF_FRAME, "MENU_VALUE(\"Cheats\"," },
+	{ "Bar mode", CC_LABEL, CF_FRAME, "MENU_VALUE(\"Bar mode\"," },
+	{ "Bar positions", CC_LABEL, CF_FRAME, "MENU_VALUE(\"Bar positions\"," },
+	{ "Enemy bars", CC_LABEL, CF_FRAME, "MENU_VALUE(\"Enemy bars\"," },
+	{ "Ammo counter", CC_LABEL, CF_FRAME, "MENU_VALUE(\"Ammo counter\"," },
+	{ "Gameover menu", CC_LABEL, CF_FRAME, "MENU_VALUE(\"Gameover menu\"," },
+	{ "Fog", CC_LABEL, CF_FRAME, "MENU_VALUE(\"Fog\"," },
+	{ "HD textures", CC_LABEL, CF_FRAME, "MENU_VALUE(\"HD textures\"," },
+	{ "Body physics", CC_LABEL, CF_FRAME, "MENU_VALUE(\"Body physics\"," },
+	{ "Subtle", CC_VALUE, CF_FRAME, 0 },
+	{ "Normal", CC_VALUE, CF_FRAME, 0 },
+	{ "Crawl Tilting", CC_LABEL, CF_FRAME, "MENU_VALUE(\"Crawl Tilting\"," },
+	{ "PSX skies", CC_LABEL, CF_FRAME, "MENU_VALUE(\"PSX skies\"," },
+	{ "Loadbar style", CC_LABEL, CF_FRAME, "MENU_VALUE(\"Loadbar style\"," },
+	{ "Mono screen style", CC_LABEL, CF_FRAME,
+		"MENU_VALUE(\"Mono screen style\"," },
+	{ "Loading text", CC_LABEL, CF_FRAME, "MENU_VALUE(\"Loading text\"," },
+	{ "Shimmer", CC_LABEL, CF_FRAME, "MENU_VALUE(\"Shimmer\"," },
+	{ "Distance fog", CC_LABEL, CF_FRAME, "MENU_VALUE(\"Distance fog\"," },
+	{ "UW Effect", CC_LABEL, CF_FRAME, "MENU_VALUE(\"UW Effect\"," },
+	{ "HD build", CC_LABEL, CF_FRAME, "MENU_VALUE(\"HD build\"," },
+	{ "Reflections", CC_LABEL, CF_FRAME, "MENU_VALUE(\"Reflections\"," },
+	{ "on", CC_VALUE, CF_FRAME, 0 },
+	{ "off", CC_VALUE, CF_FRAME, 0 },
+	{ "Circle", CC_VALUE, CF_FRAME, 0 },
+	{ "Circle", CC_PAD, CF_INPUT, 0 },
+	{ "Faded circle", CC_VALUE, CF_FRAME, 0 },
+	{ "Projected", CC_VALUE, CF_FRAME, 0 },
+	{ "Improved", CC_VALUE, CF_FRAME, 0 },
+	{ "Clear", CC_VALUE, CF_FRAME, 0 },
+	{ "Light", CC_VALUE, CF_FRAME, 0 },
+	{ "Medium", CC_VALUE, CF_FRAME, 0 },
+	{ "Strong", CC_VALUE, CF_FRAME, 0 },
+	{ "First person", CC_VALUE, CF_FRAME, 0 },
+	{ "Third person", CC_VALUE, CF_FRAME, 0 },
+	{ "still", CC_VALUE, CF_FRAME, 0 },
+	{ "animated", CC_VALUE, CF_FRAME, 0 },
+	{ "on (restart)", CC_VALUE, CF_FRAME, 0 },
+	{ "off (restart)", CC_VALUE, CF_FRAME, 0 },
+	{ "Original", CC_VALUE, CF_FRAME, 0 },
+	{ "Outfit", CC_LINE, CF_OUTFIT, 0 },
+	{ "Level facts", CC_MARKED, CF_OUTFIT, 0 },
+	{ "level and run decide", CC_VALUE, CF_OUTFIT, 0 },
+	{ "Footsteps", CC_LABEL, CF_OUTFIT, 0 },
+	{ "Head", CC_LABEL, CF_OUTFIT, 0 },
+	{ "Shine", CC_LABEL, CF_OUTFIT, 0 },
+	{ "Skin glow", CC_LABEL, CF_OUTFIT, 0 },
+	{ "as the outfit says", CC_VALUE, CF_OUTFIT, 0 },
+	{ "Bare", CC_VALUE, CF_OUTFIT, 0 },
+	{ "Boots", CC_VALUE, CF_OUTFIT, 0 },
+	{ "Bare - no 2nd set", CC_VALUE, CF_OUTFIT, 0 },
+	{ "Boots - no 2nd set", CC_VALUE, CF_OUTFIT, 0 },
+	{ "applies at the next level", CC_LINE, CF_OUTFIT, 0 },
+	{ "TR5 hair", CC_HEAD, CF_OUTFIT, "return \"TR5 hair\";" },
+	{ "own", CC_HEAD, CF_OUTFIT, "return \"own\";" },
+	{ "measured", CC_TIER, CF_ROBE, "return \"measured\";" },
+	{ "table", CC_TIER, CF_ROBE, "return \"table\";" },
+	{ "list", CC_TIER, CF_ROBE, "return \"list\";" },
+	{ "default", CC_TIER, CF_ROBE, "return \"default\";" },
+	{ "HD is off", CC_CAPTION, CF_SWITCH, "CustomText(\"HD is off\")" },
+	{ "TOMB5 Engine", CC_LINE, CF_TROYE, "CustomText(\"TOMB5 Engine\")" },
+	{ "TR3 Enemies from tomb3", CC_LINE, CF_TROYE,
+		"CustomText(\"TR3 Enemies from tomb3\")" },
+	{ "Randomizer and Windows 11 Port", CC_LINE, CF_TROYE,
+		"CustomText(\"Randomizer and Windows 11 Port\")" },
+	{ "Contributors", CC_LINE, CF_TROYE, "CustomText(\"Contributors\")" },
+	{ "Tools and Libraries", CC_LINE, CF_TROYE,
+		"CustomText(\"Tools and Libraries\")" },
+	{ "Square", CC_PAD, CF_INPUT, 0 },
+	{ "Cross", CC_PAD, CF_INPUT, 0 },
+	{ "Triangle", CC_PAD, CF_INPUT, 0 },
+	{ "PS Button", CC_PAD, CF_INPUT, 0 },
+	{ "Menu", CC_PAD, CF_INPUT, 0 },
+	{ "Stick R Up", CC_PAD, CF_INPUT, 0 },
+	{ "Stick R Down", CC_PAD, CF_INPUT, 0 },
+	{ "Stick R Left", CC_PAD, CF_INPUT, 0 },
+	{ "Stick R Right", CC_PAD, CF_INPUT, 0 },
+	{ "D-Pad Up", CC_PAD, CF_INPUT, 0 },
+	{ "D-Pad Down", CC_PAD, CF_INPUT, 0 },
+	{ "D-Pad Left", CC_PAD, CF_INPUT, 0 },
+	{ "D-Pad Right", CC_PAD, CF_INPUT, 0 },
+};
+
+/* The cells that repeat the English literal, and why: the language uses the
+ * word itself. A cell repeating the English that is not here fails, and so
+ * does one here that no longer repeats it. */
+struct caption_same_word
+{
+	const char* key;
+	int column;	// 1 French, 3 Italian, 4 Spanish
+	const char* reason;
+};
+static const caption_same_word caption_same[] =
+{
+	{ "Pause", 1, "the French word, as the language file's TXT_Paused" },
+	{ "Action", 1, "the French word, as the language file's TXT_Action" },
+	{ "Modes", 1, "the French plural of mode" },
+	{ "Audio", 1, "the same word in French" },
+	{ "Audio", 3, "the same word in Italian" },
+	{ "Audio", 4, "the same word in Spanish" },
+	{ "HUD", 1, "the loanword, as German keeps it" },
+	{ "HUD", 3, "the loanword, as German keeps it" },
+	{ "HUD", 4, "the loanword, as German keeps it" },
+	{ "VSync", 1, "a technical name" },
+	{ "VSync", 3, "a technical name" },
+	{ "VSync", 4, "a technical name" },
+	{ "Normal", 1, "the same word in French" },
+	{ "Normal", 4, "the same word in Spanish" },
+	{ "Original", 1, "the same word in French" },
+	{ "Original", 4, "the same word in Spanish" },
+	{ "table", 1, "the same word in French" },
+	{ "Triangle", 1, "the same word in French" },
+	{ "Menu", 1, "the same word in French" },
+	{ "Menu", 3, "the same word in Italian" },
+};
+
+struct caption_cells
+{
+	char cell[5][96];
+};
+
+// A hex digit's value, -1 for any other character.
+static int caption_hex(char c)
+{
+	return c >= '0' && c <= '9' ? c - '0' : c >= 'a' && c <= 'f' ?
+		c - 'a' + 10 : c >= 'A' && c <= 'F' ? c - 'A' + 10 : -1;
+}
+
+/* The table's rows, each cell decoded as the compiler reads it: adjacent
+ * literals joined, \xNN as its byte, \" and \\ as themselves. Comments are
+ * skipped. Returns false when a cell would not fit. */
+static bool caption_table(const char* flow, std::vector<caption_cells>& rows)
+{
+	const char* p = flow ? strstr(flow, "static const char* table[][5] =") : 0;
+	const char* end = p ? strstr(p, "\n\t};") : 0;
+	caption_cells row;
+	int col = -1;
+	int k = 0;
+
+	if (!p || !end)
+		return false;
+
+	p = strchr(p, '{');	// the table's own brace
+
+	for (p = p ? p + 1 : end; p < end; p++)
+	{
+		if (p[0] == '/' && p[1] == '/')
+		{
+			while (p < end && *p != '\n')
+				p++;
+
+			continue;
+		}
+
+		if (*p == '{')
+		{
+			memset(&row, 0, sizeof(row));
+			col = 0;
+			k = 0;
+		}
+		else if (*p == ',' && col >= 0 && col < 4)
+		{
+			col++;
+			k = 0;
+		}
+		else if (*p == '}' && col >= 0)
+		{
+			if (col != 4)
+				return false;
+
+			rows.push_back(row);
+			col = -1;
+		}
+		else if (*p == '"' && col >= 0)
+		{
+			for (p++; p < end && *p != '"'; p++)
+			{
+				int c = (unsigned char)*p;
+
+				if (c == '\\' && p[1] == 'x')
+				{
+					c = caption_hex(p[2]) * 16 + caption_hex(p[3]);
+					p += 3;
+				}
+				else if (c == '\\')
+					c = (unsigned char)*++p;
+
+				if (k >= 95)
+					return false;
+
+				row.cell[col][k++] = (char)c;
+			}
+		}
+	}
+
+	return true;
+}
+
+// Is `key` a literal inside one of the CustomText( ... ) calls of `text`?
+static bool caption_handed(const char* text, const char* key)
+{
+	char lit[112];
+
+	snprintf(lit, sizeof(lit), "\"%s\"", key);
+
+	for (const char* p = text ? strstr(text, "CustomText(") : 0; p;
+		p = strstr(p + 1, "CustomText("))
+	{
+		const char* q = p + 11;
+		int depth = 1;
+
+		for (; *q && depth; q++)
+		{
+			if (*q == '(')
+				depth++;
+			else if (*q == ')')
+				depth--;
+			else if (*q == '"')
+			{
+				if (!strncmp(q, lit, strlen(lit)))
+					return true;
+
+				const char* e = strchr(q + 1, '"');
+
+				if (!e)
+					break;
+
+				q = e;
+			}
+		}
+	}
+
+	return false;
+}
+
+static void caption_columns()
+{
+	static const char* const names[CF_COUNT] = { "../../game/menu_frame.cpp",
+		"hd_outfitmenu.cpp", "hd_wardrobe.cpp", "hd_switch.cpp",
+		"../../tomb5/troyestuff.cpp", "../input.cpp", "../../game/gameflow.cpp",
+		"../LoadSave.cpp" };
+	static const char* const lang[5] = { "English", "French", "German",
+		"Italian", "Spanish" };
+	char* files[CF_COUNT];
+	std::vector<caption_cells> rows;
+	char what[200];
+	int read = 0;
+
+	for (int f = 0; f < CF_COUNT; f++)
+		read += (files[f] = hd_switch_text(names[f])) != 0;
+
+	ok(read == CF_COUNT, "columns: the eight files are read", read, CF_COUNT);
+	ok(caption_table(files[CF_FLOW], rows) && rows.size() == 134,
+		"columns: the table has its 134 rows", (long)rows.size(), 134);
+
+	// The pad's names: the literals of the four pages (specific\input.cpp).
+	const char* pads = files[CF_INPUT] ? strstr(files[CF_INPUT],
+		"#define JOYNAME_STICK") : 0;
+	const char* pads_end = pads ? strstr(pads, "long JoyStyle = -1;") : 0;
+
+	// Every site is where the census says, and every row has its site.
+	int sites_found = 0;
+	const int nsites = (int)(sizeof(caption_sites) / sizeof(caption_sites[0]));
+
+	for (const caption_site& s : caption_sites)
+	{
+		const char* text = files[s.file];
+		bool here;
+
+		if (s.at)
+			here = hd_switch_count(text, s.at) >= 1;
+		else if (s.file == CF_INPUT)
+		{
+			char lit[112];
+
+			snprintf(lit, sizeof(lit), "\"%s\"", s.key);
+
+			const char* hit = pads ? strstr(pads, lit) : 0;
+
+			here = hit && hit < pads_end;
+		}
+		else
+			here = caption_handed(text, s.key);
+
+		sites_found += here;
+
+		if (!here)
+		{
+			snprintf(what, sizeof(what), "columns: \"%s\" is drawn in %s",
+				s.key, names[s.file]);
+			ok(false, what, 0, 1);
+		}
+	}
+
+	ok(sites_found == nsites, "columns: every site of the census is in its "
+		"source", sites_found, nsites);
+
+	int rows_with_site = 0;
+
+	for (const caption_cells& r : rows)
+	{
+		bool any = false;
+
+		for (const caption_site& s : caption_sites)
+			any = any || !strcmp(s.key, r.cell[0]);
+
+		rows_with_site += any;
+
+		if (!any)
+		{
+			snprintf(what, sizeof(what), "columns: \"%s\" has a site",
+				r.cell[0]);
+			ok(false, what, 0, 1);
+		}
+	}
+
+	ok(rows_with_site == (int)rows.size(), "columns: every row is drawn "
+		"somewhere", rows_with_site, (long)rows.size());
+
+	// Each cell in each column its key is drawn in.
+	const long label = caption_share("Kamerageschwindigkeit");
+	long widest[8][5] = {};
+	char widest_s[8][5][112] = {};
+	int fits = 0, measured = 0;
+
+	for (const caption_site& s : caption_sites)
+	{
+		const caption_cells* r = 0;
+
+		for (const caption_cells& x : rows)
+			if (!strcmp(x.cell[0], s.key))
+				r = &x;
+
+		if (!r || s.column == CC_HEAD || s.column == CC_TIER)
+			continue;
+
+		for (int c = 0; c < 5; c++)
+		{
+			char drawn[112];
+			// The four German d-pad names fit alone; caption_rows holds
+			// their chords, which are wider than the column.
+			const bool alone = s.column == CC_PAD && c == 2 &&
+				!strncmp(r->cell[2], "Steuerkreuz ", 12);
+
+			snprintf(drawn, sizeof(drawn), "%s%s%s",
+				s.column == CC_PAD && !alone ? "Mod+" : "", r->cell[c],
+				s.column == CC_MARKED ? " *" : "");
+
+			const long share = caption_share(drawn);
+			const long room = s.column == CC_LABEL || s.column == CC_MARKED ?
+				label : s.column == CC_VALUE || s.column == CC_PAD ? 960 :
+				2560;
+			const bool in = share <= room && (s.column != CC_CAPTION ||
+				strlen(r->cell[c]) <= 63);
+
+			measured++;
+			fits += in;
+
+			if (share > widest[s.column][c] && share < 100000)
+			{
+				widest[s.column][c] = share;
+				snprintf(widest_s[s.column][c], sizeof(widest_s[0][0]), "%s",
+					drawn);
+			}
+
+			if (!in)
+			{
+				snprintf(what, sizeof(what), "columns: %s \"%s\" fits its "
+					"column", lang[c], drawn);
+				ok(false, what, share, room);
+			}
+		}
+	}
+
+	ok(fits == measured && measured > 0, "columns: every cell fits its "
+		"column at every screen width", fits, measured);
+
+	// The F4 window's head and shine values, composed as it composes them:
+	// a head word, or "1.00/128", before a tier in brackets.
+	for (int c = 0; c < 5; c++)
+	{
+		const char* heads[3] = { "TR5", 0, 0 };
+		const char* tiers[7] = { "outfit.txt", "origin", "?", 0, 0, 0, 0 };
+		int nh = 1, nt = 3;
+
+		for (const caption_cells& r : rows)
+			for (const caption_site& s : caption_sites)
+				if (!strcmp(s.key, r.cell[0]) && s.column == CC_HEAD && nh < 3)
+					heads[nh++] = r.cell[c];
+				else if (!strcmp(s.key, r.cell[0]) && s.column == CC_TIER &&
+					nt < 7)
+					tiers[nt++] = r.cell[c];
+
+		long most = 0;
+		char line[112] = "";
+
+		for (int h = 0; h <= nh; h++)
+			for (int t = 0; t < nt; t++)
+			{
+				char v[112];
+
+				snprintf(v, sizeof(v), "%s (%s)", h < nh ? heads[h] :
+					"1.00/128", tiers[t]);
+
+				if (caption_share(v) > most)
+				{
+					most = caption_share(v);
+					snprintf(line, sizeof(line), "%s", v);
+				}
+			}
+
+		printf("  columns: widest F4 head or shine value, %s: %.1f "
+			"\"%s\"\n", lang[c], most / 5.0, line);
+		snprintf(what, sizeof(what), "columns: the widest %s head or shine "
+			"value fits", lang[c]);
+		ok(nh == 3 && nt == 7 && most <= 960, what, most, 960);
+	}
+
+	static const char* const kind[6] = { "label", "marked label", "value",
+		"pad name", "centred line", "caption" };
+
+	for (int k = 0; k < 6; k++)
+		for (int c = 0; c < 5; c++)
+			if (widest[k][c])
+				printf("  columns: widest %s, %s: %.1f \"%s\"\n", kind[k],
+					lang[c], widest[k][c] / 5.0, widest_s[k][c]);
+
+	// French, Italian and Spanish: the English word only where listed.
+	for (int c = 1; c < 5; c++)
+	{
+		if (c == 2)
+			continue;
+
+		int repeats = 0, listed = 0;
+
+		for (const caption_cells& r : rows)
+		{
+			if (strcmp(r.cell[c], r.cell[0]))
+				continue;
+
+			repeats++;
+
+			bool in = false;
+
+			for (const caption_same_word& w : caption_same)
+				in = in || (w.column == c && !strcmp(w.key, r.cell[0]));
+
+			listed += in;
+
+			if (!in)
+			{
+				snprintf(what, sizeof(what), "columns: %s \"%s\" is a word "
+					"of its own", lang[c], r.cell[0]);
+				ok(false, what, 0, 1);
+			}
+		}
+
+		snprintf(what, sizeof(what), "columns: %s repeats the English only "
+			"in the listed words", lang[c]);
+		ok(repeats == listed, what, repeats, listed);
+	}
+
+	for (const caption_same_word& w : caption_same)
+	{
+		bool same = false;
+
+		for (const caption_cells& r : rows)
+			same = same || (!strcmp(r.cell[0], w.key) &&
+				!strcmp(r.cell[w.column], w.key));
+
+		snprintf(what, sizeof(what), "columns: %s \"%s\" is the English "
+			"word: %s", lang[w.column], w.key, w.reason);
+		ok(same, what, same, 1);
+	}
+
+	// No empty cell, and every accented letter one the font composes.
+	for (int c = 0; c < 5; c++)
+	{
+		int bad = 0;
+
+		for (const caption_cells& r : rows)
+		{
+			bad += !r.cell[c][0];
+
+			for (const char* q = r.cell[c]; *q; q++)
+			{
+				char one[2] = { *q, 0 };
+
+				bad += (unsigned char)*q > '~' && caption_share(one) >= 100000;
+			}
+		}
+
+		snprintf(what, sizeof(what), "columns: every %s cell is a word the "
+			"font draws", lang[c]);
+		ok(bad == 0, what, bad, 0);
+	}
+
+	// Every hex escape of the table is two digits and ends there.
+	{
+		const char* p = files[CF_FLOW] ? strstr(files[CF_FLOW],
+			"static const char* table[][5] =") : 0;
+		const char* end = p ? strstr(p, "\n\t};") : 0;
+		int escapes = 0, long_ones = 0;
+
+		for (; p && p < end; p++)
+		{
+			if (p[0] == '/' && p[1] == '/')
+			{
+				while (p < end && *p != '\n')
+					p++;
+
+				continue;
+			}
+
+			if (p[0] == '\\' && p[1] == 'x')
+			{
+				escapes++;
+				long_ones += caption_hex(p[2]) < 0 || caption_hex(p[3]) < 0 ||
+					caption_hex(p[4]) >= 0;
+			}
+		}
+
+		ok(escapes > 0 && long_ones == 0, "columns: every hex escape of the "
+			"table ends after two digits", long_ones, 0);
+	}
+
+	for (int f = 0; f < CF_COUNT; f++)
+		free(files[f]);
+}
+
+/* extrastrings.txt (game\gameflow.cpp, LoadExtraStrings): the shipped copy,
+ * Preparation\extrastrings.txt, holds every key of CustomText's table in
+ * each of its four sections with the table's own word and no key the table
+ * lacks, so with the file present every word is the table's; and the
+ * engine reads it once at start, before the table and after the language
+ * switch, so English, US, Japanese and Dutch keep the literal. The parser
+ * itself is not linked here: it is checked against sample buffers by a
+ * harness that compiles its own text (the record names it). */
+static void extra_strings()
+{
+	char* flow = hd_switch_text("../../game/gameflow.cpp");
+	char* file = hd_switch_text("../../../../Preparation/extrastrings.txt");
+	std::vector<caption_cells> rows;
+	char what[200];
+
+	ok(flow && file && caption_table(flow, rows) && rows.size() == 134,
+		"extra strings: the table and the shipped file are read",
+		(long)rows.size(), 134);
+
+	// The shipped file, read line by line: UTF-8 without a byte order mark
+	// (the shipped copy holds only Latin-1 letters, in two bytes each), CRLF.
+	static const char* const names[4] = { "[French]", "[German]",
+		"[Italian]", "[Spanish]" };
+	int section = -1;
+	int taken[4] = { 0, 0, 0, 0 };
+	int wrong = 0, crlf = 0, lf = 0, other = 0;
+
+	for (char* p = file; p && *p;)
+	{
+		char* e = strchr(p, '\n');
+		char line[256];
+		size_t n = e ? (size_t)(e - p) : strlen(p);
+
+		lf++;
+
+		if (n && p[n - 1] == '\r')
+		{
+			n--;
+			crlf++;
+		}
+
+		if (n >= sizeof(line))
+			n = sizeof(line) - 1;
+
+		memcpy(line, p, n);
+		line[n] = 0;
+		p = e ? e + 1 : p + strlen(p);
+
+		if (!line[0] || line[0] == '#')
+			continue;
+
+		if (line[0] == '[')
+		{
+			section = -1;
+
+			for (int i = 0; i < 4; i++)
+				if (!strcmp(line, names[i]))
+					section = i;
+
+			other += section < 0;
+			continue;
+		}
+
+		char* eq = strchr(line, '=');
+
+		if (section < 0 || !eq)
+		{
+			other++;
+			continue;
+		}
+
+		*eq = 0;
+
+		// The word's UTF-8 as the Latin-1 bytes the table holds.
+		char word[128];
+		int k = 0;
+
+		for (const unsigned char* q = (const unsigned char*)eq + 1; *q &&
+			k < 127; q++)
+		{
+			if ((*q == 0xC2 || *q == 0xC3) && (q[1] & 0xC0) == 0x80)
+			{
+				word[k++] = (char)(((*q & 0x03) << 6) | (q[1] & 0x3F));
+				q++;
+			}
+			else if (*q < 0x80)
+				word[k++] = (char)*q;
+			else
+				wrong++;
+		}
+
+		word[k] = 0;
+
+		const caption_cells* r = 0;
+
+		for (const caption_cells& x : rows)
+			if (!strcmp(x.cell[0], line))
+				r = &x;
+
+		if (!r || strcmp(r->cell[section + 1], word))
+		{
+			wrong++;
+			snprintf(what, sizeof(what), "extra strings: %s \"%s\" is the "
+				"table's word", names[section], line);
+			ok(false, what, 0, 1);
+		}
+		else
+			taken[section]++;
+	}
+
+	for (int i = 0; i < 4; i++)
+	{
+		snprintf(what, sizeof(what), "extra strings: %s holds every key of "
+			"the table with its word", names[i]);
+		ok(taken[i] == (int)rows.size() && taken[i] > 0, what, taken[i],
+			(long)rows.size());
+	}
+
+	ok(wrong == 0 && other == 0 && file && (unsigned char)file[0] != 0xEF,
+		"extra strings: no other line, no key the table lacks, no byte order "
+		"mark", wrong * 1000 + other, 0);
+	ok(crlf == lf && lf > 0, "extra strings: the shipped file is CRLF", crlf,
+		lf);
+
+	// The loader: once, at start, beside the language setup.
+	const char* load = flow ? strstr(flow, "void LoadGameflow()") : 0;
+	const char* lang = load ? strstr(load, "Gameflow->Language = l;") : 0;
+	const char* call = lang ? strstr(lang, "LoadExtraStrings();") : 0;
+	const char* next = load ? strstr(load + 1, "\n}") : 0;
+
+	ok(hd_switch_count(flow, "LoadExtraStrings();") == 1 && call && call <
+		next, "extra strings: read once, in LoadGameflow after the language",
+		hd_switch_count(flow, "LoadExtraStrings();"), 1);
+	ok(hd_switch_count(flow, "fopen(\"extrastrings.txt\", \"rb\")") == 1,
+		"extra strings: opened by its bare name, as SCRIPT.DAT is",
+		hd_switch_count(flow, "fopen(\"extrastrings.txt\", \"rb\")"), 1);
+	ok(hd_switch_count(flow, "Log(\"STRINGS file=extrastrings.txt "
+		"found=%ld keys=%ld french=%ld \"\r\n\t\t\"german=%ld italian=%ld "
+		"spanish=%ld skipped=%ld rejected=%ld\"") == 1, "extra strings: one "
+		"log line at the load", 0, 1);
+	ok(hd_switch_count(flow, "#define EXTRA_FILE_MAX\t(64 * 1024)") == 1 &&
+		hd_switch_count(flow, "#define EXTRA_WORD_MAX\t63") == 1,
+		"extra strings: 64 KB at most, a word within the caption's 63 bytes",
+		0, 1);
+
+	// CustomText: English, US, Japanese and Dutch return the literal first;
+	// then the file's word, then the table's, then the literal.
+	const char* ct = flow ? strstr(flow, "const char* CustomText(const char* "
+		"engl)") : 0;
+	const char* lit = ct ? strstr(ct, "\treturn engl;\t// English, US, "
+		"Japanese and Dutch") : 0;
+	const char* file_first = lit ? strstr(lit, "ExtraStringFor(engl, column "
+		"- 1);") : 0;
+	const char* table = file_first ? strstr(file_first, "for (long i = 0; "
+		"i < (long)(sizeof(table) / sizeof(table[0])); i++)") : 0;
+
+	ok(lit && file_first && table, "extra strings: CustomText asks the file "
+		"before the table, only for the four languages", !!lit + !!file_first
+		+ !!table, 3);
+
+	free(flow);
+	free(file);
+}
+
+/* The Japanese entry (game\gameflow.cpp, SwitchLanguage): the Japanese HQ
+ * audio with English text. The entry is decided by its value, before any
+ * file is opened: with audio\HQ JP there it loads the English entry's file
+ * under the same header check and becomes JAPAN, without it it returns 0,
+ * so the Language row skips it and a saved choice leaves the language as it
+ * was. Every other entry keeps the header check alone. The sound path is
+ * the base's: ACMEmulateCDPlay's mapping still sends JAPAN to HQ JP and
+ * falls back to HQ EN; CustomText still returns the literal for JAPAN; the
+ * German keyboard test and the title logo do not name JAPAN, so a value of
+ * JAPAN takes the English keyboard table and the logo every language
+ * without one of its own takes. */
+static void japanese_audio()
+{
+	char* flow = hd_switch_text("../../game/gameflow.cpp");
+	char* audio = hd_switch_text("../audio.cpp");
+	char* frame = hd_switch_text("../../game/menu_frame.cpp");
+	char* file = hd_switch_text("../file.cpp");
+
+	ok(flow && audio && frame && file, "japanese: the four files are read",
+		!!flow + !!audio + !!frame + !!file, 4);
+
+	const char* sw = flow ? strstr(flow, "long SwitchLanguage(long idx)") : 0;
+	const char* end = sw ? strstr(sw, "\n}") : 0;
+	const char* jp = sw ? strstr(sw, "if (idx == LNG_JAPAN)") : 0;
+	const char* dir = jp ? strstr(jp, "GetFileAttributesA(\"audio\\\\HQ JP\")")
+		: 0;
+	const char* none = dir ? strstr(dir, "if (at == INVALID_FILE_ATTRIBUTES || "
+		"!(at & FILE_ATTRIBUTE_DIRECTORY))\r\n\t\t\treturn 0;") : 0;
+	const char* eng = none ? strstr(none, "name = LanguageFileName("
+		"LNG_ENGLISH);") : 0;
+	const char* load = eng ? strstr(eng, "if (!LoadFile(name, &d))") : 0;
+	const char* check = load ? strstr(load, "if (sh.nStrings != 195 || "
+		"sh.nPCStrings != 58)") : 0;
+	const char* set = check ? strstr(check, "Gameflow->Language = idx;") : 0;
+
+	ok(jp && dir && none && eng && load && check && set && set < end,
+		"japanese: the entry asks for HQ JP, then loads the English file "
+		"under the header check", !!jp + !!dir + !!none + !!eng + !!load +
+		!!check + !!set, 7);
+	ok(hd_switch_count(sw, "LNG_JAPAN") == 1 && hd_switch_count(flow,
+		"LNG_DUTCH") == 0, "japanese: only the Japanese entry has a case; "
+		"Dutch keeps the check alone", hd_switch_count(sw, "LNG_JAPAN"), 1);
+
+	// CustomText: no case for JAPAN, so the literal.
+	const char* ct = flow ? strstr(flow, "const char* CustomText(const char* "
+		"engl)") : 0;
+	const char* ct_end = ct ? strstr(ct, "\n}") : 0;
+	const char* jcase = ct ? strstr(ct, "case JAPAN") : 0;
+
+	ok(ct && (!jcase || jcase > ct_end), "japanese: CustomText returns the "
+		"literal for JAPAN", !!jcase, 0);
+
+	// The HQ music's mapping, line for line as the base has it.
+	static const char* const mapping[] = {
+		"\t\tswitch (Gameflow->Language)\r\n\t\t{\r\n"
+		"\t\tcase GERMAN:  hq = \"DE\"; break;\r\n"
+		"\t\tcase FRENCH:  hq = \"FR\"; break;\r\n"
+		"\t\tcase ITALIAN: hq = \"IT\"; break;\r\n"
+		"\t\tcase SPANISH: hq = \"ES\"; break;\r\n"
+		"\t\tcase JAPAN:   hq = \"JP\"; break;\r\n"
+		"\t\tdefault:      hq = 0;    break;\t// English, US, Dutch\r\n"
+		"\t\t}\r\n",
+		"\t\t\twsprintf(name, \"audio\\\\HQ %s\\\\%d.OGG\", hq, track);\r\n"
+		"\t\t\tOggStream = stb_vorbis_open_filename(name, &err, 0);\r\n",
+		"\t\t\twsprintf(name, \"audio\\\\HQ EN\\\\%d.OGG\", track);\r\n"
+		"\t\t\tOggStream = stb_vorbis_open_filename(name, &err, 0);\r\n",
+	};
+	int same = 0;
+
+	for (const char* m : mapping)
+		same += hd_switch_count(audio, m) == 1;
+
+	ok(same == 3, "japanese: the HQ audio's mapping is the base's, JAPAN to "
+		"HQ JP, then HQ EN", same, 3);
+
+	// The German keyboard table and the title logo name no Japanese case.
+	ok(hd_switch_count(frame, "Gameflow->Language == 2 ? GermanKeyboard : "
+		"KeyboardButtons") == 1 && hd_switch_count(frame, "== JAPAN") +
+		hd_switch_count(frame, "LNG_JAPAN") + hd_switch_count(frame,
+		"Language == 6") == 0,
+		"japanese: the German keyboard test is the base's", 0, 0);
+
+	const char* logo = file ? strstr(file, "if (Gameflow->Language == GERMAN)"
+		"\r\n\t\t\tsize = LoadFile(\"data\\\\grlogo.pak\", &CompressedData);")
+		: 0;
+	const char* rest = logo ? strstr(logo, "\t\telse\r\n\t\t\tsize = "
+		"LoadFile(\"data\\\\logo512.pak\", &CompressedData);") : 0;
+	const char* fall = rest ? strstr(rest, "if (!size || !CompressedData)")
+		: 0;
+
+	ok(logo && rest && fall && hd_switch_count(file, "== JAPAN") +
+		hd_switch_count(file, "LNG_JAPAN") == 0,
+		"japanese: the title logo of JAPAN is logo512.pak, with its fallback",
+		!!logo + !!rest + !!fall, 3);
+
+	free(flow);
+	free(audio);
+	free(frame);
+	free(file);
+}
+
 static long load_keep_at(const char* text, const char* from, const char* what)
 {
 	const char* start = text ? strstr(text, from) : 0;
@@ -28249,6 +29308,9 @@ int main()
 	glass_look();
 	hd_build_gate();
 	caption_rows();
+	caption_columns();
+	extra_strings();
+	japanese_audio();
 	load_keep();
 	load_mode();
 	load_brake();

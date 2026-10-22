@@ -32551,12 +32551,12 @@ edited. Not played: the head was not run in the game.
 
 **Left.** The Credits screen's lines of names with English joining words (*Troye and
 contributors*, *with Claude AI by Anthropic*, *trview by chreden*, *Dear ImGui by Omar
-Cornut*, *stb by Sean Barrett*) stay English; whether they get German is a question for
-the play test. `HDWardrobeHeadPhrase` (`hd_wardrobe.h`) has no caller since the window
-prints the head word itself; it stays, with the header's three comments and the README's
-head words corrected at the merge, until a later round removes it or gives it a reader.
-The decimal point of the F4 window's shine numbers, and a shine value whose exponent an
-`outfit.txt` writes with many digits, stay as #234 left them.
+Cornut*, *stb by Sean Barrett*) stay English, settled in #239. `HDWardrobeHeadPhrase`
+(`hd_wardrobe.h`) has no caller since the window prints the head word itself; it stays,
+with the header's three comments and the README's head words corrected at the merge, until
+a later round removes it or gives it a reader. The decimal point of the F4 window's shine
+numbers, and a shine value whose exponent an `outfit.txt` writes with many digits, stay
+as #234 left them.
 
 **Commits.** `88e9d5c1` (the two words and the shorter English F4 values), `e5962dd6` (the
 credits, the pad's names and the ammo captions), this record, `65c8bee0` (a comment in the
@@ -32641,6 +32641,273 @@ the deletion is proven by reading and by the build.
 change on the options page.
 
 **Commits.** `a40c0876` (the helper, the deletion and the check) and this record.
+
+### Every language gets all its texts; Japanese for the HQ audio (#239)
+2026-10-23
+
+**What.** Five things. (1) The ammo hotkeys' caption at the top of the screen
+(`DoWeaponRequest`, `specific/input.cpp`) shows the language file's own name of the
+shotgun's ammunition and of the HK's fire mode - the strings the inventory shows for the
+same items (`TXT_Shotgun_Normal_Ammo`, `TXT_Shotgun_Wideshot_Ammo`, `TXT_HKSTRING2`
+sniper, `TXT_HKSTRING3` burst, `TXT_HKSTRING4` rapid) - copied by `AmmoCaption` into
+`ammo_change_buf`, which grows from 12 to 64 bytes; `CustomText`'s table loses the rows
+*Wideshot*, *Burst*, *Sniper* and *Rapid*. (2) The German pad names read *Stick R oben*,
+*unten*, *links*, *rechts* and *Steuerkreuz oben*, *unten*, *links*, *rechts*. (3) Every
+row of the table carries a French, an Italian and a Spanish word of the same meaning as
+its German cell; two rows are new, *Display (60)* and *Original*. (4) The project's words
+can also come from `extrastrings.txt` beside the executable (`LoadExtraStrings`,
+`game/gameflow.cpp`), read once at start; the file's word goes before the table's, and
+`Preparation/extrastrings.txt` is the shipped copy with every word of the table. (5) The
+Language row reaches the Japanese entry when the folder `audio\HQ JP` is there: the
+Japanese HQ audio with English text (`SwitchLanguage`).
+
+**Why.** The play test, answering round #237's questions. On the ammo captions, which had
+got words of the project's own: "All these things already have fitting names from the
+start." and "Ah, I suspect he built something of his own, free of the .DAT languages." On
+the pad: "'Steuerkreuz' and 'oben/unten', please." *Ansicht*, *Menü* and *PS-Taste*:
+"Yes" - they stay. The credits' name lines with English joining words: "No, we can leave
+those." And on the Language row: "I actually wanted every language to get all its texts in
+its own language. We built that in specially back then." with "The .DAT is the first
+source; where it does not suffice, we supplement through our own extrastrings.txt. And our
+new menu items are the easiest part." and "If the .DAT files do not carry everything,
+please supplement from our side where possible, so that it becomes a complete package.
+Everything that is text shall be visible in every language." On the HQ sets, while
+round #238 ran: "But please do not lose the compatibility with the HQ sets. There,
+Japanese can be used for the audio; only the text is rejected." and later, with a picture
+of the Language row on *Japanese* and a HUD printing symbols: "As said, my JAPAN.DAT
+carries the TR5 format. Therefore it can use the Japanese audio." Dutch and Japanese text
+stay out of this round ("TR4 data junk shipped by Steam"); the missing language files are
+the player's to get.
+
+**Measured.** At the base `bce64b34`, read from the sources; the game was not run, the
+registry not read.
+
+- The table: 136 rows (`scripts/count_rows.py` of the round counts 134, because it skips
+  the two rows whose German word is split around a hex escape). Cells repeating the
+  English literal: French 132, German 10, Italian 130, Spanish 130; six rows carried
+  French, Italian or Spanish words (*Language*, *Level Select*, *Pause*, *Gallery*, *tomb5
+  options*, *Credits*), without accents. At the head: 134 rows; French 11, German 12 (the
+  two new rows, whose German is the English word), Italian 4, Spanish 5 - the listed words
+  below and nothing else.
+- Where each key is drawn, read out of the sources (the census of the work folder, at the
+  base and at the head; ModernTest carries the head's as 148 sites). Of the head's 134
+  rows 61 are labels of the options pages or the F4 window (held to
+  *Kamerageschwindigkeit*, 223 units), one is the F4 window's marked first label, 31 are
+  values of the value column (192), 13 pad names behind *Mod+* (192), 17 centred lines
+  (512: tabs, page titles, the action row, the Credits screen, the Level Select title,
+  *Gallery*, the F4 title and hint), one the F12 notice, two head words and four tiers the
+  F4 window composes into "head (tier)" and "1.00/128 (tier)", and four keys are drawn in
+  two columns (*Level Select* label and line, *Display* line and value, *View* line and
+  pad name, *Circle* value and pad name). At the base *Normal* was a value and an ammo
+  caption, and the four caption rows were captions. Every row has a site.
+- The accents: `AccentToCode` (`game/text.cpp`) maps 33 Latin-1 bytes to the font's codes
+  and `accent.inc` composes all 33: a, e, i, o and u each with the acute, the grave, the
+  circumflex and the diaeresis, ç, ñ, ÿ, the capitals Ä, Â, Á, É, Ö, Ó, Ü and Ñ, and ¿ and
+  ¡. No word of the round needed a letter outside them; À, È, Ç, Í, Ú and their kind would
+  be left out by `PrintString`.
+- The five ammo strings of the five language files of the play test, in bytes (normal,
+  wideshot, sniper, burst, rapid): English 19, 21, 14, 13, 13; French 15, 10, 12, 12, 19;
+  German 22, 21, 22, 18, 20; Italian 24, 32, 20, 22, 18; Spanish 27, 37, 21, 14, 14. The
+  longest is Spanish wideshot, 37 bytes and 349.0 units of a centred line's 512. German
+  and Italian write their accents as the font's codes (0x81, 0x85), Spanish as Latin-1
+  (0xF3, 0xE1); `PrintString` draws both from the buffer as from the inventory's string.
+- The HK's modes: `W_AMMO1` is the sniper mode (`FireHK`, `HKTimer = 12`; the camera's
+  "sniper mode"), `W_AMMO2` the burst, `W_AMMO3` the rapid fire; the inventory binds
+  `TXT_HKSTRING2`, 3 and 4 to ammo types 0, 1 and 2, which `update_laras_weapons_status`
+  turns into `W_AMMO1`, 2 and 3. The cycle's caption takes the string of the mode it sets.
+- `ammo_change_buf`: written by the five captions and by the F12 notice
+  (`specific/hd/hd_switch.cpp`, `strcpy` of `CustomText("HD is off")`), read only by
+  `game/health.cpp`, centred at the top. `GetStringLength` reads a byte above 127 as a
+  negative number and leaves it out of a centred line's width, so a centred line with
+  accented letters sits half their width right of the middle - as the inventory's and the
+  German umlauts' always have.
+- `SCRIPT.DAT` is opened by its bare name through `LoadFile` and `FileOpen`, so from the
+  working directory, the game folder. The language setup runs in `LoadGameflow`
+  (`specific/winmain.cpp` calls it before the settings and the title); a saved choice is
+  applied after `LoadSettings` by one `SwitchLanguage` call.
+- A value of `JAPAN` (6) elsewhere: `ACMEmulateCDPlay` plays `audio\HQ JP\<track>.OGG`,
+  then `HQ EN`, then the WAV; the title logo takes `data\logo512.pak` (only German and
+  French name a logo of their own); the German keyboard table asks `== 2`; `CustomText`
+  returns the literal; `HDScreenLogo` takes `LOGO_EU`; the boot screen asks for
+  `japan.bmp` and draws nothing when it is missing; `SayNo` and `SoundEffect` play
+  `SFX_LARA_NO_JAPANESE` for Lara's "no".
+
+| key | French | Italian | Spanish | reason for the English word |
+|---|---|---|---|---|
+| Pause | Pause | Pausa | Pausa | French: the language file's own *Pause* |
+| Action | Action | Azione | Acción | French: the language file's own *Action* |
+| Modes | Modes | Modalità | Modos | French plural of *mode* |
+| Audio | Audio | Audio | Audio | the same word in all three |
+| HUD | HUD | HUD | HUD | the loanword, as German keeps it |
+| VSync | VSync | VSync | VSync | a technical name |
+| Normal | Normal | Normale | Normal | French and Spanish: the same word |
+| Original | Original | Originale | Original | French and Spanish: the same word |
+| table | table | tabella | tabla | French: the same word |
+| Triangle | Triangle | Triangolo | Triángulo | French: the same word |
+| Menu | Menu | Menu | Menú | French and Italian: the same word |
+
+The widest cell of each column, in units at every screen width (a glyph's width plus 6.4
+per space, an accented letter as its base letter):
+
+| column | English | French | German | Italian | Spanish |
+|---|---|---|---|---|---|
+| label, 223 | 177.4 *Ammotype hotkeys* | 208.8 *Schéma de commandes* | 223.0 *Kamerageschwindigkeit* | 212.4 *Frequenza fotogrammi* | 219.2 *Estilo de pantalla mono* |
+| F4 label with mark, 223 | 112.8 | 169.2 *Propre au niveau \** | 106.4 | 100.8 | 90.8 |
+| value, 192 | 183.2 *level and run decide* | 186.2 *par niveau et partie* | 186.2 *nach Level und Lauf* | 176.2 *Stivali - manca qui* | 188.2 *Descalza - falta aquí* |
+| pad behind *Mod+*, 192 | 176.8 *Mod+Stick R Down* | 186.8 *Mod+Stick R gauche* | 180.8 *Mod+Stick R rechts* (see below) | 152.8 *Mod+Stick R giù* | 185.4 *Mod+Cruceta arriba* |
+| centred line, 512 | 310.6 | 325.6 *Randomizer et portage Windows 11* | 313.8 | 351.0 *Randomizer e porting per Windows 11* | 365.0 *Randomizer y adaptación a Windows 11* |
+| caption, 512 and 63 bytes | 84.8 *HD is off* | 118.4 *HD désactivé* | 94.8 *HD ist aus* | 116.4 *HD disattivo* | 141.4 *HD desactivado* |
+| F4 head or shine value, 192 | 188.8 *TR5 hair (outfit.txt)* | 190.2 *à tresse (par défaut)* | 189.8 *mit Zopf (outfit.txt)* | 190.4 *propria (predefinito)* | 171.4 *1.00/128 (outfit.txt)* |
+
+The four German d-pad names fit the value column alone (*Steuerkreuz rechts* 172.4,
+*unten* 168.4, *links* 160.4, *oben* 157.4) and run past it behind *Mod+* (222.4, 218.4,
+210.4, 207.4 of 192), where a chord on the d-pad prints them.
+
+The census of in-game text on the project's path that does not pass the table:
+
+| string | drawn where | path | in French, Italian and Spanish now |
+|---|---|---|---|
+| the five ammo captions | top of the screen (`game/health.cpp`) | language file, `TXT_Shotgun_*_Ammo`, `TXT_HKSTRING2..4` | the language file's own |
+| *Gamma*, *HD / SD*, the arrows `\x18`..`\x1B` | options labels | `CustomText`, no row | the same in every language |
+| *PSX*, *TR4*, *TR5*; *outfit.txt*, *origin*, *?*, the head word *TR5* | values, F4 values | `CustomText`, no row | names |
+| *I-III*, *IV-VI*, a mod's name | the F4 window's source column | raw | names |
+| *PS5 Controller*, *Xbox Controller* | the *Control layout* value (`MenuValControlLayout`, `game/menu_frame.cpp`) | raw literal | English (Left) |
+| *Mod*, `---` | the chord's prefix, the unbound mark | raw | marks |
+| the Credits screen's names and the lines with English joining words | `tomb5/troyestuff.cpp` | raw | as written (the play test: they stay) |
+| *Next*, *Previous* of the Special Features pages | `GetStupidText`, `specific/LoadSave.cpp` | its own literal per language | French, Italian and Spanish already |
+| slider numbers, the page count *1/N* | the options pages | numbers | numbers |
+| the language names (`LanguageName`, `game/gameflow.cpp`) | the *Language* value | raw literal, each language by its own name | *Français* and *Español* now with their accents (80.0 and 72.0 of 192) |
+
+**The rule.** The language file is the first source of every word the game names; the
+project's own words come from `extrastrings.txt` when it has them, then from the table,
+then the English literal. Every row of the table carries all four words; a cell repeats
+the English only where the language uses that word itself, and is listed with the reason.
+Every cell fits the column its key is drawn in, at every screen width, by #234's rule. An
+accented letter is a Latin-1 hex escape the font composes. Japanese is the Japanese HQ
+audio with English text, offered only where its folder is.
+
+**Decisions.** (1) The ammo caption is the language file's string, the one the inventory
+shows, copied bounded (`snprintf`) so that a longer string of another file is cut at the
+buffer's 63 bytes instead of running past them; the buffer holds the longest of the five
+names (37) and the F12 notice's every column. (2) The pad words are the play test's; the
+four *Steuerkreuz* chords run past the value column, and the word stays (Left). (3)
+Vocabulary and register: the game's file first where it names the thing - French
+*Munitions*, *niveau*; Italian *Munizioni*, *livello*, *Scatto*,
+the file's imperatives (*Salta livello*, *Cura*); Spanish *Munición*, *nivel*, *Mirar*,
+the file's infinitives - and the play test's German words as the meaning. *on* and *off*
+are *activé*/*désactivé*, *attivo*/*disattivo* and *activo*/*inactivo*: the Spanish
+*desactivado (reinicio)* was 2.4 units too wide, so all four Spanish values take
+*activo*/*inactivo*; the French restart is *(relancer)*, *(redémarrage)* being too wide.
+Italian and Spanish shorten left and right in the pad's names (*sx*/*dx*, *izq.*/*der.*)
+and Italian names its mode rows *Modo ...* (*Modalità combattimento* was 6.4 units over);
+the d-pad is *Flèche*, *Freccia* and *Cruceta*, named after its arrows so that French and
+Italian do not call it by the Cross button's *Croix* and *Croce* on the same page; the F4
+head words are *à tresse*, *treccia*, *trenza*, the French tier *default* is *par défaut*
+(*défaut* alone reads as a flaw) and the Spanish *estándar* (*predeterminado* ran over).
+The review of the words gave *Telecamera di morte* for the death camera, *Première
+personne* beside *Troisième personne*, *Lissage caméra*, *Modo agachado* and the notice
+*HD desactivado*; the Spanish *activo*/*inactivo* of the values stay. Its second reading
+gave the Italian duck mode *Modo accovacciato* (*abbassamento* reads as lowering), the
+bar positions' *Improved* the feminine of their label (*Améliorée*, *Migliorata*,
+*Mejorada*, as *Projected* agrees with the shadow), *Style d'écran mono* and *Estilo de
+pantalla mono* with their preposition, and the Language row's *Français* and *Español*
+their accents, which the font composes. (4)
+*Display (60)* and *Original* get rows because their French, Italian or Spanish word
+differs (*Écran (60)*, *Originale*); their German is the English word, so the German
+output is unchanged. (5) The Credits' name lines stay English (the play test's answer).
+(6) Dutch and Japanese keep the English literal in `CustomText`; no Japanese text file is
+loaded: the Japanese entry is decided by its value, before any file is read, and loads the
+English entry's file under the same header check - so a real Japanese file of the TR5
+layout, which passed the check and printed symbols, is no longer loaded, and the Steam
+edition's TR4 file is not either. Without `audio\HQ JP` it returns 0 as before, so the row
+skips it and a saved choice of 6 leaves the language as it was at start; the folder test
+is one `GetFileAttributesA`. (7) The table stays the embedded copy, so that an executable
+copied alone keeps its words; `extrastrings.txt` only goes before it. (8) The file is
+opened by `fopen` with its bare name, as `LoadFile` opens `SCRIPT.DAT`, without
+`LoadFile`'s own log lines, so the load writes the one `STRINGS` line and nothing else. A
+word holds 63 bytes at most, the caption's buffer, because the F12 notice copies its word
+with `strcpy`; at most 512 keys. A Latin-1 sign from 0x80 to 0xBF other than ¡ and ¿
+becomes *?*, because as a byte it would read as one of the font's accent codes 128..173,
+some of which have no glyph. A file over 64 KB, in UTF-16 or holding a NUL byte is left
+out whole and counted (`rejected=1`). (9) MenuTest, outside the files this round names,
+follows the table: it reads a row to its closing brace (`tree_row_cols`), because rows
+wrap at 80 columns and split around escapes; its three checks that French, Italian and
+Spanish repeat the English now expect their own words, its check that *Original* has no
+row expects the row, and the notice's size reads 64 bytes; its count stays. (10) *PS5
+Controller* and *Xbox Controller* would take two routing lines in `game/menu_frame.cpp`,
+where the round may change one: they stay raw (Left).
+
+**Checked.** The nine builds of `Preparation/Tools/Diagnose` exit 0 (`be`, `broom`,
+`btrg`, `bmodel`, `bmap`, `bmt`, `bmenu`, `bit`, `blips`). The suites at the base and at
+the head: ModernTest 16,700 and 16,751, MenuTest 44,931 and 44,931, InterpTest 754 and 754
+with the player's `ANDREA1.TRC`, LipsTest 299 and 299 with the `.OBJ` folder, 272 and 272
+without (the cutseq file named by hand), 0 failed each. ModernTest per commit: 16,692
+after the captions (`caption_rows` loses the four caption rows' checks and gains the five
+sites with the mode each names, no `CustomText` call in `input.cpp`, no caption row, the
+buffer in the definition and the declaration, the pad words alone and behind *Mod+*),
+16,732 after the words (`caption_columns`: every site of the census in its source, every
+row with a site, every cell of every column against its column, the F4 window's composed
+values per language, the identical-word list both ways, every accented letter composed,
+every escape ending after two digits; `caption_share` now composes every accented letter
+from `AccentToCode`, read out of `text.cpp`, and `accent.inc`), 16,744 after the file
+(`extra_strings`: the shipped file equals the table in all four sections with no other
+key, is CRLF without a byte order mark; the loader runs once in `LoadGameflow` after the
+language, opens the bare name, logs one line; `CustomText` asks the file after the
+language switch and before the table), 16,751 after Japanese (`japanese_audio`: the case
+and its order in `SwitchLanguage`, the literal for JAPAN in `CustomText`,
+`ACMEmulateCDPlay`'s mapping line for line as the base has it, the German keyboard test
+and the title logo's path). Eighteen changes by hand made the new checks fail: two HK
+strings swapped, the buffer back to 12, a caption row put back, a German pad word made too
+wide, a French cell set to the English, the Italian *Modalità combattimento*, a capital Í,
+an escape followed by a hex digit, a census site renamed, a listed identical word changed,
+a word of the shipped file, a key the table lacks, the file's lookup taken out, a table
+word changed, JAPAN mapped to EN in the audio, the folder test taken out, the Japanese
+entry's own file loaded, a Japanese column in `CustomText`. The parser is not linked by a
+suite: it was read line by line, and a harness of the round compiled its own text, cut
+unchanged out of `gameflow.cpp`, against sample buffers - byte order mark, CRLF and LF,
+comments, blank and indented lines, a line before any section, an unknown section, a
+section in another case and with spaces, a repeated key, a line without `=`, an empty word
+and key, a key with spaces, an umlaut, a code point above 255, a byte that is not UTF-8, a
+sequence cut short, a sign, a word of 64 and of 63 bytes, the inverted ? and !, a last
+line without LF, keys past 512 - and the loader against no file, 64 KB + 1, exactly 64 KB,
+a UTF-16 file, a NUL byte and the sample's log line, and the shipped file: `keys=134
+french=134 german=134 italian=134 spanish=134 skipped=0`, 28 checks, 0 failed. With no
+file present the German column and the English literals are the base's but for the eight
+pad words, the four removed rows and the two new rows, whose German is the literal they
+printed before, and the two language names with their accents (`LanguageName`); with the
+shipped file the words are the table's. No draw, sound or data
+path changed: nothing under `specific/hd/` is touched, `specific/audio.cpp` changes in its
+comment only, and `Gameflow->Language` keeps its values - so `hd_build` 0, the classic
+draw, the HQ music and the HQ `MAIN.SFX` path are the base's by construction. No line
+asking `g_level_active`, `HDEnabled()` or `HDDrawn()` was edited. Not played: the head was
+not run in the game.
+
+**Left.** The four German d-pad names behind *Mod+* run past the value column (above); a
+shorter word is a question for the play test. *PS5 Controller* and *Xbox Controller* stay
+English. With Japanese chosen, Lara's "no" plays the engine's Japanese sample
+(`SFX_LARA_NO_JAPANESE`, `game/sound.cpp`) and the boot screen asks for `japan.bmp`, as
+the engine always did for that value; whether the levels carry that sample was not
+measured. A Japanese font for Japanese text is a later task. The comment over
+`MenuValFrameRate` (`game/menu_frame.cpp`) still says that *Display* and *Display (60)*
+have no German entry. Three more comments in files this round may not change are now
+stale: the one over the pad's names in `game/menu_frame.cpp` (`JoyRoleIsChord`) says the
+names have their German and that *Mod+Stick R Runter* is the widest pair and fits, but
+*Runter* is gone and *Mod+Steuerkreuz rechts* runs over; the one over the F12 notice in
+`specific/hd/hd_switch.cpp` says the buffer holds eleven letters and the notice's row is
+ten letters or fewer, but the buffer holds 63 and *HD desactivado* has 14; and the
+include comment at the head of `specific/audio.cpp` says `Gameflow->Language` picks *HQ
+DE* or *HQ EN*, where it picks DE, FR, IT, ES, JP or EN (the round changed only that
+file's two sentences it named). The `-log` line `MENULOG set` prints a row's value as
+the row draws it, so on French, Italian or Spanish it now writes that language's word
+in Latin-1 bytes, as it did for German before; changing it would edit
+`game/menu_frame.cpp`. `Preparation/extrastrings.txt` goes into the release package at
+the merge. The Credits screen's lines of names stay as written.
+
+**Commits.** `824afc2d` (the captions from the language file, the buffer, the pad words),
+`255d5c18` (the French, Italian and Spanish words), `e27bb3df` (`extrastrings.txt`),
+`51b772cf` (Japanese for the HQ audio), this record and the review's two fix passes (the
+words above, a check's message, the manual's sentence on the folder test; the second
+reading's words, the language names and this record's Left).
 
 ## 3. Randomizer changes since Beta 1.0
 
@@ -32899,3 +33166,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #236 | The water sheets are part of the HD look; their row goes (#236) |
 | #237 | Two words renamed; the credits, the pad's names and the ammo captions in German (#237) |
 | #238 | The old water value leaves the registry at the next save (#238) |
+| #239 | Every language gets all its texts; Japanese for the HQ audio (#239) |

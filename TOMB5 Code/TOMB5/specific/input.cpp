@@ -887,7 +887,7 @@ long JoyMenuDeflected()
 }
 
 short ammo_change_timer = 0;
-char ammo_change_buf[12];
+char ammo_change_buf[64];
 
 //----------------------------------------------------------------------------
 // One key per weapon, the same key everywhere.
@@ -914,10 +914,23 @@ char ammo_change_buf[12];
 // carried" test, the draw, and the ammunition cycling on a second press
 // (which alone is what the "Ammotype hotkeys" option governs - drawing a
 // weapon works whether it is on or off).
-// The one difference: the caption a cycle shows goes through CustomText
-// (game\gameflow.cpp) like every word the project draws, in German too.
-// Every column of its row fits the caption's twelve bytes.
+// The one difference: the caption a cycle shows is the language file's own
+// name of the ammunition or the fire mode - the string the inventory shows
+// for the same item (game\newinv2.cpp) - so every language reads the
+// game's own words.
 //----------------------------------------------------------------------------
+
+/* The caption's text: the language file's string `txt`, copied into the
+ * caption's buffer as the inventory prints it, accent codes and all. The
+ * buffer holds 63 bytes and its end; the longest of these names in the
+ * game's language files is 37. A longer string from another file is cut at
+ * the buffer's end instead of running past it. */
+static void AmmoCaption(long txt)
+{
+	snprintf(ammo_change_buf, sizeof(ammo_change_buf), "%s",
+		SCRIPT_TEXT(txt));
+}
+
 /* One routine taking which weapon, called by the keyboard and the pad alike:
  * each weapon role is read as Key(role) OR the pad's role, the same way as the
  * medipacks and quick save/load. Core's else-if chain became a switch with the
@@ -959,14 +972,14 @@ static void DoWeaponRequest(long which)
 					lara.shotgun_type_carried &= ~W_AMMO2;
 					lara.shotgun_type_carried |= W_AMMO1;
 					ammo_change_timer = 30;
-					strcpy(ammo_change_buf, CustomText("Normal"));
+					AmmoCaption(TXT_Shotgun_Normal_Ammo);
 				}
 				else if (lara.shotgun_type_carried & W_AMMO1)
 				{
 					lara.shotgun_type_carried &= ~W_AMMO1;
 					lara.shotgun_type_carried |= W_AMMO2;
 					ammo_change_timer = 30;
-					strcpy(ammo_change_buf, CustomText("Wideshot"));
+					AmmoCaption(TXT_Shotgun_Wideshot_Ammo);
 				}
 			}
 		}
@@ -1010,26 +1023,29 @@ static void DoWeaponRequest(long which)
 
 				memset(ammo_change_buf, 0, sizeof(ammo_change_buf));
 
+				/* W_AMMO1 is the sniper mode, W_AMMO2 the burst and W_AMMO3
+				 * the rapid fire (game\lara1gun.cpp, FireHK); the inventory
+				 * names them TXT_HKSTRING2, 3 and 4 (game\newinv2.cpp). */
 				if (lara.hk_type_carried & W_AMMO3)
 				{
 					lara.hk_type_carried &= ~W_AMMO3;
 					lara.hk_type_carried |= W_AMMO2;
 					ammo_change_timer = 30;
-					strcpy(ammo_change_buf, CustomText("Burst"));
+					AmmoCaption(TXT_HKSTRING3);
 				}
 				else if (lara.hk_type_carried & W_AMMO2)
 				{
 					lara.hk_type_carried &= ~W_AMMO2;
 					lara.hk_type_carried |= W_AMMO1;
 					ammo_change_timer = 30;
-					strcpy(ammo_change_buf, CustomText("Sniper"));
+					AmmoCaption(TXT_HKSTRING2);
 				}
 				else if (lara.hk_type_carried & W_AMMO1)
 				{
 					lara.hk_type_carried &= ~W_AMMO1;
 					lara.hk_type_carried |= W_AMMO3;
 					ammo_change_timer = 30;
-					strcpy(ammo_change_buf, CustomText("Rapid"));
+					AmmoCaption(TXT_HKSTRING4);
 				}
 			}
 		}

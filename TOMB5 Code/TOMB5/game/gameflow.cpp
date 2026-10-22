@@ -1488,11 +1488,14 @@ const char* CustomText(const char* engl)
 		// the first row's name and value, the four labels under the list,
 		// their values, and the line under them. It draws in the options
 		// page's two columns, so a label is held to "Kamerageschwindigkeit"
-		// and a value to the value column "Mod+Stick R Down" was measured
-		// against (game\menu_frame.cpp, MenuValBinding): every German word
-		// below fits it. "Outfit" is the German word as well and stands
-		// here so that every word of the window has its row. "Barfuss" is
-		// written with "ss" because the font has no sharp s.
+		// and a value to the value column, 0.375 of the screen's width
+		// (game\menu_frame.cpp, MenuValBinding). A glyph is w * W / 512
+		// pixels wide at most and a space W / 80 (game\text.cpp, InitFont
+		// and GetStringLength), so a value whose glyph units plus 6.4 per
+		// space stay at or under 192 fits at every screen width W: every
+		// German value below does. "Outfit" is the German word as well and
+		// stands here so that every word of the window has its row.
+		// "Barfuss" is written with "ss" because the font has no sharp s.
 		{ "Outfit", "Outfit", "Outfit", "Outfit", "Outfit" },
 		{ "Level facts", "Level facts", "Levelvorgabe", "Level facts",
 			"Level facts" },
@@ -1524,11 +1527,14 @@ const char* CustomText(const char* engl)
 		// asks HDWardrobeHeadPhrase and HDWardrobeFromWord for
 		// (specific\hd\hd_wardrobe.cpp) and passes through here; the log
 		// lines that print the same words stay English. The row's label
-		// already says "Kopf", so the outfit's own head is "eigener".
+		// already says "Kopf", so the outfit's own head is "eigener", TR5's
+		// head "TR5" and its own head under TR5's braid "mit Zopf": with
+		// "(outfit.txt)" behind it "TR5-Kopf" and "TR5-Haar" run past the
+		// right edge from 800 pixels wide on.
 		// "outfit.txt" and "origin" are a file's name and the key of a
 		// mod.txt line and fall back to themselves, as "PSX" does.
-		{ "TR5 head", "TR5 head", "TR5-Kopf", "TR5 head", "TR5 head" },
-		{ "TR5 hair", "TR5 hair", "TR5-Haar", "TR5 hair", "TR5 hair" },
+		{ "TR5 head", "TR5 head", "TR5", "TR5 head", "TR5 head" },
+		{ "TR5 hair", "TR5 hair", "mit Zopf", "TR5 hair", "TR5 hair" },
 		{ "own head", "own head", "eigener", "own head", "own head" },
 		{ "measured", "measured", "gemessen", "measured", "measured" },
 		{ "the table", "the table", "Tabelle", "the table", "the table" },

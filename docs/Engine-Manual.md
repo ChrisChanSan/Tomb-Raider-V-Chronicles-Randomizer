@@ -4385,7 +4385,8 @@ the game will not say whether it arrived — each ends with the word for which
 tier answered (*the default*, *measured*, *the table*, *outfit.txt*, *origin*,
 *the list*). With the **Language** row on German the window speaks German:
 *Outfit*, *Levelvorgabe* with *nach Level und Lauf*, *Schritte* (*Stiefel*,
-*Barfuss*, *Stiefel - fehlt hier*), *Kopf* (*eigener*, *TR5-Kopf*, *TR5-Haar*),
+*Barfuss*, *Stiefel - fehlt hier*, *Barfuss - fehlt hier*), *Kopf* (*eigener*,
+*TR5*, *mit Zopf*),
 *Glanz*, *Hautglanz*, *laut Outfit*, *gilt ab dem nächsten Level*, and the tiers
 *Standard*, *gemessen*, *Tabelle*, *outfit.txt*, *origin*, *Liste* - a file's name
 and a key's stay as they are.

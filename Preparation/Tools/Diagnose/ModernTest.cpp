@@ -12014,8 +12014,11 @@ static void hd_build_gate()
  * and each German word stands in its row and fits its column on the game
  * font's own widths (game\chardef.inc, added up as GetStringLength does). A
  * label is held to "Kamerageschwindigkeit", the widest label of the table;
- * a value to the value column, which game\menu_frame.cpp measures as 240
- * pixels where "Mod+Stick R Down" is 215; a centred line to the screen. */
+ * a value to the value column, at least 0.375 of the screen's width W; a
+ * centred line to the screen. InitFont scales a glyph to w * (W - 1) / 512
+ * and a space is W / 80, so a string is never wider than W / 2560 times
+ * caption_share's number: a value fits at every W when that is at most
+ * 960, a line when it is at most 2560. */
 struct caption_glyph
 {
 	float u, v;
@@ -12028,7 +12031,8 @@ static const caption_glyph caption_font[106] =
 #include "../../../TOMB5 Code/TOMB5/game/chardef.inc"
 };
 
-static long caption_width(const char* s)
+// Five per glyph unit (W / 512) and 32 per space (W / 80), in W / 2560.
+static long caption_share(const char* s)
 {
 	long n = 0;
 
@@ -12043,11 +12047,11 @@ static long caption_width(const char* s)
 			c = c == 0xC4 ? 'A' : c == 0xD6 ? 'O' : 'U';
 
 		if (c == ' ')
-			n += 8;
+			n += 32;
 		else if (c < ' ')
-			n += caption_font[c + 74].w;
+			n += 5 * caption_font[c + 74].w;
 		else if (c <= '~')
-			n += caption_font[c - '!'].w;
+			n += 5 * caption_font[c - '!'].w;
 		else
 			return 100000;	// a byte the font has no glyph for
 	}
@@ -12116,8 +12120,8 @@ static void caption_rows()
 		{ "applies at the next level",
 			"\"gilt ab dem n\\xE4\" \"chsten Level\"",
 			"gilt ab dem n\xE4" "chsten Level", LINE },
-		{ "TR5 head", "\"TR5-Kopf\"", "TR5-Kopf", VALUE },
-		{ "TR5 hair", "\"TR5-Haar\"", "TR5-Haar", VALUE },
+		{ "TR5 head", "\"TR5\"", "TR5", VALUE },
+		{ "TR5 hair", "\"mit Zopf\"", "mit Zopf", VALUE },
 		{ "own head", "\"eigener\"", "eigener", VALUE },
 		{ "measured", "\"gemessen\"", "gemessen", VALUE },
 		{ "the table", "\"Tabelle\"", "Tabelle", VALUE },
@@ -12125,31 +12129,28 @@ static void caption_rows()
 		{ "the default", "\"Standard\"", "Standard", VALUE },
 		{ "HD is off", "\"HD ist aus\"", "HD ist aus", NOTICE },
 	};
-	const long label = caption_width("Kamerageschwindigkeit");
-	const long probe = caption_width("Mod+Stick R Down");
+	const long label = caption_share("Kamerageschwindigkeit");
 
 	for (const word& w : words)
 	{
 		const bool have = caption_row(flow, w.key, row, sizeof(row));
-		const long width = caption_width(w.german);
+		const long share = caption_share(w.german);
+		const long room = w.kind == LABEL ? label : w.kind == VALUE ? 960 :
+			w.kind == LINE ? 2560 : 0;
 		bool fits;
 
 		snprintf(what, sizeof(what), "captions: \"%s\" has one row, "
 			"German in it", w.key);
 		ok(have && strstr(row, w.source) != 0, what, have, 1);
 
-		if (w.kind == LABEL)
-			fits = width <= label;
-		else if (w.kind == VALUE)
-			fits = width * 215 <= 240 * probe;
-		else if (w.kind == LINE)
-			fits = width * 215 <= 640 * probe;
-		else
+		if (w.kind == NOTICE)
 			fits = strlen(w.german) <= 11;
+		else
+			fits = share <= room;
 
 		snprintf(what, sizeof(what), "captions: \"%s\" fits its column",
 			w.german);
-		ok(fits, what, width, w.kind == LABEL ? label : probe);
+		ok(fits, what, share, room);
 	}
 
 	// Every literal the window hands to CustomText has its row.
@@ -12227,7 +12228,7 @@ static void caption_rows()
 
 	// The widest head value the window can build fits the value column.
 	{
-		const char* heads[3] = { "TR5-Kopf", "TR5-Haar", "eigener" };
+		const char* heads[3] = { "TR5", "mit Zopf", "eigener" };
 		const char* froms[7] = { "gemessen", "Tabelle", "outfit.txt",
 			"origin", "Liste", "Standard", 0 };
 		long widest = 0;
@@ -12239,12 +12240,12 @@ static void caption_rows()
 
 				snprintf(line, sizeof(line), "%s (%s)", h, froms[f]);
 
-				if (caption_width(line) > widest)
-					widest = caption_width(line);
+				if (caption_share(line) > widest)
+					widest = caption_share(line);
 			}
 
-		ok(widest * 215 <= 240 * probe,
-			"captions: the widest German head value fits", widest, probe);
+		ok(widest <= 960,
+			"captions: the widest German head value fits", widest, 960);
 	}
 
 	// The F12 notice: through CustomText, no raw literal left.

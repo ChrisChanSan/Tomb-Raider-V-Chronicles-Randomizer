@@ -32046,15 +32046,21 @@ table had 93 rows; it has 116. The options pages draw no hint line; the F4 windo
 project's path: every caption with a string id draws the language file's own word.
 
 Widths on the game font's glyph table (`game/chardef.inc`, added up as
-`GetStringLength` does, an umlaut as its base letter): the label column holds
-*Kamerageschwindigkeit*, 223 units; the value column is 240 pixels where *Mod+Stick R
-Down*, 180 units, is 215 (`MenuValBinding`'s measurement), about 200 units. Every German
-label is 135 units or less (*Levelvorgabe* with its mark), every German value 191 or
-less, the widest German head value *TR5-Haar (outfit.txt)* 200; the centred hint
-`gilt ab dem n\xE4chsten Level`, drawn across the screen, is 254. The English F4 values
-*the level and the run decide* (262), *Bare - no second set in this level* (311),
-*Boots - no second set in this level* (319) and *own head (the default)* (214) are wider
-than the column.
+`GetStringLength` does, an umlaut as its base letter), scaled as the game scales them: at
+a screen W pixels wide `InitFont` makes a glyph w * (W - 1) / 512 pixels wide, rounded
+down, and a space is W / 80. The label column holds *Kamerageschwindigkeit*, 223 units.
+The value column starts at 0.625 W and so holds 0.375 W: a value whose glyph units plus
+6.4 per space stay at or under 192 fits at every width, without the help of the
+rounding. A rule in pixels at 640 x 480 does not carry over: the rounding takes up to a
+pixel from every glyph, which counts at 640 and hardly at 1920, so *TR5-Haar
+(outfit.txt)*, the first choice for the hair, was 238 of 240 pixels at 640 x 480 but
+733 of 720 at 1920 x 1080, past the edge from 800 pixels wide on. Every German label is
+133.4 units or less (*Levelvorgabe* with its mark); every German value is 189.8 or less
+(*mit Zopf (outfit.txt)*, 701 of 720 pixels at 1920 x 1080; *nach Level und Lauf* 186.2,
+690); the centred hint `gilt ab dem n\xE4chsten Level` is 247.6 of the whole screen's
+512. The English F4 values *the level and the run decide* (254), *Bare - no second set
+in this level* (299.8), *Boots - no second set in this level* (307.8) and *own head (the
+default)* (209.2) are wider than the column.
 
 The census, every caption, value and hint of the project's rows and of the F4 window,
 where it is drawn from, and what a German player saw before and sees now (a phrase of the
@@ -32221,8 +32227,8 @@ wardrobe is listed by its words; `\x18` to `\x1B` are the keyboard list's arrow 
 | the default | F4 value | `CustomText` | English | *Standard* | hd_outfitmenu.cpp |
 | the list | F4 value | `CustomText` | English | *Liste* | hd_outfitmenu.cpp |
 | the table | F4 value | `CustomText` | English | *Tabelle* | hd_outfitmenu.cpp |
-| TR5 hair | F4 value | `CustomText` | English | *TR5-Haar* | hd_outfitmenu.cpp |
-| TR5 head | F4 value | `CustomText` | English | *TR5-Kopf* | hd_outfitmenu.cpp |
+| TR5 hair | F4 value | `CustomText` | English | *mit Zopf* | hd_outfitmenu.cpp |
+| TR5 head | F4 value | `CustomText` | English | *TR5* | hd_outfitmenu.cpp |
 | HD is off | F12 notice | `CustomText` | English | *HD ist aus* | hd_switch.cpp |
 
 The weapon item. The emitter census of #232 found SHOTGUN_ANIM playing sound id 0 in three
@@ -32253,18 +32259,20 @@ level is built with its HD data, and it stands above *HD-Texturen*; *Spiegelunge
 window's *Outfit*, *Levelvorgabe*, *nach Level und Lauf*, *Schritte*, *Kopf*, *Glanz*,
 *Hautglanz*, *laut Outfit*, *Barfuss*, *Stiefel*, *Barfuss - fehlt hier*, *Stiefel -
 fehlt hier* and `"gilt ab dem n\xE4" "chsten Level"` (split at the umlaut because `c` is a
-hex digit); the phrases *TR5-Kopf*, *TR5-Haar*, *eigener* (the row's label already says
-*Kopf*), *gemessen*, *Tabelle*, *Liste*, *Standard*. (2) *Barfuss* is written with "ss":
-the font has no sharp s. (3) Every German value is chosen to fit the value column, also
-where the English word it replaces does not. (4) *Outfit* has its row although the
-German is the same word, as *Audio* and *Normal* have theirs. (5) The weapon item is
-asked by its index, never by its object number, and `AnimateItem` hands over `NO_ITEM`
-for an item that is not one of the level's, so no other item can be taken for hers.
-`SfxCommandCaller` keeps the object number: the `SFXLOG` line's `obj=` still names the
-weapon object, and its end says `feet=bare` or `feet=boots` as for her own step; the FEET
-line is unchanged. (6) All three long guns count, though only the shotgun's animation
-carries a step in the levels measured. (7) MenuTest's check of the notice, outside the
-files this round named, follows the call it reads; its count stays.
+hex digit); the phrases *TR5* for TR5's head, *mit Zopf* for the outfit's own head under
+TR5's braid, *eigener* for its own head alone (the row's label already says *Kopf*),
+*gemessen*, *Tabelle*, *Liste*, *Standard*. (2) *Barfuss* is written with "ss": the font
+has no sharp s. (3) Every German value is chosen to fit the value column at every screen
+width by the rule above, also where the English word it replaces does not; *TR5-Kopf* and
+*TR5-Haar* fitted only at 640 x 480 and gave way to *TR5* and *mit Zopf*. (4) *Outfit*
+has its row although the German is the same word, as *Audio* and *Normal* have theirs.
+(5) The weapon item is asked by its index, never by its object number, and `AnimateItem`
+hands over `NO_ITEM` for an item that is not one of the level's, so no other item can be
+taken for hers. `SfxCommandCaller` keeps the object number: the `SFXLOG` line's `obj=`
+still names the weapon object, and its end says `feet=bare` or `feet=boots` as for her
+own step; the FEET line is unchanged. (6) All three long guns count, though only the
+shotgun's animation carries a step in the levels measured. (7) MenuTest's check of the
+notice, outside the files this round named, follows the call it reads; its count stays.
 
 **Checked.** The nine builds of `Preparation/Tools/Diagnose` exit 0 (`be`, `broom`,
 `btrg`, `bmodel`, `bmap`, `bmt`, `bmenu`, `bit`, `blips`). The suites at the base and at
@@ -32272,26 +32280,30 @@ the head: ModernTest 16,329 and 16,522, MenuTest 44,938 and 44,938, InterpTest 7
 with the player's `ANDREA1.TRC`, LipsTest 299 and 299 with the `.OBJ` folder, 272 and 272
 without (the cutseq file named by hand), 0 failed each. ModernTest's new `caption_rows`
 (76 checks): every German word has its one row and stands in it, fits its column on the
-font's widths, every literal of the F4 window has its row, the phrases go through
-`CustomText` at every call and have their rows but the two names, the widest German head
-value fits, the notice goes through `CustomText`; a row changed by hand made three of them
-fail. `hd_feet` gains 117: her shotgun, crossbow and HK, a shotgun not hers, the guard,
-none out and no item, over both draws, both outfits, with and without a footstep mod and
-ids 0 and 4, against the expectation written out on its own; the four cases by name (HD
-and bare: the bare set; HD in boots over a mod: the unmodded boots; a weapon item not
-hers: the ordinary chain; drawn classic: the ordinary chain) and the index rule. The
-harness's step table as above. No line asking `g_level_active`, `HDEnabled()` or
-`HDDrawn()` was edited. Not played: the head was not run in the game.
+font's widths by the rule for every screen width, every literal of the F4 window has its
+row, the phrases go through `CustomText` at every call and have their rows but the two
+names, the widest German head value fits, the notice goes through `CustomText`; a row
+changed by hand made three of them fail, and the first head words, *TR5-Kopf* and
+*TR5-Haar*, put back by hand fail the widest head value's check (992 of 960). `hd_feet`
+gains 117: her shotgun, crossbow and HK, a shotgun not hers, the guard, none out and no
+item, over both draws, both outfits, with and without a footstep mod and ids 0 and 4,
+against the expectation written out on its own; the four cases by name (HD and bare:
+the bare set; HD in boots over a mod: the unmodded boots; a weapon item not hers: the
+ordinary chain; drawn classic: the ordinary chain) and the index rule. The harness's
+step table as above. No line asking `g_level_active`, `HDEnabled()` or `HDDrawn()` was
+edited. Not played: the head was not run in the game.
 
 **Left.** English that stays outside these pages: the Credits screen's headings
 (`tomb5/troyestuff.cpp`), the ammo hotkeys' captions *Normal*, *Wideshot*, *Burst*,
 *Sniper*, *Rapid* (`specific/input.cpp`, the engine's own), the pad's button names in the
 Key bindings' value column and the decimal point of the F4 window's shine numbers. The
-English F4 values named above run past the value column, as they did before. #232's
+English F4 values named above run past the value column, as they did before; so can a
+shine value whose exponent an `outfit.txt` writes with many digits. #232's
 Decision (4) records the shotgun as it was decided then; its Left says what changed.
 
 **Commits.** `cadc598b` (the captions in German and the notice), `a7e16445` (the weapon
-item's step and its checks), and this record.
+item's step and its checks), `aea7137f` (this record), and the commit that holds the head
+words and the width rule to every screen width.
 
 ## 3. Randomizer changes since Beta 1.0
 

@@ -47,9 +47,12 @@
 // (BLUE_GUARD, BLUE_GUARD2, SWAT_PLUS_MIP on the guard's animation), MAFIA2,
 // HITMAN and CYBORG play them from their own animations, and the shotgun's
 // weapon item carries id 0 as well. They all keep the level's own
-// entry whatever Lara wears; only a step whose caller is Lara herself is ever
-// redirected. The caller is SfxCommandCaller (game\sound.h), which AnimateItem
-// and AnimateLara set around every sound of an animation command.
+// entry whatever Lara wears; only a step of Lara's is ever redirected. The
+// caller is SfxCommandCaller (game\sound.h), which AnimateItem and
+// AnimateLara set around every sound of an animation command. Her weapon
+// item - the shotgun, HK or crossbow she holds, an item of its own that
+// AnimateItem animates and names by its object number - is hers: a step it
+// plays is chosen as her own (HDFeetCallerOf below).
 //
 // The three sets, all in memory from the level's start:
 //
@@ -128,7 +131,8 @@ struct HDFeetSets
 /* The step's choice, pure: which sound map entry sound id `sfx` plays.
  *
  *   mapped   the level's own entry for it (sample_lut[sfx]), the ordinary set
- *   caller   who plays it: SfxCommandCaller, an object number or -1
+ *   caller   who plays it: SfxCommandCaller as HDFeetCallerOf sees it, an
+ *            object number or -1
  *   lara     Lara's object number (LARA)
  *   drawnHD  whether Lara is drawn HD at this step (HDLaraDrawActive)
  *   bare     whether her HD outfit walks barefoot (HDFeetIsBare)
@@ -152,6 +156,20 @@ inline int HDFeetPick(int sfx, int mapped, long caller, long lara,
 		return mapped;
 
 	return pick >= 0 ? pick : mapped;
+}
+
+/* Who a step's caller is, pure: the caller itself, except that the item at
+ * lara.weapon_item is Lara. It is asked by the item's index in items[] and
+ * never by its object number, so a weapon item that is not hers stays what it
+ * is; -1 (NO_ITEM) on either side is nobody's.
+ *
+ *   caller      SfxCommandCaller, an object number or -1
+ *   lara        Lara's object number (LARA)
+ *   item        the index of the item whose animation plays the sound, or -1
+ *   weaponItem  lara.weapon_item at that moment, or -1 */
+inline long HDFeetCallerOf(long caller, long lara, long item, long weaponItem)
+{
+	return item >= 0 && item == weaponItem ? lara : caller;
 }
 
 /* The floor layer's rule, pure: passed over only while she is drawn HD, her
@@ -203,10 +221,17 @@ bool HDFeetBare(bool bare);
 bool HDFeetIsBare();
 
 /* The sound map entry one sound plays - HDFeetPick with this level's sets,
- * Lara's object number and her draw at this moment. SoundEffect asks it for
- * every sound once the level's own entry is known; anything but ids 0 and 4
- * comes back unchanged at once. */
+ * Lara's object number, her draw at this moment and the caller as
+ * HDFeetCallerOf sees it. SoundEffect asks it for every sound once the
+ * level's own entry is known; anything but ids 0 and 4 comes back unchanged
+ * at once. */
 int HDFeetStepInfo(int sfx, int mapped, long caller);
+
+/* The index in items[] of the item whose animation command plays the sound
+ * at hand, and lara.weapon_item at that moment, both -1 for none: AnimateItem
+ * hands them over around the sound as it sets SfxCommandCaller, and -1 and -1
+ * after it. HDFeetStepInfo asks HDFeetCallerOf with them. */
+void HDFeetStepItem(long item, long weaponItem);
 
 /* For the SFXLOG line: "bare" or "boots" when `info` is one of this level's
  * spare entries, "" otherwise. */

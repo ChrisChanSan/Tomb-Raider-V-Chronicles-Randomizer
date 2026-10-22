@@ -566,6 +566,17 @@ bool HDFeetBare(bool bare)
 	return g_bare;
 }
 
+/* The item whose animation command plays the sound at hand and Lara's weapon
+ * item at that moment, as AnimateItem hands them over; -1 outside it. */
+static long g_stepItem = -1;
+static long g_weaponItem = -1;
+
+void HDFeetStepItem(long item, long weaponItem)
+{
+	g_stepItem = item;
+	g_weaponItem = weaponItem;
+}
+
 int HDFeetStepInfo(int sfx, int mapped, long caller)
 {
 	if ((sfx != kStepsId && sfx != kLandId) || !g_lut)
@@ -573,8 +584,9 @@ int HDFeetStepInfo(int sfx, int mapped, long caller)
 
 	const HDFeetSets sets = { g_bareSteps, g_bareLand, g_bootSteps,
 		g_bootLand };
+	const long who = HDFeetCallerOf(caller, LARA, g_stepItem, g_weaponItem);
 
-	return HDFeetPick(sfx, mapped, caller, LARA, HDLaraDrawActive(), g_bare,
+	return HDFeetPick(sfx, mapped, who, LARA, HDLaraDrawActive(), g_bare,
 		sets);
 }
 

@@ -60,6 +60,7 @@
 #include "../specific/output.h"
 #include "../specific/gamemain.h"
 #include "../specific/hd/hd_level.h"
+#include "../specific/hd/hd_feet.h"	// HDFeetStepItem - her weapon's step
 #include "../tomb5/tomb5.h"
 
 uchar ShatterSounds[18][10] =
@@ -3413,6 +3414,12 @@ void AnimateItem(ITEM_INFO* item)
 					SfxCommandAnim = item->anim_number;
 					SfxCommandType = type;
 					SfxCommandRoomFlags = (item->room_number == NO_ROOM) ? -1 : (long)room[item->room_number].flags;
+					/* And its index in items[], NO_ITEM for an item that is
+					 * not one of the level's: the footstep's choice takes the
+					 * item at lara.weapon_item for Lara herself
+					 * (specific\hd\hd_feet.h). */
+					HDFeetStepItem(item >= items && item < items + MAX_ITEMS
+						? (long)(item - items) : NO_ITEM, lara.weapon_item);
 
 					if (objects[item->object_number].water_creature)
 					{
@@ -3442,6 +3449,7 @@ void AnimateItem(ITEM_INFO* item)
 					SfxCommandAnim = -1;
 					SfxCommandType = -1;
 					SfxCommandRoomFlags = -1;
+					HDFeetStepItem(NO_ITEM, NO_ITEM);
 				}
 
 				cmd += 2;

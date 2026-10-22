@@ -10746,6 +10746,77 @@ static void hd_feet()
 			"feet: F12 - the guard keeps the level's own", 0, 0);
 	}
 
+	/* Her weapon item is hers (HDFeetCallerOf): the long gun she holds is an
+	 * item of its own, here item 5 with lara.weapon_item 5, named by its
+	 * object number (SHOTGUN_ANIM 3, CROSSBOW_ANIM 4, HK_ANIM 5). Its step
+	 * is chosen exactly as Lara's own; an item of the same object number at
+	 * another index, an enemy, and anyone while no weapon item is out keep
+	 * the ordinary chain. The whole table again, through the caller as
+	 * SoundEffect now hands it over. */
+	{
+		struct held
+		{
+			const char* name;
+			long object;
+			long item;
+			long weapon;
+			bool hers;
+		};
+		const held held_items[] = {
+			{ "her shotgun", 3, 5, 5, true },
+			{ "her crossbow", 4, 5, 5, true },
+			{ "her HK", 5, 5, 5, true },
+			{ "a shotgun not hers", 3, 7, 5, false },
+			{ "the guard beside her", 37, 9, 5, false },
+			{ "a shotgun, none out", 3, 5, -1, false },
+			{ "no item at all", 3, -1, -1, false },
+		};
+
+		for (const held& h : held_items)
+			for (int hd = 0; hd < 2; hd++)
+				for (int bare = 0; bare < 2; bare++)
+					for (int mod = 0; mod < 2; mod++)
+						for (int sfx = 0; sfx <= 4; sfx += 4)
+						{
+							const long who = HDFeetCallerOf(h.object, 0,
+								h.item, h.weapon);
+							const int got = HDFeetPick(sfx, sfx, who, 0,
+								hd != 0, bare != 0, mod ? withMod : noMod);
+							const int want = feet_expect(sfx, sfx,
+								h.hers ? 0 : h.object, hd != 0, bare != 0,
+								mod != 0);
+
+							snprintf(what, sizeof(what),
+								"feet: %s id %d %s %s %s", h.name, sfx,
+								hd ? "HD" : "SD", bare ? "bare" : "boots",
+								mod ? "mod" : "plain");
+							ok(got == want, what, got, want);
+						}
+
+		// The four cases by name.
+		const long hers = HDFeetCallerOf(3, 0, 5, 5);
+		const long other = HDFeetCallerOf(3, 0, 7, 5);
+
+		ok(HDFeetPick(0, 0, hers, 0, true, true, withMod) == 207,
+			"feet: her weapon item, HD and bare - the bare set",
+			HDFeetPick(0, 0, hers, 0, true, true, withMod), 207);
+		ok(HDFeetPick(0, 0, hers, 0, true, false, withMod) == 209,
+			"feet: her weapon item, HD in boots over a mod - unmodded boots",
+			HDFeetPick(0, 0, hers, 0, true, false, withMod), 209);
+		ok(HDFeetPick(0, 0, other, 0, true, true, withMod) == 0,
+			"feet: a weapon item not hers - the ordinary chain",
+			HDFeetPick(0, 0, other, 0, true, true, withMod), 0);
+		ok(HDFeetPick(0, 0, hers, 0, false, true, withMod) == 0,
+			"feet: her weapon item drawn classic - the ordinary chain",
+			HDFeetPick(0, 0, hers, 0, false, true, withMod), 0);
+
+		// The index decides, never the object number.
+		ok(HDFeetCallerOf(3, 0, 7, 5) == 3 && HDFeetCallerOf(37, 0, 5, 5)
+			== 0 && HDFeetCallerOf(0, 0, -1, 5) == 0 &&
+			HDFeetCallerOf(-1, 0, -1, -1) == -1,
+			"feet: the caller is asked by the item's index", 0, 0);
+	}
+
 	/* The floor layer (ids 288..294, Lara's alone): quiet only while she is
 	 * drawn HD, barefoot, on a bare set - all eight cases. */
 	for (int hd = 0; hd < 2; hd++)

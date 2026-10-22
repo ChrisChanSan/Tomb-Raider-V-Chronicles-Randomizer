@@ -478,6 +478,13 @@ prints the same buttons as numbers, so read *Touchpad* as `Joy 14`, R1 as
 Square as `Joy 2` / `Joy 3` / `Joy 4` / `Joy 1`. Whatever the page calls them,
 the binding page shows you the name your own pad's page uses.
 
+With the **Language** row on German the shapes, the directions and the words among the
+names are German: *Quadrat*, *Kreuz*, *Kreis* and *Dreieck*, *PS-Taste*, *Ansicht* and
+*Menü* for the Xbox pad's View and Menu buttons, *Stick R Hoch*, *Stick R Runter*, *Stick
+R Links* and *Stick R Rechts*, and the same four for the *D-Pad*. Letters and numbers
+(*L2*, *RT*, *A*), the `Joy` numbers and the names printed on the pad (*Share*,
+*Options*, *Touchpad*) stay as they are in every language.
+
 With the Modifier unbound — every One-key pad, and the two XInput-ordered
 Separate pages — no chord can ever fire, and every plain role reads exactly
 as it would with no chords at all.
@@ -730,6 +737,9 @@ below for the six settings on that tab, and the sections after it for the
 never turns up while paging through settings and no paging arrows are drawn
 across the names. It lists names only; the web addresses
 live in `README.txt`, because the game font cannot draw every character.
+With the **Language** row on German its title and headings are German - *Credits*,
+*TOMB5-Engine*, *TR3-Gegner aus tomb3*, *Randomizer und Windows-11-Port*, *Mitwirkende*,
+*Werkzeuge und Bibliotheken*; the names stay as they are.
 
 ---
 
@@ -820,6 +830,10 @@ chords** above for binding one of them to a pad chord.
 - **Ammotype hotkeys**: the option governs **only** the ammunition cycling -
   pressing a weapon's number again while it is already out. Drawing a weapon
   and the medipacks work whether it is on or off.
+  The caption a cycle shows at the top of the screen - *Normal* or *Wideshot*
+  for the shotgun, *Burst*, *Sniper* or *Rapid* for the HK - reads *Normal*,
+  *Breitschuss*, *Salve*, *Einzelfeuer* and *Dauerfeuer* with the **Language**
+  row on German.
 
   **One key per weapon, the same key in every level:** 1 pistols,
   2 shotgun, 3 uzis, 4 revolver, 5 HK, 6 crossbow (the Grappling Gun in

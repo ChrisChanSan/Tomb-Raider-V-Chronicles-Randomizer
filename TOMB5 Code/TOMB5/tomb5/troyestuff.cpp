@@ -13,6 +13,7 @@
 #include "../tomb5/pch.h"
 #include "troyestuff.h"
 #include "../game/text.h"
+#include "../game/gameflow.h"		// CustomText, for the headings
 #include "../game/sound.h"
 #include "../specific/3dmath.h"
 #include "tomb5.h"
@@ -41,7 +42,7 @@ void CreditsScreen(long textY, long& menu, ulong& selection, ulong selection_bak
 {
 	long y;
 
-	PrintString(phd_centerx, font_height, 6, "Credits", FF_CENTER);
+	PrintString(phd_centerx, font_height, 6, CustomText("Credits"), FF_CENTER);
 
 	// Groups are separated by colour, not by blank lines - and that is a
 	// space decision, not a taste one. The screen holds fifteen rows
@@ -50,19 +51,26 @@ void CreditsScreen(long textY, long& menu, ulong& selection, ulong selection_bak
 	// the entire remaining budget and push the tool credits off screen.
 	// Headers therefore use the same gold as the title (colour 6) and the
 	// names stay white (colour 2).
+	//
+	// The title and the headings go through CustomText (game\gameflow.cpp)
+	// like every other word the project draws; the names are names and stay
+	// as they are written.
 	y = 2;
 
-	PrintString(phd_centerx, textY + y++ * font_height, 6, "TOMB5 Engine", FF_CENTER);
+	PrintString(phd_centerx, textY + y++ * font_height, 6,
+		CustomText("TOMB5 Engine"), FF_CENTER);
 	PrintString(phd_centerx, textY + y++ * font_height, 2, "Troye - ChocolateFan", FF_CENTER);
 	PrintString(phd_centerx, textY + y++ * font_height, 2, "thatguyfrombb - Raildex", FF_CENTER);
 
 	// The TR3 enemies (T-Rex, raptor, compy, vulture) are GPLv3 code taken
 	// from Troye's tomb3 decompilation, not our own work - it belongs in the
 	// game's credits, not only in a source comment.
-	PrintString(phd_centerx, textY + y++ * font_height, 6, "TR3 Enemies from tomb3", FF_CENTER);
+	PrintString(phd_centerx, textY + y++ * font_height, 6,
+		CustomText("TR3 Enemies from tomb3"), FF_CENTER);
 	PrintString(phd_centerx, textY + y++ * font_height, 2, "Troye and contributors", FF_CENTER);
 
-	PrintString(phd_centerx, textY + y++ * font_height, 6, "Randomizer and Windows 11 Port", FF_CENTER);
+	PrintString(phd_centerx, textY + y++ * font_height, 6,
+		CustomText("Randomizer and Windows 11 Port"), FF_CENTER);
 	PrintString(phd_centerx, textY + y++ * font_height, 2, "ChrisChanSan", FF_CENTER);
 
 	// The AI belongs here, next to the person who directed it, and not
@@ -72,11 +80,13 @@ void CreditsScreen(long textY, long& menu, ulong& selection, ulong selection_bak
 
 	// Testing, findings and ideas - the people who played the seeds and
 	// reported what broke.
-	PrintString(phd_centerx, textY + y++ * font_height, 6, "Contributors", FF_CENTER);
+	PrintString(phd_centerx, textY + y++ * font_height, 6,
+		CustomText("Contributors"), FF_CENTER);
 	PrintString(phd_centerx, textY + y++ * font_height, 2, "XeNoN3560 - Lucifer230 - Todesengel1931", FF_CENTER);
 	PrintString(phd_centerx, textY + y++ * font_height, 2, "Crockett - Grylle", FF_CENTER);
 
-	PrintString(phd_centerx, textY + y++ * font_height, 6, "Tools and Libraries", FF_CENTER);
+	PrintString(phd_centerx, textY + y++ * font_height, 6,
+		CustomText("Tools and Libraries"), FF_CENTER);
 	PrintString(phd_centerx, textY + y++ * font_height, 2, "trview by chreden", FF_CENTER);
 	PrintString(phd_centerx, textY + y++ * font_height, 2, "Dear ImGui by Omar Cornut", FF_CENTER);
 	PrintString(phd_centerx, textY + y++ * font_height, 2, "stb by Sean Barrett", FF_CENTER);

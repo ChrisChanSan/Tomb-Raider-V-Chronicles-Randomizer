@@ -12106,20 +12106,97 @@ static bool caption_row(const char* flow, const char* key, char* row,
 	return true;
 }
 
+// Every literal `text` hands to CustomText has its row in `flow`.
+static void caption_literals(const char* text, const char* flow,
+	const char* who)
+{
+	char row[512];
+	char what[160];
+	int seen = 0;
+
+	for (const char* p = text ? strstr(text, "CustomText(") : 0; p;
+		p = strstr(p + 1, "CustomText("))
+	{
+		const char* q = p + 11;
+		int depth = 1;
+
+		for (; *q && depth; q++)
+		{
+			if (*q == '(')
+				depth++;
+			else if (*q == ')')
+				depth--;
+			else if (*q == '"')
+			{
+				const char* end = strchr(q + 1, '"');
+				char lit[96];
+
+				if (!end || end - q - 1 >= (long)sizeof(lit))
+					break;
+
+				memcpy(lit, q + 1, (size_t)(end - q - 1));
+				lit[end - q - 1] = 0;
+				snprintf(what, sizeof(what), "captions: %s \"%s\" has a "
+					"row", who, lit);
+				ok(caption_row(flow, lit, row, sizeof(row)), what, 0, 1);
+				seen++;
+				q = end;
+			}
+		}
+	}
+
+	snprintf(what, sizeof(what), "captions: %s hands literals to it", who);
+	ok(seen > 0, what, seen, 1);
+}
+
+// The longest string of a row in bytes, a \x escape counted as one.
+static long caption_longest(const char* row)
+{
+	long longest = 0;
+
+	for (const char* p = strchr(row, '"'); p; p = strchr(p + 1, '"'))
+	{
+		const char* e = strchr(p + 1, '"');
+		long n = 0;
+
+		if (!e)
+			break;
+
+		for (const char* c = p + 1; c < e; c++, n++)
+			if (c[0] == '\\' && c[1] == 'x')
+				c += 3;
+
+		if (n > longest)
+			longest = n;
+
+		p = e;
+	}
+
+	return longest;
+}
+
 static void caption_rows()
 {
 	char* flow = hd_switch_text("../../game/gameflow.cpp");
 	char* outfit = hd_switch_text("hd_outfitmenu.cpp");
 	char* robe = hd_switch_text("hd_wardrobe.cpp");
 	char* sw = hd_switch_text("hd_switch.cpp");
+	char* troye = hd_switch_text("../../tomb5/troyestuff.cpp");
+	char* frame = hd_switch_text("../../game/menu_frame.cpp");
+	char* input = hd_switch_text("../input.cpp");
 	char row[512];
 	char what[160];
 	int n;
 
-	ok(flow && outfit && robe && sw, "captions: the four files are read",
-		!!flow + !!outfit + !!robe + !!sw, 4);
+	ok(flow && outfit && robe && sw && troye && frame && input,
+		"captions: the seven files are read", !!flow + !!outfit + !!robe +
+		!!sw + !!troye + !!frame + !!input, 7);
 
-	enum { LABEL, VALUE, LINE, NOTICE };
+	/* A label of the options page or the F4 window, a value of the value
+	 * column, a line centred across the screen, the ammo caption's buffer
+	 * of twelve bytes, and a pad's button name, measured behind "Mod+" as
+	 * a chord prints it. */
+	enum { LABEL, VALUE, LINE, NOTICE, PAD };
 	struct word
 	{
 		const char* key;
@@ -12155,6 +12232,36 @@ static void caption_rows()
 		{ "list", "\"Liste\"", "Liste", VALUE },
 		{ "default", "\"Standard\"", "Standard", VALUE },
 		{ "HD is off", "\"HD ist aus\"", "HD ist aus", NOTICE },
+		{ "Credits", "\"Credits\"", "Credits", LINE },
+		{ "TOMB5 Engine", "\"TOMB5-Engine\"", "TOMB5-Engine", LINE },
+		{ "TR3 Enemies from tomb3", "\"TR3-Gegner aus tomb3\"",
+			"TR3-Gegner aus tomb3", LINE },
+		{ "Randomizer and Windows 11 Port",
+			"\"Randomizer und Windows-11-Port\"",
+			"Randomizer und Windows-11-Port", LINE },
+		{ "Contributors", "\"Mitwirkende\"", "Mitwirkende", LINE },
+		{ "Tools and Libraries", "\"Werkzeuge und Bibliotheken\"",
+			"Werkzeuge und Bibliotheken", LINE },
+		{ "Square", "\"Quadrat\"", "Quadrat", PAD },
+		{ "Cross", "\"Kreuz\"", "Kreuz", PAD },
+		{ "Circle", "\"Kreis\"", "Kreis", PAD },
+		{ "Triangle", "\"Dreieck\"", "Dreieck", PAD },
+		{ "PS Button", "\"PS-Taste\"", "PS-Taste", PAD },
+		{ "View", "\"Ansicht\"", "Ansicht", PAD },
+		{ "Menu", "\"Men\\xFC\"", "Men\xFC", PAD },
+		{ "Stick R Up", "\"Stick R Hoch\"", "Stick R Hoch", PAD },
+		{ "Stick R Down", "\"Stick R Runter\"", "Stick R Runter", PAD },
+		{ "Stick R Left", "\"Stick R Links\"", "Stick R Links", PAD },
+		{ "Stick R Right", "\"Stick R Rechts\"", "Stick R Rechts", PAD },
+		{ "D-Pad Up", "\"D-Pad Hoch\"", "D-Pad Hoch", PAD },
+		{ "D-Pad Down", "\"D-Pad Runter\"", "D-Pad Runter", PAD },
+		{ "D-Pad Left", "\"D-Pad Links\"", "D-Pad Links", PAD },
+		{ "D-Pad Right", "\"D-Pad Rechts\"", "D-Pad Rechts", PAD },
+		{ "Normal", "\"Normal\"", "Normal", NOTICE },
+		{ "Wideshot", "\"Breitschuss\"", "Breitschuss", NOTICE },
+		{ "Burst", "\"Salve\"", "Salve", NOTICE },
+		{ "Sniper", "\"Einzelfeuer\"", "Einzelfeuer", NOTICE },
+		{ "Rapid", "\"Dauerfeuer\"", "Dauerfeuer", NOTICE },
 	};
 	const long label = caption_share("Kamerageschwindigkeit");
 
@@ -12162,21 +12269,33 @@ static void caption_rows()
 	{
 		const bool have = caption_row(flow, w.key, row, sizeof(row));
 		const long room = w.kind == LABEL ? label : w.kind == VALUE ? 960 :
-			w.kind == LINE ? 2560 : 0;
+			w.kind == LINE ? 2560 : w.kind == PAD ? 960 : 0;
+		const char* before = w.kind == PAD ? "Mod+" : "";
 
 		snprintf(what, sizeof(what), "captions: \"%s\" has one row, "
 			"German in it", w.key);
 		ok(have && strstr(row, w.source) != 0, what, have, 1);
 
+		// A caption's buffer holds every column of its row.
+		if (w.kind == NOTICE)
+		{
+			snprintf(what, sizeof(what), "captions: every column of \"%s\" "
+				"fits twelve bytes", w.key);
+			ok(have && caption_longest(row) <= 11, what,
+				have ? caption_longest(row) : -1, 11);
+		}
+
 		// The German word, then the English key, which French, Italian and
 		// Spanish draw as English does; a label with the row's mark behind
 		// it, the widest any label of the window is drawn.
+		char german[96];
 		char english[96];
 
-		snprintf(english, sizeof(english), "%s%s", w.key,
+		snprintf(german, sizeof(german), "%s%s", before, w.german);
+		snprintf(english, sizeof(english), "%s%s%s", before, w.key,
 			w.kind == LABEL ? " *" : "");
 
-		const char* both[2] = { w.german, english };
+		const char* both[2] = { german, english };
 
 		for (const char* s : both)
 		{
@@ -12190,35 +12309,89 @@ static void caption_rows()
 		}
 	}
 
-	// Every literal the window hands to CustomText has its row.
-	for (const char* p = outfit ? strstr(outfit, "CustomText(") : 0; p;
-		p = strstr(p + 1, "CustomText("))
+	// Every literal the window, the Credits screen and the ammo hotkeys
+	// hand to CustomText has its row.
+	caption_literals(outfit, flow, "F4's");
+	caption_literals(troye, flow, "the Credits'");
+	caption_literals(input, flow, "the ammo caption's");
+
+	// The Credits screen draws its title and its headings, the gold rows,
+	// through CustomText and none raw.
+	n = hd_switch_count(troye, "CustomText(\"");
+	ok(n == 6 && hd_switch_count(troye, "6, \"") == 0, "captions: the "
+		"Credits' title and five headings go through CustomText", n, 6);
+
+	// The ammo hotkeys' five captions, and no raw one left.
+	n = hd_switch_count(input, "strcpy(ammo_change_buf, CustomText(\"");
+	ok(n == 5 && hd_switch_count(input, "sprintf(ammo_change_buf, \"") == 0,
+		"captions: the five ammo captions go through CustomText", n, 5);
+
+	// The pad's names: the value column passes every one through
+	// CustomText, alone and in a chord.
+	n = hd_switch_count(frame, "JoyButtonName(");
+	ok(n == 2 && hd_switch_count(frame, "CustomText(JoyButtonName(") == n,
+		"captions: the pad's names go through CustomText", n, 2);
+
+	/* Every name of the four pages (specific\input.cpp, from the stick's
+	 * macro to the last table): a word has its row, and a letter or a
+	 * number ("A", "L2"), an unnamed bit ("Joy 13") and a name printed on
+	 * the pad ("Share", "Options", "Touchpad") have none, so it stays as
+	 * the pad says it in every language. */
 	{
-		const char* q = p + 11;
-		int depth = 1;
+		const char* p = input ? strstr(input, "#define JOYNAME_STICK") : 0;
+		const char* end = p ? strstr(p, "long JoyStyle = -1;") : 0;
+		char seen[64][24];
+		int names = 0, words_with_rows = 0;
 
-		for (; *q && depth; q++)
+		for (const char* q = p; q && q < end; q++)
 		{
-			if (*q == '(')
-				depth++;
-			else if (*q == ')')
-				depth--;
-			else if (*q == '"')
+			if (q[0] == '/' && q[1] == '/')
 			{
-				const char* end = strchr(q + 1, '"');
-				char lit[96];
+				q = strchr(q, '\n');
 
-				if (!end || end - q - 1 >= (long)sizeof(lit))
+				if (!q)
 					break;
 
-				memcpy(lit, q + 1, (size_t)(end - q - 1));
-				lit[end - q - 1] = 0;
-				snprintf(what, sizeof(what), "captions: F4's \"%s\" has a "
-					"row", lit);
-				ok(caption_row(flow, lit, row, sizeof(row)), what, 0, 1);
-				q = end;
+				continue;
 			}
+
+			if (*q != '"')
+				continue;
+
+			const char* e = strchr(q + 1, '"');
+			char lit[24];
+
+			if (!e || e - q - 1 >= (long)sizeof(lit))
+				break;
+
+			memcpy(lit, q + 1, (size_t)(e - q - 1));
+			lit[e - q - 1] = 0;
+			q = e;
+
+			bool again = false;
+
+			for (int i = 0; i < names; i++)
+				again = again || !strcmp(seen[i], lit);
+
+			if (again || names >= 64)
+				continue;
+
+			snprintf(seen[names++], sizeof(seen[0]), "%s", lit);
+
+			const bool name = strlen(lit) <= 2 || !strncmp(lit, "Joy ", 4) ||
+				!strcmp(lit, "Share") || !strcmp(lit, "Options") ||
+				!strcmp(lit, "Touchpad");
+			const bool has = caption_row(flow, lit, row, sizeof(row));
+
+			words_with_rows += has;
+			snprintf(what, sizeof(what), "captions: the pad's \"%s\" %s",
+				lit, name ? "is a name, no row" : "has a row");
+			ok(has != name, what, has, !name);
 		}
+
+		ok(names == 48 && words_with_rows == 15, "captions: 48 pad names, "
+			"15 of them words with rows", names * 100 + words_with_rows,
+			4815);
 	}
 
 	// The head and shine words: the window's own head words and the one-word
@@ -12329,6 +12502,9 @@ static void caption_rows()
 	free(outfit);
 	free(robe);
 	free(sw);
+	free(troye);
+	free(frame);
+	free(input);
 }
 
 // Where `what` first stands in `text` from `from` on, or -1.

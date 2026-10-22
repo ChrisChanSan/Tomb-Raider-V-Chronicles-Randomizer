@@ -1543,6 +1543,61 @@ const char* CustomText(const char* engl)
 		// ammo hotkeys' caption, whose buffer holds eleven letters
 		// (specific\input.cpp); "HD ist aus" is ten.
 		{ "HD is off", "HD is off", "HD ist aus", "HD is off", "HD is off" },
+		// The Credits screen's headings (tomb5\troyestuff.cpp), each drawn
+		// centred across the screen; its title is "Credits" above. The
+		// names under them are names and have no rows.
+		{ "TOMB5 Engine", "TOMB5 Engine", "TOMB5-Engine", "TOMB5 Engine",
+			"TOMB5 Engine" },
+		{ "TR3 Enemies from tomb3", "TR3 Enemies from tomb3",
+			"TR3-Gegner aus tomb3", "TR3 Enemies from tomb3",
+			"TR3 Enemies from tomb3" },
+		{ "Randomizer and Windows 11 Port", "Randomizer and Windows 11 Port",
+			"Randomizer und Windows-11-Port", "Randomizer and Windows 11 Port",
+			"Randomizer and Windows 11 Port" },
+		{ "Contributors", "Contributors", "Mitwirkende", "Contributors",
+			"Contributors" },
+		{ "Tools and Libraries", "Tools and Libraries",
+			"Werkzeuge und Bibliotheken", "Tools and Libraries",
+			"Tools and Libraries" },
+		// The pad's button names in the Key bindings' value column
+		// (specific\input.cpp, JoyButtonName, through game\menu_frame.cpp,
+		// MenuValBinding). The PS5 pad's shapes are the German shapes
+		// ("Circle" is above, a value of its own as well); the stick's and
+		// the d-pad's directions are the German keyboard table's arrow
+		// keys, "Hoch", "Runter", "Links", "Rechts"; the Xbox pad's View
+		// and Menu buttons are "Ansicht" ("View" is above, the page's
+		// caption, the same word) and "Men\xFC". A letter, a number and a
+		// name printed on the pad ("Share", "Options", "Touchpad",
+		// "Joy 13") fall back to themselves. Every German name fits the
+		// value column at every screen width behind "Mod+".
+		{ "Square", "Square", "Quadrat", "Square", "Square" },
+		{ "Cross", "Cross", "Kreuz", "Cross", "Cross" },
+		{ "Triangle", "Triangle", "Dreieck", "Triangle", "Triangle" },
+		{ "PS Button", "PS Button", "PS-Taste", "PS Button", "PS Button" },
+		{ "Menu", "Menu", "Men\xFC", "Menu", "Menu" },
+		{ "Stick R Up", "Stick R Up", "Stick R Hoch", "Stick R Up",
+			"Stick R Up" },
+		{ "Stick R Down", "Stick R Down", "Stick R Runter", "Stick R Down",
+			"Stick R Down" },
+		{ "Stick R Left", "Stick R Left", "Stick R Links", "Stick R Left",
+			"Stick R Left" },
+		{ "Stick R Right", "Stick R Right", "Stick R Rechts", "Stick R Right",
+			"Stick R Right" },
+		{ "D-Pad Up", "D-Pad Up", "D-Pad Hoch", "D-Pad Up", "D-Pad Up" },
+		{ "D-Pad Down", "D-Pad Down", "D-Pad Runter", "D-Pad Down",
+			"D-Pad Down" },
+		{ "D-Pad Left", "D-Pad Left", "D-Pad Links", "D-Pad Left",
+			"D-Pad Left" },
+		{ "D-Pad Right", "D-Pad Right", "D-Pad Rechts", "D-Pad Right",
+			"D-Pad Right" },
+		// The ammo hotkeys' captions (specific\input.cpp), copied into the
+		// caption's buffer of twelve bytes, so no column holds more than
+		// eleven letters; "Normal" is above. The HK's three modes are the
+		// fire selector's German words.
+		{ "Wideshot", "Wideshot", "Breitschuss", "Wideshot", "Wideshot" },
+		{ "Burst", "Burst", "Salve", "Burst", "Burst" },
+		{ "Sniper", "Sniper", "Einzelfeuer", "Sniper", "Sniper" },
+		{ "Rapid", "Rapid", "Dauerfeuer", "Rapid", "Rapid" },
 	};
 
 	long column;

@@ -1501,15 +1501,21 @@ static const char* MenuValBinding(long role, char* buf)
 	 * An unbound Modifier with a chord stored reads "---+R3": the same
 	 * "---" that means unbound one line above, in the half that is
 	 * unbound. It is honest - that binding cannot fire - and it fits
-	 * (198 px at its widest, "---+Stick R Down"). */
+	 * (198 px at its widest, "---+Stick R Down").
+	 *
+	 * The button's name goes through CustomText (game\gameflow.cpp): the
+	 * shapes, the stick's and the d-pad's directions and the words among
+	 * the names have their German; a letter, a number or a name printed on
+	 * the pad falls back to itself. In German "Mod+Stick R Runter" is the
+	 * widest pair and stays inside the column at every screen width. */
 	if (JoyRoleIsChord(role))
 	{
 		sprintf(buf, "%s+%s", jLayout[JOY_ROLE_MODIFIER] == -1 ? "---" : "Mod",
-			JoyButtonName(jLayout[role]));
+			CustomText(JoyButtonName(jLayout[role])));
 		return buf;
 	}
 
-	return JoyButtonName(jLayout[role]);
+	return CustomText(JoyButtonName(jLayout[role]));
 }
 
 static void MenuSelectBinding(long role)

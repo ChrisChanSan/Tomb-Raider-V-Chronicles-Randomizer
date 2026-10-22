@@ -914,6 +914,9 @@ char ammo_change_buf[12];
 // carried" test, the draw, and the ammunition cycling on a second press
 // (which alone is what the "Ammotype hotkeys" option governs - drawing a
 // weapon works whether it is on or off).
+// The one difference: the caption a cycle shows goes through CustomText
+// (game\gameflow.cpp) like every word the project draws, in German too.
+// Every column of its row fits the caption's twelve bytes.
 //----------------------------------------------------------------------------
 /* One routine taking which weapon, called by the keyboard and the pad alike:
  * each weapon role is read as Key(role) OR the pad's role, the same way as the
@@ -956,14 +959,14 @@ static void DoWeaponRequest(long which)
 					lara.shotgun_type_carried &= ~W_AMMO2;
 					lara.shotgun_type_carried |= W_AMMO1;
 					ammo_change_timer = 30;
-					sprintf(ammo_change_buf, "Normal");
+					strcpy(ammo_change_buf, CustomText("Normal"));
 				}
 				else if (lara.shotgun_type_carried & W_AMMO1)
 				{
 					lara.shotgun_type_carried &= ~W_AMMO1;
 					lara.shotgun_type_carried |= W_AMMO2;
 					ammo_change_timer = 30;
-					sprintf(ammo_change_buf, "Wideshot");
+					strcpy(ammo_change_buf, CustomText("Wideshot"));
 				}
 			}
 		}
@@ -1012,21 +1015,21 @@ static void DoWeaponRequest(long which)
 					lara.hk_type_carried &= ~W_AMMO3;
 					lara.hk_type_carried |= W_AMMO2;
 					ammo_change_timer = 30;
-					sprintf(ammo_change_buf, "Burst");
+					strcpy(ammo_change_buf, CustomText("Burst"));
 				}
 				else if (lara.hk_type_carried & W_AMMO2)
 				{
 					lara.hk_type_carried &= ~W_AMMO2;
 					lara.hk_type_carried |= W_AMMO1;
 					ammo_change_timer = 30;
-					sprintf(ammo_change_buf, "Sniper");
+					strcpy(ammo_change_buf, CustomText("Sniper"));
 				}
 				else if (lara.hk_type_carried & W_AMMO1)
 				{
 					lara.hk_type_carried &= ~W_AMMO1;
 					lara.hk_type_carried |= W_AMMO3;
 					ammo_change_timer = 30;
-					sprintf(ammo_change_buf, "Rapid");
+					strcpy(ammo_change_buf, CustomText("Rapid"));
 				}
 			}
 		}

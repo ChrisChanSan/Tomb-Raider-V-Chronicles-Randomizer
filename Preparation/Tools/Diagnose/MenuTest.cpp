@@ -3090,9 +3090,9 @@ static void graphics_build_row()
 		check(strstr(sw, "strcpy(ammo_change_buf, "
 			"CustomText(\"HD is off\"));") != 0, 1,
 			"build row: it says HD is off, through CustomText");
-		check((int)sizeof("HD is off") <= 12 &&
-			(int)sizeof("HD ist aus") <= 12, 1,
-			"build row: and fits the caption's twelve bytes");
+		check((int)sizeof("HD is off") <= 64 &&
+			(int)sizeof("HD ist aus") <= 64, 1,
+			"build row: and fits the caption's 64 bytes");
 	}
 
 	free(frame);

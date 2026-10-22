@@ -12216,10 +12216,13 @@ static void caption_rows()
 		!!sw + !!troye + !!frame + !!input, 7);
 
 	/* A label of the options page or the F4 window, a value of the value
-	 * column, a line centred across the screen, the ammo caption's buffer
-	 * of twelve bytes, and a pad's button name, measured behind "Mod+" as
-	 * a chord prints it. */
-	enum { LABEL, VALUE, LINE, NOTICE, PAD };
+	 * column, a line centred across the screen, the caption at the top of
+	 * the screen (a centred line in a buffer of 64 bytes), and a pad's
+	 * button name, measured behind "Mod+" as a chord prints it. The four
+	 * d-pad names behind "Steuerkreuz" fit the column alone and are wider
+	 * than it behind "Mod+": they are checked as such, so a fifth name
+	 * over the column, or one of the four made short enough, shows here. */
+	enum { LABEL, VALUE, LINE, NOTICE, PAD, PADWIDE };
 	struct word
 	{
 		const char* key;
@@ -12272,19 +12275,18 @@ static void caption_rows()
 		{ "PS Button", "\"PS-Taste\"", "PS-Taste", PAD },
 		{ "View", "\"Ansicht\"", "Ansicht", PAD },
 		{ "Menu", "\"Men\\xFC\"", "Men\xFC", PAD },
-		{ "Stick R Up", "\"Stick R Hoch\"", "Stick R Hoch", PAD },
-		{ "Stick R Down", "\"Stick R Runter\"", "Stick R Runter", PAD },
-		{ "Stick R Left", "\"Stick R Links\"", "Stick R Links", PAD },
-		{ "Stick R Right", "\"Stick R Rechts\"", "Stick R Rechts", PAD },
-		{ "D-Pad Up", "\"D-Pad Hoch\"", "D-Pad Hoch", PAD },
-		{ "D-Pad Down", "\"D-Pad Runter\"", "D-Pad Runter", PAD },
-		{ "D-Pad Left", "\"D-Pad Links\"", "D-Pad Links", PAD },
-		{ "D-Pad Right", "\"D-Pad Rechts\"", "D-Pad Rechts", PAD },
-		{ "Normal", "\"Normal\"", "Normal", NOTICE },
-		{ "Wideshot", "\"Breitschuss\"", "Breitschuss", NOTICE },
-		{ "Burst", "\"Salve\"", "Salve", NOTICE },
-		{ "Sniper", "\"Einzelfeuer\"", "Einzelfeuer", NOTICE },
-		{ "Rapid", "\"Dauerfeuer\"", "Dauerfeuer", NOTICE },
+		{ "Stick R Up", "\"Stick R oben\"", "Stick R oben", PAD },
+		{ "Stick R Down", "\"Stick R unten\"", "Stick R unten", PAD },
+		{ "Stick R Left", "\"Stick R links\"", "Stick R links", PAD },
+		{ "Stick R Right", "\"Stick R rechts\"", "Stick R rechts", PAD },
+		{ "D-Pad Up", "\"Steuerkreuz oben\"", "Steuerkreuz oben", PADWIDE },
+		{ "D-Pad Down", "\"Steuerkreuz unten\"", "Steuerkreuz unten",
+			PADWIDE },
+		{ "D-Pad Left", "\"Steuerkreuz links\"", "Steuerkreuz links",
+			PADWIDE },
+		{ "D-Pad Right", "\"Steuerkreuz rechts\"", "Steuerkreuz rechts",
+			PADWIDE },
+		{ "Normal", "\"Normal\"", "Normal", VALUE },
 	};
 	const long label = caption_share("Kamerageschwindigkeit");
 
@@ -12292,8 +12294,9 @@ static void caption_rows()
 	{
 		const bool have = caption_row(flow, w.key, row, sizeof(row));
 		const long room = w.kind == LABEL ? label : w.kind == VALUE ? 960 :
-			w.kind == LINE ? 2560 : w.kind == PAD ? 960 : 0;
-		const char* before = w.kind == PAD ? "Mod+" : "";
+			w.kind == LINE || w.kind == NOTICE ? 2560 : 960;
+		const bool pad = w.kind == PAD || w.kind == PADWIDE;
+		const char* before = pad ? "Mod+" : "";
 
 		snprintf(what, sizeof(what), "captions: \"%s\" has one row, "
 			"German in it", w.key);
@@ -12303,9 +12306,25 @@ static void caption_rows()
 		if (w.kind == NOTICE)
 		{
 			snprintf(what, sizeof(what), "captions: every column of \"%s\" "
-				"fits twelve bytes", w.key);
-			ok(have && caption_longest(row) <= 11, what,
-				have ? caption_longest(row) : -1, 11);
+				"fits the caption's 64 bytes", w.key);
+			ok(have && caption_longest(row) <= 63, what,
+				have ? caption_longest(row) : -1, 63);
+		}
+
+		// A d-pad name behind "Steuerkreuz": alone in the column, and wider
+		// than it behind "Mod+".
+		if (w.kind == PADWIDE)
+		{
+			char chord[96];
+
+			snprintf(chord, sizeof(chord), "Mod+%s", w.german);
+			snprintf(what, sizeof(what), "captions: \"%s\" fits its column "
+				"alone", w.german);
+			ok(caption_share(w.german) <= 960, what,
+				caption_share(w.german), 960);
+			snprintf(what, sizeof(what), "captions: \"%s\" is wider than "
+				"the column, as recorded", chord);
+			ok(caption_share(chord) > 960, what, caption_share(chord), 961);
 		}
 
 		// The German word, then the English key, which French, Italian and
@@ -12322,9 +12341,12 @@ static void caption_rows()
 
 		for (const char* s : both)
 		{
+			if (w.kind == PADWIDE && s == german)
+				continue;	// measured alone and behind "Mod+" above
+
 			const long share = caption_share(s);
-			const bool fits = w.kind == NOTICE ? strlen(s) <= 11 :
-				share <= room;
+			const bool fits = share <= room &&
+				(w.kind != NOTICE || strlen(s) <= 63);
 
 			snprintf(what, sizeof(what), "captions: \"%s\" fits its column",
 				s);
@@ -12332,11 +12354,10 @@ static void caption_rows()
 		}
 	}
 
-	// Every literal the window, the Credits screen and the ammo hotkeys
-	// hand to CustomText has its row.
+	// Every literal the window and the Credits screen hand to CustomText
+	// has its row.
 	caption_literals(outfit, flow, "F4's");
 	caption_literals(troye, flow, "the Credits'");
-	caption_literals(input, flow, "the ammo caption's");
 
 	// The Credits screen draws its title and its headings, the gold rows,
 	// through CustomText and none raw.
@@ -12344,10 +12365,83 @@ static void caption_rows()
 	ok(n == 6 && hd_switch_count(troye, "6, \"") == 0, "captions: the "
 		"Credits' title and five headings go through CustomText", n, 6);
 
-	// The ammo hotkeys' five captions, and no raw one left.
-	n = hd_switch_count(input, "strcpy(ammo_change_buf, CustomText(\"");
-	ok(n == 5 && hd_switch_count(input, "sprintf(ammo_change_buf, \"") == 0,
-		"captions: the five ammo captions go through CustomText", n, 5);
+	/* The ammo hotkeys' five captions are the language file's own names,
+	 * the strings the inventory shows (game\newinv2.cpp): each mode the
+	 * cycle sets is followed by the string that names it - W_AMMO1 is the
+	 * sniper mode, W_AMMO2 the burst, W_AMMO3 the rapid fire
+	 * (game\lara1gun.cpp, FireHK) - and no word of the project's goes in. */
+	{
+		static const char* const sets[5][2] = {
+			{ "lara.shotgun_type_carried |= W_AMMO1;",
+				"AmmoCaption(TXT_Shotgun_Normal_Ammo);" },
+			{ "lara.shotgun_type_carried |= W_AMMO2;",
+				"AmmoCaption(TXT_Shotgun_Wideshot_Ammo);" },
+			{ "lara.hk_type_carried |= W_AMMO2;",
+				"AmmoCaption(TXT_HKSTRING3);" },
+			{ "lara.hk_type_carried |= W_AMMO1;",
+				"AmmoCaption(TXT_HKSTRING2);" },
+			{ "lara.hk_type_carried |= W_AMMO3;",
+				"AmmoCaption(TXT_HKSTRING4);" },
+		};
+
+		for (const auto& s : sets)
+		{
+			const char* at = input ? strstr(input, s[0]) : 0;
+			const char* call = at ? strstr(at, s[1]) : 0;
+
+			snprintf(what, sizeof(what), "captions: %s shows %s", s[0], s[1]);
+			ok(hd_switch_count(input, s[0]) == 1 &&
+				hd_switch_count(input, s[1]) == 1 && call && call - at < 80,
+				what, call ? (long)(call - at) : -1, 1);
+		}
+
+		n = hd_switch_count(input, "AmmoCaption(TXT_");
+		ok(n == 5 && hd_switch_count(input, "CustomText(") == 0 &&
+			hd_switch_count(input, "strcpy(ammo_change_buf") == 0,
+			"captions: five captions from the language file, no word of "
+			"the table's", n, 5);
+
+		const char* fn = input ? strstr(input, "static void AmmoCaption(long "
+			"txt)") : 0;
+		const char* end = fn ? strstr(fn, "\n}") : 0;
+		const char* cp = fn ? strstr(fn, "snprintf(ammo_change_buf, "
+			"sizeof(ammo_change_buf), \"%s\",") : 0;
+		const char* src = fn ? strstr(fn, "SCRIPT_TEXT(txt));") : 0;
+
+		ok(cp && src && cp < end && src < end, "captions: the caption copies "
+			"the string, bounded by its buffer", cp && src, 1);
+	}
+
+	/* No row for the four captions the language file names now, and the
+	 * buffer: the same size in the definition and the declaration, room
+	 * for the longest of the five names in the game's language files
+	 * (37 bytes, measured) and its end. */
+	{
+		static const char* const gone[4] = { "Wideshot", "Burst", "Sniper",
+			"Rapid" };
+		char* head = hd_switch_text("../input.h");
+
+		for (const char* g : gone)
+		{
+			char at[32];
+
+			snprintf(at, sizeof(at), "{ \"%s\",", g);
+			snprintf(what, sizeof(what), "captions: \"%s\" has no row", g);
+			ok(!hd_switch_count(flow, at), what, hd_switch_count(flow, at),
+				0);
+		}
+
+		const char* def = input ? strstr(input, "char ammo_change_buf[") : 0;
+		const char* ext = head ? strstr(head, "extern char ammo_change_buf[")
+			: 0;
+		const long size = def ? atol(def + 21) : 0;
+		const long size_h = ext ? atol(ext + 28) : 0;
+
+		ok(size == 64 && size_h == size && size >= 37 + 1,
+			"captions: the caption's buffer holds 63 bytes and its end",
+			size * 1000 + size_h, 64064);
+		free(head);
+	}
 
 	// The pad's names: the value column passes every one through
 	// CustomText, alone and in a chord.

@@ -478,12 +478,15 @@ prints the same buttons as numbers, so read *Touchpad* as `Joy 14`, R1 as
 Square as `Joy 2` / `Joy 3` / `Joy 4` / `Joy 1`. Whatever the page calls them,
 the binding page shows you the name your own pad's page uses.
 
-With the **Language** row on German the shapes, the directions and the words among the
-names are German: *Quadrat*, *Kreuz*, *Kreis* and *Dreieck*, *PS-Taste*, *Ansicht* and
-*Menü* for the Xbox pad's View and Menu buttons, *Stick R Hoch*, *Stick R Runter*, *Stick
-R Links* and *Stick R Rechts*, and the same four for the *D-Pad*. Letters and numbers
+With the **Language** row on French, German, Italian or Spanish the shapes, the
+directions and the words among the names are that language's: in German *Quadrat*,
+*Kreuz*, *Kreis* and *Dreieck*, *PS-Taste*, *Ansicht* and *Menü* for the Xbox pad's View
+and Menu buttons, *Stick R oben*, *Stick R unten*, *Stick R links* and *Stick R rechts*,
+and *Steuerkreuz oben*, *unten*, *links* and *rechts* for the d-pad. Letters and numbers
 (*L2*, *RT*, *A*), the `Joy` numbers and the names printed on the pad (*Share*,
-*Options*, *Touchpad*) stay as they are in every language.
+*Options*, *Touchpad*) stay as they are in every language. Behind *Mod+*, as a chord
+prints it, a German d-pad name is wider than the value column and runs past the
+screen's right edge.
 
 With the Modifier unbound — every One-key pad, and the two XInput-ordered
 Separate pages — no chord can ever fire, and every plain role reads exactly
@@ -737,9 +740,10 @@ below for the six settings on that tab, and the sections after it for the
 never turns up while paging through settings and no paging arrows are drawn
 across the names. It lists names only; the web addresses
 live in `README.txt`, because the game font cannot draw every character.
-With the **Language** row on German its title and headings are German - *Credits*,
-*TOMB5-Engine*, *TR3-Gegner aus tomb3*, *Randomizer und Windows-11-Port*, *Mitwirkende*,
-*Werkzeuge und Bibliotheken*; the names stay as they are.
+With the **Language** row on French, German, Italian or Spanish its title and headings
+are in that language - in German *Credits*, *TOMB5-Engine*, *TR3-Gegner aus tomb3*,
+*Randomizer und Windows-11-Port*, *Mitwirkende*, *Werkzeuge und Bibliotheken*; the names
+stay as they are.
 
 ---
 
@@ -830,10 +834,9 @@ chords** above for binding one of them to a pad chord.
 - **Ammotype hotkeys**: the option governs **only** the ammunition cycling -
   pressing a weapon's number again while it is already out. Drawing a weapon
   and the medipacks work whether it is on or off.
-  The caption a cycle shows at the top of the screen - *Normal* or *Wideshot*
-  for the shotgun, *Burst*, *Sniper* or *Rapid* for the HK - reads *Normal*,
-  *Breitschuss*, *Salve*, *Einzelfeuer* and *Dauerfeuer* with the **Language**
-  row on German.
+  The caption a cycle shows at the top of the screen is the name the inventory
+  shows for the shotgun's ammunition or the HK's fire mode, out of the game's
+  own language file, so it reads in the language of the **Language** row.
 
   **One key per weapon, the same key in every level:** 1 pistols,
   2 shotgun, 3 uzis, 4 revolver, 5 HK, 6 crossbow (the Grappling Gun in
@@ -1329,10 +1332,46 @@ Only files in the true TR5 PC text layout are accepted; the game checks the
 file's **header**, not its name. `JAPAN.DAT` and `DUTCH.DAT` ship with every
 edition of TR5 and are in fact Tomb Raider 4 files, so they are skipped
 silently, and some Steam-edition language files are rejected the same way.
+Japanese is offered when the folder `audio\HQ JP` holds the Japanese HQ
+soundtrack (below): it plays the Japanese HQ audio with English text, and no
+Japanese text file is loaded at all. Dutch stays skipped.
+
+The engine's own words - the options pages, the F4 outfit window, the Credits
+screen's headings, the pad's names, the F12 notice - are French, German, Italian
+or Spanish with the row on that language, and English with it on English, English
+US, Japanese or Dutch. The ammo hotkeys' caption is the language file's own name.
 
 > If Left/Right on that row does nothing, only one usable file is present. The
 > language files must sit **next to `PCTomb5.exe`**, and so must `SCRIPT.DAT`
 > — never inside `data\`.
+
+### extrastrings.txt: the engine's words in a file
+
+The engine's own words can also come from `extrastrings.txt`, a text file in the
+game folder **next to `PCTomb5.exe`** - the release ships it with every word the engine
+carries, so a player or a translator can change a word without a new build. The engine
+reads it **once at start**, before the title; an edit shows at the next start, and the
+Language row switches between its words at once, as between the built-in ones.
+
+The format, which the file's own header repeats: plain text, UTF-8 with or without a
+byte order mark, Windows or Unix line ends, at most 64 KB. A line starting with `#` is
+a comment and a blank line is skipped. `[French]`, `[German]`, `[Italian]` and
+`[Spanish]` open a section (in any case; any other section is skipped with its lines),
+and inside a section a line reads `English text=word` - for example `Language=Langue`
+under `[French]`: the text exactly as the engine shows it in English, then the word.
+Spaces around `=` are ignored, the text and the word may hold spaces, a text repeated
+in a section takes its last line, and a line without `=`, with nothing after it or with
+a word over 63 bytes is skipped. A letter outside Latin-1, and a sign such as « or §,
+shows as `?`; the font draws the small accented letters of the four languages but of
+the capitals only Ä, Â, Á, É, Ö, Ó, Ü and Ñ.
+
+The order, for French, German, Italian and Spanish: the file's word, else the engine's
+own, else the English text. English, English US, Japanese and Dutch always show the
+English text. Started with `-log`, the engine writes one line at the load:
+`STRINGS file=extrastrings.txt found=1 keys=134 french=134 german=134 italian=134
+spanish=134 skipped=0 rejected=0` - `found=0` when there is no file, `skipped` the lines
+it left out, `rejected=1` for a file over 64 KB, in UTF-16 or holding a NUL byte, which
+is left out whole.
 
 ### HQ soundtracks
 
@@ -1351,8 +1390,9 @@ The set follows the **Language** row: German text pulls HQ DE, and so on;
 English, English US and Dutch all use HQ EN. A missing track falls back to
 HQ EN and then to the original WAV, so a half-filled folder is fine.
 
-> The folder shipped as `HQ JP WIP` is not read — the engine looks for
-> `audio\HQ JP`. Rename it when you have the files.
+> The engine looks for `audio\HQ JP`, not for a folder named `HQ JP WIP`. With
+> `audio\HQ JP` there, the Language row offers Japanese, which plays the Japanese
+> HQ audio with English text.
 
 Changing the language mid-game also changes the music set, but only from the
 next track that starts.
@@ -4396,8 +4436,9 @@ the only one of them you can change; the other three are facts, and they are
 there because a value you wrote yourself somewhere else is worth nothing if
 the game will not say whether it arrived — each ends with the word for which
 tier answered (*default*, *measured*, *table*, *outfit.txt*, *origin*,
-*list*). With the **Language** row on German the window speaks German:
-*Outfit*, *Leveleigen* with *nach Level und Lauf*, *Schritte* (*Stiefel*,
+*list*). With the **Language** row on French, German, Italian or Spanish the
+window speaks that language; in German *Outfit*, *Leveleigen* with *nach Level und
+Lauf*, *Schritte* (*Stiefel*,
 *Barfuss*, *Stiefel - fehlt hier*, *Barfuss - fehlt hier*), *Kopf* (*eigener*,
 *TR5*, *mit Zopf*), *Glanz*, *Hautglanz*, *laut Outfit*, *gilt ab dem nächsten
 Level*, and the tiers *Standard*, *gemessen*, *Tabelle*, *outfit.txt*,

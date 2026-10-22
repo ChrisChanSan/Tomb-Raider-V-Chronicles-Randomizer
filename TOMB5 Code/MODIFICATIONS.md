@@ -32039,28 +32039,32 @@ without a row was English in every language. The F4 window
 (`specific/hd/hd_outfitmenu.cpp`) passed its own literals through `CustomText` but had no
 rows for them, and printed the wardrobe's phrases raw; the F12 notice
 (`specific/hd/hd_switch.cpp`) was copied into the caption raw. The census, read out of
-the sources: 162 distinct strings - 27 from the language file, 130 through `CustomText`
-(120 before: 93 with a German row before, 116 after), 5 raw literals (15 before). The
+the sources: 161 distinct strings - 27 from the language file, 129 through `CustomText`
+(119 before: 93 with a German row before, 116 after), 5 raw literals (15 before). The
 table had 93 rows; it has 116. The options pages draw no hint line; the F4 window has one,
 *applies at the next level*. No original row draws English in German through the
-project's path: every caption with a string id draws the language file's own word.
+project's path: every caption with a string id draws the language file's own word. The
+names of the two pages that run the game's own screens, *Special Features* and *Credits*,
+are no page titles: `MenuDraw` hands those pages to `MenuRunLegacy` before it draws a
+title, and the census leaves them out.
 
-Widths on the game font's glyph table (`game/chardef.inc`, added up as
-`GetStringLength` does, an umlaut as its base letter), scaled as the game scales them: at
-a screen W pixels wide `InitFont` makes a glyph w * (W - 1) / 512 pixels wide, rounded
-down, and a space is W / 80. The label column holds *Kamerageschwindigkeit*, 223 units.
-The value column starts at 0.625 W and so holds 0.375 W: a value whose glyph units plus
-6.4 per space stay at or under 192 fits at every width, without the help of the
-rounding. A rule in pixels at 640 x 480 does not carry over: the rounding takes up to a
-pixel from every glyph, which counts at 640 and hardly at 1920, so *TR5-Haar
-(outfit.txt)*, the first choice for the hair, was 238 of 240 pixels at 640 x 480 but
-733 of 720 at 1920 x 1080, past the edge from 800 pixels wide on. Every German label is
-133.4 units or less (*Levelvorgabe* with its mark); every German value is 189.8 or less
+Widths on the game font's glyph table (`game/chardef.inc`, added up as `GetStringLength`
+does, an umlaut as its base letter), scaled as the game scales them: at a screen W pixels
+wide `InitFont` makes a glyph w * (W - 1) / 512 pixels wide, rounded down, and a space is
+W / 80. The label column holds *Kamerageschwindigkeit*, 223 units. The value column starts
+at 0.625 W and so holds 0.375 W: a value whose glyph units plus 6.4 per space stay at or
+under 192 fits at every width, without the help of the rounding. A rule in pixels at 640 x
+480 does not carry over: the rounding takes up to a pixel from every glyph, which counts
+at 640 and hardly at 1920, so *TR5-Haar (outfit.txt)*, the first choice for the hair, was
+238 of 240 pixels at 640 x 480 but 302 of 300 at 800 x 600 and 733 of 720 at 1920 x 1080,
+past the edge at every width above 1536 pixels (*TR5-Kopf (outfit.txt)*: 236 of 240 at 640
+x 480, 725 of 720 at 1920 x 1080, past it at every width above 2559). Every German label
+is 133.4 units or less (*Levelvorgabe* with its mark); every German value is 189.8 or less
 (*mit Zopf (outfit.txt)*, 701 of 720 pixels at 1920 x 1080; *nach Level und Lauf* 186.2,
-690); the centred hint `gilt ab dem n\xE4chsten Level` is 247.6 of the whole screen's
-512. The English F4 values *the level and the run decide* (254), *Bare - no second set
-in this level* (299.8), *Boots - no second set in this level* (307.8) and *own head (the
-default)* (209.2) are wider than the column.
+690); the centred hint `gilt ab dem n\xE4chsten Level` is 247.6 of the whole screen's 512.
+The English F4 values *the level and the run decide* (254), *Bare - no second set in this
+level* (299.8), *Boots - no second set in this level* (307.8) and *own head (the default)*
+(209.2) are wider than the column.
 
 The census, every caption, value and hint of the project's rows and of the F4 window,
 where it is drawn from, and what a German player saw before and sees now (a phrase of the
@@ -32172,7 +32176,6 @@ wardrobe is listed by its words; `\x18` to `\x1B` are the keyboard list's arrow 
 | VSync | caption | `CustomText` | *VSync* | *VSync* | menu_frame.cpp |
 | Walk | caption | language file `TXT_Walk` | the language file's own | the language file's own | menu_frame.cpp |
 | Options | page title | language file `TXT_Options` | the language file's own | the language file's own | menu_frame.cpp |
-| Special Features | page title | `CustomText` | English | English | menu_frame.cpp |
 | --- | value | raw literal | English | English | menu_frame.cpp |
 | animated | value | `CustomText` | *animiert* | *animiert* | menu_frame.cpp |
 | Circle | value | `CustomText` | *Kreis* | *Kreis* | menu_frame.cpp |

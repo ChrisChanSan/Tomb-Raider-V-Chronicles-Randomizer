@@ -1528,9 +1528,9 @@ const char* CustomText(const char* engl)
 		// (specific\hd\hd_wardrobe.cpp) and passes through here; the log
 		// lines that print the same words stay English. The row's label
 		// already says "Kopf", so the outfit's own head is "eigener", TR5's
-		// head "TR5" and its own head under TR5's braid "mit Zopf": with
-		// "(outfit.txt)" behind it "TR5-Kopf" and "TR5-Haar" run past the
-		// right edge from 800 pixels wide on.
+		// head "TR5" and its own head under TR5's braid "mit Zopf", short
+		// enough that each, with "(outfit.txt)" behind it, stays within the
+		// 192 units of the value column at every screen width.
 		// "outfit.txt" and "origin" are a file's name and the key of a
 		// mod.txt line and fall back to themselves, as "PSX" does.
 		{ "TR5 head", "TR5 head", "TR5", "TR5 head", "TR5 head" },

@@ -42,7 +42,7 @@ GPLv3.
 | **Sound** | With your own Tomb Raider IV-VI Remastered installed, the game plays its sound effects at 44.1 kHz — measurably wider, not upsampled. A `MAIN.SFX` you put into `audio\` yourself is used before it |
 | **Loading screens** | Your own Remaster's pictures in `screens\HD\` make the loading screens run at 1920x1080 instead of 640x480, while *HD textures* is on |
 | **HD art** | With your own Remaster installed, the levels, Lara and the pickups can be drawn with its HD models and textures — read where they lie, never copied, never shipped. They are loaded with every level whenever the Remaster is found, and *Options -> Graphics -> HD textures* or F12 switches the world and the interface between them and the classic look at any moment; the game starts classic until you switch it once. Which rooms an HD frame draws is the visibility path by default (registry `hd_vis` 1, the HD art of every room in sight drawn whole); `hd_vis` 0 keeps the classic portal walk. An installation an earlier build set up may hold the `hd_vis` 0 that build wrote; the first start moves it to 1 once (writing `hd_vis_rev` beside it), and a 0 set afterwards stays - see the [engine manual](docs/Engine-Manual.md) |
-| **HD water** | In an HD level most pools, canals and stretches of sea (every one with an underwater room below) get the engine's own moving water surface - waves, reflection, a clear or murky depth, foam in patches along the bank and where a waterfall lands, streaks on a fast river, a wet line round whatever stands in it but Lara and the creatures swimming in it - in place of the water art your installation has over it, tunable per body of water in `hd_water.txt` (`art keep` brings that art back). *Options -> Graphics -> HD water* turns it off and brings back the level's own water faces |
+| **HD water** | In an HD level most pools, canals and stretches of sea (every one with an underwater room below) get the engine's own moving water surface - waves, reflection, a clear or murky depth, foam in patches along the bank and where a waterfall lands, streaks on a fast river, a wet line round whatever stands in it but Lara and the creatures swimming in it - in place of the water art your installation has over it, tunable per body of water in `hd_water.txt` (`art keep` brings that art back). It is part of the HD look: the F12 switch to the classic look brings back the level's own water faces |
 | **Reflections** | In an HD level the polished floors of Rome, the VCI building and the title mirror the room over them - every floor height and slope in view at its own height, each tread of a stair, the ramps and the corridors going up, and ANDREA1's church mosaic; a sliver showing less than a thousandth of the screen stays plain and leaves without a fade. *Options -> Graphics -> Reflections* turns the mirror off at once, for a machine that cannot carry it; the floors stay solid until the next level load. See the [engine manual](docs/Engine-Manual.md) |
 | **60 frames a second** | The default. The game still thinks thirty times a second and what is drawn in between is interpolated, so nothing about the physics changes. *Options -> Graphics -> Display -> Frame rate* offers 30, 60 and the display's own refresh |
 | **Level order** | Optional, from shuffling inside a section up to a free run through the whole game |
@@ -122,11 +122,11 @@ three movement fixes — climb-up delay, flexible crawling, crawl tilting.</td>
 </tr>
 <tr>
 <td width="50%"><img src="docs/menu-graphics.jpg" alt="Graphics"><br>
-<b>Graphics</b>, over two pages: HD textures with Body physics under it, HD
-water and Reflections, fog and distance fog, shimmer, the mono screen and
-shadow styles, PSX skies, static lighting, the underwater effect, look
-transparency and footprints. The picture is Beta 2.0's page, without Body
-physics, HD water and Reflections.</td>
+<b>Graphics</b>, over two pages: HD textures with Body physics under it,
+Reflections, fog and distance fog, shimmer, the mono screen and shadow styles,
+PSX skies, static lighting, the underwater effect, look transparency and
+footprints. The picture is Beta 2.0's page, without Body physics and
+Reflections.</td>
 <td width="50%"><img src="docs/menu-display.jpg" alt="Display"><br>
 <b>Display</b>, under Graphics: the frame rate — 30, 60 or whatever your
 screen refreshes at; 60 is what a fresh installation gets — VSync, and

@@ -1901,10 +1901,9 @@ static void BuildRoomSectors()
 /* The water sheets (hd_render.h, HDRenderSetWaterSheets): every room's
  * floor squares handed to the renderer, which finds the water squares,
  * joins them into bodies, classes them and builds the sheets over them.
- * tomb5.hd_water 0 builds the bodies and no sheet and draws no caustic under
- * them, so BuildWaterSurfaces restores every classic water face as it would
- * without this. The section picks the palette, by the game's own level id
- * rather than by a file name. */
+ * A water face no sheet covers is restored by BuildWaterSurfaces as it
+ * would be without this. The section picks the palette, by the game's own
+ * level id rather than by a file name. */
 static_assert(HD_WATER_ROOM_UNDERWATER == ROOM_UNDERWATER &&
 	HD_WATER_ROOM_OPEN == (ROOM_OUTSIDE | ROOM_NOT_INSIDE),
 	"the water sheets read the engine's own room flags");
@@ -1983,7 +1982,7 @@ static void FeedWaterLara()
 
 bool HDWaterRippleOnSheet(long x, long y, long z, int flags)
 {
-	return HDLevelActive() && tomb5.hd_water && tomb5.hd_motion &&
+	return HDLevelActive() && tomb5.hd_motion &&
 		(flags & 1) && RippleIsRing(flags) &&
 		HDRenderWaterSheetUnder((int)x, (int)y, (int)z);
 }
@@ -2075,7 +2074,7 @@ static void BuildWaterFalls()
  * is moved by the way from that middle to the stretch: the mist then rises
  * where the art's water lands. A projection, so a second build moves it no
  * further. Over the fifteen levels only ANDREA2 has such emitters, its two
- * in room 231. Nothing without sheets (tomb5.hd_water 0 lays no curtain);
+ * in room 231. Nothing without sheets (a level that built none);
  * the item's place is not saved (the object saves its flags alone), so a
  * level loaded again starts from the classic place and is moved again. */
 static void MoveWaterfallMist()
@@ -2122,13 +2121,12 @@ static void MoveWaterfallMist()
  * tick at every foot within kDropReach of the camera, at a random place
  * along it and at most kDropAcross to either side, on the surface, and no
  * more than kDropsMax a tick in all. Nothing in a level without sheets
- * (tomb5.hd_water 0 builds none) and nothing while tomb5.hd_motion is
- * off - the water stands still. A drop lives 24 ticks: two a tick are about
- * 48 at a foot - ANDREA2 room 231's curtain has four feet, about 200 of the
- * game's 1024 sparks - and the cap holds a level to about 380 (JOBY5 has 37
- * feet, the WATERLOG foot= lines, 1,776 drops alive without it). Two, 64
- * units, eight squares and 16 are free choices; a drop eight squares off is
- * a dot. */
+ * and nothing while tomb5.hd_motion is off - the water stands still. A
+ * drop lives 24 ticks: two a tick are about 48 at a foot - ANDREA2 room
+ * 231's curtain has four feet, about 200 of the game's 1024 sparks - and
+ * the cap holds a level to about 380 (JOBY5 has 37 feet, the WATERLOG foot=
+ * lines, 1,776 drops alive without it). Two, 64 units, eight squares and 16
+ * are free choices; a drop eight squares off is a dot. */
 void HDWaterFallsTick()
 {
 	const int kDropsPerTick = 2;
@@ -2136,7 +2134,7 @@ void HDWaterFallsTick()
 	const float kDropReach = 8192.0f;
 	const int kDropsMax = 16;
 
-	if (!HDLevelActive() || !tomb5.hd_water || !tomb5.hd_motion)
+	if (!HDLevelActive() || !tomb5.hd_motion)
 		return;
 
 	const int feet = HDRenderWaterFeet();
@@ -2257,7 +2255,7 @@ static void WaterSquareWords(const FLOOR_INFO& f, unsigned short* slope,
  * their sprites are left out where the cards draw. */
 bool HDWaterSplash(const SPLASH_SETUP* setup)
 {
-	if (!setup || !HDLevelActive() || !tomb5.hd_water || !tomb5.hd_motion)
+	if (!setup || !HDLevelActive() || !tomb5.hd_motion)
 		return false;
 
 	HDSplashSetup s;
@@ -2281,7 +2279,7 @@ bool HDWaterSplash(const SPLASH_SETUP* setup)
 
 bool HDWaterSpray(long x, long y, long z, long strength)
 {
-	if (!HDLevelActive() || !tomb5.hd_water || !tomb5.hd_motion)
+	if (!HDLevelActive() || !tomb5.hd_motion)
 		return false;
 
 	return HDRenderWaterSpray((float)x, (float)y, (float)z, (int)strength,
@@ -2467,7 +2465,7 @@ static void WorldToFrame(float* m)
  * water of this frame. */
 bool HDWaterTank(const ITEM_INFO* item)
 {
-	if (!item || !HDLevelActive() || !tomb5.hd_water || !tomb5.hd_motion)
+	if (!item || !HDLevelActive() || !tomb5.hd_motion)
 		return false;
 
 	return HDRenderWaterTank((int)(item - items), (float)item->pos.x_pos,
@@ -2476,10 +2474,10 @@ bool HDWaterTank(const ITEM_INFO* item)
 }
 
 /* The pages of the cards, appended to the level's page cache - with the
- * sheets alone: tomb5.hd_water 0 loads nothing more. */
+ * sheets alone: a level that built none loads nothing more. */
 static void AppendWaterCardPages()
 {
-	if (!tomb5.hd_water || !HDRenderWaterSheetsBuilt())
+	if (!HDRenderWaterSheetsBuilt())
 		return;
 
 	int pages[4];
@@ -2616,19 +2614,19 @@ static void BuildWaterSheets()
 	HDRenderWaterSinks(table.empty() ? 0 : &table[0], (int)table.size());
 	HDRenderWaterFile("hd_water.txt");
 	BuildWaterFilms();
+	// The sheets are part of the HD look: every HD build lays them.
 	HDRenderSetWaterSheets(rooms.empty() ? 0 : &rooms[0], (int)rooms.size(),
-		WaterSection(), g_stem, tomb5.hd_water ? 1 : 0);
+		WaterSection(), g_stem);
 	BuildWaterFalls();
 	AppendWaterCardPages();
 	MoveWaterfallMist();
 
 	/* The depth texture the sheets read (HDRenderWaterDepthBind), bound
-	 * here, between frames, only when this level built sheets - with
-	 * tomb5.hd_water 0, and in a level with no water square, the device
-	 * keeps its own depth buffer. It goes with the level's buffers
-	 * (release_buffers): at the next level, and before a Reset or DXClose
-	 * through HDLevelDeviceLost, after which the HD path waits for the next
-	 * level as it does for everything else. */
+	 * here, between frames, only when this level built sheets - in a level
+	 * with no water square the device keeps its own depth buffer. It goes
+	 * with the level's buffers (release_buffers): at the next level, and
+	 * before a Reset or DXClose through HDLevelDeviceLost, after which the
+	 * HD path waits for the next level as it does for everything else. */
 	HDRenderWaterLevel built;
 	const char* refused = "ok";
 
@@ -2696,12 +2694,11 @@ static void BuildWaterSheets()
 
 	char line[512];
 
-	HDRenderWaterLogLine(-1, g_stem, tomb5.hd_water ? 1 : 0, line,
-		sizeof(line));
+	HDRenderWaterLogLine(-1, g_stem, line, sizeof(line));
 	Log("%s", line);
 
 	for (int b = 0; b < HDRenderWaterBodies(); b++)
-		if (HDRenderWaterLogLine(b, g_stem, 0, line, sizeof(line)))
+		if (HDRenderWaterLogLine(b, g_stem, line, sizeof(line)))
 			Log("%s", line);
 
 	for (int f = 0; HDRenderWaterFallLine(f, g_stem, line, sizeof(line)); f++)
@@ -2870,9 +2867,9 @@ static void BuildWaterSurfaces()
 				}
 
 				/* This project's water sheet over this piece of ground takes
-				 * the face's place (BuildWaterSheets). With tomb5.hd_water 0
-				 * no sheet is built and the answer is always no; so it is for
-				 * a body a row of class none switched off. */
+				 * the face's place (BuildWaterSheets). Where no sheet is
+				 * built the answer is always no; so it is for a body a row
+				 * of class none switched off. */
 				if (HDRenderWaterSheetAt(i, (int)x0, (int)z0, (int)x1, (int)z1))
 				{
 					underSheet++;
@@ -2954,8 +2951,8 @@ static void BuildWaterSurfaces()
 		 * on it, so a face under it is never restored, and the majority only
 		 * decides the faces no sheet covers - over a square with no
 		 * underwater room below, or of a body an hd_water.txt row of class
-		 * none switched off. With tomb5.hd_water 0 no face is under a sheet
-		 * and the majority decides alone. */
+		 * none switched off. Where no sheet is built no face is under a
+		 * sheet and the majority decides alone. */
 		if (inPlane && covered * 2 >= inPlane)
 		{
 			g_water_face_kept += inPlane;
@@ -6693,7 +6690,6 @@ static int KeyStampOf(const char* wadName, HDLevelKey& k)
 	snprintf(k.install, sizeof(k.install), "%s", HDInstallRoot());
 	snprintf(k.installTr3, sizeof(k.installTr3), "%s", HDInstallRootTr3());
 	k.air = (int)tomb5.hd_air;
-	k.water = (int)tomb5.hd_water;
 	k.objects = (int)tomb5.hd_objects;
 	k.budgetMb = (long)tomb5.hd_texture_budget_mb;
 	snprintf(k.format, sizeof(k.format), "%s", tomb5_hd_texture_format);
@@ -8456,8 +8452,8 @@ int HDCarriedRoom(int group)
  * frame that asks and kept for the level: the rooms' flags and squares as
  * the water build reads them for the deep look's top (hd_render.cpp,
  * g_wdeep_top) and the highest point of each room's art. The deep look is
- * the water build's answer whatever tomb5.hd_water says, and the art is
- * room art, so the answer does not depend on the sheets. */
+ * the water build's answer whether it built sheets or not, and the art
+ * is room art, so the answer does not depend on the sheets. */
 static int SurfaceRoom()
 {
 	static char stem[64] = { 0 };
@@ -9010,7 +9006,7 @@ void HDFrameScissorForRoom(int roomIndex)
 
 /* The sea seen from below, drawn by HDFrameSky right after the sky
  * (HDRenderWaterLook, which answers false at once outside a level with the
- * deep look or with tomb5.hd_water off). The eye under the water is
+ * deep look or without the sheets). The eye under the water is
  * HDFrameDraw's own test on the room the drawn eye stands in - a water
  * room the under look holds (HDRenderWaterUnderOn) - and world up in view
  * space is the sky's view's second row, as HDFrameDraw takes it from its
@@ -10013,10 +10009,10 @@ void HDFrameDraw()
 	 * well on a frame the camera has just swum into, a tick behind; on 1
 	 * when this frame is drawn under the water; deep 1 when the level takes
 	 * the deep look (the level line's under_deep). on=0 with flag=1: the
-	 * level built no sheets (tomb5.hd_water 0, a device without the water
-	 * shaders, a level with no water square) or the frame drew no HD
-	 * room. surface the room whose art is the sea's surface (SurfaceRoom,
-	 * drawn at every frame below), -1 for none. */
+	 * level built no sheets (a device without the water shaders, a level
+	 * with no water square) or the frame drew no HD room. surface the room
+	 * whose art is the sea's surface (SurfaceRoom, drawn at every frame
+	 * below), -1 for none. */
 	if (gLogEnabled && !g_undergate_logged && eye_wet && !HDObjectRingFrame())
 	{
 		HDRenderWaterLevel water;
@@ -10254,7 +10250,7 @@ void HDFrameDraw()
  * against the classic draw of the same mesh - the fraction the stand rule
  * pushes art back by (hd_render.h, HD_STAND_PUSH). Rats are the only
  * creatures the classic path draws that swim; bats and spiders do not.
- * Nothing without sheets (tomb5.hd_water 0 builds none). */
+ * Nothing in a level that built no sheets. */
 static void MarkWaterCreatures()
 {
 	const float kMarkPull = HD_STAND_PUSH;
@@ -10357,8 +10353,8 @@ void HDFrameDrawGlow()
 	/* The frame behind the water sheets: every opaque thing of the frame is
 	 * in the render target now - the HD rooms and objects, Lara and the
 	 * classic buckets - and nothing of the blend phase yet. One copy, and
-	 * only when a room of this frame has a sheet (none with tomb5.hd_water
-	 * 0, which builds no sheet). A tank's film asks for it while it is
+	 * only when a room of this frame has a sheet (none in a level that
+	 * built no sheet). A tank's film asks for it while it is
 	 * wet, so its strength is set first. */
 	if (HDRenderWaterSheetsBuilt())
 		FeedWaterFilms();
@@ -10386,7 +10382,7 @@ void HDFrameDrawGlow()
 
 	/* The game's own ripples for the rings on the sheets and Lara's place
 	 * for their waterline, once a frame and only in a level that built
-	 * sheets (none with tomb5.hd_water 0). */
+	 * sheets. */
 	if (HDRenderWaterSheetsBuilt())
 	{
 		FeedWaterRipples();

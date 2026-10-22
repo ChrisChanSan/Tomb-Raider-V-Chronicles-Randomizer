@@ -1851,19 +1851,19 @@ static void controls_mouse_rows()
 /* The row of the chest's soft motion lives in game\menu_frame.cpp's Graphics
  * table, which cannot be linked here, so what is checked is what the tree
  * says, the way controls_mouse_rows reads the Controls table: the table's
- * sixteen rows in order and the split they page into, the row's kind, save
+ * fifteen rows in order and the split they page into, the row's kind, save
  * class and lack of a gate, the four values it shows, their five strings
  * in game\gameflow.cpp's table, the registry name in tomb5\tomb5.cpp, and
  * the draw's reset on a change in specific\hd\hd_laradraw.cpp. The step is
  * game\menu_nav.h's MenuSliderStep over 0..3, swept whole. */
 static void graphics_softbody_row()
 {
-	static const char* const want[16] =
+	static const char* const want[15] =
 	{
-		"Display", "HD build", "HD textures", "Body physics", "HD water",
-		"Reflections", "Fog", "Distance fog", "Shimmer", "Mono screen style",
-		"Shadow mode", "PSX skies", "Static lighting", "UW Effect",
-		"Look transparency", "Footprints"
+		"Display", "HD build", "HD textures", "Body physics", "Reflections",
+		"Fog", "Distance fog", "Shimmer", "Mono screen style", "Shadow mode",
+		"PSX skies", "Static lighting", "UW Effect", "Look transparency",
+		"Footprints"
 	};
 	char* frame = tree_file("../../../TOMB5 Code/TOMB5/game/menu_frame.cpp");
 	char* flow = tree_file("../../../TOMB5 Code/TOMB5/game/gameflow.cpp");
@@ -1921,13 +1921,14 @@ static void graphics_softbody_row()
 		}
 	}
 
-	check(rows, 16, "softbody row: the Graphics table holds sixteen rows");
+	// Read up to sixteen, so that a row too many shows in the count.
+	check(rows, 15, "softbody row: the Graphics table holds fifteen rows");
 
-	for (i = 0; i < rows && i < 16; i++)
+	for (i = 0; i < rows && i < 15; i++)
 		check(strcmp(label[i], want[i]), 0,
 			"softbody row: the Graphics rows stand in this order");
 
-	if (rows == 16)
+	if (rows == 15)
 	{
 		check(!strncmp(line[3], "MENU_VALUE(\"Body physics\"", 25), 1,
 			"softbody row: Body physics is an ungated value row, "
@@ -1938,21 +1939,21 @@ static void graphics_softbody_row()
 		check(strstr(line[3], "MENU_SAVE_TOMB5") != 0, 1,
 			"softbody row: it is saved with the tomb5 settings");
 		check(!strncmp(line[2], "MENU_VALUE(\"HD textures\"", 24) &&
-			!strncmp(line[6], "MENU_VALUE(\"Fog\"", 16), 1,
+			!strncmp(line[5], "MENU_VALUE(\"Fog\"", 16), 1,
 			"softbody row: ungated like its neighbours, which no page row "
 			"greys while HD is off");
 	}
 
-	// Sixteen rows at MENU_MAX_ROWS 12 and no fixed row: two pages, eight
-	// and eight, and the second starts at Shimmer.
-	check(MenuPageCount(16, 12), 2, "softbody row: Graphics pages in two");
-	check(MenuRowsOnPage(16, 12, 0), 8,
+	// Fifteen rows at MENU_MAX_ROWS 12 and no fixed row: two pages, eight
+	// and seven, and the second starts at Mono screen style.
+	check(MenuPageCount(15, 12), 2, "softbody row: Graphics pages in two");
+	check(MenuRowsOnPage(15, 12, 0), 8,
 		"softbody row: eight rows on the first page");
-	check(MenuRowsOnPage(16, 12, 1), 8, "softbody row: eight on the second");
-	check(MenuPageFirstRow(16, 12, 1), 8,
+	check(MenuRowsOnPage(15, 12, 1), 7, "softbody row: seven on the second");
+	check(MenuPageFirstRow(15, 12, 1), 8,
 		"softbody row: the second page starts at row 8");
-	check(rows == 16 &&
-		!strcmp(label[MenuPageFirstRow(16, 12, 1)], "Shimmer"), 1,
+	check(rows == 15 &&
+		!strcmp(label[MenuPageFirstRow(15, 12, 1)], "Mono screen style"), 1,
 		"softbody row: which is Mono screen style, and Body physics is on "
 		"the first page beside HD textures");
 
@@ -2055,15 +2056,17 @@ static void graphics_softbody_row()
 	free(draw);
 }
 
-/* ------------------------------------------------------ the HD water row -- */
+/* ------------------------------------------------------ no HD water row -- */
 
-/* The HD water row on the Graphics page, read from the tree as the Body
- * physics row is: its table line (an ungated value row right under Body
- * physics, saved with the tomb5 settings), the two expressions of its value
- * and its step, its string's five columns in game\gameflow.cpp, the
- * registry name in tomb5\tomb5.cpp (written on a first run, read with on as
- * the default, saved), and the two places in specific\hd\hd_level.cpp
- * that read the option, the water sheets' build and its log line. */
+/* The water sheets have no row: they come with the HD look. Read from the
+ * tree as the Body physics row is: no row and no value functions of that
+ * name in the Graphics table, no string row for its label in
+ * game\gameflow.cpp, no registry value of the water in tomb5\tomb5.cpp,
+ * and no option read in specific\hd\hd_level.cpp, whose water build asks
+ * for the sheets in every HD build; the classic water under the HD look is
+ * the diagnostic tool's alone (HDRenderWaterSheetsOverride, never called by
+ * the engine). The searched name is spelled in two halves, so that a
+ * search of the tree for it finds no code. */
 static void graphics_water_row()
 {
 	char* frame = tree_file("../../../TOMB5 Code/TOMB5/game/menu_frame.cpp");
@@ -2084,55 +2087,19 @@ static void graphics_water_row()
 		return;
 	}
 
-	// The table line, right under Body physics.
-	{
-		const char* body = strstr(frame, "MENU_VALUE(\"Body physics\"");
-		const char* row = strstr(frame, "MENU_VALUE(\"HD water\", "
-			"MenuValHdWater, MenuStepHdWater, MENU_SAVE_TOMB5),");
-		const char* between = body ? strchr(body, '\n') : 0;
-
-		check(tree_count(frame, "MENU_VALUE(\"HD water\""), 1,
-			"water row: one row of that name");
-		check(row != 0, 1, "water row: an ungated value row with its own two "
-			"functions, saved with the tomb5 settings");
-		check(body != 0 && row != 0 && between != 0 &&
-			strstr(between + 1, "MENU_VALUE(") == row, 1,
-			"water row: the next row after Body physics");
-	}
-
-	// What it shows and how it steps: on and off, one press toggles.
-	check(strstr(frame, "CustomText(tomb5.hd_water ? \"on\" : \"off\")")
-		!= 0, 1, "water row: it shows the table's own on and off");
-	check(strstr(frame, "tomb5.hd_water = !tomb5.hd_water;") != 0, 1,
-		"water row: a press either way toggles it");
-
-	// The string, five columns.
-	{
-		char col[5][64];
-		const char* at = strstr(flow, "{ \"HD water\",");
-
-		check(at != 0 && tree_quoted(at, col, 5) == 5, 1,
-			"water row: the label has its row in CustomText's table");
-
-		if (at)
-		{
-			check(!strcmp(col[0], "HD water") && !strcmp(col[1], "HD water") &&
-				!strcmp(col[3], "HD water") && !strcmp(col[4], "HD water"),
-				1, "water row: English, French, Italian and Spanish alike");
-			check(strcmp(col[2], "HD-Wasser"), 0,
-				"water row: the German column is its translation");
-			check(tree_count(flow, "{ \"HD water\","), 1,
-				"water row: and the string has exactly one row");
-		}
-	}
-
-	// The registry, and the engine's two readers.
-	check(tree_count(opts, "sprintf(buf, \"hd_water\");"), 3,
-		"water row: hd_water is written on a first run, read and saved");
-	check(strstr(opts, "REG_ReadBool(buf, tomb5.hd_water, 1);") != 0, 1,
-		"water row: a registry without hd_water reads as on");
-	check(tree_count(level, "tomb5.hd_water ? 1 : 0"), 2, "water row: the "
-		"water sheets' build and its log line read the option");
+	check(tree_count(frame, "\"HD water\""), 0,
+		"water row: the Graphics table has no row of that name");
+	check(tree_count(frame, "MenuValHdWater") +
+		tree_count(frame, "MenuStepHdWater"), 0,
+		"water row: and no value functions for one");
+	check(tree_count(flow, "\"HD water\""), 0,
+		"water row: the string table has no row for its label");
+	check(tree_count(opts, "hd_" "water\""), 0,
+		"water row: no registry value of the water is written or read");
+	check(tree_count(level, "tomb5.hd_" "water"), 0,
+		"water row: the water build reads no option");
+	check(tree_count(level, "WaterSection(), g_stem);"), 1,
+		"water row: the build asks for the sheets in every HD build");
 
 	free(frame);
 	free(flow);
@@ -2142,15 +2109,15 @@ static void graphics_water_row()
 
 /* --------------------------------------------------- the Reflections row -- */
 
-/* The Reflections row on the Graphics page, read from the tree as the HD
- * water row is: its table line (an ungated value row right under HD water,
- * which writes its own key, so it saves nothing more), what it shows - the
- * registry's hd_marble, absent read as on - and its step, which writes the
- * other value to that key and hands it to the renderer at once with the
- * ceiling kept (HDRenderMarbleSet, planes 0); in tomb5\tomb5.cpp the same
- * key written on a first run and read with on as the default; and the
- * round trip of a value through the row's write, the start's read and the
- * row's own reading, a stored value over 1 included. */
+/* The Reflections row on the Graphics page, read from the tree as the Body
+ * physics row is: its table line (an ungated value row right under Body
+ * physics, which writes its own key, so it saves nothing more), what it
+ * shows - the registry's hd_marble, absent read as on - and its step,
+ * which writes the other value to that key and hands it to the renderer
+ * at once with the ceiling kept (HDRenderMarbleSet, planes 0); in
+ * tomb5\tomb5.cpp the same key written on a first run and read with on as
+ * the default; and the round trip of a value through the row's write, the
+ * start's read and the row's own reading, a stored value over 1 included. */
 static void graphics_reflections_row()
 {
 	char* frame = tree_file("../../../TOMB5 Code/TOMB5/game/menu_frame.cpp");
@@ -2170,20 +2137,20 @@ static void graphics_reflections_row()
 		return;
 	}
 
-	// The table line, right under HD water.
+	// The table line, right under Body physics.
 	{
-		const char* water = strstr(frame, "MENU_VALUE(\"HD water\"");
+		const char* body = strstr(frame, "MENU_VALUE(\"Body physics\"");
 		const char* row = strstr(frame, "MENU_VALUE(\"Reflections\", "
 			"MenuValReflect, MenuStepReflect, MENU_SAVE_NONE),");
-		const char* between = water ? strchr(water, '\n') : 0;
+		const char* between = body ? strchr(body, '\n') : 0;
 
 		check(tree_count(frame, "MENU_VALUE(\"Reflections\""), 1,
 			"reflections row: one row of that name");
 		check(row != 0, 1, "reflections row: an ungated value row with its "
 			"own two functions, saving nothing more than its own key");
-		check(water != 0 && row != 0 && between != 0 &&
+		check(body != 0 && row != 0 && between != 0 &&
 			strstr(between + 1, "MENU_VALUE(") == row, 1,
-			"reflections row: the next row after HD water");
+			"reflections row: the next row after Body physics");
 	}
 
 	// What it shows: the key as the start reads it, absent as on.
@@ -3030,15 +2997,15 @@ static void graphics_hd_row()
 
 /* ------------------------------------------------------ the HD build row -- */
 
-/* The HD build row on the Graphics page, read from the tree as the HD water
- * row is: its table line (an ungated value row right above HD textures,
- * saved with the tomb5 settings); what it shows and how it steps - the
- * next value, tomb5_hd_build_next, never the gate in force; the registry's
- * hd_build saved from that next value; the one place the gate takes it, at
- * the top of S_LoadLevelFile before the gate is first asked; that the
- * other readers of tomb5.hd_build only read it, so a step in a running
- * level reaches none of them before the next load; and the switch's
- * notice on screen when the key is pressed with the gate off. */
+/* The HD build row on the Graphics page, read from the tree as the
+ * Reflections row is: its table line (an ungated value row right above HD
+ * textures, saved with the tomb5 settings); what it shows and how it
+ * steps - the next value, tomb5_hd_build_next, never the gate in force; the
+ * registry's hd_build saved from that next value; the one place the gate
+ * takes it, at the top of S_LoadLevelFile before the gate is first asked;
+ * that the other readers of tomb5.hd_build only read it, so a step in a
+ * running level reaches none of them before the next load; and the
+ * switch's notice on screen when the key is pressed with the gate off. */
 static void graphics_build_row()
 {
 	char* frame = tree_file("../../../TOMB5 Code/TOMB5/game/menu_frame.cpp");

@@ -51,7 +51,6 @@ struct HDLevelKey
 	char install[HD_LEVEL_KEY_PATH];	// the Remaster's game 5 folder
 	char installTr3[HD_LEVEL_KEY_PATH];	// the I-III bundle's game 3, or ""
 	int air;			// tomb5.hd_air
-	int water;			// tomb5.hd_water
 	int objects;			// tomb5.hd_objects
 	long budgetMb;			// tomb5.hd_texture_budget_mb
 	char format[16];		// tomb5_hd_texture_format
@@ -104,9 +103,6 @@ inline const char* HDLevelKeyDiffers(const HDLevelKey* a, const HDLevelKey* b)
 
 	if (a->air != b->air)
 		return "hd_air";
-
-	if (a->water != b->water)
-		return "hd_water";
 
 	if (a->objects != b->objects)
 		return "hd_objects";

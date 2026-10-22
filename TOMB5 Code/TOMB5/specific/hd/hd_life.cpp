@@ -65,7 +65,7 @@ namespace
 
 	bool life_on()
 	{
-		return tomb5.hd_water && HDRenderWaterSheetsBuilt();
+		return HDRenderWaterSheetsBuilt();
 	}
 
 	/* A drip's ring into the game's ripples, with the fields SetupRipple

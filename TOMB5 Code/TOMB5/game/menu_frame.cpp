@@ -782,10 +782,10 @@ static bool MenuStepFog(long, long dir)
  * without the Remaster, the draw is classic and the key has nothing to
  * switch (it says so on screen, specific/hd/hd_switch.cpp). The row shows
  * and steps tomb5_hd_build_next, which the gate takes at the next level
- * load (specific/file.cpp, S_LoadLevelFile) - like HD water, the row shows
- * what the next level will do, so a step in a running level changes
- * nothing there. A stored value other than 0 shows as on and is kept as
- * stored until a step writes 0 or 1. */
+ * load (specific/file.cpp, S_LoadLevelFile) - the row shows what the next
+ * level will do, so a step in a running level changes nothing there. A
+ * stored value other than 0 shows as on and is kept as stored until a step
+ * writes 0 or 1. */
 static const char* MenuValHdBuild(long, char* buf)
 {
 	strcpy(buf, CustomText(tomb5_hd_build_next ? "on" : "off"));
@@ -861,29 +861,6 @@ static bool MenuStepBodyPhysics(long, long dir)
 	return 1;
 }
 
-/* HD water, tomb5.hd_water: this project's water surface over every water
- * square of an HD level the sheet can cover - over an underwater room, in a
- * room drawn HD - or the level's own restored water faces in its place.
- * It is taken at the start of a level (specific/hd/hd_level.cpp,
- * BuildWaterSheets), so the row shows what the next level will do - unlike
- * HD textures, which switches the world on screen at once - and it is
- * offered whatever the level on screen draws. */
-static const char* MenuValHdWater(long, char* buf)
-{
-	strcpy(buf, CustomText(tomb5.hd_water ? "on" : "off"));
-	return buf;
-}
-
-static bool MenuStepHdWater(long, long dir)
-{
-	if (!dir)
-		return 0;
-
-	SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
-	tomb5.hd_water = !tomb5.hd_water;
-	return 1;
-}
-
 /* Reflections: the polished floors' mirror (specific/hd/hd_render.cpp, "the
  * marble floors"), the registry's hd_marble, which the game's start hands
  * to the renderer (tomb5/tomb5.cpp). The row shows the key - absent reads
@@ -891,8 +868,7 @@ static bool MenuStepHdWater(long, long dir)
  * value and hands it to the renderer at once (HDRenderMarbleSet, planes 0
  * keeping the frame's ceiling): the mirror's draw follows on the next
  * drawn frame, and off costs nothing from there; the floors' build follows
- * at the level's next load. Offered whatever the level on screen draws, as
- * HD water is. */
+ * at the level's next load. Offered whatever the level on screen draws. */
 static bool MenuReflectOn()
 {
 	ulong on = 1;
@@ -1687,10 +1663,8 @@ static const menu_row menu_rows_graphics[] =
 	MENU_VALUE("HD textures", MenuValHdTextures, MenuStepHdTextures, MENU_SAVE_TOMB5),
 	// Directly under the HD switch it depends on.
 	MENU_VALUE("Body physics", MenuValBodyPhysics, MenuStepBodyPhysics, MENU_SAVE_TOMB5),
-	// Under the HD rows.
-	MENU_VALUE("HD water", MenuValHdWater, MenuStepHdWater, MENU_SAVE_TOMB5),
 	// The polished floors' mirror, with the HD rows; it writes its own key.
-	// Sixteen rows: the page pages eight and eight, with the arrow row
+	// Fifteen rows: the page pages eight and seven, with the arrow row
 	// under them.
 	MENU_VALUE("Reflections", MenuValReflect, MenuStepReflect, MENU_SAVE_NONE),
 	MENU_VALUE("Fog", MenuValFog, MenuStepFog, MENU_SAVE_TOMB5),

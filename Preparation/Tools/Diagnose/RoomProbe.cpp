@@ -583,9 +583,13 @@
  *     -hdwater 0|1    the water sheets, built as hd_level.cpp's
  *                     BuildWaterSheets builds them - the same
  *                     HDRenderSetWaterSheets over the classic level's floor
- *                     squares: 1 with the sheets (tomb5.hd_water 1), 0 with
- *                     the bodies, their wave on the remaster's water art
- *                     and no sheet and no caustic under them. A room
+ *                     squares: 1 with the sheets, as every HD level of
+ *                     the game builds them, 0 with the bodies, their wave
+ *                     on the remaster's water art and no sheet and no
+ *                     caustic under them - the classic water under the
+ *                     HD look, a state the game does not have; the tool
+ *                     asks for it through HDRenderWaterSheetsOverride,
+ *                     which the game never calls. A room
  *                     counts as drawn HD by the engine's own test (a
  *                     group with triangles, not hollow, with -hdm not
  *                     marked). Prints the WATERLOG lines the engine
@@ -17306,7 +17310,6 @@ static void ProbeLevelKey(const char* root, const char* stem, double budgetMiB,
 	ProbeFileStamp(g_water_file, &k->waterFile);
 	snprintf(k->install, sizeof(k->install), "%s", root);
 	k->air = g_air_option;
-	k->water = g_hdwater == 1 ? 1 : 0;
 	k->budgetMb = (long)budgetMiB;
 	snprintf(k->format, sizeof(k->format), "%s",
 		pageFormat == HD_PAGE_FORMAT_DXT5 ? "dxt5" : "rgba");
@@ -21390,8 +21393,11 @@ static int ProbeMain(int argc, char** argv)
 
 			HDRenderWaterFile(g_water_file.empty() ? 0 : g_water_file.c_str());
 			ProbeWaterFilms(level);
-			HDRenderSetWaterSheets(nr ? &rooms[0] : 0, nr, section, stem,
-				g_hdwater);
+			/* -hdwater 0: the classic water through the renderer's tool
+			 * override, which the game never sets; 1 builds the sheets as
+			 * every HD level does. Kept for the -reload set below. */
+			HDRenderWaterSheetsOverride(g_hdwater == 1 ? 0 : 1);
+			HDRenderSetWaterSheets(nr ? &rooms[0] : 0, nr, section, stem);
 			ProbeWetSlopes(rooms);
 
 			/* -surfaceroom and -surfacealways: the game's rule over the
@@ -21512,8 +21518,7 @@ static int ProbeMain(int argc, char** argv)
 
 				QueryPerformanceCounter(&a);
 				ProbeWaterFilms(level);
-				HDRenderSetWaterSheets(nr ? &rooms[0] : 0, nr, section, stem,
-					g_hdwater);
+				HDRenderSetWaterSheets(nr ? &rooms[0] : 0, nr, section, stem);
 				ProbeWaterFalls(level, stem);
 				ProbeCardPages(root, managed, threads);
 				QueryPerformanceCounter(&b);
@@ -21534,12 +21539,11 @@ static int ProbeMain(int argc, char** argv)
 
 			HDRenderWaterLara(g_lara_set ? 1 : 0, g_lara_x, g_lara_z);
 			HDRenderWaterTiming(1, 0, 0);
-			HDRenderWaterLogLine(-1, stem, g_hdwater, line, sizeof(line));
+			HDRenderWaterLogLine(-1, stem, line, sizeof(line));
 			printf("%s\n", line);
 
 			for (int b = 0; b < HDRenderWaterBodies(); b++)
-				if (HDRenderWaterLogLine(b, stem, g_hdwater, line,
-					sizeof(line)))
+				if (HDRenderWaterLogLine(b, stem, line, sizeof(line)))
 					printf("%s\n", line);
 
 			for (int f = 0; HDRenderWaterFallLine(f, stem, line,

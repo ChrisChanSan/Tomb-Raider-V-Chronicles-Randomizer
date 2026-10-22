@@ -714,7 +714,7 @@ nearer end. The seven tabs:
 |---|---|---|
 | Audio | Music volume, SFX volume, Sound quality, Language | 80 / 90 / Medium / automatic |
 | Controls | *Key bindings*, *View*, *Modes*, Control type, Action, Control layout, Camera speed, Dead zone, Mouse sensitivity, Invert mouse, Targeting, Ammotype hotkeys | see below |
-| Graphics | *Display*, HD textures, Body physics, HD water, Reflections, Fog, Distance fog, Shimmer, Mono screen style, Shadow mode, PSX skies, Static lighting, UW Effect, Look transparency, Footprints — fifteen rows on two pages, eight and seven, turned with the arrows at the bottom | see **tomb5 options**; Body physics off; HD water on; Reflections on; Shadow mode *Projected* (offered only while HD is on, see **The projected shadow**) |
+| Graphics | *Display*, HD build, HD textures, Body physics, Reflections, Fog, Distance fog, Shimmer, Mono screen style, Shadow mode, PSX skies, Static lighting, UW Effect, Look transparency, Footprints — fifteen rows on two pages, eight and seven, turned with the arrows at the bottom | see **tomb5 options**; Body physics off; Reflections on; Shadow mode *Projected* (offered only while HD is on, see **The projected shadow**) |
 | HUD | Bar mode, Bar positions, Enemy bars, Ammo counter, Gameover menu, Loadbar style, Loading text | see **tomb5 options** |
 | tomb5 options | Cutscene skipper, Cheats, Level Select, Fix climb up delay, Flexible crawling, Crawl Tilting | see below |
 | Special Features | the bonus gallery (title screen only) | all locked |
@@ -751,7 +751,7 @@ delay* (on — removes the pause before Lara pulls herself up), *Flexible
 crawling* (on), *Crawl Tilting* (on).
 
 The other settings the original never had — *Footprints*, *Shadow mode*,
-*Fog*, *HD textures*, *Body physics*, *HD water*, *Reflections*, *Bar mode*,
+*Fog*, *HD textures*, *Body physics*, *Reflections*, *Bar mode*,
 *Bar positions*, *Enemy bars*, *Ammo counter*, *Gameover menu*, *PSX skies*,
 *Loadbar style*, *Mono screen style*, *Loading text*, *Shimmer*, *Distance fog*,
 *Ammotype hotkeys*, *Look transparency*, *Static lighting*, *UW Effect* — sit on
@@ -1762,18 +1762,16 @@ see *Lara in HD* below for which of her stays classic and why.
   one, drawn as one smooth layer also with the PSX sky option on (that
   option's tiles cut small windows out of other pages, which the HD page
   cannot fill). Deepsea Dive's sky is a single colour with nothing over it.
-  With the water sheets on (`hd_water`, the default) its two moving layers
-  - the old low-resolution sea surface seen from below - are no longer
-  drawn: the surface overhead is the Remaster's own art of the sea and
-  this engine's own look of it, drawn with the sky: a soft glow overhead,
-  the sun's faint light through it and broad faint shafts of light fanning
-  down through the open water, which the rocks and everything else stand
-  in front of. With `hd_water` at `0` the old layers are drawn as before,
-  under the Remaster's art. That art of the sea's surface is drawn at every
-  frame of the dive, with the water sheets on or off, wherever the camera
-  looks: it stays in the picture as the camera swims from room to room. With
-  the water sheets on, seen from below by a camera inside the dive (lower than
-  the start cavern's pool, which the water's depth is measured from) that art
+  With the water sheets its two moving layers - the old low-resolution sea
+  surface seen from below - are not drawn: the surface overhead is the
+  Remaster's own art of the sea and this engine's own look of it, drawn
+  with the sky: a soft glow overhead, the sun's faint light through it and
+  broad faint shafts of light fanning down through the open water, which the
+  rocks and everything else stand in front of. That art of the sea's
+  surface is drawn at every frame of the dive, wherever the camera looks:
+  it stays in the picture as the camera swims from room to room. Seen from
+  below by a camera inside the dive (lower than the start cavern's pool,
+  which the water's depth is measured from) that art
   gives way to this engine's own sheet of the sea: a dark blue underside in
   the water's own colour, its small waves broken up and turned every few
   metres so that no crest runs straight or repeats, lighter where a shaft of
@@ -2019,11 +2017,13 @@ it.
   Russian levels — *The Base*, *Deepsea Dive* and *Sinking Submarine*); where
   a frame has no HD painting the original tile is drawn and nothing is
   missing.
-- **The water sheets: this engine's own water surface** (`hd_water`, on by
-  default). A *water square* is a 1024-unit square of a room that is not under
-  water and whose room below is an underwater room - the very link Lara dives
-  through - and its surface is the top of that water there, where Lara's head
-  breaks the surface. A square whose floor slopes or is split into two
+- **The water sheets: this engine's own water surface**, part of the HD look:
+  every level drawn HD has them, with no option of their own (the game reads
+  no registry value for them). A *water square* is
+  a 1024-unit square of a room that is not under water and whose room below
+  is an underwater room - the very link Lara dives through - and its surface
+  is the top of that water there, where Lara's head breaks the surface. A
+  square whose floor slopes or is split into two
   triangles keeps its whole sheet at that height, under the level's own raised
   part (the corner plates of RICH2's pools, the edge of the island in ANDY3's
   pond), and a square whose floor stands more than a click over the water at
@@ -2075,11 +2075,8 @@ it.
   RICHCUT2 and the title have no water square by this rule. A square over a
   room that is dry until a flipmap floods it is water while that flip is on:
   JOBY5's four basins under the leaks (32 squares) and a channel of 21 squares
-  in RICH3. Set *HD water* off and the level's own water
-  faces are restored exactly as without the sheets, and the caustic under them
-  is off; what stays is only the caustic's shape and its fade with distance on
-  the Remaster's own marked water art and the wave on that art, which live in
-  the compiled shaders. Taken at the start of a level.
+  in RICH3. The classic look (F12) draws the level's own water faces, as the
+  original does.
 - **Seeing through the water.** Before the frame's see-through things are
   drawn, the engine takes one copy of the picture as it stands - the rooms,
   the objects, Lara - when a room of the frame has a sheet, and the sheet reads
@@ -2130,8 +2127,8 @@ it.
   carries the room's water: the two lay in one plane and fought in stripes.
   A card without it draws the same sheet with the depth
   of the level's own floor data, and cannot know a floor at the water's
-  height: there a row of class `none` is the way. With *HD water* off neither
-  the copy nor the depth texture is made.
+  height: there a row of class `none` is the way. In a level without a sheet
+  neither the copy nor the depth texture is made.
 - **The water's life.** The waves of a sheet are eight rows, long and short,
   and no row runs as one straight crest: each is broken into short trains of
   crests, one and a half to three of its own wavelengths long, three crests
@@ -2290,7 +2287,7 @@ it.
   Remaster's own moving
   water surface over a river is left out, as its still water is.
   `hd_water.txt` can make any body a river and give it a current by hand.
-  With *HD water* off there are no rivers.
+  Without the sheets - the classic look (F12) - there are no rivers.
 - **The water up to its bank.** ANDY3's pond stands at the level's own
   water height, as every body does. Its bank is the Remaster's ground
   sloping into the water inside the water squares, so the water's edge is
@@ -2459,7 +2456,7 @@ it.
   underwater state, which the dive (JOBY4) never sets and which follows the
   room a logic step late (`cam=`), 1 when that frame is drawn under the water
   (`on=`), and 1 when the level takes the deep sea's water (`deep=`).
-- **The dive splash and the fish tank.** With `hd_water` and `hd_motion`
+- **The dive splash and the fish tank.** With the sheets and `hd_motion`
   on, a splash over a sheet - Lara diving or wading in, an explosion under
   the water - is drawn as this water's own: two rings running out over the
   sheet, a crown of spray standing as high as the classic splash's column
@@ -2473,12 +2470,12 @@ it.
   does, see-through with streaks running down it, coming out of the glass
   over the first quarter second and fading over the half second before
   the tank is done; on its first ticks a burst of spray and drops is
-  thrown out of the broken glass. With `hd_water` on, the floor its
+  thrown out of the broken glass. With the sheets, the floor its
   water floods is covered by a thin sheet of the water with a foaming rim,
   deepest while it pours out, then sinking and drying as the floor lasers
   run down (with `hd_motion` off it keeps its resting height); the
-  lasers' red glow stays. Once a tank is shot - either tank, with
-  `hd_water` on - the floor its water reaches stays wet: from the squares
+  lasers' red glow stays. Once a tank is shot - either tank, with the
+  sheets - the floor its water reaches stays wet: from the squares
   under the dome out over level squares and down one step, never up a
   step, only in the tank's own rooms (in RICH2 rooms 122, 121, 45 and 46
   at the tank of room 122, room 23 at the other) and no further than two
@@ -2524,8 +2521,8 @@ it.
   the water does not run out: the whole floor is wet from the moment of
   the shot.
   The splash's and the spray's timing and everything the game decides
-  are the classic ones. `hd_water` `0` draws
-  the classic splash, spray and tank's dome, and so does `hd_motion` `0`.
+  are the classic ones. `hd_motion` `0` draws the classic splash, spray and
+  tank's dome, and so does the classic look (F12).
 - **`SPLASHLOG` in the log.** With `-log`, once a second while anything of
   it draws: `SPLASHLOG level=<stem> splashes=<n> cards=<n> rings=<n>
   tank=<item>:<state>` - the HD splashes alive, the cards drawn, the splash
@@ -2548,7 +2545,7 @@ it.
   depth <ms>, under <ms>, foot <ms>, river <ms>, foam <ms>, foam depth
   <ms>, cards <ms>` gives its time, each draw's to the GPU's end. It runs
   at every load of a level with sheets.
-- **The water's life** (with the water sheets, `hd_water`). Small things float on
+- **The water's life** (with the water sheets). Small things float on
   the sheets and a few fish swim under them, in four levels for now: ANDREA2's sewer
   canal gets bottles, rags and a barrel; ANDY3's rivers, its lake, its shallows and the
   pond of room 145, and ANDY1's two pools get dead leaves, a rag and barrels, and a
@@ -2601,8 +2598,8 @@ it.
   (`drips_at=`). The models are the Remaster's own (a bottle, two cloths, a barrel, a
   fish), drawn as HD objects: with `hd_objects` off nothing floats, the drips and
   their rings stay; the drop is drawn as the game draws its own falling drips, and
-  leaves the game's own drips alone. Without the sheets (`hd_water` 0, `hd_build` 0)
-  none of it runs.
+  leaves the game's own drips alone. Without the sheets (`hd_build` 0, a level
+  without water) none of it runs.
 - **`LIFELOG` in the log.** With `-log`, every level with life writes one `LIFELOG
   level=<stem>` line at its load: the bodies that took life (`bodies=`), the floats
   (`floats=`), the fish (`fish=`), the drips (`drips=`), the floats a body's swell, its
@@ -2623,7 +2620,7 @@ it.
   by drips and barrels (`rings=`) and those a full ripple table refused (`full=`),
   the river floats come back so far (`respawned=`) and the schools fleeing now
   (`fleeing=`).
-- **The springs** (with the water sheets, `hd_water`). A spring is a jet of water
+- **The springs** (with the water sheets). A spring is a jet of water
   rising from the floor of a pool: rings on the sheet over it, a few small bubbles
   rising in its jet (three a second at full strength, one in three leaving a small
   ring at the surface) and a rising current that bends what stands behind it: under
@@ -2726,7 +2723,6 @@ values, in the same key as every other setting
 | `hd_motion` | DWORD | What **moves** in an HD room, `1` by default: water and waterfalls scrolling, ivy, banners, grass and kelp swaying in the wind, and a small ripple over a water surface, the slow travel of light along a shaft or a lamp cone, the four-page animated pictures (the twenty-seven flipbook surfaces of five levels), the longer loops of fourteen to thirty pages (the turning fan shadows of the 13th Floor, the monitor wall of the Security Breach cutscene, the flames, smoke and rain rings - 168 surfaces in nine levels; set to `0` they show their first page) and the ripple over the Remaster's own still-water sheets — in short, everything this chapter says stops with `hd_motion`. All of it comes from the Remaster's own art — the artists marked which surfaces flow and which vertices bend, and this reads those marks. Like `hd_objects` it has no options row and is a way back rather than a taste: set it to `0` and an HD room stands perfectly still. Does nothing at all while `hd_enable` is off. |
 | `hd_reflect` | DWORD | The **gloss** of metal, marble, ice and glass in an HD room, `1` by default: a highlight from the level's lamps where they hang - worked out once per level for every spot, so it stays by its lamp and runs on across doorways - and a reflection of the surface's own light that grows the flatter you look at it, on floors, walls, crates and ducts alike, never more than two and a half times the surface's own lit colour and never to white. Not a mirror: nothing is drawn twice. Which surfaces shine, in this order: the gloss the Remaster's artists gave a surface themselves (its own strength); your file `hd_gloss.txt`; a list of texture pages built into the engine; and the pages that lie on floors whose footsteps sound of metal, marble or ice - in every room that wears them. RICH2's lobby pages and every see-through floor stay exactly as they were. **`hd_gloss.txt`** lies beside the executable, where `SCRIPT.DAT` and `Balance.txt` are, and is read at every level load, so a change shows at the next one. One texture page per line: the page number, a class (`metal`, `marble`, `ice`, `glass` or `custom`) and optionally strength (above 0, up to 1), exponent (1 to 255, the tighter the highlight the higher) and F0 (0 to 1, how much it reflects face on), where `-` or leaving a number out takes the class's own; a `custom` page names all three. `-<page>` takes a page out (a surface the artists gave a gloss keeps it), `#` starts a comment, and a line that cannot be read is counted and skipped; a file saved as UTF-8 with or without a byte order mark reads the same - for example `140 metal 0.6 32` or `-3149 # the girders stay matt`. The page numbers of a room are in the `GLOSSLOG` lines of a `-log` run. Like `hd_motion` it has no options row and is a way back rather than a taste; set it to `0` and the picture is the one without any gloss. Does nothing while `hd_enable` is off. |
 | `hd_softbody` | DWORD | The options row *Body physics* writes this. The **soft motion of the chest** of the HD Lara (see *Lara in HD*): `0` off, the default, `1` subtle, `2` normal, `3` strong; any other number reads as off. Never on a young-Lara level, never for a Lara drawn classic, and nothing on screen while `hd_enable` is off. |
-| `hd_water` | DWORD | The options row *HD water* writes this. The **water sheets** (see *Water* above), `1` by default: every water square the sheet can cover - over an underwater room, in a room drawn HD - gets this engine's own water surface with a caustic on the floor under it (none in the night levels, see *Water* above), and the level's own water face there is not drawn, nor the Remaster's own water art over it (`art keep` in `hd_water.txt` draws that art again); a water plane with no underwater room below keeps its faces. `0` builds no sheet, restores every water face of the level as without them and switches the caustic under them off; what stays is only the caustic's shape and its fade with distance on the Remaster's own marked water art and the wave on that art, which live in the compiled shaders. Taken at the start of a level; nothing at all with `hd_build` at `0`. Tuning per body of water: `hd_water.txt`. In the Deepsea Dive, under the water, `1` also draws the sea's surface seen from below with the sky (see *The sky is the Remaster's sky*); `0` draws none of it and keeps the level's old moving layers of that surface under the Remaster's art; the Remaster's art of the surface itself is drawn at every frame of the dive either way. |
 | `hd_marble` | DWORD | The options row *Reflections* (German *Spiegelungen*) writes this. The **polished floors' mirror** (see *The polished floors mirror the room* above), `1` by default: the floors of the pages in the mirror column reflect the room, its statics, Lara and the items, and the sky where the rooms in the mirror open to it, and the see-through floors of RICH2's corridor and lobby and of the title are drawn solid, the Remaster's copy of the room under them left out of the level. `0` draws every floor as it was, the see-through ones over the Remaster's copy. Read at the game's start; the row switches the mirror's draw at once (off costs nothing from the next frame) and the floors' build at the next level load, when a level already in memory is built again. Changes nothing on screen while `hd_enable` is off. |
 | `hd_marble_ceiling` | DWORD | Not on the options page. The most **planes** - floor heights and slopes - one frame mirrors, `64` by default, `1` to `64`: a ceiling far over the most a frame shows, so every plane that shows at least a thousandth of the screen is mirrored (a sliver under that stays plain); each costs a mirrored draw of the rooms that can show in it (the cost table in the record of the marble floors). Past the ceiling the planes covering the least are left plain. Read at the game's start. `hd_marble_planes`, the cap of two before it, is no longer read (a registry that holds it keeps it unread). |
 | `hd_springs` | DWORD | Not on the options page. The **springs** the rule places (see *The springs* above): absent - every registry until you add it - the rule as built, one deep pool in two; `0` none of the rule's (ANDREA2's fountain and the springs of `hd_water.txt` stay); `n` one pool in two times n. Read at the start of a level, never written by the game. |
@@ -2735,7 +2731,7 @@ values, in the same key as every other setting
 | `hd_air` | DWORD | The **air of the rooms**, `1` by default. Some of the Remaster's art of one room stands inside another room the first has no doorway, opening or shaft into; on `1` such art, where one of the overlap boxes holds it, is drawn only through its own room's portal window, and not at all when that room has no window this frame, so it no longer shows through a wall - a dark block beside a flag, a window frame in a brick loft, a marble strip above a metal stair opening, black bars beside a pillar, a lit floor in a doorway, a strip of a facade under a courtyard's ceiling. Set it to `0` and that art is drawn as it was before this setting existed: those six come back, and so does art the rule hides where a room the reach lists has no window of its own. On `1` and `2` a room seen with its own window that lies under the sky also brings in the rooms whose art stands in it, so art that hangs far from its own room's doorways - ANDREA2's brick tower beside the alley at the church gate - no longer comes and goes as the camera swings; on `0` it does as before. A room whose art there is mostly a copy of faces another room already holds is not brought in, so it is not drawn twice over itself. `2` is `1` and one more: a room whose art in another room's space stands mostly where that room's own art already stands - a second shell, like the one RICH2's lift shaft carries of the shaft's floors - has that art drawn only through its own room's window, so the doubled girders, lamps and panels no longer come and go beside the lift. It takes more than the doubles there: the shaft's counterweight and pulleys go with them, and the lamps' lit tubes, leaving a dark smear where a lamp hung. On `1` and `2` such a second shell is drawn a little behind the faces it copies, so where both stand the room's own faces win and the lamps and the grating of RICH2's lift shaft no longer speckle as the camera moves; where two rooms with no doorway between them share a stretch of wall, the art on the smaller of their two classic faces is drawn behind the larger one's, so the wall ANDREA1's room 212 shows through the grating from room 19 no longer flickers; the pipe in the hollow of JOBY2's broken pillar by the stairs is drawn whole where its room's walls are in sight; and a room brought in under the sky follows the level's flip state, so art of the state the level is not in is not drawn. It is there to compare the answers at the same place with the same build; the `HDLOG level=` line names it as `air=0`, `air=1` or `air=2` just before its last field, `covered=` (how many faces of one room lie inside a larger face of another and have their art drawn behind), so a log says which ran; with `-log` and the air on, one `HDLOG covered` line per such face follows. Taken at the start of a level; no options row; nothing at all with `hd_build` at `0`. |
 | `hd_vis` | DWORD | **Which rooms an HD frame draws**, `1` by default. A registry an earlier build wrote may hold the `0` most of them wrote on their first run, never chosen, since there is no row: the first start of a build that knows the default moves it to `1` once and writes `hd_vis_rev` `1` beside it; from then on the value is kept as set, so a `0` set by hand afterwards stays `0` (a registry without `hd_vis_rev` is moved again). `0` is the classic walk, the way the settings above describe: the portal walk with the reach, a room's art that stands in another room drawn through its own window, the air and the rooms brought in under the sky. `1` is the **visibility path**: the rooms are the portal walk's from the room the eye is in, as the original game walks them, and every listed room's art is drawn whole, the depth buffer alone deciding what hides what. The walk also lists, each with the part of the window it is seen in, the rooms whose art reaches out of their own room into a listed room (linked with it by a doorway or a floor opening, or that room under the sky), the rooms behind a listed room's classic wall faces its art leaves bare (linked with it), and, through a doorway whose opening in the art is wider than the doorway, the room behind by that opening; every room listed so walks on through its own doorways as a room the doorways list does. No room is carried then (`hd_reach` changes nothing), and a room's art that stands inside another room's space, beyond its own walls, is drawn through its own window as with `0`, so it does not hang in the other room's picture - and art standing in a room its room has no link with is drawn whole only on a wall of its room the original game draws in that frame, one wall with the face it belongs to, in its plane or round a corner -; the rest of its art is drawn whole. A room the original game draws with no HD art of its own, none of its walls covered by art, and other rooms' art standing in it is not drawn at all: the painted tree bands of ANDY3 and ANDY1 give way to the HD trees standing in their place, and so does such a room whose floor squares all open onto rooms drawn HD: the leaf lids over the hollows of ANDY3's forest. Where such a room is not under the sky itself, the frame that lists it draws the sky behind it, so a hollow shows the sky above it whichever way the eye turns. A room the original game draws whose own HD art is never drawn (it all stands outside its box) keeps its faces even where it stands inside another room: JOBY2's sniper rooms behind the broken glass block windows of the courtyard stay the classic black. The art of an object the Remaster bakes into a room - a slot the level's `.MAP` calls `DUMMY` - that lies on a listed classic room's faces is drawn in front of them, as the original game draws the object over the room: those windows' reveal and sill show their brick and wood in the sniper rooms' place. A static mesh the original game draws whose surface the art of the room it stands in lies on - half of it or more, within 32 units - is left to that art while that room is drawn: the dormer on the roof of ANDY3's mill-wheel house. And a room's art lying on the wall plane of a room it has no link with, reaching into that room's height, is drawn through its own window while that room is drawn: the sliver of JOBY2's court in the ceiling corner of the marble room below it. The two depth pushes of the room art stay: a room whose art outside it doubles other rooms' art, and a room's art on a wall inside a larger wall of the room it stands in, are drawn behind the other copy (`hd_air` 0 turns both off with the air). A flipmap pair is listed by the room the doorways lead to only; a wall broken out beside a doorway (0.3 of it bare of art) widens that doorway, seen from either side; a doorway that meets the window it is seen through on its edge, or stops within 2 pixels of it at 2,560, keeps its room listed, so a room does not drop out for one frame as the eye sways; and a doorway the eye stands at - within 128 units of its corners - lists its room with the window it is seen through, as the eye passes it. With `-log` the `HDLOG settings` line ends in `hd_vis=`, a line before it says when an earlier build's value was moved, the `HDLOG level= vis=1` line gives the counts of the level's tables once (ending in `twin= wide_bare= edge= statics_held= statics_ms= enclosed=`) and `VISLOG` the frame's rooms with what listed each, once a second and whenever the eye's room changes (`e` and `edge=` the window's edge, `n` and `near=` a doorway the eye stands at). Taken at the start of a level; no options row. Changes nothing on screen while `hd_enable` is off; with `hd_build` on, `1` still builds the level's visibility tables at the load. |
 | `hd_threads` | DWORD | The **threads of an HD level load**, `0` by default: the machine's own count, never more than 16. The texture pages are unpacked, the rooms' buffers filled and the models' pages unpacked on that many threads; `1` does all of it on one, any other number up to 16 takes that many, and a larger one 16. The level comes out the same whatever it says - the `hash=` at the end of the `built` line is the proof (see *The loading time* below). It is there to compare, not a taste. Taken at the start of a level; no options row; nothing at all with `hd_build` at `0`. |
-| `hd_fog` | DWORD | Not on the options page. The **fog of the fog bulbs and of the art's mist**, `1` by default. The level's fog bulbs - ANDY3's mill and its river, ANDY1, ANDY2, ANDREA1, ANDREA2, RICH2, RICH3 - are drawn as fog with a body, thickest at a bulb's middle and fading to nothing at its edge with no outline, over whatever stands in it and over the sky behind it, thinning and rising slowly as it breathes. Every bulb is as thick as the look's band allows: looked at through its middle it lays its own colour over a dark wall as bright as an eighth of white (33 of 255); standing in one of ANDY3's bulbs by the mill lays a light, even veil over the whole view (about 8 of 255 on average, up to 30 where the bulb is thickest), and a bright bulb such as ANDREA2's canal ones is thinned to the same. The art's drifting mist - the pale lumps over the hill and round the crane at ANDY3's mill - is drawn at about a third of its old strength, as faint fog rather than bright cloud; so is the drifting sand over the title's dunes. A layer that drifts over a wall - the golden wash in ANDREA2's and ANDREA3's tunnels - is no mist and keeps its full strength. `0` draws everything as before: the bulbs as a haze on the walls and floors behind each bulb, the mist at full strength. The bulbs' fog needs the water sheets' depth: in a level with no water square (ANDREA3, RICH1, the title) and with `hd_water` at `0` the bulbs keep the haze whatever this says (the mist follows this key there too). In the reflection of a polished floor (`hd_marble`) the bulbs drawn as fog show neither fog nor haze. The log's settings line names the key (`hd_fog=`), and each level's first frame line how many bulbs the fog took and drew (`fog_taken=`, `fog_drawn=`). Read at the game's start; nothing at all while `hd_enable` is off. |
+| `hd_fog` | DWORD | Not on the options page. The **fog of the fog bulbs and of the art's mist**, `1` by default. The level's fog bulbs - ANDY3's mill and its river, ANDY1, ANDY2, ANDREA1, ANDREA2, RICH2, RICH3 - are drawn as fog with a body, thickest at a bulb's middle and fading to nothing at its edge with no outline, over whatever stands in it and over the sky behind it, thinning and rising slowly as it breathes. Every bulb is as thick as the look's band allows: looked at through its middle it lays its own colour over a dark wall as bright as an eighth of white (33 of 255); standing in one of ANDY3's bulbs by the mill lays a light, even veil over the whole view (about 8 of 255 on average, up to 30 where the bulb is thickest), and a bright bulb such as ANDREA2's canal ones is thinned to the same. The art's drifting mist - the pale lumps over the hill and round the crane at ANDY3's mill - is drawn at about a third of its old strength, as faint fog rather than bright cloud; so is the drifting sand over the title's dunes. A layer that drifts over a wall - the golden wash in ANDREA2's and ANDREA3's tunnels - is no mist and keeps its full strength. `0` draws everything as before: the bulbs as a haze on the walls and floors behind each bulb, the mist at full strength. The bulbs' fog needs the water sheets' depth: in a level with no water square (ANDREA3, RICH1, the title) the bulbs keep the haze whatever this says (the mist follows this key there too). In the reflection of a polished floor (`hd_marble`) the bulbs drawn as fog show neither fog nor haze. The log's settings line names the key (`hd_fog=`), and each level's first frame line how many bulbs the fog took and drew (`fog_taken=`, `fog_drawn=`). Read at the game's start; nothing at all while `hd_enable` is off. |
 | `hd_texture_budget_mb` | DWORD | How much video memory the HD art may take, in mebibytes. `0`, the default, means **work it out from the card** (see below; the card's own answer stops at 4095 MiB, which is a limit of the Direct3D 9 call and not of your card). Set a number and that number is the ceiling. |
 | `hd_install` | String | The folder of your *Tomb Raider IV-VI Remastered* — the one holding `tomb456.exe`. Leave it **empty** and the engine finds it by itself. |
 | `hd_install_tr3` | String | The folder of your *Tomb Raider I-III Remastered* — the one holding `tomb123.exe`. Needed for exactly one thing: the HD models of the four Tomb Raider III guests the randomizer can import (the T-Rex, the vulture, the Compsognathus and the raptor), which live in that bundle and in no other. Leave it **empty** and the engine looks for it in the same walk it uses for the other one; without the game those four enemies draw the classic way and nothing else changes. |
@@ -3820,7 +3816,7 @@ outfit rule. The HD part of such a load is meant to take about a tenth of a
 second where a fresh build takes two to three, and the whole load about a tenth
 as well. The data are built again when the level's files
 changed (its `.TRC`, its `.hdm`, the Remaster's `.TRG`, `hd_gloss.txt`,
-`hd_water.txt`), when `hd_air`, `hd_water`, `hd_marble`, `hd_objects`, the
+`hd_water.txt`), when `hd_air`, `hd_marble`, `hd_objects`, the
 texture budget or
 format or the chosen outfit changed, after an outfit change made in the level,
 after the graphics device was made new (Alt+Enter, a resolution change), and for

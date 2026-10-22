@@ -1684,8 +1684,8 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits)
 	 * through the extinction instead, which leaves her own colour alone
 	 * within its clear zone round the eye. Standing in a dry room with
 	 * nodes in the water under its floor, that dry room is the room the
-	 * sheet lies in: her dry answer. Without sheets (tomb5.hd_water 0) and
-	 * in a level without water, the classic answer; a water room no sheet
+	 * sheet lies in: her dry answer. Without sheets, in a level without
+	 * water as well, the classic answer; a water room no sheet
 	 * lies over, below. */
 	long wetAmbient = LaraNodeAmbient[1];
 	bool wetIsDry = false;
@@ -1750,7 +1750,7 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits)
 	 * under 1 of luma for a jump of 13. Out of it the tween runs on until
 	 * the colours drawn are within kAmbientSettle of the rules' on every
 	 * channel, then they are the rules' again - as they are without
-	 * sheets, at tomb5.hd_water 0, in a level without water and on land.
+	 * sheets, in a level without water and on land.
 	 * A level's first frame takes the colours as they are; a mirror's draw
 	 * and a paused game step nothing. 0.25 s is a free choice, the same as
 	 * the water's own look's (hd_render.cpp, "along a swim"); 0.5 is half

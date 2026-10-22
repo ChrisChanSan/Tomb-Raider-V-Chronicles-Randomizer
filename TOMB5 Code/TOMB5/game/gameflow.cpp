@@ -1447,8 +1447,6 @@ const char* CustomText(const char* engl)
 		{ "Body physics",    "Body physics",    "K\xF6rperphysik", "Body physics",      "Body physics" },
 		{ "Subtle",          "Subtle",          "Dezent",         "Subtle",             "Subtle" },
 		{ "Normal",          "Normal",          "Normal",         "Normal",             "Normal" },
-		// The row under it; its values are "on" and "off" of this table.
-		{ "HD water", "HD water", "HD-Wasser", "HD water", "HD water" },
 		{ "Crawl Tilting",   "Crawl Tilting",   "Kriechneigung",  "Crawl Tilting",      "Crawl Tilting" },
 		{ "PSX skies",       "PSX skies",       "PSX-Himmel",     "PSX skies",          "PSX skies" },
 		{ "Loadbar style",   "Loadbar style",   "Ladebalken",     "Loadbar style",      "Loadbar style" },
@@ -1458,7 +1456,7 @@ const char* CustomText(const char* engl)
 		{ "Distance fog",    "Distance fog",    "Distanznebel",   "Distance fog",       "Distance fog" },
 		{ "UW Effect",       "UW Effect",       "Unterwasser-Effekt", "UW Effect",      "UW Effect" },
 		// The build gate above "HD textures" and the polished floors'
-		// mirror under "HD water"; their values are "on"/"off" of this
+		// mirror under "Body physics"; their values are "on"/"off" of this
 		// table. "HD-Aufbau" names what the gate switches: whether a level
 		// is built with its HD data at all.
 		{ "HD build", "HD build", "HD-Aufbau", "HD build", "HD build" },

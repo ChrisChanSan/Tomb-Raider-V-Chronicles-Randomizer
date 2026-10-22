@@ -1244,9 +1244,9 @@ void HDRenderSetWaterMarks(const HDWaterMark* marks, int count);
  * the square's own floor, which a split sector raises over the water on
  * one triangle. A square whose dry floor stands more than a click over that
  * top at every corner is no water square (water_square in hd_render.cpp).
- * Built with `sheets` 0, a square's surface is its own floor, none is left
- * out and no body is a river: what moves the remaster's water art then is
- * what moves it without the sheets.
+ * Built without sheets (HDRenderWaterSheetsOverride), a square's surface
+ * is its own floor, none is left out and no body is a river: what moves
+ * the remaster's water art then is what moves it without the sheets.
  * HDRenderSetWaterSheets finds them in
  * the classic level's floor data, one HDWaterRoom per room, joins them into
  * bodies - four-connected at one world height, across rooms - classes every
@@ -1265,9 +1265,9 @@ void HDRenderSetWaterMarks(const HDWaterMark* marks, int count);
  * the sheet, so the art shows itself.
  *
  * Called after HDRenderLevelBegin (it reads the groups' light samples) and
- * before the first frame; nothing of the arrays is kept. `sheets` 0 builds
- * the bodies and their classes and no sheet, and switches the caustic under
- * them off. No rooms removes it all. The engine and the diagnostic tool both
+ * before the first frame; nothing of the arrays is kept. The sheets are
+ * built unless the diagnostic tool's override below asks for the classic
+ * water. No rooms removes it all. The engine and the diagnostic tool both
  * build through this one function. */
 enum
 {
@@ -1342,7 +1342,15 @@ struct HDWaterSink
 void HDRenderWaterSinks(const HDWaterSink* sinks, int count);
 
 void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
-	const char* stem, int sheets);
+	const char* stem);
+
+/* The classic water, for the diagnostic tool alone. Non-zero makes the
+ * next HDRenderSetWaterSheets build the bodies and their classes and no
+ * sheet, with no caustic under them: the classic water of an HD level, the
+ * comparison picture out of the same build. Zero, the default, builds the
+ * sheets. Call it before HDRenderSetWaterSheets; the engine never calls it
+ * and there is no option and no registry key for it. */
+void HDRenderWaterSheetsOverride(int off);
 
 /* FlipMap swapped the records of `room` and `other` (hd_level.cpp,
  * HDFlipRoom): the bodies of water only an alternate holds follow it. */
@@ -1488,10 +1496,11 @@ bool HDRenderWaterBodyInfo(int at, HDRenderWaterBody* out);
 void HDRenderWaterLevelInfo(HDRenderWaterLevel* out);
 const char* HDRenderWaterClassName(int cls);
 const char* HDRenderWaterSectionName(int section);
-/* The WATERLOG line of the level (body -1, `option` the tomb5.hd_water the
- * build ran with) or of one body - the engine's -log and RoomProbe -hdwater
- * print the same text. False for a body that does not exist. */
-bool HDRenderWaterLogLine(int body, const char* stem, int option, char* out,
+/* The WATERLOG line of the level (body -1; its option= is 1 when the build
+ * laid the sheets, 0 under HDRenderWaterSheetsOverride) or of one body -
+ * the engine's -log and RoomProbe -hdwater print the same text. False for a
+ * body that does not exist. */
+bool HDRenderWaterLogLine(int body, const char* stem, char* out,
 	size_t size);
 
 /* The diagnostic tool's GPU timing of the sheet draws (timestamp queries,
@@ -1718,7 +1727,7 @@ bool HDRenderWaterTank(int item, float x, float y, float z, int yRot,
  * tank's water runs over. HDRenderWaterWetTanks hands in, before
  * HDRenderSetWaterSheets, every FISHTANK of the level - its item, room,
  * place and turn; the sheets' build lays the floor its water would reach
- * (with the sheets alone: tomb5.hd_water 0 lays none), after
+ * (with the sheets alone: a build without them lays none), after
  * HDRenderWaterTankMesh. HDRenderWaterWet sets a tank's state each frame:
  * 0 whole, 1 pouring (ControlFishtank runs it), 2 shot and done; `flags1`
  * its item_flags[1]; `age` the seconds since it broke, or under 0, and the
@@ -1829,7 +1838,7 @@ bool HDRenderWaterProbeStand(float x, float z, float height, float offX,
 bool HDRenderWaterProbeLook(const float* view, float persp, float centreX,
 	float centreY, float eyeX, float eyeZ, const float* knobs, double* gpuMs);
 /* The same look on the game's path, drawn by HDFrameSky right after the
- * sky in a level that takes the deep look, with tomb5.hd_water on and the
+ * sky in a level that takes the deep look, with the sheets on and the
  * eye under the water (`under`: a frame block with its under-the-water
  * fields filled), its surface the water's top over the dive
  * (HDWaterLookDepth). `knobs` 0 for HDWaterLookKnobs' own; the device's

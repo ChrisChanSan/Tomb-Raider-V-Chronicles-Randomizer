@@ -19,8 +19,8 @@
  * The first part reads the level only through hd_render.h and the .TRG
  * and is linked by RoomProbe as well (compiled there with HD_SPRING_TOOL);
  * the last part is the engine's: the level's begin and end, the frame's
- * three calls and the device's loss. With tomb5.hd_water 0 no sheet is
- * built and nothing of this runs; with tomb5.hd_motion 0 the bubbles hold
+ * three calls and the device's loss. In a level that built no sheet
+ * nothing of this runs; with tomb5.hd_motion 0 the bubbles hold
  * where they are, the column stands and the sheets draw no ring. */
 #ifndef HD_SPRING_TOOL
 #include "../../tomb5/pch.h"
@@ -2266,7 +2266,6 @@ void HDSpringRelease()
 /* ------------------------------------------------------------ the engine */
 #include "hd_level.h"			// HDLevelActive
 #include "../function_stubs.h"		// Log, gLogEnabled
-#include "../../tomb5/tomb5.h"		// tomb5.hd_water
 #include "../../game/camera.h"		// camera.pos, the eye
 #include "../../game/objects.h"		// LARA
 #include "../../game/control.h"		// items, level_items
@@ -2370,7 +2369,7 @@ void HDSpringLevelBegin(const char* stem)
 {
 	HDSpringClear();
 
-	if (!tomb5.hd_water || !HDRenderWaterSheetsBuilt())
+	if (!HDRenderWaterSheetsBuilt())
 		return;
 
 	ulong thin = 1, crack = 1;

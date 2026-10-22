@@ -32550,14 +32550,16 @@ edited. Not played: the head was not run in the game.
 **Left.** The Credits screen's lines of names with English joining words (*Troye and
 contributors*, *with Claude AI by Anthropic*, *trview by chreden*, *Dear ImGui by Omar
 Cornut*, *stb by Sean Barrett*) stay English; whether they get German is a question for
-the play test. The README's F4 paragraph still names the head row's former words *own
-head*, *TR5 head* and *TR5 hair*. The decimal point of the F4 window's shine numbers, and
-a shine value whose exponent an `outfit.txt` writes with many digits, stay as #234 left
-them.
+the play test. `HDWardrobeHeadPhrase` (`hd_wardrobe.h`) has no caller since the window
+prints the head word itself; it stays, with the header's three comments and the README's
+head words corrected at the merge, until a later round removes it or gives it a reader.
+The decimal point of the F4 window's shine numbers, and a shine value whose exponent an
+`outfit.txt` writes with many digits, stay as #234 left them.
 
 **Commits.** `88e9d5c1` (the two words and the shorter English F4 values), `e5962dd6` (the
-credits, the pad's names and the ammo captions), this record, `65c8bee0` (a comment in
-the outfit window names the tier tag *list*) and the commit that adds `65c8bee0` here.
+credits, the pad's names and the ammo captions), this record, `65c8bee0` (a comment in the
+outfit window names the tier tag *list*) and the commit that adds `65c8bee0` here, and a
+wording commit at the merge (the header's comments, the README and this entry's Left).
 
 ## 3. Randomizer changes since Beta 1.0
 

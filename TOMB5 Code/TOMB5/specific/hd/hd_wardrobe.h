@@ -200,20 +200,21 @@ struct HDWardrobeEntry
  * "tr5", "hair" or "outfit". Never null. */
 const char* HDWardrobeHeadWord(int head);
 
-/* And the short phrase the wardrobe window shows in a row: "TR5 head",
- * "TR5 hair" or "own head". Never null. */
+/* The same head as a short phrase for prose: "TR5 head", "TR5 hair" or
+ * "own head". Never null. Nothing reads it at present: the wardrobe window
+ * prints the head word itself (hd_outfitmenu.cpp) and the log the word. */
 const char* HDWardrobeHeadPhrase(int head);
 
 /* Where that answer came from, as a clause for a log line ("its mod.txt says
  * origin=tr1", "outfit.txt", "the default"). Never null. The phrase form, for
- * prose: a sentence of the log and every row of the F4 wardrobe window. */
+ * prose: the sentences of the log. */
 const char* HDWardrobeFromWord(int from);
 
 /* The same answer as one word for a table column or a log field - "default",
  * "measured", "table", "outfit.txt", "origin", "list". Never null. Callers use
  * this instead of an array of their own, so a new tier gets its name in every
- * reader. For the `key=value (tag)` fields of the level build line and the
- * columns of ModelProbe's tables; the F4 window uses only the phrase form so
+ * reader. For the `key=value (tag)` fields of the level build line, the
+ * columns of ModelProbe's tables and the rows of the F4 wardrobe window, so
  * that one tier never reads two ways in one window. */
 const char* HDWardrobeFromTag(int from);
 

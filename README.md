@@ -247,7 +247,7 @@ On the **Level facts** row there is no outfit to hang a footstep choice on, so
 left and right do nothing there and the row says *as the outfit says* instead.
 
 Under it stands **Head**, and that one is not a choice: it says whose head the
-highlighted body wears — *own head*, *TR5 head* or *TR5 hair* — and in
+highlighted body wears — *own*, *TR5* or *TR5 hair* — and in
 brackets who decided, so a body that comes out of Tomb Raider I-III and loses
 its hood to TR5's hair says so before you pick it. What the three mean, and how
 a mod says which it wants, is under *Mods* below.

@@ -432,11 +432,11 @@ void HDOutfitMenu()
 		/* What the body is made of: two more facts of the highlighted body
 		 * and its neighbours' opposite in the same way the head row is -
 		 * nothing in this menu changes them. They stand here because they
-		 * are the two the player can change himself, in a list file, and a
-		 * value he has written is worth nothing if the game will not say
-		 * whether it arrived, so the clause after each says which tier
-		 * answered, and "the list" is the one that means his own line was
-		 * read. Shine is the clothes, glow is her skin.
+		 * are the two the player can change in a list file, and a value
+		 * written there is worth nothing if the game will not say whether
+		 * it arrived, so the clause after each says which tier answered,
+		 * and "list" is the one that means the player's own line was read.
+		 * Shine is the clothes, glow is her skin.
 		 *
 		 * The one-word tag, HDWardrobeFromTag, is used, the same the head
 		 * row above uses, so that one tier does not read as two different

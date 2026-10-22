@@ -29469,18 +29469,19 @@ the base's by the one `INSTALL` line: the search is reached by the same callers 
 before (the line looks nothing up), and for this machine's Steam the harness gives the
 same roots and notes.
 
-**Left.** The engine and the GUI were not run here: the row, the notice, the
-`INSTALL` line, the result rows and `spoiler.txt` are proved from the code, the
-builds and MenuTest's reading of the tree, and the first look is the play test's. The
-row's caption has no string row in `game/gameflow.cpp`'s table, outside this round's
-files, so it reads *HD build* in every language. The HD font, made once a session, stays
-after the row turns the build off while *HD textures* is on (`HDFontGlyphAt` asks the
-draw alone, a line of the HD gate this round does not edit). `global/types.h` still says
-`hd_build` is "registry only, read at the game's start". A notice for a stale
-`hd_install` override in the options, and a wide spelling of the override itself, were
-left out. The seventeen narrow sites stay narrow. `Tr5Transfer.cpp` reads a donor
-animation's command count unsigned and walks it without a bound; no slot it transfers
-carries a negative count today.
+**Left.** The engine and the GUI were not run here: the row, the notice, the `INSTALL`
+line, the result rows and `spoiler.txt` are proved from the code, the builds and
+MenuTest's reading of the tree, and the first look is the play test's. The row's caption
+has no string row in `game/gameflow.cpp`'s table, outside this round's files, so it reads
+*HD build* in every language; its string row follows in #234 with the other captions
+outside the table. The HD font, made once a session, stays after the row turns the build
+off while *HD textures* is on (`HDFontGlyphAt` asks the draw alone, a line of the HD gate
+this round does not edit); accepted after the play test of 2026-10-22 and written into the
+Engine Manual's `hd_build` row. `global/types.h` still says `hd_build` is "registry only,
+read at the game's start". A notice for a stale `hd_install` override in the options, and
+a wide spelling of the override itself, were left out. The seventeen narrow sites stay
+narrow. `Tr5Transfer.cpp` reads a donor animation's command count unsigned and walks it
+without a bound; no slot it transfers carries a negative count today.
 
 **Commits.** `25cbabbb` (the walks and the wide names), `19a9b871` (the code page line),
 `7bd4644f` (the `INSTALL` line), `325a44bf` (the HD build row), `fd45a98f` (the TR3

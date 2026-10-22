@@ -4378,6 +4378,127 @@ carries the tables.
     to 93000, 173 changes) 75 moving the mirror (91,846 pixels) with the base's
     mirror, 45 (13,290) with the head's; ANDREA1 (117599 to 121000, 98 changes) 6
     (734) and 4 (712).
+444. **Names compared wide in the installation search and the Mods scan**
+    (`hd_install_names.h`, `HDNameIs`; `hd_install.cpp`, `child`; `hd_mods.cpp`) -
+    every entry name is compared as the file system gives it, UTF-16, with `_wcsicmp`,
+    and never through `path::string()`. TEXTBOOK (Windows names are UTF-16 and their
+    case does not matter; MSVC's `path::string()` converts to the ANSI code page and
+    throws `system_error` for a letter it lacks); DATA: on this machine (code page 1252)
+    an override folder holding a Cyrillic or a CJK entry threw out of `HDInstallRoot`
+    at the base, and a Mods folder holding a Cyrillic entry, or only "Tomb Über Mod",
+    threw out of `HDModsScan`; with the change neither throws (the round's harness,
+    before and after).
+445. **Every walk steps with an error code** (`hd_install.cpp`, `child`,
+    `search_walk`; `hd_mods.cpp` as before) - `directory_iterator(dir, ec)` and
+    `increment(ec)`, a failed step ending that folder's walk. TEXTBOOK (the
+    non-throwing overloads of `<filesystem>`).
+446. **The code page test** (`hd_install_names.h`, `HDNameFits`) - a name fits a code
+    page when `WideCharToMultiByte` with `WC_NO_BEST_FIT_CHARS` uses no stand-in and the
+    spelling reads back to the same name. TEXTBOOK (the Win32 conversion's documented
+    flags); OWN: the round trip as the test.
+447. **The vdf's library paths read as UTF-8, the system code page as the fallback,
+    and Steam's folder read wide** (`hd_install.cpp`, `steam_libraries`,
+    `registry_string` with `RegGetValueW`). TEXTBOOK (`libraryfolders.vdf` is UTF-8);
+    DATA: the base's steps on a UTF-8 library path with a Cyrillic, a CJK or a Latin-1
+    letter gave `is_directory` false, error 2, for all three - the library passed over
+    without a note; with the change all three are walked (the harness's `lib` cases).
+448. **The search's last net writes its reason** (`hd_install.cpp`, `search`;
+    `hd_mods.cpp`, `need_scan`) - a try/catch round the walk whose catch notes the
+    error; no root is handed on from a walk stopped half way. OWN; DATA: after a caught
+    throw the base left both roots empty and the diagnostics EMPTY (measurement M3b,
+    and the round's harness).
+449. **A root the code page cannot spell is refused with one line**
+    (`hd_install.cpp`, `narrow_root`) - "install path not representable in the system
+    code page: HD off", the I-III root's line saying the guests stay classic. OWN;
+    DATA: seventeen narrow opens and listings in twelve files take a path made from a
+    root (counted in the tree: `hd_pagecache.cpp` three, `hd_trm.cpp` and `hd_trl.cpp`
+    two each, `hd_bind.cpp` two, `hd_scan.cpp`, `hd_font.cpp`, `hd_spring.cpp`,
+    `hd_debris.h`, `hd_classic.cpp`, `sfxbank.cpp`, `hd_level.cpp`'s stamp and
+    `hd_folderlist.h` one each), over the twelve the round set as the limit for turning
+    them wide.
+450. **The Mods scan keeps its paths in the system code page and skips a name that
+    does not fit it** (`hd_mods.cpp`, `wide`, `narrow`, `gather`, `count_files`,
+    `collect_wavs`) - the file system asked in that same code page, not through
+    `u8path`; a skipped folder or list gets one `MODLOG skipped` line. OWN; DATA: the
+    harness (above): "Tomb Über Mod" found, a Cyrillic mod and a CJK list skipped with
+    their lines.
+451. **`HDInstallAddLibrary`** (`hd_install.h`) - a library a tool adds, searched
+    before Steam's; the engine never calls it. OWN.
+452. **The `INSTALL` line and its place** (`specific/file.cpp`, `S_LoadLevelFile`,
+    after the first load thread joined) - `hd`, `tr3`, `reason` (the notes joined with
+    " | "), `bank` (`mod`, `audio`, `install`, `level`), once a process, behind `-log`;
+    `HDInstallSearched` to tell "none" from "not looked for". OWN; DATA: the first
+    resolver call is on the main thread with `hd_build` 1 and only in the sound bank
+    chain on the load thread with `hd_build` 0 (measurement M3d), and the bank is known
+    once that chain ran.
+453. **The HD build row and its next value** (`game/menu_frame.cpp`, `MenuValHdBuild`,
+    `MenuStepHdBuild`; `tomb5/tomb5.cpp` and `.h`, `tomb5_hd_build_next`;
+    `specific/file.cpp`, the top of `S_LoadLevelFile`) - on and off, default on, above
+    *HD textures*; the gate takes the row's value at the next load, before
+    `HDLevelKeyEarly` asks it, and the save writes the row's value as `hd_build`. OWN;
+    DATA: the price the manuals and the README give, from the play test's log (eight
+    levels and the title, measurement M4): 1.25 to 4.78 s per load, median 2.8 s,
+    232 to 475 MiB of pages and 10 to 62 MiB of room buffers on the card, 7 to 17 MiB of
+    model buffers.
+454. **"HD is off" in the ammo caption** (`hd_switch.cpp`, `HDSwitchInput`) - a press
+    with the gate off and nothing to switch shows it for 30 drawn frames. OWN: the
+    words and the condition, the switch line's `hd_build=0` cause, in the caption the
+    ammo hotkeys already use, with its eleven-letter buffer and its 30 frames
+    (`specific/input.cpp`, `game/health.cpp`).
+455. **ModernTest's `install_names` and MenuTest's `graphics_build_row`**
+    (`Preparation/Tools/Diagnose/`) - 15 checks of the name compare, the code page test
+    and the two conversions with made-up names (code pages 1252, 1251 and 936), and 20
+    checks of the row, its next value, the one place the load takes it and the
+    notice, read from the tree. OWN.
+456. **The TR3 bank beside the level, in `data`, or in the `SFX` beside `DATA`**
+    (`TR5Randomizer/src/core/Tr3Source.cpp`, `resolveBank`, `sfxPath`). PLACE: the I-III
+    Remastered keeps its levels in `3\DATA` and the bank in `3\SFX\MAIN.SFX`
+    (measurement M1a); DATA: its 414 waves are the original's byte for byte behind a
+    740-byte head the wave reader steps over, and the four guests' sound packages built
+    from it are identical (measurement M1b; the round's TR3 probe).
+457. **The Gold folder in `DATA\LA` or `LA`** (`Tr3Source.cpp`, `resolveTr3Gold`).
+    PLACE: `3\DATA\LA\CHUNNEL.TR2` (measurement M1a).
+458. **The TR3 editions by size and SHA-256** (`Preparation/Tr3Checksums.csv`, the
+    `Edition` column and the six Remastered rows; `DataFolder.cpp`, `Tr3Edition`) -
+    original and Remastered named, any other file "of an unknown edition", never
+    refused. DATA: the sizes and hashes of the Remastered `CRASH.TR2`, `ROOFS.TR2`,
+    `ANTARC.TR2`, `NEVADA.TR2`, `CHUNNEL.TR2` and `MAIN.SFX` (measurement M1c); four of
+    the five levels have the original's size, so only the hash tells them apart; OWN:
+    warn and proceed, the play test's choice.
+459. **The hash kept by path, size and write time** (`DataFolder.cpp`,
+    `Tr3Edition::check`, `Tr3Hashes.txt` in the package cache) - the stamp the package
+    cache already trusts (`Tr3Source.cpp`, `sourceStamp`). OWN.
+460. **One test for the greying, the planner and the spoiler** (`gui/Main.cpp`,
+    `guestFilesThere`; `Randomize.cpp`, `guestsReady`) - a guest is in the pool only
+    with its level and the bank there; the planner gets the resolved folder; the TR3
+    outfits need a resolved level folder, and an outfit whose level file is missing is
+    left out (`Tr3Source::missingOutfits`). OWN; DATA: at the base a path that resolved
+    its level and not its bank gave ERROR rows in the GUI and exit code 1 on the
+    command line (measurement M1a; the round's Andrea1 runs, seed 380), and a folder
+    with `CRASH.TR2` alone exit code 1 on the Nevada outfit.
+461. **The Copy phase removes the `.hdm` sidecars of the levels it restores**
+    (`DataFolder.cpp`, `copyLevels`). OWN, the explicit Restore's own step (`Main.cpp`,
+    `doRestore`); DATA: the round's probe - at the base both sidecars stay, now both go
+    and a foreign `.hdm` stays.
+462. **`spoiler.txt`'s `TR3 SOURCES` and the deselected kinds by name**
+    (`gui/Main.cpp`, `writeSpoiler`). OWN.
+463. **Core's command counts that read negative** - ten animation records in seven
+    vanilla levels carry a command count of 43690, 43687, 49932 or 65534 (RICH1's
+    `DOOR_TYPE4` 655 and `ANIMATING2` 739 among them); the engine reads the field as
+    `short` and runs commands only for a count above 0 (`game/control.cpp`,
+    `AnimateItem`), so none of them runs. DATA: the round's scan of the
+    fifteen vanilla files, and RICH1's records byte for byte the same in the randomized
+    file; a tool that reads the count unsigned (`AnimCmd`) walks on into the next
+    animations' commands.
+464. **The readers of a found root take it in the system code page, not as UTF-8**
+    (`hd_wardrobe.cpp`, `add_from_install`; `hd_classic.cpp`, `HDClassicRead` and
+    `read_level`) - the root through `HDNameWide`, each file name through
+    `HDNameFits`, one the code page cannot spell passed over. TEXTBOOK
+    (`std::filesystem::u8path` reads its argument as UTF-8 and throws
+    `system_error` on bytes that are not); DATA: the round's probe on a library named
+    with an umlaut - both base walks throw, the head's wardrobe lists the ASCII outfit
+    and passes over the Cyrillic one, the head's reader finds `GUN_OPTION` in
+    `JUNGLE.TR2`; under an ASCII name the reader's line is the base's.
 
 ## Credited, but not contained here
 

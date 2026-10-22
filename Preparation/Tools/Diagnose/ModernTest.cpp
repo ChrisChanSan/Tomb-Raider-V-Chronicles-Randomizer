@@ -118,6 +118,12 @@
 #include "../../../TOMB5 Code/TOMB5/specific/zrange_math.h"
 // The skeleton fit and the pocket: the object path's rules (object_rules).
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_object_rules.h"
+/* The names of the installation search: the wide compare and the code page
+ * test (install_names). Last, because it brings windows.h with it. */
+#include "../../../TOMB5 Code/TOMB5/specific/hd/hd_install_names.h"
+// windows.h defines far and near away; this file names variables so.
+#undef far
+#undef near
 #include <string.h>
 #include <algorithm>
 #include <chrono>
@@ -27335,6 +27341,66 @@ static void object_rules()
 	}
 }
 
+/* ------------------------------------------------- the install names --- */
+
+/* The names the installation search and the Mods scan compare and keep
+ * (specific\hd\hd_install_names.h), with names made up for the test: a
+ * Cyrillic and a CJK folder name, which the Western code page 1252 cannot
+ * spell, and a Latin-1 one, which it can. The letters are given as numbers
+ * so that no editor's code page can touch them. */
+static void install_names()
+{
+	printf("the install names: the wide compare and the code page test\n");
+
+	static const wchar_t cyr[] = { 0x0420, 0x0430, 0x0441, 0x0445, 0x0438,
+		0x0442, 0x0438, 0x0442, 0x0435, 0x043B, 0x044C, 0x043D, 0x0438,
+		0x0446, 0x0430, 0 };
+	static const wchar_t cjk[] = { 0x53E4, 0x5893, 0x4E3D, 0x5F71, 0 };
+	static const wchar_t lat[] = { 'T', 'o', 'm', 'b', ' ', 0x00DC, 'b', 'e',
+		'r', 0 };
+	static const wchar_t stroke[] = { 0x0141, 'a', 'r', 'a', 0 };
+	std::string out;
+
+	ok(HDNameIs(L"DATA", L"data") && HDNameIs(L"tomb456.EXE", L"TOMB456.exe"),
+		"names: the case of A-Z does not matter", 1, 1);
+	ok(!HDNameIs(L"TEX", L"TEXT") && !HDNameIs(L"5", L"55"),
+		"names: a longer name is another name", 0, 0);
+	ok(HDNameIs(cyr, cyr) && !HDNameIs(cyr, L"tomb456.exe") &&
+		!HDNameIs(cjk, L"5"),
+		"names: a Cyrillic or CJK entry is compared, not thrown on", 1, 1);
+	ok(!HDNameIs(0, L"5") && !HDNameIs(L"5", 0),
+		"names: no name is no match", 0, 0);
+
+	const bool latFits = HDNameFits(lat, 1252, out);
+
+	ok(latFits && out == "Tomb \xDC" "ber",
+		"code page: Latin-1 fits 1252, spelt in its byte", latFits, 1);
+	ok(!HDNameFits(cyr, 1252, out) && out.empty(),
+		"code page: Cyrillic does not fit 1252 and gives no spelling",
+		(long)out.size(), 0);
+	ok(!HDNameFits(cjk, 1252, out) && out.empty(),
+		"code page: CJK does not fit 1252", (long)out.size(), 0);
+	ok(!HDNameFits(stroke, 1252, out),
+		"code page: no best-fit look-alike (L for the stroked L)", 1, 0);
+	ok(HDNameFits(cyr, 1251, out) && (long)out.size() == 15,
+		"code page: Cyrillic fits 1251, one byte a letter",
+		(long)out.size(), 15);
+	ok(HDNameFits(cjk, 936, out) && (long)out.size() == 8,
+		"code page: CJK fits 936, two bytes a letter", (long)out.size(), 8);
+	ok(HDNameFits(L"", 1252, out) && out.empty(),
+		"code page: an empty name fits as an empty spelling", 1, 1);
+
+	ok(HDNameWide("Tomb \xDC" "ber", 1252) == lat,
+		"wide: a 1252 spelling reads back", 1, 1);
+	ok(HDNameWide("Tomb \xC3\x9C" "ber", CP_UTF8) == lat,
+		"wide: the vdf's UTF-8 reads back", 1, 1);
+	ok(HDNameWide("Tomb \xDC" "ber", CP_UTF8).empty(),
+		"wide: bytes that are not UTF-8 give no name, not a guess", 1, 1);
+
+	ok(!HDNameFits(lat, 1251, out) && out.empty(),
+		"code page: the test is the code page's, not the machine's", 0, 0);
+}
+
 int main()
 {
 	printf("ModernTest - the arithmetic of the modern control\n");
@@ -27540,6 +27606,7 @@ int main()
 	fog_body();
 	fog_art();
 	object_rules();
+	install_names();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

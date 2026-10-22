@@ -21,8 +21,10 @@
 #include <windows.h>
 #include <bcrypt.h>
 
+#include <algorithm>
 #include <cstdio>
 #include <cctype>
+#include <string>
 
 #pragma comment(lib, "bcrypt.lib")
 
@@ -391,7 +393,204 @@ bool DataFolder::copyLevels(const std::wstring& sourceDataDir,
         if (attr != INVALID_FILE_ATTRIBUTES && (attr & FILE_ATTRIBUTE_READONLY))
             SetFileAttributesW(dst.c_str(), attr & ~FILE_ATTRIBUTE_READONLY);
 
+        // The level's HD marker sidecar (<stem>.hdm) goes with the level it
+        // described, as the explicit Restore removes it: a level put back
+        // here and then left as it is - a run that fails on it, a row
+        // switched off - would otherwise hand the engine an earlier run's
+        // cut rooms, donors, outfit and sfximport list beside a vanilla
+        // level. A level the run makes gets its own sidecar written after
+        // it. A file that is not there is not an error.
+        const size_t dot = lf.name.find_last_of('.');
+        const std::string stem =
+            (dot == std::string::npos) ? lf.name : lf.name.substr(0, dot);
+        DeleteFileW(PathUtil::join(targetDataDir,
+                                   PathUtil::widen(stem + ".hdm")).c_str());
+
         if (copiedCount) ++(*copiedCount);
     }
     return true;
+}
+
+//----------------------------------------------------------------------------
+// The edition of the Tomb Raider III files (DataFolder.h)
+//----------------------------------------------------------------------------
+namespace
+{
+    // One row of Tr3Checksums.csv, the columns found by the header's names.
+    struct Tr3Row { std::string game, file, sha, edition; uint64_t size; };
+
+    std::vector<Tr3Row> tr3Rows(const std::string& text)
+    {
+        std::vector<Tr3Row> rows;
+        std::vector<std::string> head;
+        size_t pos = 0;
+
+        while (pos < text.size())
+        {
+            size_t nl = text.find('\n', pos);
+            const std::string line = trim(text.substr(pos,
+                (nl == std::string::npos ? text.size() : nl) - pos));
+            pos = (nl == std::string::npos) ? text.size() : nl + 1;
+            if (line.empty()) continue;
+
+            std::vector<std::string> cell;
+            size_t at = 0;
+            for (;;)
+            {
+                const size_t c = line.find(',', at);
+                cell.push_back(trim(line.substr(at,
+                    (c == std::string::npos ? line.size() : c) - at)));
+                if (c == std::string::npos) break;
+                at = c + 1;
+            }
+
+            if (head.empty()) { head = cell; continue; }
+
+            auto col = [&](const char* name) -> std::string {
+                for (size_t k = 0; k < head.size() && k < cell.size(); ++k)
+                    if (head[k] == name) return cell[k];
+                return std::string();
+            };
+
+            Tr3Row r;
+            r.game = col("Game");
+            r.file = upper(col("FileName"));
+            r.sha = upper(col("SHA256"));
+            r.size = std::strtoull(col("SizeBytes").c_str(), nullptr, 10);
+            r.edition = col("Edition");
+            if (r.edition.empty()) r.edition = "original";
+            if (!r.file.empty() && r.sha.size() == 64) rows.push_back(r);
+        }
+        return rows;
+    }
+
+    // Size and last write time, the stamp the TR3 package cache trusts.
+    std::string tr3Stamp(const std::wstring& path)
+    {
+        WIN32_FILE_ATTRIBUTE_DATA a;
+        if (!GetFileAttributesExW(path.c_str(), GetFileExInfoStandard, &a) ||
+            (a.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY))
+            return std::string();
+        const unsigned long long size =
+            ((unsigned long long)a.nFileSizeHigh << 32) | a.nFileSizeLow;
+        const unsigned long long when =
+            ((unsigned long long)a.ftLastWriteTime.dwHighDateTime << 32) |
+            a.ftLastWriteTime.dwLowDateTime;
+        return std::to_string(size) + "-" + std::to_string(when);
+    }
+}
+
+Tr3Edition::Verdict Tr3Edition::check(const std::string& csvText,
+                                      const char* game,
+                                      const std::vector<std::wstring>& files,
+                                      const std::wstring& cacheDir)
+{
+    Verdict v;
+    const std::vector<Tr3Row> rows = tr3Rows(csvText);
+
+    // The hash cache: one line per file, "<stamp>\t<SHA-256>\t<path>".
+    const std::wstring cachePath = cacheDir.empty() ? std::wstring()
+        : PathUtil::join(cacheDir, L"Tr3Hashes.txt");
+    std::vector<std::string> cache;
+    bool cacheChanged = false;
+    if (!cachePath.empty())
+    {
+        FILE* f = nullptr;
+        if (_wfopen_s(&f, cachePath.c_str(), L"rb") == 0 && f)
+        {
+            char buf[2048];
+            while (std::fgets(buf, sizeof(buf), f))
+            {
+                std::string l = trim(buf);
+                if (!l.empty()) cache.push_back(l);
+            }
+            std::fclose(f);
+        }
+    }
+
+    std::vector<std::string> editions;
+    for (const std::wstring& file : files)
+    {
+        const std::string stamp = tr3Stamp(file);
+        if (stamp.empty()) continue;            // not there: nothing to check
+        v.present = true;
+
+        const std::string path = PathUtil::narrow(file);
+        const std::string key = stamp + "\t";
+        std::string sha;
+        for (const std::string& l : cache)
+        {
+            const size_t t2 = l.find('\t', key.size());
+            if (l.compare(0, key.size(), key) == 0 && t2 != std::string::npos &&
+                l.substr(t2 + 1) == path)
+                sha = l.substr(key.size(), t2 - key.size());
+        }
+        if (sha.size() != 64)
+        {
+            uint64_t size = 0;
+            std::string err;
+            if (!FileHash::sha256File(file, sha, size, err)) sha.clear();
+            if (sha.size() == 64)
+            {
+                const std::string tail = "\t" + path;
+                cache.erase(std::remove_if(cache.begin(), cache.end(),
+                    [&](const std::string& l) {
+                        return l.size() >= tail.size() && l.compare(
+                            l.size() - tail.size(), tail.size(), tail) == 0;
+                    }), cache.end());
+                cache.push_back(key + sha + "\t" + path);
+                cacheChanged = true;
+            }
+        }
+
+        const size_t cut = path.find_last_of("\\/");
+        const std::string leaf =
+            (cut == std::string::npos) ? path : path.substr(cut + 1);
+        const unsigned long long size =
+            std::strtoull(stamp.c_str(), nullptr, 10);
+        std::string edition;
+        for (const Tr3Row& r : rows)
+            if (r.game == game && r.file == upper(leaf) && r.size == size &&
+                r.sha == sha)
+                edition = r.edition;
+
+        if (edition.empty())
+            v.unknown.push_back(leaf);
+        else if (std::find(editions.begin(), editions.end(), edition) ==
+                 editions.end())
+            editions.push_back(edition);
+    }
+
+    for (size_t k = 0; k < editions.size(); ++k)
+        v.edition += (k ? " + " : "") + editions[k];
+
+    // Storing is optional, as with the package cache: a hash that is not
+    // kept is only taken again next time.
+    if (cacheChanged && PathUtil::ensureDir(cacheDir))
+    {
+        FILE* f = nullptr;
+        if (_wfopen_s(&f, cachePath.c_str(), L"wb") == 0 && f)
+        {
+            for (const std::string& l : cache)
+                std::fprintf(f, "%s\r\n", l.c_str());
+            std::fclose(f);
+        }
+    }
+    return v;
+}
+
+std::string Tr3Edition::describe(const Verdict& v)
+{
+    if (!v.present) return "absent";
+    if (v.unknown.empty()) return v.edition;
+    std::string s = "unknown edition (";
+    for (size_t k = 0; k < v.unknown.size(); ++k)
+        s += (k ? ", " : "") + v.unknown[k];
+    return s + ")";
+}
+
+const char* Tr3Edition::warning()
+{
+    return "TR3 files of an unknown edition: "
+           "guest sounds and textures may differ";
 }

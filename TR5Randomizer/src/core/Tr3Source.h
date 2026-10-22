@@ -261,5 +261,20 @@ namespace Tr3Source
     // path the GUI accepts without a word.
     std::wstring resolveFolder(const std::wstring& chosen, const wchar_t* file);
     std::wstring resolveTr3(const std::wstring& chosen);       // CRASH.TR2
-    std::wstring resolveTr3Gold(const std::wstring& chosen);   // chunnel.TR2
+    // chunnel.TR2 - also in DATA\LA or LA under the chosen folder, the
+    // Remastered layout, so its "3" folder serves the Gold row too.
+    std::wstring resolveTr3Gold(const std::wstring& chosen);
+
+    // The Tomb Raider 3 MAIN.SFX for a RESOLVED tr3 folder (the one holding
+    // CRASH.TR2), or empty: beside the level, then in data\ inside it, then
+    // in the sibling SFX\ of a folder named DATA (the Remastered layout,
+    // <bundle>\3\SFX\MAIN.SFX). sfxPath, the GUI's presence test and the
+    // command line all ask this one function.
+    std::wstring resolveBank(const std::wstring& tr3Dir);
+
+    // The ids of the TR3 outfits whose level file is not in the RESOLVED
+    // tr3 folder (none when the folder is empty: then no TR3 outfit is in
+    // the pool anyway). The planner leaves them out, so a partial folder
+    // costs those outfits and never a level.
+    std::vector<std::string> missingOutfits(const std::wstring& tr3Dir);
 }

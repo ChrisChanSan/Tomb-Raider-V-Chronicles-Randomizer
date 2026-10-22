@@ -88,6 +88,8 @@ public:
     // Copies all known levels from the source into the target folder,
     // creating the target if needed. This doubles as "restore to default" -
     // both are the same operation, which is why there is only one function.
+    // Each level's HD marker sidecar (<stem>.hdm) in the target goes with
+    // it: it described the randomized level the copy replaces.
     bool copyLevels(const std::wstring& sourceDataDir,
                     const std::wstring& targetDataDir,
                     std::string& error,
@@ -109,6 +111,45 @@ public:
 private:
     std::vector<LevelFile> m_known;
 };
+
+//----------------------------------------------------------------------------
+// The edition of the Tomb Raider III files a run reads the guests and the
+// TR3 outfits from.
+//
+// Tr3Checksums.csv lists every edition this project knows, file by file,
+// with size and SHA-256 and an Edition column: the original release and the
+// I-III Remastered files. Four of the five Remastered levels have the
+// original's size (retouched texels only), so only the hash tells them
+// apart. A file of no known edition is never refused - the import reads it
+// all the same - but the run says so: a WARNING in the GUI's result rows
+// and in spoiler.txt, a line on the command line.
+//----------------------------------------------------------------------------
+namespace Tr3Edition
+{
+    struct Verdict
+    {
+        bool present = false;              // at least one file was checked
+        std::string edition;               // "original", "Remastered",
+                                           // both joined by " + "; or ""
+        std::vector<std::string> unknown;  // names of files no edition has
+    };
+
+    // Checks those of `files` that exist against the list's rows of `game`
+    // ("tr3" or "tr3gold"): name (any case), size and SHA-256. Each file's
+    // hash is kept in <cacheDir>\Tr3Hashes.txt under its path, size and
+    // write time - the same stamp the package cache trusts - so a file is
+    // hashed once; an empty cacheDir hashes every time. A list without the
+    // Edition column (an older data\Tr3Checksums.csv) counts as original.
+    Verdict check(const std::string& csvText, const char* game,
+                  const std::vector<std::wstring>& files,
+                  const std::wstring& cacheDir);
+
+    // One word for a log line: the edition, "unknown edition" or "absent".
+    std::string describe(const Verdict& v);
+
+    // The warning, word for word the same in every place it is shown.
+    const char* warning();
+}
 
 namespace FileHash
 {

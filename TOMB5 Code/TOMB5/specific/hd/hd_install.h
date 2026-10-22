@@ -67,9 +67,18 @@ const char* HDInstallRootTr3();
 // rejected and for what reason. Never null, possibly empty. For the log.
 const char* HDInstallDiagnostics();
 
+// Whether the search has run. Asks nothing and starts nothing: the INSTALL
+// log line uses it to tell "none found" from "never looked for".
+bool HDInstallSearched();
+
 // Forgets the answer, so the next HDInstallRoot() searches again. Only the
 // setup dialog and the tests need this.
 void HDInstallForget();
+
+// One more Steam library folder for the next search, searched as a library
+// from libraryfolders.vdf is, and before the ones Steam names. For the tools,
+// which cannot add a library to Steam's own file; the engine never calls it.
+void HDInstallAddLibrary(const wchar_t* folder);
 
 // The path stored in the registry, or an empty string. Public so the setup
 // dialog can show it.

@@ -2684,8 +2684,12 @@ installation, every level's HD art is read and unpacked while the level loads,
 whatever the row says, so *off* and *on* switch the world and the interface on
 screen between the classic and the HD look on the next frame (see **The HD/SD
 switch** below). The row is off on a fresh install: the game starts classic,
-and F12 shows the HD look at once. The registry value `hd_build` below turns
-the HD loading off altogether.
+and F12 shows the HD look at once. The row right above it, **HD build**
+(`hd_build` below), turns the HD loading off altogether, from the next level
+load on: the loads are short again and F12 switches nothing until it is on
+again. Switch it off if you never press F12 and play classic anyway - the HD
+build costs one to five seconds a level load and a few hundred MiB of video
+memory (the numbers are in the table).
 
 There is no options row for the *path*, and normally there does not need to be:
 the engine reads Steam's own folder out of the registry, walks every library in
@@ -2697,14 +2701,22 @@ depot. The same walk also looks for a `tomb123.exe` with a subfolder `3`
 holding `DATA` and `TEX`, which is *Tomb Raider I-III Remastered*: the four
 Tomb Raider III guests the randomizer can put into a level have their HD
 models there and nowhere else. Not having that game costs those four models
-and nothing else. For a copy Steam does not know about there are registry
+and nothing else. A folder whose name holds letters your Windows code page
+cannot spell - Cyrillic or Chinese on a Western system, in a library's path or
+in `steamapps\common` - is looked into like any other and never stops the
+search. The engine opens the Remaster's files through that code page, though,
+so an installation that lies under such a name itself cannot be read: HD then
+stays off (for the I-III bundle, the four guests stay classic), and the log's
+`INSTALL` line (below) says *install path not representable in the system code
+page*. A path with letters of your own code page (an *Ü* on a German system)
+works. For a copy Steam does not know about there are registry
 values, in the same key as every other setting
 (`HKEY_CURRENT_USER\Software\Core Design\Tomb Raider Chronicles\tomb5`):
 
 | Value | Type | Meaning |
 |---|---|---|
 | `hd_enable` | DWORD | The options row *HD textures* writes this, and so does the *HD / SD* key (F12): it is the **look**, `1` HD and `0` classic, of the world and the interface alike (**The HD/SD switch** below says what it switches). `0` is the default, so a new game starts classic. The row and the key are one value: a press of F12 turns the row, the row turns what F12 would, and both are saved at once, so the next game starts as you left it. It decides nothing about what is loaded - that is `hd_build`. |
-| `hd_build` | DWORD | Not on the options page. Whether the HD art is **built** at all, `1` by default: with `1`, every level's HD art is read and built at its load whenever your installation is found, whatever `hd_enable` says, so the switch between the two looks is always ready - at the price of the HD load's time and memory even while you play classic, and of one sound: with `1` and your installation found, Lara's own footstep and landing sounds (*Boots* under **Footsteps**) come from the unmodded bank in classic play too, so a sound mod's footsteps are replaced there (they become the *Bare* set). Set it to `0` and nothing of the HD art is opened or built: the engine is the classic one, a sound mod's footsteps included, and the row and F12 have nothing to switch. One HD-adjacent thing never asks either value: the 44.1 kHz sound bank, which is opened out of your remaster installation in any case - see **HQ sounds** - and whose search also reads `hd_install` and `hd_install_tr3` below and walks your Steam libraries. Written into the registry with its default the first time the game reads its settings. |
+| `hd_build` | DWORD | The options row *HD build* (Graphics, right above *HD textures*) writes this: *on* `1`, *off* `0`, any other value set by hand shows as *on* and stays as it is until the row is stepped. A step takes effect at the **next level load** - the level on screen keeps what it was loaded with, built or not, until you leave it or load a savegame - and is saved at once. Whether the HD art is **built** at all, `1` by default: with `1`, every level's HD art is read and built at its load whenever your installation is found, whatever `hd_enable` says, so the switch between the two looks is always ready - at the price of the HD load's time and memory even while you play classic (measured over eight levels and the title: 1.25 to 4.78 seconds more per level load, 2.8 seconds in the middle, 232 to 475 MiB of texture pages and 10 to 62 MiB of room buffers on the card, 7 to 17 MiB of model buffers in the program), and of one sound: with `1` and your installation found, Lara's own footstep and landing sounds (*Boots* under **Footsteps**) come from the unmodded bank in classic play too, so a sound mod's footsteps are replaced there (they become the *Bare* set). Set it to `0` and nothing of the HD art is opened or built: the loads are as short as without the Remaster, the engine is the classic one, a sound mod's footsteps included, and the *HD textures* row and F12 have nothing to switch - F12 shows *HD is off* at the top of the screen for a second instead. A level left with `1` gives its HD data back at the next load, whatever this says. One HD-adjacent thing never asks either value: the 44.1 kHz sound bank, which is opened out of your remaster installation in any case - see **HQ sounds** - and whose search also reads `hd_install` and `hd_install_tr3` below and walks your Steam libraries. Written into the registry with its default the first time the game reads its settings. |
 | `hd_objects` | DWORD | HD models for the objects **and for Lara**, `1` by default. There is no options row for it: it is not a matter of taste but a way back if one level's models ever go wrong. Set it to `0` and the rooms stay HD while every object and Lara draw the classic way. Lara has no key of her own on purpose — she is a model like the rest of them and a level's models are one buffer, so a second switch would only be a second way to end up with half a picture. Changes nothing on screen while `hd_enable` is off; with `hd_build` on, `0` still keeps the models out of the load. |
 | `hd_motion` | DWORD | What **moves** in an HD room, `1` by default: water and waterfalls scrolling, ivy, banners, grass and kelp swaying in the wind, and a small ripple over a water surface, the slow travel of light along a shaft or a lamp cone, the four-page animated pictures (the twenty-seven flipbook surfaces of five levels), the longer loops of fourteen to thirty pages (the turning fan shadows of the 13th Floor, the monitor wall of the Security Breach cutscene, the flames, smoke and rain rings - 168 surfaces in nine levels; set to `0` they show their first page) and the ripple over the Remaster's own still-water sheets — in short, everything this chapter says stops with `hd_motion`. All of it comes from the Remaster's own art — the artists marked which surfaces flow and which vertices bend, and this reads those marks. Like `hd_objects` it has no options row and is a way back rather than a taste: set it to `0` and an HD room stands perfectly still. Does nothing at all while `hd_enable` is off. |
 | `hd_reflect` | DWORD | The **gloss** of metal, marble, ice and glass in an HD room, `1` by default: a highlight from the level's lamps where they hang - worked out once per level for every spot, so it stays by its lamp and runs on across doorways - and a reflection of the surface's own light that grows the flatter you look at it, on floors, walls, crates and ducts alike, never more than two and a half times the surface's own lit colour and never to white. Not a mirror: nothing is drawn twice. Which surfaces shine, in this order: the gloss the Remaster's artists gave a surface themselves (its own strength); your file `hd_gloss.txt`; a list of texture pages built into the engine; and the pages that lie on floors whose footsteps sound of metal, marble or ice - in every room that wears them. RICH2's lobby pages and every see-through floor stay exactly as they were. **`hd_gloss.txt`** lies beside the executable, where `SCRIPT.DAT` and `Balance.txt` are, and is read at every level load, so a change shows at the next one. One texture page per line: the page number, a class (`metal`, `marble`, `ice`, `glass` or `custom`) and optionally strength (above 0, up to 1), exponent (1 to 255, the tighter the highlight the higher) and F0 (0 to 1, how much it reflects face on), where `-` or leaving a number out takes the class's own; a `custom` page names all three. `-<page>` takes a page out (a surface the artists gave a gloss keeps it), `#` starts a comment, and a line that cannot be read is counted and skipped; a file saved as UTF-8 with or without a byte order mark reads the same - for example `140 metal 0.6 32` or `-3149 # the girders stay matt`. The page numbers of a room are in the `GLOSSLOG` lines of a `-log` run. Like `hd_motion` it has no options row and is a way back rather than a taste; set it to `0` and the picture is the one without any gloss. Does nothing while `hd_enable` is off. |
@@ -2748,8 +2760,9 @@ binding F12 there does not also switch the picture. The choice holds across
 level loads, so the same spot can be compared before and after a load. There
 is nothing to switch only where the level on screen has no HD art: with
 `hd_build` at `0`, with no installation found, or in a level the remaster has
-nothing for; the key then does nothing, and the row still moves its value, as
-any option does.
+nothing for; the key then does nothing - with `hd_build` at `0` it shows *HD is
+off* at the top of the screen for a second, where the ammo hotkeys show theirs -
+and the row still moves its value, as any option does.
 
 What it switches is the **world and the interface**: the rooms, the static
 meshes, the items and enemies, Lara, the water, its life and its splashes, the
@@ -2804,6 +2817,22 @@ its end: `hd_build=0 nothing to switch` with `hd_build` at `0`,
 game's start one more line names the two settings the game starts with:
 
     HDLOG settings hd_enable=0|1 hd_build=<n>
+
+and at the first level load, once, the line that says what the search for the
+installations found and why, and where the sounds came from:
+
+    INSTALL hd=<folder|none> tr3=<folder|none> reason=<notes> bank=<source>
+
+`hd` is the *Tomb Raider IV-VI Remastered* game folder the HD art is read from,
+`tr3` the *Tomb Raider I-III Remastered* one for the four guests' models, both
+`none` when not found or not usable; `reason` is the search's own notes, joined
+with ` | ` - which folders it looked at, what it turned away and why (a folder
+without `DATA`, `TEX` and `ITEM`, a configured path that does not exist, a path
+your code page cannot spell, *not looked for* when `hd_build` is `0` and the
+sound bank came from somewhere else first); `bank` is where the 44.1 kHz sound
+bank came from: `mod` a Mods folder, `audio` an `audio\MAIN.SFX` beside the
+game, `install` the Remaster, `level` none (the level's own sounds). The folder
+names are your own paths, which is one more reason the line stays behind `-log`.
 
 ### What the HD art asks of your graphics card
 
@@ -4395,7 +4424,11 @@ mod that has a file wins. A folder whose name begins with `_` is switched off
 and everything under it with it — rename `IMI Uzis` to `_IMI Uzis` and the
 original is back, with nothing else to undo. Nothing is ever written into your
 installation or into the mod: a mod replaces a file by being *looked at
-first*, never on disk.
+first*, never on disk. A folder or list whose name holds letters your Windows
+code page cannot spell (Cyrillic or Chinese on a Western system) is passed
+over with one `MODLOG skipped <name>` line, since the engine opens a mod's
+files through that code page; letters of your own code page, such as an *Ü*
+on a German system, work.
 
 A mod may carry a `mod.txt` beside its game folders, one `key=value` per line
 with `#` for a comment. The only key so far is `origin=`, which names the game

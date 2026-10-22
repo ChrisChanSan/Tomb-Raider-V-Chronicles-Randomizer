@@ -46,7 +46,8 @@ up when you need it.
 this program — no levels, no script, no sounds. The randomizer works on the
 installation you already own.
 
-**Optionally, Tomb Raider III and The Lost Artifact.** They unlock four guest
+**Optionally, Tomb Raider III and The Lost Artifact** - the original release,
+or *Tomb Raider I-III Remastered*, which holds both. They unlock four guest
 enemies and four guest outfits. Everything else works without them. Details
 in [The Tomb Raider III guests](#the-tomb-raider-iii-guests).
 
@@ -529,8 +530,10 @@ lands in a `Debug Level` folder beside the program.
 ## spoiler.txt, and reporting a problem
 
 After every run, `spoiler.txt` lands beside `TR5Randomizer.exe`. It holds the
-version and build, your seed, the effective seed, **every setting**, what was
-done to `SCRIPT.DAT`, one line per level, and — under `DATA` — where the
+version and build, your seed, the effective seed, **every setting** (the
+deselected enemy kinds and outfits by name), what was done to `SCRIPT.DAT`, the
+Tomb Raider III sources (`TR3 SOURCES`: the edition of each, the guests and TR3
+outfits that were available), one line per level, and — under `DATA` — where the
 precomputed data came from: the program carries its own copy of every
 `zones_*.json` and of the checksum list, so a file of that name in `data\`
 is optional, but if it is there it is used instead of the built-in one.
@@ -568,14 +571,57 @@ rows stay greyed with *"— needs Tomb Raider 3"*.
 **The Compy only ever arrives as a pack of four** on one sector behind one
 trigger, or not at all. One Compy is not the animal.
 
-**Checking your copy is the right one:** `data\Tr3Checksums.csv` lists the
-size and SHA-256 of exactly the files these were ported from. If a dinosaur or
-an outfit comes out looking wrong, compare yours against that list.
+**Which folder to pick.** Either the game's own folder or its `data` folder
+inside it. Both editions work:
+
+- the **original release** - Tomb Raider III's folder for the first row,
+  The Lost Artifact's for the second;
+- **Tomb Raider I-III Remastered** - its game folder `3` (or `3\DATA`) for
+  **both** rows: the levels are in `3\DATA`, The Lost Artifact's `CHUNNEL.TR2`
+  in `3\DATA\LA`, and the sound bank in `3\SFX\MAIN.SFX`, and all three are
+  found from there. The Remastered bank holds the original's 414 sounds,
+  byte for byte, so the guests sound the same; its levels differ only in a
+  few retouched texture pixels, so a guest or an outfit may look slightly
+  different from the original game. The Lost Artifact, sold on its own
+  in its day and hard to find now, is part of the Remastered bundle.
+
+A row whose files are not all there - a level but no `MAIN.SFX`, or no level
+at all - stays greyed, and the guests it would bring are **out of the pool**:
+the run makes those levels without them instead of reporting an error. A TR3
+outfit whose level file is missing from the folder is left out the same way.
+
+**Which edition you have.** `data\Tr3Checksums.csv` lists every edition this
+program knows, file by file, with size, SHA-256 and an `Edition` column: the
+original release and the Remastered files. Each run checks the TR3 files it
+reads against it (the checksum is taken once per file and kept in the
+`Import-Export` cache, so it costs no time after the first run) and names the
+edition in `spoiler.txt`: `TR3 source: original` or `Remastered`, and the same
+for Gold. A file of **no known edition** - another release, a patched or modded
+file - is never refused: the run goes on, and the level rows show *done,
+warning*, the status line and `spoiler.txt` say *"TR3 files of an unknown
+edition: guest sounds and textures may differ"*, and `spoiler.txt` names the
+file. If a dinosaur or an outfit comes out looking or sounding wrong, that line
+is the first thing to look at.
+
+**The same seed with other TR3 folders is another game.** Which guests and
+outfits are in the pool changes what the seed draws, and the seed itself
+holds only the options. `spoiler.txt` therefore has a `TR3 SOURCES` section:
+both editions, the guests that were available, and the TR3 outfits that were in
+the pool - compare it when two runs of one seed differ.
 
 **The `Import-Export` folder** beside the program is a cache of what was
 extracted. It carries a file `DO NOT REDISTRIBUTE.txt`, and that is meant
 literally: it holds another game's data. Deleting it is always safe — it is
-just re-extracted, slower, once.
+just re-extracted, slower, once. `Tr3Hashes.txt` in it holds the checksums of
+your TR3 files, each under its path, size and date, so the edition check above
+reads each file only once.
+
+**Every run starts from vanilla, the HD sidecars included.** A run first puts
+every level back from `data\Backup`, and with each level the `.hdm` file beside
+it - the note for the HD engine of which rooms, models and sounds the last run
+changed - is removed too, as *Restore original* does. A level the run then
+randomizes gets its own new one; a level that fails or whose row is switched
+off is a vanilla level with no leftover note from an earlier run.
 
 ---
 

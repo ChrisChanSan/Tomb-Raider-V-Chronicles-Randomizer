@@ -14,9 +14,10 @@
 /* MenuTest - the arithmetic of the options menu, checked without a game.
  *
  * Build with bmenu.bat, run with no arguments from this folder: the last
- * nine families (pad_scheme_repair, controls_mouse_rows,
+ * ten families (pad_scheme_repair, controls_mouse_rows,
  * graphics_softbody_row, graphics_water_row, graphics_shadow_row,
- * hd_switch_rows, graphics_hd_row, display_gamma_row and slider_numbers)
+ * hd_switch_rows, graphics_hd_row, graphics_build_row, display_gamma_row
+ * and slider_numbers)
  * read engine files as text, by their paths relative to it, because the
  * tables and rows they check live in files that cannot be linked here.
  *
@@ -1850,19 +1851,19 @@ static void controls_mouse_rows()
 /* The row of the chest's soft motion lives in game\menu_frame.cpp's Graphics
  * table, which cannot be linked here, so what is checked is what the tree
  * says, the way controls_mouse_rows reads the Controls table: the table's
- * fifteen rows in order and the split they page into, the row's kind, save
+ * sixteen rows in order and the split they page into, the row's kind, save
  * class and lack of a gate, the four values it shows, their five strings
  * in game\gameflow.cpp's table, the registry name in tomb5\tomb5.cpp, and
  * the draw's reset on a change in specific\hd\hd_laradraw.cpp. The step is
  * game\menu_nav.h's MenuSliderStep over 0..3, swept whole. */
 static void graphics_softbody_row()
 {
-	static const char* const want[15] =
+	static const char* const want[16] =
 	{
-		"Display", "HD textures", "Body physics", "HD water", "Reflections",
-		"Fog", "Distance fog", "Shimmer", "Mono screen style", "Shadow mode",
-		"PSX skies", "Static lighting", "UW Effect", "Look transparency",
-		"Footprints"
+		"Display", "HD build", "HD textures", "Body physics", "HD water",
+		"Reflections", "Fog", "Distance fog", "Shimmer", "Mono screen style",
+		"Shadow mode", "PSX skies", "Static lighting", "UW Effect",
+		"Look transparency", "Footprints"
 	};
 	char* frame = tree_file("../../../TOMB5 Code/TOMB5/game/menu_frame.cpp");
 	char* flow = tree_file("../../../TOMB5 Code/TOMB5/game/gameflow.cpp");
@@ -1920,38 +1921,38 @@ static void graphics_softbody_row()
 		}
 	}
 
-	check(rows, 15, "softbody row: the Graphics table holds fifteen rows");
+	check(rows, 16, "softbody row: the Graphics table holds sixteen rows");
 
-	for (i = 0; i < rows && i < 15; i++)
+	for (i = 0; i < rows && i < 16; i++)
 		check(strcmp(label[i], want[i]), 0,
 			"softbody row: the Graphics rows stand in this order");
 
-	if (rows == 15)
+	if (rows == 16)
 	{
-		check(!strncmp(line[2], "MENU_VALUE(\"Body physics\"", 25), 1,
+		check(!strncmp(line[3], "MENU_VALUE(\"Body physics\"", 25), 1,
 			"softbody row: Body physics is an ungated value row, "
 			"right after HD textures");
-		check(strstr(line[2], "MenuValBodyPhysics, MenuStepBodyPhysics")
+		check(strstr(line[3], "MenuValBodyPhysics, MenuStepBodyPhysics")
 			!= 0, 1, "softbody row: it shows and steps tomb5.hd_softbody "
 			"through its own two functions");
-		check(strstr(line[2], "MENU_SAVE_TOMB5") != 0, 1,
+		check(strstr(line[3], "MENU_SAVE_TOMB5") != 0, 1,
 			"softbody row: it is saved with the tomb5 settings");
-		check(!strncmp(line[1], "MENU_VALUE(\"HD textures\"", 24) &&
-			!strncmp(line[5], "MENU_VALUE(\"Fog\"", 16), 1,
+		check(!strncmp(line[2], "MENU_VALUE(\"HD textures\"", 24) &&
+			!strncmp(line[6], "MENU_VALUE(\"Fog\"", 16), 1,
 			"softbody row: ungated like its neighbours, which no page row "
 			"greys while HD is off");
 	}
 
-	// Fifteen rows at MENU_MAX_ROWS 12 and no fixed row: two pages, eight
-	// and seven, and the second starts at Mono screen style.
-	check(MenuPageCount(15, 12), 2, "softbody row: Graphics pages in two");
-	check(MenuRowsOnPage(15, 12, 0), 8,
+	// Sixteen rows at MENU_MAX_ROWS 12 and no fixed row: two pages, eight
+	// and eight, and the second starts at Shimmer.
+	check(MenuPageCount(16, 12), 2, "softbody row: Graphics pages in two");
+	check(MenuRowsOnPage(16, 12, 0), 8,
 		"softbody row: eight rows on the first page");
-	check(MenuRowsOnPage(15, 12, 1), 7, "softbody row: seven on the second");
-	check(MenuPageFirstRow(15, 12, 1), 8,
+	check(MenuRowsOnPage(16, 12, 1), 8, "softbody row: eight on the second");
+	check(MenuPageFirstRow(16, 12, 1), 8,
 		"softbody row: the second page starts at row 8");
-	check(rows == 15 &&
-		!strcmp(label[MenuPageFirstRow(15, 12, 1)], "Mono screen style"), 1,
+	check(rows == 16 &&
+		!strcmp(label[MenuPageFirstRow(16, 12, 1)], "Shimmer"), 1,
 		"softbody row: which is Mono screen style, and Body physics is on "
 		"the first page beside HD textures");
 
@@ -2956,8 +2957,8 @@ static void graphics_hd_row()
 			"hd textures row: hd_build written first, read and saved");
 		check(strstr(opts, "REG_ReadLong(buf, tomb5.hd_build, 1);") != 0,
 			1, "hd textures row: a registry without hd_build builds");
-		check(tree_count(frame, "hd_build"), 1,
-			"hd textures row: hd_build has no row (named once, in a note)");
+		check(tree_count(frame, "MENU_VALUE(\"HD build\""), 1,
+			"hd textures row: hd_build has a row of its own, HD build");
 
 		// The step: the switch's own setter, and no write of its own.
 		{
@@ -3025,6 +3026,113 @@ static void graphics_hd_row()
 	free(save);
 	free(flow);
 	free(opts);
+}
+
+/* ------------------------------------------------------ the HD build row -- */
+
+/* The HD build row on the Graphics page, read from the tree as the HD water
+ * row is: its table line (an ungated value row right above HD textures,
+ * saved with the tomb5 settings); what it shows and how it steps - the
+ * next value, tomb5_hd_build_next, never the gate in force; the registry's
+ * hd_build saved from that next value; the one place the gate takes it, at
+ * the top of S_LoadLevelFile before the gate is first asked; that the
+ * other readers of tomb5.hd_build only read it, so a step in a running
+ * level reaches none of them before the next load; and the switch's
+ * notice on screen when the key is pressed with the gate off. */
+static void graphics_build_row()
+{
+	char* frame = tree_file("../../../TOMB5 Code/TOMB5/game/menu_frame.cpp");
+	char* opts = tree_file("../../../TOMB5 Code/TOMB5/tomb5/tomb5.cpp");
+	char* head = tree_file("../../../TOMB5 Code/TOMB5/tomb5/tomb5.h");
+	char* file = tree_file("../../../TOMB5 Code/TOMB5/specific/file.cpp");
+	char* sw = tree_file(
+		"../../../TOMB5 Code/TOMB5/specific/hd/hd_switch.cpp");
+	char* level = tree_file(
+		"../../../TOMB5 Code/TOMB5/specific/hd/hd_level.cpp");
+	char* outfit = tree_file(
+		"../../../TOMB5 Code/TOMB5/specific/hd/hd_outfitmenu.cpp");
+	const int all = frame && opts && head && file && sw && level && outfit;
+
+	check(all, 1, "build row: the seven engine files are readable from here");
+
+	if (all)
+	{
+		// The table line, right above HD textures.
+		const char* row = strstr(frame, "MENU_VALUE(\"HD build\", "
+			"MenuValHdBuild, MenuStepHdBuild, MENU_SAVE_TOMB5),");
+		const char* after = row ? strchr(row, '\n') : 0;
+		const char* hd = strstr(frame, "MENU_VALUE(\"HD textures\"");
+
+		check(tree_count(frame, "MENU_VALUE(\"HD build\""), 1,
+			"build row: one row of that name");
+		check(row != 0, 1, "build row: an ungated value row with its own "
+			"two functions, saved with the tomb5 settings");
+		check(after != 0 && hd != 0 && strstr(after + 1, "MENU_VALUE(") == hd,
+			1, "build row: the next row is HD textures");
+
+		// What it shows and how it steps: the next value, on and off.
+		check(strstr(frame,
+			"CustomText(tomb5_hd_build_next ? \"on\" : \"off\")") != 0, 1,
+			"build row: it shows the next value as the table's on and off");
+		check(strstr(frame,
+			"tomb5_hd_build_next = tomb5_hd_build_next ? 0 : 1;") != 0, 1,
+			"build row: a press either way toggles the next value");
+		check(tree_count(frame, "tomb5.hd_build"), 0,
+			"build row: the menu never touches the gate in force");
+
+		// Saved from the next value, which starts at the value read.
+		check(strstr(opts, "REG_WriteLong(buf, tomb5_hd_build_next);") != 0,
+			1, "build row: the save writes the row's value as hd_build");
+		check(tree_count(opts, "REG_WriteLong(buf, tomb5.hd_build);"), 1,
+			"build row: the gate itself is written on a first run only");
+		check(strstr(opts, "tomb5_hd_build_next = tomb5.hd_build;") != 0, 1,
+			"build row: the row starts at the value the game starts with");
+		check(strstr(head, "extern ulong tomb5_hd_build_next;") != 0, 1,
+			"build row: the next value is declared beside the settings");
+
+		// The one place the gate takes it: the top of the load.
+		{
+			const char* load = strstr(file, "long S_LoadLevelFile(long num)");
+			const char* take = strstr(file,
+				"tomb5.hd_build = tomb5_hd_build_next;");
+			const char* early = strstr(file, "HDLevelKeyEarly(name, &next);");
+			const char* first = strstr(file,
+				"const long hd = tomb5.hd_build && HDInstallRoot()[0];");
+
+			check(tree_count(file, "tomb5.hd_build = "), 1,
+				"build row: the load takes the row's value in one place");
+			check(load && take && early && first && load < take &&
+				take < early && early < first, 1, "build row: at the top of "
+				"S_LoadLevelFile, before HDLevelKeyEarly asks the gate");
+		}
+
+		// The other readers read it and never write it.
+		check(tree_count(sw, "tomb5.hd_build ="), 0,
+			"build row: the switch only reads the gate");
+		check(tree_count(level, "tomb5.hd_build ="), 0,
+			"build row: the HD level only reads the gate");
+		check(tree_count(outfit, "tomb5.hd_build ="), 0,
+			"build row: the outfit window only reads the gate");
+		check(strstr(level, "\tif (!tomb5.hd_build)\r\n\t\treturn false;")
+			!= 0 || strstr(level, "\tif (!tomb5.hd_build)\n\t\treturn false;")
+			!= 0, 1, "build row: HDEnabled still asks the gate in force");
+
+		// The notice when the key is pressed with the gate off.
+		check(strstr(sw, "if (what == HD_SWITCH_NOTHING && !tomb5.hd_build)")
+			!= 0, 1, "build row: the key's notice is for the gate off");
+		check(strstr(sw, "strcpy(ammo_change_buf, \"HD is off\");") != 0, 1,
+			"build row: it says HD is off");
+		check((int)sizeof("HD is off") <= 12, 1,
+			"build row: and fits the caption's twelve bytes");
+	}
+
+	free(frame);
+	free(opts);
+	free(head);
+	free(file);
+	free(sw);
+	free(level);
+	free(outfit);
 }
 
 /* ------------------------------------------------------- the Gamma row -- */
@@ -4273,6 +4381,7 @@ int main()
 	graphics_shadow_row();
 	hd_switch_rows();
 	graphics_hd_row();
+	graphics_build_row();
 	display_gamma_row();
 	slider_numbers();
 	slider_reads();

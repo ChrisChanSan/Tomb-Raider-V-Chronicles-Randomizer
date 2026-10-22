@@ -795,9 +795,21 @@ reads them where they lie, on your own machine, while the game runs. Without
 them the game runs exactly as the original did, with the classic art, the
 classic sound bank and the classic 640x480 loading screens.
 
+The HD art is built at every level load whether you look at it or not, so
+that F12 switches between the classic and the HD look at once. That has a
+price, measured over eight levels and the title: **1.25 to 4.78 seconds more
+per level load** (2.8 in the middle), 232 to 475 MiB of texture pages and 10 to
+62 MiB of room buffers on the graphics card, and 7 to 17 MiB of model buffers in
+the program. If you play classic anyway, switch **Options → Graphics → HD build**
+off: from the next level load on nothing of the HD art is built, the loads are
+as short as without the Remaster, and F12 says *HD is off*. Switch it on again
+and the next level load builds it again.
+
 The four Tomb Raider III guests (T-Rex, raptor, compy, vulture) likewise need
-your own **Tomb Raider III** installation; their models and sounds are read
-from it at run time and none of them ships here either.
+your own **Tomb Raider III** installation - the original release, or the game
+folder `3` of *Tomb Raider I-III Remastered*, which carries The Lost Artifact
+too; their models and sounds are read from it at run time and none of them
+ships here either.
 
 **The machine:** Windows 10 or 11 (the engine is tested on Windows 11; the
 XAudio2 it uses comes with Windows 10). `PCtomb5.exe` is a 32-bit program on

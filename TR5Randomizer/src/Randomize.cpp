@@ -432,20 +432,67 @@ int main(int argc, char** argv)
     Patch::markTriggerSafeSectors(lvl, in);
     in.modelHeight = Patch::modelHeightFn(source, nullptr, tr3Dir, tr3GoldDir, cache);
 
+    // The planner gets the guests only when their files are really there:
+    // the level (resolved above) and the bank (Tr3Source::resolveBank),
+    // the same test that greys the GUI's rows. Without the bank they stay
+    // out of the pool with one line and the level is made without them,
+    // rather than drawing one whose sounds cannot be fetched. The outfits
+    // need the level alone.
+    const bool guestsReady =
+        !tr3Dir.empty() && !Tr3Source::resolveBank(tr3Dir).empty();
+    if (!tr3Dir.empty() && !guestsReady)
+        std::printf("  note: no MAIN.SFX for the tr3= path (beside its "
+                    "levels, in data or in the SFX beside DATA) - the "
+                    "Tomb Raider 3 guests stay out of the pool\n");
+
+    // The edition of the TR3 files, by size and SHA-256 (Tr3Edition in
+    // DataFolder.h): named, or warned about - never a reason to stop.
+    if (!tr3Dir.empty() || !tr3GoldDir.empty())
+    {
+        std::string csv, csvErr;
+        DataFile::Source csvSrc = DataFile::Source::Embedded;
+        DataFile::read(PathUtil::join(PathUtil::exeDir(), L"data"),
+                       "Tr3Checksums.csv", csv, csvSrc, csvErr);
+
+        std::vector<std::wstring> t3, gd;
+        if (!tr3Dir.empty())
+        {
+            for (const wchar_t* f : { L"CRASH.TR2", L"ROOFS.TR2",
+                                      L"ANTARC.TR2", L"NEVADA.TR2" })
+                t3.push_back(tr3Dir + L"\\" + f);
+            const std::wstring bank = Tr3Source::resolveBank(tr3Dir);
+            if (!bank.empty()) t3.push_back(bank);
+        }
+        if (!tr3GoldDir.empty()) gd.push_back(tr3GoldDir + L"\\chunnel.TR2");
+
+        const Tr3Edition::Verdict v3 = Tr3Edition::check(csv, "tr3", t3, cache);
+        const Tr3Edition::Verdict vg =
+            Tr3Edition::check(csv, "tr3gold", gd, cache);
+        std::printf("  TR3 source: %s\n  TR3 Gold source: %s\n",
+                    Tr3Edition::describe(v3).c_str(),
+                    Tr3Edition::describe(vg).c_str());
+        if (!v3.unknown.empty() || !vg.unknown.empty())
+            std::printf("  WARNING: %s\n", Tr3Edition::warning());
+    }
+
     RandoOptions opt;
     opt.addEnemies = enemies > 0;
     opt.enemiesPerLevel = enemies;
     opt.swapEnemies = enemies > 0;     // combined in the CLI, enough for tests
     opt.randomOutfits = outfits;
-    opt.tr3Outfits    = outfitsTr3;
+    opt.tr3Outfits    = outfitsTr3 && !tr3Dir.empty();
     opt.outfitsOff    = outfitsOff;
+    // A TR3 outfit whose level is not in the folder stays out of the pool,
+    // as a guest without its bank does.
+    for (const std::string& id : Tr3Source::missingOutfits(tr3Dir))
+        opt.outfitsOff.insert(id);
     opt.allWeapons = weapons;
     opt.swapEnemies = mix;
     opt.crossEnemies = cross;
     opt.allsanity = allsanity;
     opt.disabledEnemies = enemiesDisabled;
-    opt.tr3Dir     = tr3Dir;
-    opt.tr3GoldDir = tr3GoldDir;
+    opt.tr3Dir     = guestsReady ? tr3Dir : std::wstring();
+    opt.tr3GoldDir = guestsReady ? tr3GoldDir : std::wstring();
     opt.extraPickups = extraItems;
     opt.randomWeather = weather;
     if (enemiesOnly) { opt.shuffleKeyItems = false; opt.shuffleOtherPickups = false; }

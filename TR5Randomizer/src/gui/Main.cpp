@@ -392,6 +392,11 @@ namespace
         int  skippedNonPlayable = 0;
         std::string scriptNote;      // what SCRIPT.DAT yielded on the last run
 
+        // The edition of the TR3 files the last run read (Tr3Edition in
+        // DataFolder.h): taken once a run, in the Copy phase.
+        Tr3Edition::Verdict tr3Edition;
+        Tr3Edition::Verdict goldEdition;
+
         // A run does not go through in one piece but step by step: one level
         // per frame. Otherwise the window freezes for the duration of all 15
         // levels, Windows reports "not responding", and it looks like a
@@ -585,9 +590,46 @@ namespace
 static std::wstring resolveFolder(const std::wstring& chosen, const wchar_t* file)
 { return Tr3Source::resolveFolder(chosen, file); }
 
-// The resolved folders as they go to the core and the patch path.
-static std::wstring tr3Folder(const App& a)  { return resolveFolder(a.cfg.tr3Dir, L"CRASH.TR2"); }
-static std::wstring goldFolder(const App& a) { return resolveFolder(a.cfg.tr3GoldDir, L"chunnel.TR2"); }
+// The resolved folders as they go to the core and the patch path - the
+// same two lookups the command line makes, so the Gold row also finds
+// The Lost Artifact inside the Remastered "3" folder (DATA\LA).
+static std::wstring tr3Folder(const App& a)
+{ return Tr3Source::resolveTr3(a.cfg.tr3Dir); }
+static std::wstring goldFolder(const App& a)
+{ return Tr3Source::resolveTr3Gold(a.cfg.tr3GoldDir); }
+
+// Are the files a guest needs really there? Its level (CRASH.TR2 for "tr3",
+// chunnel.TR2 for "tr3gold") and the Tomb Raider 3 bank where the fetch
+// will look for it (Tr3Source::resolveBank: beside the levels, in data\, or
+// in the SFX beside the Remastered DATA). The vulture needs both games:
+// its model is Gold's, its sounds are in TR3's MAIN.SFX. One test for the
+// greying (dinoSourcePresent), the planner and the spoiler.
+static bool guestFilesThere(const App& a, const char* source)
+{
+    const std::wstring tr3 = tr3Folder(a);
+    const bool bank = !tr3.empty() && !Tr3Source::resolveBank(tr3).empty();
+
+    if (std::strcmp(source, "tr3") == 0) return bank;
+    if (std::strcmp(source, "tr3gold") == 0)
+        return bank && !goldFolder(a).empty();
+    return false;
+}
+
+// Does this run read TR3 files at all? A guest in the pool, or the TR3
+// outfits switched on with a TR3 level folder there.
+static bool runReadsTr3(const App& a)
+{
+    return guestFilesThere(a, "tr3") ||
+           (a.optOutfits && a.optOutfitsTr3 && !tr3Folder(a).empty());
+}
+
+// Whether a file the run reads is of no known edition.
+static bool tr3EditionUnknown(const App& a)
+{
+    return runReadsTr3(a) &&
+           (!a.tr3Edition.unknown.empty() ||
+            (guestFilesThere(a, "tr3gold") && !a.goldEdition.unknown.empty()));
+}
 
 // Cache for the packages extracted from Tomb Raider 3.
 //
@@ -621,6 +663,37 @@ static std::wstring cacheDir(const App& a)
         }
     }
     return dir;
+}
+
+// The edition of the TR3 files this run reads, once a run: the four levels
+// the guests and the TR3 outfits come from and the bank, and Gold's level -
+// each checked by size and SHA-256 against Tr3Checksums.csv (a file in
+// data\ wins, the baked copy is the floor), the hashes kept in the package
+// cache beside them. Never a reason to stop.
+static void checkTr3Editions(App& a)
+{
+    std::string csv, err;
+    DataFile::Source src = DataFile::Source::Embedded;
+    DataFile::read(a.payloadDir(), "Tr3Checksums.csv", csv, src, err);
+
+    std::vector<std::wstring> tr3, gold;
+    const std::wstring t = tr3Folder(a);
+    if (!t.empty())
+    {
+        for (const wchar_t* f : { L"CRASH.TR2", L"ROOFS.TR2", L"ANTARC.TR2",
+                                  L"NEVADA.TR2" })
+            tr3.push_back(PathUtil::join(t, f));
+        const std::wstring bank = Tr3Source::resolveBank(t);
+        if (!bank.empty()) tr3.push_back(bank);
+    }
+    const std::wstring g = goldFolder(a);
+    if (!g.empty()) gold.push_back(PathUtil::join(g, L"chunnel.TR2"));
+
+    // No TR3 folder, no cache folder: nothing is created for nothing.
+    const std::wstring cache =
+        (tr3.empty() && gold.empty()) ? std::wstring() : cacheDir(a);
+    a.tr3Edition = Tr3Edition::check(csv, "tr3", tr3, cache);
+    a.goldEdition = Tr3Edition::check(csv, "tr3gold", gold, cache);
 }
 
 
@@ -898,11 +971,23 @@ static std::wstring cacheDir(const App& a)
         opt.crossEnemies = (a.optEnemyPool == 1);
         opt.allsanity    = (a.optEnemyPool == 2);
         opt.disabledEnemies = a.optEnemiesOff;
-        opt.tr3Dir     = a.cfg.tr3Dir;
-        opt.tr3GoldDir = a.cfg.tr3GoldDir;
+        // The planner gets the RESOLVED folders, and only where the files
+        // the guests need are really there - the test that greys their
+        // rows (dinoSourcePresent). A folder that resolves its level but
+        // not its bank would otherwise keep the guests in the pool and
+        // turn every level that draws one into an ERROR row. The TR3
+        // outfits need the level alone (tr3Ready in the outfit row).
+        opt.tr3Dir     = guestFilesThere(a, "tr3") ? tr3Folder(a)
+                                                   : std::wstring();
+        opt.tr3GoldDir = guestFilesThere(a, "tr3gold") ? goldFolder(a)
+                                                       : std::wstring();
         opt.randomOutfits = a.optOutfits;
-        opt.tr3Outfits    = a.optOutfitsTr3;
+        opt.tr3Outfits    = a.optOutfitsTr3 && !tr3Folder(a).empty();
         opt.outfitsOff    = a.optOutfitsOff;
+        // A TR3 outfit whose level is not in the folder stays out of the
+        // pool, as a guest without its bank does.
+        for (const std::string& id : Tr3Source::missingOutfits(tr3Folder(a)))
+            opt.outfitsOff.insert(id);
         opt.allWeapons = true;              // standard, see the App comment
         // Item abundance: the GUI's three tiers as a count. Free placement
         // spots and the item limit cap them anyway.
@@ -1248,8 +1333,25 @@ static std::wstring cacheDir(const App& a)
         std::fprintf(f, "  Enemy pool:         %s\r\n",
                      a.optEnemyPool == 0 ? "level pool only"
                                          : a.optEnemyPool == 1 ? "cross mix" : "allsanity");
+        // The deselected kinds by name, not by count: two runs of one seed
+        // with different deselections give different levels, and only
+        // the names tell which.
         if (!a.optEnemiesOff.empty())
-            std::fprintf(f, "  deselected kinds:   %d\r\n", (int)a.optEnemiesOff.size());
+        {
+            std::string names;
+            for (const EnemyKind& k : Rando::enemyKinds())
+                if (a.optEnemiesOff.count(k.typeId))
+                    names += (names.empty() ? "" : ", ") + std::string(k.name);
+            std::fprintf(f, "  deselected kinds:   %s\r\n", names.c_str());
+        }
+        if (a.optOutfits && !a.optOutfitsOff.empty())
+        {
+            std::string names;
+            for (const OutfitKind& k : Rando::outfitKinds())
+                if (a.optOutfitsOff.count(k.id))
+                    names += (names.empty() ? "" : ", ") + std::string(k.name);
+            std::fprintf(f, "  deselected outfits: %s\r\n", names.c_str());
+        }
         std::fprintf(f, "  Secrets:            %s%s%s\r\n",
                      a.optSecrets == 0 ? "vanilla" : a.optSecrets == 1 ? "in the item pool"
                                                    : a.optSecrets == 2 ? "glitchless list"
@@ -1310,6 +1412,48 @@ static std::wstring cacheDir(const App& a)
                 if (seen.insert(l).second) std::fprintf(f, "  %s\r\n", l.c_str());
             line("");
         }
+
+        //--------------------------------------------------------------------
+        // The Tomb Raider III files the guests and the TR3 outfits came
+        // from: absent, or the edition Tr3Checksums.csv knows them as. A
+        // file of no known edition was read all the same, and says so here.
+        //--------------------------------------------------------------------
+        line("TR3 SOURCES");
+        std::fprintf(f, "  TR3 source:         %s\r\n",
+                     Tr3Edition::describe(a.tr3Edition).c_str());
+        std::fprintf(f, "  TR3 Gold source:    %s\r\n",
+                     Tr3Edition::describe(a.goldEdition).c_str());
+        if (tr3EditionUnknown(a))
+            std::fprintf(f, "  WARNING: %s\r\n", Tr3Edition::warning());
+
+        // What the planner could draw from them: the guests whose files
+        // are there (guestFilesThere, the planner's own test) and the TR3
+        // outfits in the pool - the same seed with another of these is
+        // another set of levels, and this is where that shows.
+        {
+            std::string guests, outfits;
+            for (const EnemyKind& k : Rando::enemyKinds())
+                if (k.source && guestFilesThere(a, k.source))
+                    guests += (guests.empty() ? "" : ", ") +
+                              std::string(k.name);
+
+            const bool tr3Outfits = a.optOutfits && a.optOutfitsTr3 &&
+                                    !tr3Folder(a).empty();
+            const std::vector<std::string> missing =
+                Tr3Source::missingOutfits(tr3Folder(a));
+            for (const OutfitKind& k : Rando::outfitKinds())
+                if (k.source[0] && tr3Outfits &&
+                    std::find(missing.begin(), missing.end(), k.id) ==
+                        missing.end())
+                    outfits += (outfits.empty() ? "" : ", ") +
+                               std::string(k.name);
+
+            std::fprintf(f, "  Guests available:   %s\r\n",
+                         guests.empty() ? "none" : guests.c_str());
+            std::fprintf(f, "  TR3 outfits:        %s\r\n",
+                         outfits.empty() ? "none" : outfits.c_str());
+        }
+        line("");
 
         line("LEVELS");
         for (const LevelRow& r : a.levels)
@@ -1394,6 +1538,8 @@ static std::wstring cacheDir(const App& a)
                     a.scriptNote += (a.scriptNote.empty() ? "" : "  |  ") + rSum;
             }
 
+            checkTr3Editions(a);
+
             a.phase = App::Phase::Levels;
             a.stepIndex = 0;
             return;
@@ -1413,7 +1559,14 @@ static std::wstring cacheDir(const App& a)
             a.phaseText = r.name;
 
             std::string e;
-            if (doLevel(a, r, a.effectiveSeed(), e)) ++a.doneCount;
+            if (doLevel(a, r, a.effectiveSeed(), e))
+            {
+                ++a.doneCount;
+                // Done all the same, and said where the player looks.
+                if (tr3EditionUnknown(a))
+                    r.result = std::string("WARNING: ") +
+                               Tr3Edition::warning() + " - " + r.result;
+            }
             else { ++a.failCount; r.result = "ERROR: " + e; }
 
             ++a.stepIndex;
@@ -1464,7 +1617,13 @@ static std::wstring cacheDir(const App& a)
                           a.doneCount, a.failCount ? T(" - with errors, see spoiler.txt") : "",
                           spoiler ? T("Details are in spoiler.txt next to the program.")
                                   : T("spoiler.txt could not be written."));
-            setStatus(a, buf, a.failCount > 0);
+            // The warning in the line the player reads, not only in the
+            // rows' tooltips.
+            if (tr3EditionUnknown(a))
+                setStatus(a, std::string(buf) + " " + T("WARNING: ") +
+                          Tr3Edition::warning() + ".", true);
+            else
+                setStatus(a, buf, a.failCount > 0);
             a.phaseText.clear();
             a.phase = App::Phase::Idle;
             return;
@@ -1535,19 +1694,12 @@ static bool dinoSourcePresent(const App& a, const char* source)
 {
     if (!source) return true;                 // lives in TR5 itself
 
-    if (std::strcmp(source, "tr3") == 0)
-        return !tr3Folder(a).empty()
-            && !resolveFolder(a.cfg.tr3Dir, L"MAIN.SFX").empty();
-
     // The vulture needs BOTH installations: its model sits in chunnel.TR2 of
     // The Lost Artifact, but its sounds come from the MAIN.SFX of Tomb
     // Raider 3. The two files differ - Gold ships its own (9.8 MB against
-    // 11.6 MB), and the audited wave numbers refer to TR3's.
-    if (std::strcmp(source, "tr3gold") == 0)
-        return !goldFolder(a).empty()
-            && !resolveFolder(a.cfg.tr3Dir, L"MAIN.SFX").empty();
-
-    return false;
+    // 11.6 MB), and the audited wave numbers refer to TR3's. The test is
+    // guestFilesThere, which the planner asks as well.
+    return guestFilesThere(a, source);
 }
 
 //----------------------------------------------------------------------------
@@ -2609,6 +2761,14 @@ static void drawUi(App& a, HWND hwnd)
             else if (r.result == "skipped")
             {
                 ImGui::TextDisabled(T("skipped"));
+            }
+            else if (r.result.rfind("WARNING", 0) == 0)
+            {
+                // Done, with something to read: a TR3 file of no known
+                // edition (Tr3Edition). Amber, as the "modified" state.
+                ImGui::TextColored(ImVec4(1, .75f, .3f, 1), T("done, warning"));
+                if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort))
+                    ImGui::SetTooltip(T("%s"), r.result.c_str());
             }
             else
             {

@@ -1131,7 +1131,11 @@ std::wstring Tr3Source::sfxPath(const DinoSource&,
     // ships its own, but the auditioned wave numbers refer to the TR3 one.
     // The Gold parameter stays in the interface so the intent is visible
     // and nobody "cleans it up" later.
-    return tr3Dir + L"\\MAIN.SFX";
+    //
+    // Where it lies is resolveBank's answer. With none, the path beside the
+    // level is still handed on, so the failure names the file it wanted.
+    const std::wstring bank = resolveBank(tr3Dir);
+    return bank.empty() ? tr3Dir + L"\\MAIN.SFX" : bank;
 }
 
 std::vector<Tr3Source::OutfitSource> Tr3Source::outfits()
@@ -1637,4 +1641,69 @@ std::wstring Tr3Source::resolveTr3(const std::wstring& chosen)
 { return resolveFolder(chosen, L"CRASH.TR2"); }
 
 std::wstring Tr3Source::resolveTr3Gold(const std::wstring& chosen)
-{ return resolveFolder(chosen, L"chunnel.TR2"); }
+{
+    // The folder itself or its data\, as for every other game. Then the
+    // Remastered layout, where The Lost Artifact is a subfolder of the
+    // third game's levels: <bundle>\3\DATA\LA\CHUNNEL.TR2. So "3" and
+    // "3\DATA" both find it, and one folder serves both rows.
+    const std::wstring direct = resolveFolder(chosen, L"chunnel.TR2");
+    if (!direct.empty() || chosen.empty()) return direct;
+
+    std::wstring base = chosen;
+    while (!base.empty() && (base.back() == L'\\' || base.back() == L'/'))
+        base.pop_back();
+
+    const std::wstring inData =
+        resolveFolder(base + L"\\DATA\\LA", L"chunnel.TR2");
+    if (!inData.empty()) return inData;
+    return resolveFolder(base + L"\\LA", L"chunnel.TR2");
+}
+
+std::vector<std::string> Tr3Source::missingOutfits(const std::wstring& tr3Dir)
+{
+    std::vector<std::string> out;
+    if (tr3Dir.empty()) return out;
+
+    for (const OutfitSource& o : outfits())
+    {
+        if (std::strcmp(o.source, "tr3") != 0) continue;
+        std::wstring file;
+        for (const char* p = o.file; *p; ++p)
+            file.push_back(wchar_t((unsigned char)*p));
+        if (resolveFolder(tr3Dir, file.c_str()) != tr3Dir) out.push_back(o.id);
+    }
+    return out;
+}
+
+std::wstring Tr3Source::resolveBank(const std::wstring& tr3Dir)
+{
+    if (tr3Dir.empty()) return std::wstring();
+
+    std::wstring base = tr3Dir;
+    while (!base.empty() && (base.back() == L'\\' || base.back() == L'/'))
+        base.pop_back();
+
+    auto there = [](const std::wstring& p) {
+        struct _stat64 st;
+        return _wstat64(p.c_str(), &st) == 0 && (st.st_mode & _S_IFREG) != 0;
+    };
+
+    // Beside the level: the original release keeps both in data\.
+    if (there(base + L"\\MAIN.SFX")) return base + L"\\MAIN.SFX";
+    // In a data\ inside it, for a level folder that is the game folder.
+    if (there(base + L"\\data\\MAIN.SFX")) return base + L"\\data\\MAIN.SFX";
+
+    // The Remastered layout: the levels in <bundle>\3\DATA, the bank in the
+    // sibling <bundle>\3\SFX. Its 414 waves are the original's, byte for
+    // byte, behind a 740-byte head that waveDirectory steps over (it looks
+    // for RIFF), so the same wave numbers fetch the same sounds.
+    const size_t cut = base.find_last_of(L"\\/");
+    const std::wstring leaf =
+        (cut == std::wstring::npos) ? base : base.substr(cut + 1);
+    if (cut != std::wstring::npos && _wcsicmp(leaf.c_str(), L"DATA") == 0)
+    {
+        const std::wstring sibling = base.substr(0, cut) + L"\\SFX\\MAIN.SFX";
+        if (there(sibling)) return sibling;
+    }
+    return std::wstring();
+}

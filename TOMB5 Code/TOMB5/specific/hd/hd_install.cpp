@@ -18,13 +18,14 @@
  * version. See the LICENSE file at the root of this source tree.
  */
 #include "hd_install.h"
+#include "hd_install_names.h"	// the wide names, the code page test
 
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <windows.h>
 
 #include <algorithm>
-#include <cctype>
+#include <exception>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -54,6 +55,10 @@ namespace
 	std::string found_root_tr3;
 	std::string notes;
 
+	/* Library folders a tool adds to the search (HDInstallAddLibrary). The
+	 * engine adds none. */
+	std::vector<std::wstring> extra_libraries;
+
 	void note(const std::string& line)
 	{
 		if (!notes.empty())
@@ -61,55 +66,63 @@ namespace
 		notes += line;
 	}
 
-	std::string lower(std::string s)
+	// A path as a note shows it: '?' where the code page lacks a letter.
+	std::string shown(const fs::path& path)
 	{
-		std::transform(s.begin(), s.end(), s.begin(),
-			[](unsigned char c) { return (char)std::tolower(c); });
-		return s;
+		return HDNameShown(path.native());
 	}
 
 	/* Steam writes its own path with forward slashes, the library file with
 	 * doubled backslashes. std::filesystem reads both; the log should still
-	 * look uniform. */
-	std::string tidy(const std::string& path)
+	 * look uniform. Wide throughout: a wide path is never converted, so a
+	 * name of any script passes. */
+	fs::path tidy(const std::wstring& path)
 	{
 		if (path.empty())
-			return path;
-		std::string out = fs::path(path).lexically_normal().string();
-		while (!out.empty() && (out.back() == '\\' || out.back() == '/'))
+			return fs::path();
+		std::wstring out = fs::path(path).lexically_normal().native();
+		while (!out.empty() && (out.back() == L'\\' || out.back() == L'/'))
 			out.pop_back();
-		return out;
+		return fs::path(out);
 	}
 
 	/* A child entry by name, case-insensitively. Windows itself does not care,
 	 * but std::filesystem compares paths as strings and the spelling varies
 	 * between the games ("DATA" versus "data"). Walking the directory is
 	 * therefore more accurate than assembling a path and testing it - and it
-	 * returns the on-disk spelling, which is what logs should show. */
-	fs::path child(const fs::path& dir, const std::string& name, bool want_dir)
+	 * returns the on-disk spelling, which is what logs should show.
+	 *
+	 * Every name is compared wide (HDNameIs) and the walk steps with an
+	 * error code: an entry the system code page cannot spell is passed over
+	 * like any other non-match instead of throwing out of the search, and a
+	 * folder that fails half way ends the walk where it failed. */
+	fs::path child(const fs::path& dir, const wchar_t* name, bool want_dir)
 	{
 		std::error_code ec;
 		if (dir.empty() || !fs::is_directory(dir, ec))
 			return {};
-		const std::string want = lower(name);
-		for (const fs::directory_entry& e : fs::directory_iterator(dir, ec))
+		fs::directory_iterator it(dir, ec), end;
+		if (ec)
+			return {};
+		for (; it != end; it.increment(ec))
 		{
 			if (ec)
 				break;
-			if (lower(e.path().filename().string()) != want)
+			if (!HDNameIs(it->path().filename().c_str(), name))
 				continue;
-			if (want_dir ? e.is_directory(ec) : e.is_regular_file(ec))
-				return e.path();
+			std::error_code kind;
+			if (want_dir ? it->is_directory(kind) : it->is_regular_file(kind))
+				return it->path();
 		}
 		return {};
 	}
 
-	fs::path child_dir(const fs::path& dir, const std::string& name)
+	fs::path child_dir(const fs::path& dir, const wchar_t* name)
 	{
 		return child(dir, name, true);
 	}
 
-	fs::path child_file(const fs::path& dir, const std::string& name)
+	fs::path child_file(const fs::path& dir, const wchar_t* name)
 	{
 		return child(dir, name, false);
 	}
@@ -129,30 +142,36 @@ namespace
 	 * zero that REG_SZ does not. RRF_SUBKEY_WOW6432KEY is not needed here the
 	 * way it is in TROne - this build is 32 bit and already lands in the
 	 * WOW6432Node branch by itself - but it is left in for the HKLM read so
-	 * that a 64 bit build of this engine finds the same key. */
-	std::string registry_string(HKEY hive, const char* key, const char* value, DWORD extra_flags)
+	 * that a 64 bit build of this engine finds the same key.
+	 *
+	 * Read wide (RegGetValueW): a Steam folder whose name the system code
+	 * page cannot spell reads back as '?' through the narrow call, and that
+	 * names no folder. */
+	std::wstring registry_string(HKEY hive, const wchar_t* key,
+		const wchar_t* value, DWORD extra_flags)
 	{
-		char buffer[MAX_PATH * 2] = { 0 };
+		wchar_t buffer[MAX_PATH * 2] = { 0 };
 		DWORD size = sizeof(buffer);
 		DWORD type = 0;
-		const LSTATUS status = RegGetValueA(hive, key, value,
+		const LSTATUS status = RegGetValueW(hive, key, value,
 			RRF_RT_REG_SZ | extra_flags, &type, buffer, &size);
 		if (status != ERROR_SUCCESS)
 			return {};
-		return std::string(buffer);
+		return std::wstring(buffer);
 	}
 
 	/* The folder Steam itself lives in, or empty; `why_not` then says what went
 	 * wrong. HKEY_CURRENT_USER first: it says which Steam installation this
 	 * account actually runs. HKEY_LOCAL_MACHINE is the fallback for the case
 	 * that Steam never ran under this account. */
-	std::string steam_root(std::string& why_not)
+	fs::path steam_root(std::string& why_not)
 	{
-		std::string path = registry_string(HKEY_CURRENT_USER,
-			"Software\\Valve\\Steam", "SteamPath", 0);
+		std::wstring path = registry_string(HKEY_CURRENT_USER,
+			L"Software\\Valve\\Steam", L"SteamPath", 0);
 		if (path.empty())
 			path = registry_string(HKEY_LOCAL_MACHINE,
-				"SOFTWARE\\Valve\\Steam", "InstallPath", RRF_SUBKEY_WOW6432KEY);
+				L"SOFTWARE\\Valve\\Steam", L"InstallPath",
+				RRF_SUBKEY_WOW6432KEY);
 		if (path.empty())
 		{
 			why_not = "Steam is not in the registry (neither HKCU\\Software\\Valve\\Steam nor HKLM).";
@@ -160,9 +179,10 @@ namespace
 		}
 
 		std::error_code ec;
-		if (!fs::is_directory(path, ec))
+		if (!fs::is_directory(fs::path(path), ec))
 		{
-			why_not = "The registry names \"" + path + "\" but there is no folder there.";
+			why_not = "The registry names \"" + HDNameShown(path) +
+				"\" but there is no folder there.";
 			return {};
 		}
 		return tidy(path);
@@ -253,53 +273,68 @@ namespace
 		return out;
 	}
 
-	/* Every Steam library folder that actually exists - Steam's own first, then
-	 * the ones from libraryfolders.vdf in file order, duplicates removed. */
+	/* Every Steam library folder that actually exists - the ones a tool added
+	 * first (HDInstallAddLibrary), then Steam's own, then the ones from
+	 * libraryfolders.vdf in file order, duplicates removed.
+	 *
+	 * libraryfolders.vdf spells its paths in UTF-8, so they are read as UTF-8
+	 * and kept wide; a narrow reading turns every letter beyond ASCII into
+	 * the wrong bytes and passes that library over without a word. A
+	 * value that is not valid UTF-8 is read in the system code page, the
+	 * spelling an older file may carry. */
 	std::vector<fs::path> steam_libraries()
 	{
 		std::vector<fs::path> out;
+		std::vector<std::wstring> candidates(extra_libraries);
 		std::string why_not;
-		const std::string root = steam_root(why_not);
-		if (root.empty())
-		{
-			note(why_not);
-			return out;
-		}
-
-		std::vector<std::string> candidates;
-		candidates.push_back(root);
-
-		const fs::path vdf = fs::path(root) / "steamapps" / "libraryfolders.vdf";
+		const fs::path root = steam_root(why_not);
 		std::error_code ec;
-		if (!fs::is_regular_file(vdf, ec))
-		{
-			/* Not an error: a Steam installation with a single library gets by
-			 * without the file, and that library is already in the list. */
-			note("No libraryfolders.vdf under " + root + " - assuming a single-library Steam.");
-		}
+
+		if (root.empty())
+			note(why_not);
 		else
 		{
-			std::string text;
-			if (read_text_file(vdf, text))
+			candidates.push_back(root.native());
+
+			const fs::path vdf = root / L"steamapps" / L"libraryfolders.vdf";
+			if (!fs::is_regular_file(vdf, ec))
 			{
-				for (const std::string& p : vdf_library_paths(text))
-					candidates.push_back(p);
+				/* Not an error: a Steam installation with a single library
+				 * gets by without the file, and that library is already in
+				 * the list. */
+				note("No libraryfolders.vdf under " + shown(root) +
+					" - assuming a single-library Steam.");
 			}
 			else
-				note("Could not read " + vdf.string() + ".");
+			{
+				std::string text;
+				if (read_text_file(vdf, text))
+				{
+					for (const std::string& p : vdf_library_paths(text))
+					{
+						std::wstring wide = HDNameWide(p, CP_UTF8);
+						if (wide.empty())
+							wide = HDNameWide(p, CP_ACP);
+						if (!wide.empty())
+							candidates.push_back(wide);
+					}
+				}
+				else
+					note("Could not read " + shown(vdf) + ".");
+			}
 		}
 
-		std::vector<std::string> seen;
-		for (const std::string& candidate : candidates)
+		for (const std::wstring& candidate : candidates)
 		{
-			const std::string clean = tidy(candidate);
+			const fs::path clean = tidy(candidate);
 			if (clean.empty() || !fs::is_directory(clean, ec))
 				continue;
-			const std::string folded = lower(clean);
-			if (std::find(seen.begin(), seen.end(), folded) != seen.end())
-				continue;
-			seen.push_back(folded);
-			out.push_back(fs::path(clean));
+			bool seen = false;
+			for (const fs::path& have : out)
+				if (HDNameIs(have.c_str(), clean.c_str()))
+					seen = true;
+			if (!seen)
+				out.push_back(clean);
 		}
 		return out;
 	}
@@ -311,28 +346,33 @@ namespace
 	 *
 	 * TROne's rule, unchanged: recognise by CONTENT, never by folder name.
 	 * Steam names the same game differently per language and depot, and a
-	 * folder somebody moved by hand is named whatever they liked. */
-	std::string classify_remaster456(const fs::path& dir)
+	 * folder somebody moved by hand is named whatever they liked.
+	 *
+	 * The path comes back wide; search() decides whether the narrow file
+	 * calls of the engine can open it. */
+	fs::path classify_remaster456(const fs::path& dir)
 	{
-		if (child_file(dir, "tomb456.exe").empty())
+		if (child_file(dir, L"tomb456.exe").empty())
 			return {};
 
-		const fs::path sub = child_dir(dir, "5");
+		const fs::path sub = child_dir(dir, L"5");
 		if (sub.empty())
 		{
-			note(dir.string() + ": a tomb456.exe but no folder \"5\" - Chronicles is not in this bundle.");
+			note(shown(dir) + ": a tomb456.exe but no folder \"5\" - "
+				"Chronicles is not in this bundle.");
 			return {};
 		}
 
-		const fs::path data = child_dir(sub, "DATA");
-		const fs::path tex = child_dir(sub, "TEX");
-		const fs::path item = child_dir(sub, "ITEM");
+		const fs::path data = child_dir(sub, L"DATA");
+		const fs::path tex = child_dir(sub, L"TEX");
+		const fs::path item = child_dir(sub, L"ITEM");
 		if (data.empty() || tex.empty() || item.empty())
 		{
-			note(sub.string() + ": folder \"5\" without DATA, TEX and ITEM - skipped.");
+			note(shown(sub) +
+				": folder \"5\" without DATA, TEX and ITEM - skipped.");
 			return {};
 		}
-		return sub.string();
+		return sub;
 	}
 
 	/* The other bundle: Tomb Raider I-III Remastered, for the four Tomb
@@ -347,41 +387,65 @@ namespace
 	 * empty is still worth finding: the model then comes back "missing" with
 	 * the file name in the log, which says far more than an install that
 	 * silently was not there at all. Nothing but models is read from it. */
-	std::string classify_remaster123(const fs::path& dir)
+	fs::path classify_remaster123(const fs::path& dir)
 	{
-		if (child_file(dir, "tomb123.exe").empty())
+		if (child_file(dir, L"tomb123.exe").empty())
 			return {};
 
-		const fs::path sub = child_dir(dir, "3");
+		const fs::path sub = child_dir(dir, L"3");
 		if (sub.empty())
 		{
-			note(dir.string() + ": a tomb123.exe but no folder \"3\" - the third game is not in this bundle.");
+			note(shown(dir) + ": a tomb123.exe but no folder \"3\" - "
+				"the third game is not in this bundle.");
 			return {};
 		}
 
-		const fs::path data = child_dir(sub, "DATA");
-		const fs::path tex = child_dir(sub, "TEX");
+		const fs::path data = child_dir(sub, L"DATA");
+		const fs::path tex = child_dir(sub, L"TEX");
 		if (data.empty() || tex.empty())
 		{
-			note(sub.string() + ": folder \"3\" without DATA and TEX - skipped.");
+			note(shown(sub) + ": folder \"3\" without DATA and TEX - skipped.");
 			return {};
 		}
 
-		if (child_dir(sub, "ITEM").empty())
-			note(sub.string() + ": folder \"3\" has no ITEM - the Tomb Raider III guests stay classic.");
+		if (child_dir(sub, L"ITEM").empty())
+			note(shown(sub) + ": folder \"3\" has no ITEM - "
+				"the Tomb Raider III guests stay classic.");
 
-		return sub.string();
+		return sub;
 	}
 
-	void search()
+	/* A root found wide, handed on in the spelling the engine's narrow
+	 * file calls take (fopen, char[260]) - or not at all. A root the system
+	 * code page cannot spell would reach every one of those calls with '?'
+	 * in it and fail there, file by file, with a half-HD level as the
+	 * result; one line here and HD off is the honest answer.
+	 *
+	 * Turning those calls wide instead was counted: seventeen narrow opens
+	 * and listings in twelve files take a path made from a root (the page
+	 * cache three, the .TRM and .TRL readers two each, the binder two, the
+	 * .TRG scan, the font, the springs, the debris, the classic pages, the
+	 * sound bank, the level key's stamp and the folder listing one each). */
+	std::string narrow_root(const fs::path& root, const char* line)
 	{
-		searched = true;
-		found_root.clear();
-		found_root_tr3.clear();
-		notes.clear();
+		std::string narrow;
 
+		if (root.empty())
+			return narrow;
+
+		if (HDNameFits(root.native(), CP_ACP, narrow))
+			return narrow;
+
+		note(std::string(line) + " - " + shown(root));
+		return std::string();
+	}
+
+	void search_walk()
+	{
 		std::error_code ec;
 		std::vector<fs::path> scan_roots;
+		fs::path root456;
+		fs::path root123;
 
 		/* The configured override folders first, so they win. Either may be the
 		 * bundle folder itself or a folder containing it - both are scanned, so
@@ -392,8 +456,9 @@ namespace
 		const std::string over = tomb5_hd_install;
 		if (!over.empty())
 		{
-			if (fs::is_directory(over, ec))
-				scan_roots.push_back(fs::path(over));
+			const fs::path wide = HDNameWide(over, CP_ACP);
+			if (!wide.empty() && fs::is_directory(wide, ec))
+				scan_roots.push_back(wide);
 			else
 				note("Configured folder does not exist: " + over);
 		}
@@ -401,18 +466,19 @@ namespace
 		const std::string over3 = tomb5_hd_install_tr3;
 		if (!over3.empty())
 		{
-			if (fs::is_directory(over3, ec))
-				scan_roots.push_back(fs::path(over3));
+			const fs::path wide = HDNameWide(over3, CP_ACP);
+			if (!wide.empty() && fs::is_directory(wide, ec))
+				scan_roots.push_back(wide);
 			else
 				note("Configured I-III folder does not exist: " + over3);
 		}
 
 		for (const fs::path& lib : steam_libraries())
 		{
-			const fs::path steamapps = child_dir(lib, "steamapps");
+			const fs::path steamapps = child_dir(lib, L"steamapps");
 			if (steamapps.empty())
 				continue;
-			const fs::path common = child_dir(steamapps, "common");
+			const fs::path common = child_dir(steamapps, L"common");
 			if (!common.empty())
 				scan_roots.push_back(common);
 		}
@@ -433,40 +499,86 @@ namespace
 		{
 			/* The folder itself first, then its children - one level deep.
 			 * Anything deeper belongs to the games, not to this search. */
-			if (found_root.empty())
-				found_root = classify_remaster456(root);
-			if (found_root_tr3.empty())
-				found_root_tr3 = classify_remaster123(root);
+			if (root456.empty())
+				root456 = classify_remaster456(root);
+			if (root123.empty())
+				root123 = classify_remaster123(root);
 
-			if (!found_root.empty() && !found_root_tr3.empty())
+			if (!root456.empty() && !root123.empty())
 				break;
 
-			for (const fs::directory_entry& e : fs::directory_iterator(root, ec))
+			/* Stepped with an error code, as child() is: a folder that
+			 * fails half way ends this root's walk, never the search. */
+			fs::directory_iterator it(root, ec), end;
+			if (ec)
+				continue;
+			for (; it != end; it.increment(ec))
 			{
 				if (ec)
 					break;
-				if (!e.is_directory(ec))
+				std::error_code kind;
+				if (!it->is_directory(kind))
 					continue;
-				if (found_root.empty())
-					found_root = classify_remaster456(e.path());
-				if (found_root_tr3.empty())
-					found_root_tr3 = classify_remaster123(e.path());
-				if (!found_root.empty() && !found_root_tr3.empty())
+				if (root456.empty())
+					root456 = classify_remaster456(it->path());
+				if (root123.empty())
+					root123 = classify_remaster123(it->path());
+				if (!root456.empty() && !root123.empty())
 					break;
 			}
-			if (!found_root.empty() && !found_root_tr3.empty())
+			if (!root456.empty() && !root123.empty())
 				break;
 		}
 
-		if (found_root.empty())
+		found_root = narrow_root(root456,
+			"install path not representable in the system code page: HD off");
+		found_root_tr3 = narrow_root(root123,
+			"I-III install path not representable in the system code page: "
+			"the Tomb Raider III guests stay classic");
+
+		if (root456.empty())
 			note("No Tomb Raider IV-VI Remastered recognised - HD art stays off.");
-		else
+		else if (!found_root.empty())
 			note("HD art source: " + found_root);
 
-		if (found_root_tr3.empty())
+		if (root123.empty())
 			note("No Tomb Raider I-III Remastered recognised - the four Tomb Raider III guests stay classic.");
-		else
+		else if (!found_root_tr3.empty())
 			note("Tomb Raider III guest models: " + found_root_tr3);
+	}
+
+	/* The search, with nothing let out of it. Every walk above steps with
+	 * an error code and compares names wide, so nothing in it is known to
+	 * throw; this is the net under that. Without it a throw ends the game,
+	 * and caught anywhere above, it leaves both roots empty AND the notes
+	 * empty - the search counts as done, and nothing says why HD is off -
+	 * so the catch writes the reason down. A root is set only once the
+	 * walk is through, so a search stopped half way hands on none. */
+	void search()
+	{
+		searched = true;
+		found_root.clear();
+		found_root_tr3.clear();
+		notes.clear();
+
+		try
+		{
+			search_walk();
+		}
+		catch (const std::exception& e)
+		{
+			found_root.clear();
+			found_root_tr3.clear();
+			note(std::string("The installation search stopped on an error (") +
+				e.what() + ") - HD art stays off.");
+		}
+		catch (...)
+		{
+			found_root.clear();
+			found_root_tr3.clear();
+			note("The installation search stopped on an error - "
+				"HD art stays off.");
+		}
 	}
 }
 
@@ -484,6 +596,11 @@ const char* HDInstallDiagnostics()
 	return notes.c_str();
 }
 
+bool HDInstallSearched()
+{
+	return searched;
+}
+
 const char* HDInstallRootTr3()
 {
 	if (!searched)
@@ -497,6 +614,12 @@ void HDInstallForget()
 	found_root.clear();
 	found_root_tr3.clear();
 	notes.clear();
+}
+
+void HDInstallAddLibrary(const wchar_t* folder)
+{
+	if (folder && *folder)
+		extra_libraries.push_back(folder);
 }
 
 const char* HDInstallOverride()

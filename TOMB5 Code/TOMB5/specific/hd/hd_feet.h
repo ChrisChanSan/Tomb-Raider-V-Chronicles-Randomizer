@@ -17,8 +17,7 @@
 // An outfit says boots or bare feet (HDWardrobeEntry::feet, and the player may
 // overrule it in the F4 changer), and this is the half of that answer which is
 // audible. It owns nothing about the wardrobe and nothing about the menu: it
-// owns the level's two sets of footstep recordings and the two entries of the
-// sound map that choose between them.
+// owns the level's footstep sets and the choice between them at every step.
 //
 // A step is two layers, not one - the branch does not surface under either of
 // their names, so a plain grep for one sound id misses the other:
@@ -37,80 +36,158 @@
 //               Those recordings are the long half of a step: ANDREA1's id 288
 //               is 274 ms where its id 0 is 41.
 //
-// So the switch is the two ids and the floor layer. Bending sound id 0 and
-// sound id 4 puts the bank's barefoot recording under her foot; leaving the
-// floor layer alone would put a boot on the surface under it on the same
-// frame, which is the sound the layer is - a boot on mud, on metal, on wood.
-// While she is barefoot AddFootprint asks HDFeetSurfaceQuiet() and passes it
-// over. The footprint itself is a picture and is not touched.
+// So the switch is the two ids and the floor layer. A barefoot recording under
+// her foot and a boot on the surface under it on the same frame would be both
+// at once, so while she is drawn barefoot AddFootprint asks
+// HDFeetSurfaceQuiet() and passes the floor layer over. The footprint itself
+// is a picture and is not touched. Sound id 17 (the wet foot) is not switched:
+// there is one dry barefoot set and no wet one.
 //
-// The two sets:
+// Who walks. Ids 0 and 4 are not Lara's alone: measured with AnimCmd, a guard
+// (BLUE_GUARD, BLUE_GUARD2, SWAT_PLUS_MIP on the guard's animation), MAFIA2,
+// HITMAN and CYBORG play them from their own animations, and the shotgun's
+// weapon item carries id 0 as well. They all keep the level's own
+// entry whatever Lara wears; only a step whose caller is Lara herself is ever
+// redirected. The caller is SfxCommandCaller (game\sound.h), which AnimateItem
+// and AnimateLara set around every sound of an animation command.
 //
-//   boots  the level's own samples for ids 0 and 4, loaded from the first
-//          unmodded bank of the chain (HQSfxPayloadBoots) and not from a mod's
-//          bank or a mod's loose .wav. A sound mod that replaces the footsteps
-//          replaces them for every outfit at once, and a bare-footstep mod
-//          would make Lara sound barefoot in boots, in a wetsuit and in a
-//          parka alike. With the outfit choosing between two sets, the two
-//          have to be two.
+// The three sets, all in memory from the level's start:
 //
-//   bare   extra DS_Buffers slots after the level's own samples. What goes in
-//          them is what the ordinary chain would have played for ids 0 and 4 -
-//          so a barefoot sound mod is heard exactly where it belongs - and,
-//          when the chain has nothing of its own to say, the remaster's own
-//          barefoot recordings: sound id HQ_SFX_BARE_FEET of the bank, which
-//          no level carries.
+//   ordinary  the level's own entries for ids 0 and 4, loaded through the
+//             ordinary chain like every other sample: a mod's loose .wav, a
+//             mod's bank, else the unmodded bank, else the level's own
+//             recording. This is what the classic draw plays, and what every
+//             emitter but Lara plays in either draw. A sound mod's footsteps
+//             are heard here, exactly as without the HD build.
 //
-//          The ordinary chain covers both kinds of mod: a mod's bank is one
-//          way to replace the footsteps and a loose 0000..0003.wav beside it
-//          is the other - "a mod's <NNNN>.wav replaces bank sample NNNN",
-//          which for the footsteps is exactly those four and 0010. The test
-//          here is not "is a mod's bank being played" but "does the chain's
-//          sound id 0 differ from the unmodded bank's", so both kinds answer
-//          it and a mod that is about doors or voices answers it with no.
+//   bare      what the HD draw plays under a barefoot outfit. When the
+//             ordinary chain's id 0 is a mod's own recording (a footstep
+//             mod), that IS the bare set: the two spare entries point at the
+//             level's own samples and nothing is loaded twice. Otherwise the
+//             remaster's own barefoot recordings, sound id HQ_SFX_BARE_FEET
+//             of the bank, which no level carries - in DS_Buffers slots after
+//             the level's own.
 //
-// And the landing, measured on the bank. The boots have four steps of 33 to
-// 41 ms and one landing of 175 ms - a landing is 4.7 times a step and 2.4
-// times its peak. Of the bank's five barefoot recordings (106 / 86 / 134 /
-// 69 / 113 ms) none stands out that way, so all five are steps and none is a
-// landing on its own. So sound id 4 draws from the same five takes as sound
-// id 0, with the level's own id 4 volume and radius. A mod that does supply
-// a distinct landing - one several times the RMS of its own steps - is used
-// as the bare landing instead when that mod is the source.
+//   boots     what the HD draw plays under an outfit with boots: the first
+//             unmodded bank's ids 0 and 4. Loaded only when the ordinary
+//             chain's footsteps differ from the unmodded bank's, because
+//             otherwise the ordinary set already is those boots and the choice
+//             falls through to it.
+//
+// The test for "a footstep mod" is not "is a mod's bank being played" but
+// "does the chain's recording differ from the unmodded bank's, byte for
+// byte": a mod's bank is one way to replace the footsteps and a loose
+// 0000..0003.wav (0010 for the landing) is the other, and a mod that is about
+// doors or voices carries the install's own footsteps and answers no.
+//
+// The landing, measured on the bank: the boots have four steps of 33 to 41 ms
+// and one landing of 175 ms - 4.7 times a step and 2.4 times its peak. Of the
+// bank's five barefoot recordings (106 / 86 / 134 / 69 / 113 ms) none stands
+// out that way, so the bare id 4 draws from the same five takes as the bare
+// id 0, with the level's own id 4 volume and radius.
 //
 // The infos. The level's sound map is game_malloc'ed and exactly num_infos
-// long, so file.cpp asks for two more and this fills them: one for the bare
-// steps and one for the bare landing. Their fields are the level's own id 0
-// and id 4 entries - how loud, how far and how the engine rolls between takes
-// is the level's business - with two exceptions, both measured: the sample
-// number and count are what was really loaded, and the pitch comes from the
-// bank's own barefoot entry, which is 0 where id 0 is 12. The remaster ships
-// those five recordings with the random pitch turned off and that is a
-// statement about them, not about footsteps in general.
+// long, so file.cpp asks for four more and this fills them: bare steps, bare
+// landing, unmodded boots' steps, unmodded boots' landing. Their fields are
+// the level's own id 0 and id 4 entries - how loud, how far and how the
+// engine rolls between takes is the level's business - except the sample
+// number and count, which are what was really loaded, and the bare set's
+// pitch, which comes from the bank's own barefoot entry (0 where id 0 is 12).
 //
-// Nothing is allocated after the level is up. Everything here is decided
-// while LoadSamples runs; the switch afterwards writes two shorts into
-// sample_lut.
+// The choice is made at every step, in SoundEffect, by HDFeetStepInfo below:
+// the sound map itself is never bent. So the HD/SD switch changes the next
+// step and the F4 changer the next step after it closes, and a step already
+// sounding finishes as it began.
+//
+// Nothing is allocated after the level is up. Everything here is loaded while
+// LoadSamples runs; the outfit's answer afterwards is one flag.
 
 struct SAMPLE_INFO;
 
 /* How many spare SAMPLE_INFO entries LoadSamples allocates past the level's
- * own for this file: one for the bare steps and one for the bare landing. */
-#define HD_FEET_SPARE_INFOS	2
+ * own for this file: bare steps, bare landing, unmodded boots' steps and
+ * unmodded boots' landing. */
+#define HD_FEET_SPARE_INFOS	4
+
+/* The two sound ids this file switches, SFX_LARA_FEET and SFX_LARA_LAND of
+ * game\sound.h - written out here so that the rule below compiles without
+ * the engine's headers, and checked against them in hd_feet.cpp. */
+#define HD_FEET_ID_STEPS	0
+#define HD_FEET_ID_LAND		4
+
+/* The spare entries of one level, by sound map index, -1 where a set is not
+ * there. */
+struct HDFeetSets
+{
+	int bareSteps;
+	int bareLand;
+	int bootSteps;
+	int bootLand;
+};
+
+/* The step's choice, pure: which sound map entry sound id `sfx` plays.
+ *
+ *   mapped   the level's own entry for it (sample_lut[sfx]), the ordinary set
+ *   caller   who plays it: SfxCommandCaller, an object number or -1
+ *   lara     Lara's object number (LARA)
+ *   drawnHD  whether Lara is drawn HD at this step (HDLaraDrawActive)
+ *   bare     whether her HD outfit walks barefoot (HDFeetIsBare)
+ *
+ * Every emitter but Lara, every id but 0 and 4, and every step while she is
+ * drawn classic keep `mapped`. Drawn HD, she walks on the bare set or on the
+ * unmodded boots, and on `mapped` wherever the set she wants is not there. */
+inline int HDFeetPick(int sfx, int mapped, long caller, long lara,
+	bool drawnHD, bool bare, const HDFeetSets& sets)
+{
+	if (caller < 0 || caller != lara || !drawnHD || mapped < 0)
+		return mapped;
+
+	int pick;
+
+	if (sfx == HD_FEET_ID_STEPS)
+		pick = bare ? sets.bareSteps : sets.bootSteps;
+	else if (sfx == HD_FEET_ID_LAND)
+		pick = bare ? sets.bareLand : sets.bootLand;
+	else
+		return mapped;
+
+	return pick >= 0 ? pick : mapped;
+}
+
+/* The floor layer's rule, pure: passed over only while she is drawn HD, her
+ * outfit walks barefoot and the level has a bare set to walk on. Its one
+ * caller plays it for Lara alone, so there is no emitter to ask. */
+inline bool HDFeetQuietRule(bool drawnHD, bool bare, bool haveBare)
+{
+	return drawnHD && bare && haveBare;
+}
 
 /* Called from LoadSamples once the level's own samples are decoded. `lut` and
  * `infos` are the level's own tables, `infoCount` how many entries were read
- * and `spare` how many entries beyond that the caller allocated (two). `next`
- * is the first free DS_Buffers slot, which is the level's num_samples.
+ * and `spare` how many entries beyond that the caller allocated. `next` is the
+ * first free DS_Buffers slot, which is the level's num_samples.
  *
- * Loads the bare set into the slots from `next` up, fills the spare infos and
- * writes its own log lines. Safe with no bank at all - then there is no bare
- * set and HDFeetAvailable() answers false. */
+ * Loads what the sets need into the slots from `next` up, fills the spare
+ * infos and writes its own log lines. Safe with no bank at all - then there
+ * is no bare set and HDFeetAvailable() answers false. */
 void HDFeetLevelBuild(short* lut, SAMPLE_INFO* infos, int infoCount, int spare,
 	int next);
 
+/* One of the level's own samples as LoadSamples' loop left it: its decoded
+ * size, so that the unmodded boots are held to the same length rule the loop
+ * holds every bank sample to, and whether the loop took the ordinary chain's
+ * payload for it. A take the loop refused holds the level's own recording,
+ * and a mod's recording that never reached the slot is no mod. Stores two
+ * facts and decides nothing. */
+void HDFeetNoteSample(int levelSample, long pcmBytes22k, bool chainTaken);
+
 // Thrown away with the level. The tables themselves are game_malloc's.
 void HDFeetLevelEnd();
+
+/* The FEET line behind -log, once a level's outfit is known: what the
+ * ordinary set is, whether the unmodded boots are loaded, the bare set's
+ * entries and what the outfit wants. Silent in a level that built no sets. */
+void HDFeetSay();
 
 // Is there a barefoot set in this level at all? False means the F4 row says
 // "unavailable" and the log says why.
@@ -119,22 +196,31 @@ bool HDFeetAvailable();
 // Why not, in words, for the menu and the log. "" when it is available.
 const char* HDFeetWhyNot();
 
-/* Bend sound ids 0 and 4 to the bare set or back to the level's own. Costs two
- * shorts, may be called at any time and is idempotent. Does nothing at all
- * when there is no bare set. Returns what is in force afterwards. */
+/* What the outfit wants: barefoot or in boots. One flag, read at every step;
+ * may be called at any time and is idempotent. Does nothing at all when there
+ * is no bare set. Returns what is in force afterwards. */
 bool HDFeetBare(bool bare);
 bool HDFeetIsBare();
 
+/* The sound map entry one sound plays - HDFeetPick with this level's sets,
+ * Lara's object number and her draw at this moment. SoundEffect asks it for
+ * every sound once the level's own entry is known; anything but ids 0 and 4
+ * comes back unchanged at once. */
+int HDFeetStepInfo(int sfx, int mapped, long caller);
+
+/* For the SFXLOG line: "bare" or "boots" when `info` is one of this level's
+ * spare entries, "" otherwise. */
+const char* HDFeetInfoName(int info);
+
 /* Whether the FLOOR layer is to be passed over - see the two layers above.
- * True only while a bare set is in force, so a player with hd_build 0 or no
- * installation, with boots on, or in a level that has no second set hears
- * the level's own steps. The set follows hd_build, not the draw: with
- * hd_build on, a player who plays classic hears the bare set's steps from
- * the installation's bank too. Says so in the log the first time in each
- * bare spell; the caller is game\footprnt.cpp and nothing else. */
+ * HDFeetQuietRule with this level's answer: true only while she is drawn HD
+ * and barefoot on a bare set, so with the classic draw, with boots on, or in
+ * a level that has no second set the player hears the level as it is.
+ * Says so in the log the first time in each quiet spell; the caller is
+ * game\footprnt.cpp and nothing else. */
 bool HDFeetSurfaceQuiet();
 
-// What the level's two sets hold, for the log line and for a tool.
+// What the level's sets hold, for the log line and for a tool.
 int HDFeetBareTakes();		// recordings behind sound id 0 when bare
 int HDFeetBareLandTakes();	// ... and behind sound id 4; 0 only without an id 4
 const char* HDFeetBareSource();	// where they came from. Never null.

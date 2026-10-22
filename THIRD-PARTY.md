@@ -4498,6 +4498,62 @@ carries the tables.
     with an umlaut - both base walks throw, the head's wardrobe lists the ASCII outfit
     and passes over the Cyrillic one, the head's reader finds `GUN_OPTION` in
     `JUNGLE.TR2`; under an ASCII name the reader's line is the base's.
+465. **Lara's footstep chosen at every step, and only hers** (`hd_feet.h`, `HDFeetPick`,
+    `HDFeetSets`; `hd_feet.cpp`, `HDFeetStepInfo`; `game/sound.cpp`, `SoundEffect`) -
+    ids 0 and 4 only, caller `LARA` only, drawn HD only: the bare set under a barefoot
+    outfit, the unmodded boots under boots, the level's own entry wherever a set is not
+    there or the step is not hers. OWN; PROGRAM-CHECK, a search of the engine's own
+    source: commands are read only by `AnimateItem` and `AnimateLara`, and ids 0, 4
+    and 17 are played only from commands; DATA: `AnimCmd` over slots 0 to 470 - the
+    classic levels' BLUE_GUARD, MAFIA2 and HITMAN, the randomized JOBY5's SWAT_PLUS_MIP,
+    BLUE_GUARD2, CYBORG and SHOTGUN_ANIM, RICH3's and ANDREA1's - and no Tomb Raider III
+    guest - play ids 0 or 4 from their own animations.
+466. **Lara named as the caller of her animation sounds** (`game/laramisc.cpp`,
+    `AnimateLara`, the five `SfxCommand*` values around `SoundEffect`) - set and cleared
+    as `AnimateItem` (`game/control.cpp`) does for every other item. OWN; PROGRAM-CHECK,
+    the engine's own `AnimateItem` sets the same five.
+467. **The draw asked is Lara's body's** (`HDLaraDrawActive` in `HDFeetStepInfo` and
+    `HDFeetSurfaceQuiet`) - not `HDDrawn` alone, because a level whose HD build gave up,
+    or `hd_objects` 0, draws her classic in boots while the switch says HD. OWN.
+468. **The unmodded boots, loaded only for a footstep mod** (`hd_feet.cpp`,
+    `chain_differs`, `boots_into`, `HDFeetNoteSample`; `specific/file.cpp`,
+    `LoadSamples`) - every take of ids 0 and 4 compared byte for byte, chain against the
+    first unmodded bank; where one differs, both ids' takes from that bank into new
+    slots, all or nothing per id, held to the load loop's length rule. OWN; DATA: a
+    harness over the engine's own `hqsfx.cpp` and `hd_feet.cpp`: with a footstep mod 5
+    slots, 28,624 bytes of audio (29,204 as RIFF); without one none, the table the
+    base's byte for byte in ANDREA1, JOBY5 and RICH3.
+469. **A footstep mod's bare set is the ordinary samples** (`hd_feet.cpp`,
+    `HDFeetLevelBuild`, `useMod`) - the two bare entries point at the level's own
+    samples, which the ordinary chain filled with the mod's recordings. OWN; DATA: the
+    same harness, the footsteps' bytes 145,426 before and after with the mod (the copy
+    of 116,802 gone, the boots' 28,624 in its slots).
+470. **Four spare sample infos** (`hd_feet.h`, `HD_FEET_SPARE_INFOS` 4; `file.cpp`,
+    `LoadSamples`) - bare steps, bare landing, boots' steps, boots' landing, 32 bytes of
+    `game_malloc` with the build gate open, none with `hd_build` 0. OWN; DATA: ANDREA1's
+    infos 1,656 bytes with `hd_build` 0 before and after, 1,672 and 1,688 with 1.
+471. **The floor layer quiet only while drawn HD and barefoot** (`hd_feet.h`,
+    `HDFeetQuietRule`; `game/footprnt.cpp`, `AddFootprint`) - drawn HD, the outfit
+    barefoot and a bare set in the level, at that step. OWN.
+472. **The FEET line, the `feet=` end of the SFXLOG line, and ModernTest's `hd_feet`**
+    (`hd_feet.cpp`, `HDFeetSay`, `HDFeetInfoName`; `hd_level.cpp`, `HDLevelBuild`;
+    `Preparation/Tools/Diagnose/ModernTest.cpp`) - one line per level load behind
+    `-log`, and 164 checks of the pure rules with three gate checks. OWN.
+473. **A footstep mod is what the load loop loaded** (`hd_feet.cpp`, `chain_differs`,
+    `HDFeetNoteSample`; `specific/file.cpp`, `LoadSamples`) - the loop tells each
+    sample whether it took the ordinary chain's payload; a take it refused by its
+    length rule holds the level's own recording and counts as no mod. OWN; DATA: the
+    same harness with the loop's refusal simulated over ANDREA1 and a footstep mod -
+    all four steps refused, the bare entries on 7,056 bytes of the level's own boots
+    without the verdict and on the bank's 22,394 bytes of barefoot recordings with it.
+474. **A footstep mod's bare set only whole** (`hd_feet.cpp`, `HDFeetLevelBuild`) - the
+    first take of id 0 decides whether the ordinary set is a footstep mod's, and every
+    take of id 0 must have reached its slot before the bare entries point at it; a
+    later refused take sends the bare set to the bank's barefoot recordings, as the
+    boots are all or nothing per id. OWN; DATA: the same harness over ANDREA1 and a
+    footstep mod with takes 1 and 2 refused - the bare entries on 48,610 bytes with
+    3,686 of the level's own boots in them without the rule, on the bank's 22,394 bytes
+    with it.
 
 ## Credited, but not contained here
 

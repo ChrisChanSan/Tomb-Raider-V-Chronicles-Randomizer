@@ -775,19 +775,20 @@ const char* HQSfxPlainSource()
  *
  * HQSfxPayload with the mod taken out of it, for sound ids 0 and 4 alone:
  * the first unmodded bank of the chain, and no loose .wav overlay. The
- * footsteps need two independent sets because a sound mod which replaces
- * the footsteps replaces them for every outfit at once - the Underworld
- * bare-footstep mod, for example, would make Lara barefoot in boots, in a
- * wetsuit and in a parka alike. With the outfit deciding which of two sets
- * plays, the two have to be two, and the boots' half may not be the half a
- * mod has swapped.
+ * level's own slots hold the ordinary chain, which is what the classic draw
+ * and every other emitter play; a sound mod which replaces the footsteps is
+ * heard there. Lara drawn HD in an outfit with boots walks on these instead
+ * - the Underworld bare-footstep mod, for example, would otherwise make her
+ * barefoot in boots, in a wetsuit and in a parka alike. hd_feet.cpp asks for
+ * them only where the chain's recording differs, and compares the two with
+ * this same call.
  *
  * The plausibility rule is the one HQSfxPayload has always had: the unmodded
  * bank holds the same recording as the level, so at twice the rate it must
  * be about twice as long. No ruler is needed here - this is the ruler.
  *
- * Null means "keep the level's own sample", which is Core's boots and
- * therefore already the right answer. */
+ * Null means "no unmodded recording for this sample": then there is no
+ * boots set, and the ordinary set stands in for it. */
 char* HQSfxPayloadBoots(long levelSample, long pcmBytes22k, long* riffBytes,
 	SfxRiffParts* parts)
 {

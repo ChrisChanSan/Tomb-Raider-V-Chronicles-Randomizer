@@ -50,6 +50,8 @@
 #include "../../../TOMB5 Code/TOMB5/game/modern_camera.h"
 // The HD/SD switch's press rule, pure (hd_switch below).
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_switch.h"
+// The footsteps' choice per step and the floor layer's rule, pure (hd_feet).
+#include "../../../TOMB5 Code/TOMB5/specific/hd/hd_feet.h"
 /* The 60 fps cut detection's own thresholds and its own rule, so that
  * camera_camcut() measures the orbit against the tree rather than against a
  * number copied out of it. It costs nothing: this header includes stdlib.h
@@ -10611,6 +10613,154 @@ static void camera_mouse()
 	ok(b.mouse_yaw == 0 && b.mouse_pitch == 0, "mouse: a reset clears the hand-over", b.mouse_yaw, 0);
 }
 
+/* The footsteps (specific\hd\hd_feet.h): which sound map entry a step plays.
+ *
+ * HDFeetPick is the choice SoundEffect makes at every step, pure. The
+ * expectation below is written out on its own, from the rule as it is
+ * stated - only Lara, only ids 0 and 4, only drawn HD; then the bare set
+ * under a barefoot outfit, the unmodded boots under boots where a footstep
+ * mod made them necessary, and the level's own entry wherever a set is not
+ * there - and the whole table is walked: every emitter of ids 0 and 4 that
+ * AnimCmd finds in the classic and the randomized levels, both draws, both
+ * outfits, with and without a footstep mod, both ids. The entries are those
+ * of a level with 207 infos (ANDREA1): 0 and 4 its own, 207..210 the spare. */
+struct feet_world
+{
+	const char* name;
+	long caller;
+};
+
+static int feet_expect(int sfx, int mapped, long caller, bool hd, bool bare,
+	bool mod)
+{
+	if (caller != 0 || !hd)
+		return mapped;
+
+	if (sfx == 0)
+		return bare ? 207 : mod ? 209 : mapped;
+
+	if (sfx == 4)
+		return bare ? 208 : mod ? 210 : mapped;
+
+	return mapped;
+}
+
+static void hd_feet()
+{
+	const feet_world who[] = {
+		{ "LARA", 0 },
+		{ "SHOTGUN_ANIM", 3 },		// the shotgun's weapon item
+		{ "SWAT_PLUS_MIP", 36 },
+		{ "BLUE_GUARD", 37 },
+		{ "MAFIA2", 51 },
+		{ "HITMAN", 67 },
+		{ "BLUE_GUARD2", 460 },
+		{ "CYBORG", 469 },
+		{ "no caller", -1 },
+	};
+	const HDFeetSets withMod = { 207, 208, 209, 210 };
+	const HDFeetSets noMod = { 207, 208, -1, -1 };
+	char what[160];
+
+	for (const feet_world& w : who)
+		for (int hd = 0; hd < 2; hd++)
+			for (int bare = 0; bare < 2; bare++)
+				for (int mod = 0; mod < 2; mod++)
+					for (int sfx = 0; sfx <= 4; sfx += 4)
+					{
+						const int mapped = sfx;
+						const int got = HDFeetPick(sfx, mapped, w.caller, 0,
+							hd != 0, bare != 0, mod ? withMod : noMod);
+						const int want = feet_expect(sfx, mapped, w.caller,
+							hd != 0, bare != 0, mod != 0);
+
+						snprintf(what, sizeof(what), "feet: %s id %d %s %s %s",
+							w.name, sfx, hd ? "HD" : "SD",
+							bare ? "bare" : "boots", mod ? "mod" : "plain");
+						ok(got == want, what, got, want);
+					}
+
+	// The ids the sets do not own pass through, Lara's own and drawn HD.
+	{
+		const int ids[] = { 2, 17, 288, 294 };
+
+		for (int id : ids)
+		{
+			const int got = HDFeetPick(id, 99, 0, 0, true, true, withMod);
+
+			snprintf(what, sizeof(what), "feet: id %d is never switched", id);
+			ok(got == 99, what, got, 99);
+		}
+	}
+
+	// A level without an id 4 entry keeps its -1: there is nothing to play.
+	ok(HDFeetPick(4, -1, 0, 0, true, true, withMod) == -1,
+		"feet: no id 4 in the level, none played", HDFeetPick(4, -1, 0, 0,
+		true, true, withMod), -1);
+
+	// A level whose bare set is missing plays its own entry, not a hole.
+	{
+		const HDFeetSets none = { -1, -1, -1, -1 };
+
+		ok(HDFeetPick(0, 0, 0, 0, true, true, none) == 0,
+			"feet: no sets at all, the level's own", HDFeetPick(0, 0, 0, 0,
+			true, true, none), 0);
+	}
+
+	/* F12 brings the boots back at the next step: a barefoot outfit, the
+	 * draw flipped by HDSwitchStep itself, and the step asked after each
+	 * press. HD bare, then classic (the level's own entry, which is the
+	 * boots - or a mod's steps), then HD bare again. */
+	{
+		HDSwitchState s = HD_SWITCH_START;
+		int seen[3];
+
+		seen[0] = HDFeetPick(0, 0, 0, 0, s.drawn != 0, true, noMod);
+		HDSwitchStep(&s, 1, 1, 1);
+		HDSwitchStep(&s, 0, 1, 1);
+		seen[1] = HDFeetPick(0, 0, 0, 0, s.drawn != 0, true, noMod);
+		HDSwitchStep(&s, 1, 1, 1);
+		HDSwitchStep(&s, 0, 1, 1);
+		seen[2] = HDFeetPick(0, 0, 0, 0, s.drawn != 0, true, noMod);
+
+		ok(seen[0] == 207, "feet: F12 - drawn HD and bare", seen[0], 207);
+		ok(seen[1] == 0, "feet: F12 to SD - the boots are back", seen[1], 0);
+		ok(seen[2] == 207, "feet: F12 to HD - bare again", seen[2], 207);
+
+		// And with a footstep mod in force: SD the mod's, HD boots unmodded.
+		s = HDSwitchState HD_SWITCH_START;
+		seen[0] = HDFeetPick(0, 0, 0, 0, s.drawn != 0, false, withMod);
+		HDSwitchStep(&s, 1, 1, 1);
+		HDSwitchStep(&s, 0, 1, 1);
+		seen[1] = HDFeetPick(0, 0, 0, 0, s.drawn != 0, false, withMod);
+
+		ok(seen[0] == 209, "feet: F12 - HD boots are the unmodded ones",
+			seen[0], 209);
+		ok(seen[1] == 0, "feet: F12 to SD - the mod's own steps", seen[1], 0);
+
+		// The enemy beside her never moves, whatever is pressed.
+		ok(HDFeetPick(0, 0, 37, 0, true, true, withMod) == 0 &&
+			HDFeetPick(0, 0, 37, 0, false, true, withMod) == 0,
+			"feet: F12 - the guard keeps the level's own", 0, 0);
+	}
+
+	/* The floor layer (ids 288..294, Lara's alone): quiet only while she is
+	 * drawn HD, barefoot, on a bare set - all eight cases. */
+	for (int hd = 0; hd < 2; hd++)
+		for (int bare = 0; bare < 2; bare++)
+			for (int have = 0; have < 2; have++)
+			{
+				const bool got = HDFeetQuietRule(hd != 0, bare != 0,
+					have != 0);
+				const bool want = hd && bare && have;
+
+				snprintf(what, sizeof(what), "feet: floor layer %s %s %s",
+					hd ? "HD" : "SD", bare ? "bare" : "boots",
+					have ? "set" : "no set");
+				ok(got == want, what, got, want);
+			}
+}
+
 /* The HD/SD switch (specific\hd\hd_switch.h): one flip per press, none for
  * a held key, none outside a level or under a menu, nothing without HD
  * data, and a state that holds across the loads of levels with and
@@ -11730,10 +11880,17 @@ static void hd_build_gate()
 		hd_switch_count(feet, "\tif (!HDEnabled())\n");
 	ok(n == 1, "hd build gate: the barefoot set is built behind it", n, 1);
 	n = hd_switch_count(file,
-		"const long spare = HDEnabled() ? HD_FEET_SPARE_INFOS : 0;") +
-		hd_switch_count(file,
-		"if (!HDEnabled() || !sample_lut || !sample_infos)");
-	ok(n == 2, "hd build gate: the samples ask the build gate", n, 2);
+		"const long spare = HDEnabled() ? HD_FEET_SPARE_INFOS : 0;");
+	ok(n == 1, "hd build gate: the spare sample infos ask the build gate", n,
+		1);
+
+	/* No sample is redirected at the load: the footsteps take the ordinary
+	 * chain like every other sample, and Lara's set is chosen at every step
+	 * by her draw. */
+	n = hd_switch_count(file, "HQSfxPayloadBoots(");
+	ok(n == 0, "hd build gate: no sample is redirected at the load", n, 0);
+	n = hd_switch_count(feet, "HDLaraDrawActive(), g_bare,");
+	ok(n == 2, "hd build gate: the step and the floor ask Lara's draw", n, 2);
 
 	// The loading screens and the F4 changer ask the draw.
 	n = hd_switch_count(file, "if (!tomb5.hd_enable ||");
@@ -27459,6 +27616,7 @@ int main()
 	hd_switch();
 	hd_switch_option();
 	hd_switch_wiring();
+	hd_feet();
 	glass_split();
 	glass_hue();
 	glass_look();

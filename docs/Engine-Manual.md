@@ -2753,6 +2753,9 @@ values, in the same key as every other setting
 | `hd_outfit` | String | Which body Lara wears, written by the **F4 outfit changer** and read at every level start. Empty — the default — means *Level facts*: the level and the rolled run decide. There is no options row for it; set it in the changer. See **The outfit changer, Mods and footsteps**. |
 | `hd_footsteps` | subkey | Not a value but a key of its own, `…\tomb5\hd_footsteps`, holding one DWORD per outfit: the value's **name** is the outfit's own key and its value is `1` for bare feet or `2` for boots. Written by the changer's *Footsteps* row, one entry per outfit you have set, and read at every level start. |
 
+A value for the water sheets that an older build wrote into this key is removed the next
+time the game saves its options.
+
 ### The HD/SD switch
 
 One key between the HD draw and the classic draw, for comparing the two at the

@@ -1317,6 +1317,273 @@ const char* LanguageName(long idx)
 	return file;
 }
 
+/* extrastrings.txt: the project's words in a text file beside the game's
+ * executable, so that a player or a translator can change a word without a
+ * build. The table below is the embedded copy - an executable copied alone
+ * keeps its words - and a word of the file goes before the table's word of
+ * the same key in French, German, Italian and Spanish (CustomText).
+ *
+ * The file is plain text, UTF-8 with or without a byte order mark, its lines
+ * ended by CRLF or LF. A line starting with '#' is a comment and a blank one
+ * is skipped. "[French]", "[German]", "[Italian]" and "[Spanish]" open a
+ * section, in any case; any other section is skipped with its lines. Inside
+ * a section "English literal=word" maps the exact literal the code hands to
+ * CustomText to that language's word: spaces and tabs around both are
+ * trimmed, both may hold spaces, and a key repeated in a section takes the
+ * word of its last line. A line without '=', with an empty key or word, a
+ * word of more than EXTRA_WORD_MAX bytes, a key past EXTRA_KEYS_MAX or a
+ * line outside any section is skipped and counted. The UTF-8 is decoded to
+ * the Latin-1 byte the table's escapes write, so a word takes the same
+ * AccentToCode path as the table's; a code point above 255, a sign of
+ * Latin-1 (ExtraLatin1) and a byte that is not UTF-8 become '?'. A file
+ * of more than EXTRA_FILE_MAX bytes, one that starts with a UTF-16 byte
+ * order mark or holds a NUL byte, is skipped as a whole and counted. */
+#define EXTRA_FILE_MAX	(64 * 1024)
+#define EXTRA_WORD_MAX	63	// the ammo caption's buffer, specific\input.cpp
+#define EXTRA_KEYS_MAX	512
+
+struct EXTRA_STRING
+{
+	const char* key;
+	const char* word[4];	// French, German, Italian, Spanish; 0: none
+};
+
+// Spaces and tabs off both ends of `s`, in place; the start of what is left.
+static char* ExtraTrim(char* s)
+{
+	char* e = s + strlen(s);
+
+	while (*s == ' ' || *s == '\t')
+		s++;
+
+	while (e > s && (e[-1] == ' ' || e[-1] == '\t'))
+		*--e = 0;
+
+	return s;
+}
+
+// UTF-8 to Latin-1 in place: a code point up to 255 is its byte, anything
+// else - a code point above 255, a byte that starts no UTF-8 sequence, a
+// sequence cut short - is '?'. So is a sign from 0x80 to 0xBF but the
+// inverted ! and ?: as a byte it would read as one of the font's own accent
+// codes 128..173 (game\text.cpp, PrintString), some of which have no glyph.
+static void ExtraLatin1(char* s)
+{
+	const uchar* r = (const uchar*)s;
+	uchar* w = (uchar*)s;
+
+	while (*r)
+	{
+		const ulong c = *r;
+		const long n = c < 0x80 ? 0 : c >= 0xC2 && c <= 0xDF ? 1 :
+			c >= 0xE0 && c <= 0xEF ? 2 : c >= 0xF0 && c <= 0xF4 ? 3 : -1;
+		ulong cp = n > 0 ? c & (0x3F >> n) : c;
+		long i = 1;
+
+		for (; n > 0 && i <= n; i++)
+		{
+			if ((r[i] & 0xC0) != 0x80)
+				break;
+
+			cp = (cp << 6) | (r[i] & 0x3F);
+		}
+
+		if (n < 0 || i <= n)
+		{
+			*w++ = '?';
+			r++;
+			continue;
+		}
+
+		*w++ = cp > 0xFF || (cp >= 0x80 && cp <= 0xBF && cp != 0xA1 &&
+			cp != 0xBF) ? '?' : (uchar)cp;
+		r += n + 1;
+	}
+
+	*w = 0;
+}
+
+/* The words of the file's text, `size` bytes at `text` with a NUL behind
+ * them, cut and decoded in place, into `out` (at most `max` keys). Returns
+ * the number of keys; `words` gets the words per section and `skipped` the
+ * lines skipped and counted. */
+static long ExtraStringsParse(char* text, long size, EXTRA_STRING* out,
+	long max, long* words, long* skipped)
+{
+	static const char* const names[4] = { "French", "German", "Italian",
+		"Spanish" };
+	char* p = text;
+	char* end = text + size;
+	long count = 0;
+	long section = -1;	// -1 before any section, -2 in one skipped
+
+	if (size >= 3 && (uchar)p[0] == 0xEF && (uchar)p[1] == 0xBB &&
+		(uchar)p[2] == 0xBF)
+		p += 3;
+
+	while (p < end)
+	{
+		char* line = p;
+		char* nl = (char*)memchr(p, '\n', end - p);
+
+		if (nl)
+		{
+			*nl = 0;
+			p = nl + 1;
+		}
+		else
+			p = end;
+
+		const long len = (long)strlen(line);
+
+		if (len && line[len - 1] == '\r')
+			line[len - 1] = 0;
+
+		line = ExtraTrim(line);
+
+		if (!*line || *line == '#')
+			continue;
+
+		const long l = (long)strlen(line);
+
+		if (*line == '[' && line[l - 1] == ']')
+		{
+			line[l - 1] = 0;
+
+			const char* name = ExtraTrim(line + 1);
+
+			section = -2;
+
+			for (long i = 0; i < 4; i++)
+				if (!_stricmp(name, names[i]))
+					section = i;
+
+			continue;
+		}
+
+		if (section == -2)
+			continue;
+
+		char* eq = strchr(line, '=');
+
+		if (section < 0 || !eq)
+		{
+			(*skipped)++;
+			continue;
+		}
+
+		*eq = 0;
+
+		char* key = ExtraTrim(line);
+		char* word = ExtraTrim(eq + 1);
+
+		ExtraLatin1(key);
+		ExtraLatin1(word);
+
+		if (!*key || !*word || strlen(word) > EXTRA_WORD_MAX)
+		{
+			(*skipped)++;
+			continue;
+		}
+
+		long i = 0;
+
+		while (i < count && strcmp(out[i].key, key))
+			i++;
+
+		if (i == count)
+		{
+			if (count == max)
+			{
+				(*skipped)++;
+				continue;
+			}
+
+			memset(&out[count], 0, sizeof(out[count]));
+			out[count++].key = key;
+		}
+
+		if (!out[i].word[section])
+			words[section]++;
+
+		out[i].word[section] = word;
+	}
+
+	return count;
+}
+
+static char* extra_text;	// the file's text, kept for the run
+static EXTRA_STRING extra_strings[EXTRA_KEYS_MAX];
+static long extra_count;
+
+/* Read extrastrings.txt once, at start (LoadGameflow): it is opened by its
+ * bare name, as LoadFile opens SCRIPT.DAT, so the game folder's copy is the
+ * one read. Its words stay for the run; the Language row picks among them
+ * through CustomText as it picks the table's columns. One line in the -log
+ * file says what was read; found=0 when there is no file. */
+static void LoadExtraStrings()
+{
+	FILE* f = fopen("extrastrings.txt", "rb");
+	const long found = f ? 1 : 0;
+	long words[4] = { 0, 0, 0, 0 };
+	long skipped = 0;
+	long rejected = 0;
+
+	extra_count = 0;
+
+	if (f)
+	{
+		long size = -1;
+
+		if (!fseek(f, 0, SEEK_END))
+			size = ftell(f);
+
+		fseek(f, 0, SEEK_SET);
+
+		if (size < 0 || size > EXTRA_FILE_MAX)
+			rejected = 1;
+		else
+		{
+			extra_text = (char*)malloc(size + 1);
+
+			if (!extra_text || (long)fread(extra_text, 1, size, f) != size ||
+				memchr(extra_text, 0, size) || (size >= 2 &&
+				(((uchar)extra_text[0] == 0xFF && (uchar)extra_text[1] == 0xFE)
+				|| ((uchar)extra_text[0] == 0xFE &&
+				(uchar)extra_text[1] == 0xFF))))
+			{
+				free(extra_text);
+				extra_text = 0;
+				rejected = 1;
+			}
+			else
+			{
+				extra_text[size] = 0;
+				extra_count = ExtraStringsParse(extra_text, size,
+					extra_strings, EXTRA_KEYS_MAX, words, &skipped);
+			}
+		}
+
+		fclose(f);
+	}
+
+	Log("STRINGS file=extrastrings.txt found=%ld keys=%ld french=%ld "
+		"german=%ld italian=%ld spanish=%ld skipped=%ld rejected=%ld",
+		found, extra_count, words[0], words[1], words[2], words[3],
+		skipped, rejected);
+}
+
+// The file's word for `engl` in language column `column` (0 French, 1
+// German, 2 Italian, 3 Spanish), or 0 when it has none.
+static const char* ExtraStringFor(const char* engl, long column)
+{
+	for (long i = 0; i < extra_count; i++)
+		if (!strcmp(extra_strings[i].key, engl))
+			return extra_strings[i].word[column];
+
+	return 0;
+}
+
 // The project's own words - menu rows and values, the F4 outfit window, the
 // Credits screen's headings, the pad's names, the F12 notice - have no
 // string ID in the language wad, so each gets its own row in the table
@@ -1329,7 +1596,7 @@ const char* LanguageName(long idx)
 // literal that is the same in every language ("PSX", "TR4", "TR5",
 // "Gamma", "HD / SD", a file's or a button's name) has no row, and the
 // function returns it as it is when nothing matches. A word of
-// extrastrings.txt goes before the table's (LoadExtraStrings below).
+// extrastrings.txt goes before the table's (LoadExtraStrings above).
 // English, US, Japanese and Dutch read the English literal.
 //
 // Only characters the game font can draw without escape codes (ASCII) are
@@ -1686,8 +1953,14 @@ const char* CustomText(const char* engl)
 		column = 4;
 		break;
 	default:
-		return engl;	// English and US
+		return engl;	// English, US, Japanese and Dutch
 	}
+
+	// extrastrings.txt first, then the table, then the literal.
+	const char* word = ExtraStringFor(engl, column - 1);
+
+	if (word)
+		return word;
 
 	for (long i = 0; i < (long)(sizeof(table) / sizeof(table[0])); i++)
 		if (!strcmp(engl, table[i][0]))
@@ -1850,6 +2123,10 @@ void LoadGameflow()
 
 	PrepareLanguageBuffer(d);
 	Gameflow->Language = l;
+
+	// The project's words of extrastrings.txt, once for the run, beside the
+	// language setup and before the title.
+	LoadExtraStrings();
 
 	// Vanilla has slot == identity; the loop below overwrites whatever the
 	// SCRIPT.DAT distributed differently.

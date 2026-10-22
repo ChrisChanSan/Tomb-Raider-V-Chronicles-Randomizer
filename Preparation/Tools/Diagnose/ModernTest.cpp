@@ -13321,6 +13321,170 @@ static void caption_columns()
 		free(files[f]);
 }
 
+/* extrastrings.txt (game\gameflow.cpp, LoadExtraStrings): the shipped copy,
+ * Preparation\extrastrings.txt, holds every key of CustomText's table in
+ * each of its four sections with the table's own word and no key the table
+ * lacks, so with the file present every word is the table's; and the
+ * engine reads it once at start, before the table and after the language
+ * switch, so English, US, Japanese and Dutch keep the literal. The parser
+ * itself is not linked here: it is checked against sample buffers by a
+ * harness that compiles its own text (the record names it). */
+static void extra_strings()
+{
+	char* flow = hd_switch_text("../../game/gameflow.cpp");
+	char* file = hd_switch_text("../../../../Preparation/extrastrings.txt");
+	std::vector<caption_cells> rows;
+	char what[200];
+
+	ok(flow && file && caption_table(flow, rows) && rows.size() == 134,
+		"extra strings: the table and the shipped file are read",
+		(long)rows.size(), 134);
+
+	// The shipped file, read line by line: UTF-8 without a byte order mark
+	// (the shipped copy holds only Latin-1 letters, in two bytes each), CRLF.
+	static const char* const names[4] = { "[French]", "[German]",
+		"[Italian]", "[Spanish]" };
+	int section = -1;
+	int taken[4] = { 0, 0, 0, 0 };
+	int wrong = 0, crlf = 0, lf = 0, other = 0;
+
+	for (char* p = file; p && *p;)
+	{
+		char* e = strchr(p, '\n');
+		char line[256];
+		size_t n = e ? (size_t)(e - p) : strlen(p);
+
+		lf++;
+
+		if (n && p[n - 1] == '\r')
+		{
+			n--;
+			crlf++;
+		}
+
+		if (n >= sizeof(line))
+			n = sizeof(line) - 1;
+
+		memcpy(line, p, n);
+		line[n] = 0;
+		p = e ? e + 1 : p + strlen(p);
+
+		if (!line[0] || line[0] == '#')
+			continue;
+
+		if (line[0] == '[')
+		{
+			section = -1;
+
+			for (int i = 0; i < 4; i++)
+				if (!strcmp(line, names[i]))
+					section = i;
+
+			other += section < 0;
+			continue;
+		}
+
+		char* eq = strchr(line, '=');
+
+		if (section < 0 || !eq)
+		{
+			other++;
+			continue;
+		}
+
+		*eq = 0;
+
+		// The word's UTF-8 as the Latin-1 bytes the table holds.
+		char word[128];
+		int k = 0;
+
+		for (const unsigned char* q = (const unsigned char*)eq + 1; *q &&
+			k < 127; q++)
+		{
+			if ((*q == 0xC2 || *q == 0xC3) && (q[1] & 0xC0) == 0x80)
+			{
+				word[k++] = (char)(((*q & 0x03) << 6) | (q[1] & 0x3F));
+				q++;
+			}
+			else if (*q < 0x80)
+				word[k++] = (char)*q;
+			else
+				wrong++;
+		}
+
+		word[k] = 0;
+
+		const caption_cells* r = 0;
+
+		for (const caption_cells& x : rows)
+			if (!strcmp(x.cell[0], line))
+				r = &x;
+
+		if (!r || strcmp(r->cell[section + 1], word))
+		{
+			wrong++;
+			snprintf(what, sizeof(what), "extra strings: %s \"%s\" is the "
+				"table's word", names[section], line);
+			ok(false, what, 0, 1);
+		}
+		else
+			taken[section]++;
+	}
+
+	for (int i = 0; i < 4; i++)
+	{
+		snprintf(what, sizeof(what), "extra strings: %s holds every key of "
+			"the table with its word", names[i]);
+		ok(taken[i] == (int)rows.size() && taken[i] > 0, what, taken[i],
+			(long)rows.size());
+	}
+
+	ok(wrong == 0 && other == 0 && file && (unsigned char)file[0] != 0xEF,
+		"extra strings: no other line, no key the table lacks, no byte order "
+		"mark", wrong * 1000 + other, 0);
+	ok(crlf == lf && lf > 0, "extra strings: the shipped file is CRLF", crlf,
+		lf);
+
+	// The loader: once, at start, beside the language setup.
+	const char* load = flow ? strstr(flow, "void LoadGameflow()") : 0;
+	const char* lang = load ? strstr(load, "Gameflow->Language = l;") : 0;
+	const char* call = lang ? strstr(lang, "LoadExtraStrings();") : 0;
+	const char* next = load ? strstr(load + 1, "\n}") : 0;
+
+	ok(hd_switch_count(flow, "LoadExtraStrings();") == 1 && call && call <
+		next, "extra strings: read once, in LoadGameflow after the language",
+		hd_switch_count(flow, "LoadExtraStrings();"), 1);
+	ok(hd_switch_count(flow, "fopen(\"extrastrings.txt\", \"rb\")") == 1,
+		"extra strings: opened by its bare name, as SCRIPT.DAT is",
+		hd_switch_count(flow, "fopen(\"extrastrings.txt\", \"rb\")"), 1);
+	ok(hd_switch_count(flow, "Log(\"STRINGS file=extrastrings.txt "
+		"found=%ld keys=%ld french=%ld \"\r\n\t\t\"german=%ld italian=%ld "
+		"spanish=%ld skipped=%ld rejected=%ld\"") == 1, "extra strings: one "
+		"log line at the load", 0, 1);
+	ok(hd_switch_count(flow, "#define EXTRA_FILE_MAX\t(64 * 1024)") == 1 &&
+		hd_switch_count(flow, "#define EXTRA_WORD_MAX\t63") == 1,
+		"extra strings: 64 KB at most, a word within the caption's 63 bytes",
+		0, 1);
+
+	// CustomText: English, US, Japanese and Dutch return the literal first;
+	// then the file's word, then the table's, then the literal.
+	const char* ct = flow ? strstr(flow, "const char* CustomText(const char* "
+		"engl)") : 0;
+	const char* lit = ct ? strstr(ct, "\treturn engl;\t// English, US, "
+		"Japanese and Dutch") : 0;
+	const char* file_first = lit ? strstr(lit, "ExtraStringFor(engl, column "
+		"- 1);") : 0;
+	const char* table = file_first ? strstr(file_first, "for (long i = 0; "
+		"i < (long)(sizeof(table) / sizeof(table[0])); i++)") : 0;
+
+	ok(lit && file_first && table, "extra strings: CustomText asks the file "
+		"before the table, only for the four languages", !!lit + !!file_first
+		+ !!table, 3);
+
+	free(flow);
+	free(file);
+}
+
 static long load_keep_at(const char* text, const char* from, const char* what)
 {
 	const char* start = text ? strstr(text, from) : 0;
@@ -29040,6 +29204,7 @@ int main()
 	hd_build_gate();
 	caption_rows();
 	caption_columns();
+	extra_strings();
 	load_keep();
 	load_mode();
 	load_brake();

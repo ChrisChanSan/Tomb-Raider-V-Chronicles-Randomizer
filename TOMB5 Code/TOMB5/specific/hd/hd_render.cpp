@@ -414,6 +414,7 @@ namespace
 	bool g_no_blend = false;	// see HDRenderBlendOverride
 	bool g_no_clear = false;	// see HDRenderClearOverride
 	bool g_no_upright = false;	// see HDRenderUprightOverride
+	bool g_no_sheets = false;	// see HDRenderWaterSheetsOverride
 
 	inline float MaterialBlend(const trf::remaster::TrgPart& part, int pass)
 	{
@@ -5516,6 +5517,11 @@ void HDRenderClearOverride(int off)
 void HDRenderUprightOverride(int off)
 {
 	g_no_upright = off ? true : false;
+}
+
+void HDRenderWaterSheetsOverride(int off)
+{
+	g_no_sheets = off ? true : false;
 }
 
 void HDRenderStackOverride(int keep)
@@ -16202,8 +16208,10 @@ void HDRenderWaterCorners(int clicks, unsigned short type,
 }
 
 void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
-	const char* stem, int sheets)
+	const char* stem)
 {
+	const int sheets = g_no_sheets ? 0 : 1;
+
 	release_water_sheets();
 
 	if (!rooms || count <= 0 || g_groups.empty())
@@ -25226,7 +25234,7 @@ const char* HDRenderWaterSectionName(int section)
  * of the ripple row's source its floats drift away from, none without one
  * (spring; HDRenderWaterBody::spring - the line is written before the
  * springs of hd_spring.cpp mark theirs, which their SPRINGLOG lines name). */
-bool HDRenderWaterLogLine(int body, const char* stem, int option, char* out,
+bool HDRenderWaterLogLine(int body, const char* stem, char* out,
 	size_t size)
 {
 	if (!out || !size)
@@ -25253,7 +25261,7 @@ bool HDRenderWaterLogLine(int body, const char* stem, int option, char* out,
 			"clip=%d falls=%d lowered=%d dropped=%d river=%d curtains=%d "
 			"segs=%d old=%d under=%d under_fallback=%d under_deep=%d "
 			"night=%d art_kept=%d",
-			stem ? stem : "?", option,
+			stem ? stem : "?", g_no_sheets ? 0 : 1,
 			HDRenderWaterSectionName(g_wlevel.section), g_wlevel.sectors,
 			g_wlevel.sheets, g_wlevel.built, g_wlevel.bodies,
 			cls[HD_WATER_BASIN], cls[HD_WATER_CHANNEL], cls[HD_WATER_SEA],

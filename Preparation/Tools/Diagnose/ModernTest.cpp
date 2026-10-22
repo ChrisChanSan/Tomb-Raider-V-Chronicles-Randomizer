@@ -11263,15 +11263,40 @@ static void hd_switch_wiring()
 	n = hd_switch_count(life, "if (!life_on() || !HDDrawn())");
 	ok(n == 1, "hd switch wiring: the life's frame asks HDDrawn", n, 1);
 
-	n = hd_switch_count(life,
-		"return tomb5.hd_water && HDRenderWaterSheetsBuilt();");
+	n = hd_switch_count(life, "return HDRenderWaterSheetsBuilt();");
 	ok(n == 1, "hd switch wiring: the life built at the load does not", n,
 		1);
+
+	/* The water sheets come with the HD look, with no option of their own:
+	 * the hooks of the ripple, the splash, the spray, the falls and the
+	 * tank ask the draw (HDLevelActive) and the motion and nothing else;
+	 * the classic water under the HD look is the diagnostic tool's
+	 * override, off by default and never set by the engine. */
+	char* render = hd_switch_text("hd_render.cpp");
+
+	n = hd_switch_count(level, "tomb5.hd_water") +
+		hd_switch_count(life, "tomb5.hd_water");
+	ok(n == 0, "hd switch wiring: no water gate reads an option", n, 0);
+
+	n = hd_switch_count(level, "return HDLevelActive() && tomb5.hd_motion &&") +
+		hd_switch_count(level, "|| !HDLevelActive() || !tomb5.hd_motion)") +
+		hd_switch_count(level, "	if (!HDLevelActive() || !tomb5.hd_motion)");
+	ok(n == 5, "hd switch wiring: the five water hooks ask the draw and the "
+		"motion", n, 5);
+
+	n = hd_switch_count(render, "bool g_no_sheets = false;");
+	ok(n == 1, "hd switch wiring: the classic water override is off by "
+		"default", n, 1);
+
+	n = hd_switch_count(level, "HDRenderWaterSheetsOverride") +
+		hd_switch_count(life, "HDRenderWaterSheetsOverride");
+	ok(n == 0, "hd switch wiring: and the engine never sets it", n, 0);
 
 	free(level);
 	free(object);
 	free(lara);
 	free(life);
+	free(render);
 }
 
 /* A number #defined in an engine text, or -1: the token after the name. */
@@ -23914,7 +23939,7 @@ static void water_sea()
 	ok(HDWaterSeaOver(1, 1, 1, 2065.0f, none),
 		"sea sheet: an eye under the stand-in's surface takes it", 0, 0);
 	ok(!HDWaterSeaOver(0, 1, 1, 2065.0f, none),
-		"sea sheet: ...not with the sheets off (hd_water 0)", 0, 0);
+		"sea sheet: ...not with the sheets off (none built)", 0, 0);
 	ok(!HDWaterSeaOver(1, 0, 1, 2065.0f, none),
 		"sea sheet: ...not without the deep look (every other level)", 0, 0);
 	ok(!HDWaterSeaOver(1, 1, 0, 2065.0f, none),

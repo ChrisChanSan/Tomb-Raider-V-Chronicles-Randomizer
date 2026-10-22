@@ -2616,7 +2616,7 @@ static void BuildWaterSheets()
 	BuildWaterFilms();
 	// The sheets are part of the HD look: every HD build lays them.
 	HDRenderSetWaterSheets(rooms.empty() ? 0 : &rooms[0], (int)rooms.size(),
-		WaterSection(), g_stem, 1);
+		WaterSection(), g_stem);
 	BuildWaterFalls();
 	AppendWaterCardPages();
 	MoveWaterfallMist();
@@ -2694,11 +2694,11 @@ static void BuildWaterSheets()
 
 	char line[512];
 
-	HDRenderWaterLogLine(-1, g_stem, 1, line, sizeof(line));
+	HDRenderWaterLogLine(-1, g_stem, line, sizeof(line));
 	Log("%s", line);
 
 	for (int b = 0; b < HDRenderWaterBodies(); b++)
-		if (HDRenderWaterLogLine(b, g_stem, 0, line, sizeof(line)))
+		if (HDRenderWaterLogLine(b, g_stem, line, sizeof(line)))
 			Log("%s", line);
 
 	for (int f = 0; HDRenderWaterFallLine(f, g_stem, line, sizeof(line)); f++)

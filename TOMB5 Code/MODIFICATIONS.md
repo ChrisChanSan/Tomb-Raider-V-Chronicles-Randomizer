@@ -1914,7 +1914,7 @@ neighbouring rows. Since 2026-10-15 the row is the draw and not the build: the b
 the row and F12 switch the level on screen at once (chapter 2.6, The HD/SD switch, Built
 when found). The settings that steer the path stand, each with its default, in the
 manual's table under **HD from the Remaster**: `hd_build`, `hd_enable`, `hd_objects`,
-`hd_motion`, `hd_reflect`, `hd_softbody`, `hd_water`, `hd_springs`, `hd_reach`, `hd_air`,
+`hd_motion`, `hd_reflect`, `hd_softbody`, `hd_springs`, `hd_reach`, `hd_air`,
 `hd_threads`, `hd_texture_budget_mb`, `hd_install`, `hd_install_tr3`,
 `hd_texture_format`, `hd_outfit` and the `hd_footsteps` subkey. The four Tomb
 Raider III enemies this project ports into TR5 can be drawn from the *other* bundle:
@@ -32309,6 +32309,105 @@ item's step and its checks), `aea7137f` (this record), `fd3d460b` (the head word
 width rule to every screen width), `4364b4ed` (the width figures corrected, the legacy
 page names dropped) and the record's last corrections.
 
+### The water sheets are part of the HD look; their row goes (#236)
+2026-10-22
+
+**What.** The options row *HD water* is gone from the Graphics page, and with it the
+option field `tomb5.hd_water`, its registry value `hd_water` (the first run's default,
+the read and the save), the row's two value functions, its caption row in `CustomText`'s
+table and the level key's water field. The water sheets are drawn whenever the HD look is
+drawn: every HD build lays them, and the F12 switch to the classic look still shows the
+classic water, as it did. A `hd_water` value an older build left in the registry is
+neither read nor written; a player who had switched the row off gets the sheets back.
+The other rows (*HD build*, *HD textures*, *Body physics*, *Reflections*, the fog and the
+rest) are unchanged. The Graphics page holds fifteen rows now, paged eight and seven.
+
+**Why.** The play test: "Oh yes, the HD water switch can go now. It is good enough now."
+
+**Measured.** Every line that read or wrote the value, at `fa6b57e1` (the name not
+followed by a letter, a digit, `_` or `.`; `hd_water.txt`, `hd_water_under.h` and
+`hd_water_look` are other names and stay), and what each became:
+- `global/types.h`: the field and its comment - removed.
+- `tomb5/tomb5.cpp` (7 lines): the first run's write of 1, the read with 1 for an absent
+  value, the save - removed. The registry is not cleaned: a value left there is ignored.
+- `game/menu_frame.cpp`: `MenuValHdWater`, `MenuStepHdWater` and the table line under
+  *Body physics* - removed; two comments that compared other rows with it reworded; the
+  table's comment says fifteen rows, eight and seven. `game/gameflow.cpp`: the caption
+  row `"HD water"` / *HD-Wasser* and its comment - removed; the Reflections row's comment
+  names *Body physics* as the row above it.
+- `specific/hd/hd_level.cpp` (22 lines, 9 of them code). Five hooks asked
+  `HDLevelActive()` (the level built and drawn HD, `g_level_active && HDDrawn()`), the
+  value and `tomb5.hd_motion`; each now asks `HDLevelActive()` and `tomb5.hd_motion`:
+  `HDWaterRippleOnSheet`, `HDWaterFallsTick`, `HDWaterSplash`, `HDWaterSpray`,
+  `HDWaterTank`. `AppendWaterCardPages` asked the value and `HDRenderWaterSheetsBuilt()`
+  and asks what was built alone. The build handed `tomb5.hd_water ? 1 : 0` to
+  `HDRenderSetWaterSheets` and now hands nothing: the renderer lays the sheets unless the
+  tool's override asks for the classic water. The `WATERLOG` level line's `option=` field
+  came from the value; it stays, now printed by the renderer from the override (1 in the
+  game, as at the default before), because the record's WATERLOG sweeps compare the
+  engine's and RoomProbe's lines whole. The level key's `k.water` - removed. Thirteen
+  comments reworded to "without the sheets" or "a level that built none".
+- `specific/hd/hd_life.cpp`: `life_on` asked the value and `HDRenderWaterSheetsBuilt()`,
+  now the latter alone. `specific/hd/hd_spring.cpp`: `HDSpringLevelBegin` the same; the
+  include of `tomb5/tomb5.h`, there for the value alone, and a comment.
+- `specific/hd/hd_levelkey.h`: the key's `water` field and its comparison (refusal
+  `hd_water`) - removed. The key lives in memory only: it decides whether a savegame
+  loaded inside a level keeps the HD data built for it, and with the sheets in every HD
+  build the field could no longer differ between two keys. Nothing is written to disk.
+- Comments only: `hd_render.cpp` 9, `hd_render.h` 3, `hd_level.h` 3, `hd_laradraw.cpp` 2,
+  `hd_life.h` 1, `hd_water_under.h` 1, and the room shader's flood comment
+  (`hd_shader/hd_room.hlsl`): its 17 `.inc` files differ in their stamp line alone.
+- None of these lines carried `g_level_active`, `HDEnabled()` or `HDDrawn()`, and none
+  of those gates changed.
+- Tools: RoomProbe's copy of the key (1 line), its `-hdwater` usage (1 line naming the
+  value; the argument's other mentions stay); MenuTest's water row family (7 lines);
+  ModernTest's key row, the life's gate and a check label (3 lines).
+
+Value lines per file, before and after: engine code and comments 59 in 14 files to 0;
+tools 11 to 0; the manuals 15 to 1 (the sentence that says an old value is ignored); this
+record 151 to 150 before this entry and the ledger 6 to 6, all history but the
+chapter's list of settings.
+
+**The rule.** The water's gates ask exactly the question they asked beside the value:
+the draw (`HDLevelActive()`) and the motion for the five hooks, what was built
+(`HDRenderWaterSheetsBuilt()`) for the cards' pages, the springs and the life. The
+classic water under the HD look is no state of the game any more; the diagnostic tool
+keeps it for the water entries' parity pictures through
+`HDRenderWaterSheetsOverride(int off)`, an override of the tools' kind beside
+`HDRenderShoreOverride` and the glow's: off by default, never called by the engine, no
+option and no registry key. `HDRenderSetWaterSheets` lost its `sheets` parameter and
+`HDRenderWaterLogLine` its `option`; RoomProbe's `-hdwater 0|1` keeps its name and sets
+the override before the build.
+
+**Decisions.** The registry value is ignored rather than deleted: the engine writes
+nothing to a player's registry for it. The log field stays (above). The suites search for
+the removed name in two halves, so that a search of the tree finds it only in this
+record, the ledger and the manual's one sentence.
+
+**Checked.** RoomProbe of `fa6b57e1` against the head's, every picture md5-compared:
+the six classic views (`-classicroom N -classiconly`, the HD look off) 6 of 6
+identical; the fifteen parity cameras drawn classic in an HD build (`-hddrawn 0`, the
+F12 look) with `-hdwater 1` and with `-hdwater 0` 15 of 15 each; the six HD views at
+`-hdwater 1` 6 of 6; the census eyes (room 0, `-sky`) at `-hdwater 1` and `0` 15 of 15
+each; the fifteen parity cameras at `-hdwater 1` and `0` 15 of 15 each; the WATERLOG
+sweep of the fifteen levels (`-nodraw`) 268 of 268 lines at `-hdwater 1` and 175 of 175
+at `-hdwater 0`. So the defaults draw what they drew, the classic look is untouched, and
+the tool's override draws what `-hdwater 0` drew. The only state that goes is the base
+with `hd_water` 0 under the HD look. The suites, at the base and at the head: ModernTest
+16,522 to 16,525 (the key's water row out, four wiring checks in: no water gate reads an
+option, the five hooks ask the draw and the motion, the override off by default and set
+by no engine file), MenuTest 44,938 to 44,931 (the water row family 13 to 7 checks, now
+of the row's absence; the Graphics table 16 to 15 rows, one order check fewer; the paging
+measured: two pages, eight and seven, the second starting at *Mono screen style*),
+InterpTest 754, LipsTest 299 with the lips' objects and 272 without; 0 failed. All nine
+tool builds exit 0. Between the first and the third commit MenuTest's row checks and
+one ModernTest check fail by design; each commit builds.
+
+**Left.** The game is not run; the play test sees the page and the water.
+
+**Commits.** `e2db9c0e` (the row, the value and the gates), `1fb5a32e` (the tool's
+override and the checks), `be295ecb` (the removed name in two halves) and this record.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -32563,3 +32662,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #232 | Lara's footstep follows the draw and her outfit, and nobody else's does (#232) |
 | #233 | The glow's normal, re-derived (#233) |
 | #234 | The captions in German, and Lara's weapon item steps as she does (#234) |
+| #236 | The water sheets are part of the HD look; their row goes (#236) |

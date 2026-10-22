@@ -3120,9 +3120,11 @@ static void graphics_build_row()
 		// The notice when the key is pressed with the gate off.
 		check(strstr(sw, "if (what == HD_SWITCH_NOTHING && !tomb5.hd_build)")
 			!= 0, 1, "build row: the key's notice is for the gate off");
-		check(strstr(sw, "strcpy(ammo_change_buf, \"HD is off\");") != 0, 1,
-			"build row: it says HD is off");
-		check((int)sizeof("HD is off") <= 12, 1,
+		check(strstr(sw, "strcpy(ammo_change_buf, "
+			"CustomText(\"HD is off\"));") != 0, 1,
+			"build row: it says HD is off, through CustomText");
+		check((int)sizeof("HD is off") <= 12 &&
+			(int)sizeof("HD ist aus") <= 12, 1,
 			"build row: and fits the caption's twelve bytes");
 	}
 

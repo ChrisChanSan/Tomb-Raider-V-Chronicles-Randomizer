@@ -4570,6 +4570,19 @@ carries the tables.
 476. **RoomProbe `-glowface shipped|file|face`; ModernTest's `glow_normal`**
     (`Preparation/Tools/Diagnose/`) - the normal forced on every glow part before
     the level is built, for the A/B, and 8 checks of `HDGlowFaceNormal`. OWN.
+477. **Lara's weapon item steps as she does** (`hd_feet.h`, `HDFeetCallerOf`,
+    `HDFeetStepItem`; `hd_feet.cpp`, `HDFeetStepInfo`; `game/control.cpp`,
+    `AnimateItem`) - the item at `lara.weapon_item`, asked by its index in `items[]`
+    and never by its object number, is Lara for the footstep's choice; and 117 checks
+    in ModernTest's `hd_feet`. OWN; DATA: the emitter census of #232 (SHOTGUN_ANIM
+    plays id 0 in three randomized levels and in no classic one), and the footstep
+    harness, base against head, over six levels with and without a footstep mod.
+478. **The German words of the project's captions** (`game/gameflow.cpp`,
+    `CustomText`'s table; `specific/hd/hd_outfitmenu.cpp`;
+    `specific/hd/hd_switch.cpp`; ModernTest's `caption_rows`) - 23 rows: *HD-Aufbau*,
+    *Spiegelungen*, the F4 window's words, the wardrobe's phrases as the window
+    shows them, *HD ist aus*; widths on the font's own glyph table. OWN; DATA: the
+    census of every caption, value and hint the options pages and the F4 window draw.
 
 ## Credited, but not contained here
 

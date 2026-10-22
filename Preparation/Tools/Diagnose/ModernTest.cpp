@@ -10746,6 +10746,77 @@ static void hd_feet()
 			"feet: F12 - the guard keeps the level's own", 0, 0);
 	}
 
+	/* Her weapon item is hers (HDFeetCallerOf): the long gun she holds is an
+	 * item of its own, here item 5 with lara.weapon_item 5, named by its
+	 * object number (SHOTGUN_ANIM 3, CROSSBOW_ANIM 4, HK_ANIM 5). Its step
+	 * is chosen exactly as Lara's own; an item of the same object number at
+	 * another index, an enemy, and anyone while no weapon item is out keep
+	 * the ordinary chain. The whole table again, through the caller as
+	 * SoundEffect now hands it over. */
+	{
+		struct held
+		{
+			const char* name;
+			long object;
+			long item;
+			long weapon;
+			bool hers;
+		};
+		const held held_items[] = {
+			{ "her shotgun", 3, 5, 5, true },
+			{ "her crossbow", 4, 5, 5, true },
+			{ "her HK", 5, 5, 5, true },
+			{ "a shotgun not hers", 3, 7, 5, false },
+			{ "the guard beside her", 37, 9, 5, false },
+			{ "a shotgun, none out", 3, 5, -1, false },
+			{ "no item at all", 3, -1, -1, false },
+		};
+
+		for (const held& h : held_items)
+			for (int hd = 0; hd < 2; hd++)
+				for (int bare = 0; bare < 2; bare++)
+					for (int mod = 0; mod < 2; mod++)
+						for (int sfx = 0; sfx <= 4; sfx += 4)
+						{
+							const long who = HDFeetCallerOf(h.object, 0,
+								h.item, h.weapon);
+							const int got = HDFeetPick(sfx, sfx, who, 0,
+								hd != 0, bare != 0, mod ? withMod : noMod);
+							const int want = feet_expect(sfx, sfx,
+								h.hers ? 0 : h.object, hd != 0, bare != 0,
+								mod != 0);
+
+							snprintf(what, sizeof(what),
+								"feet: %s id %d %s %s %s", h.name, sfx,
+								hd ? "HD" : "SD", bare ? "bare" : "boots",
+								mod ? "mod" : "plain");
+							ok(got == want, what, got, want);
+						}
+
+		// The four cases by name.
+		const long hers = HDFeetCallerOf(3, 0, 5, 5);
+		const long other = HDFeetCallerOf(3, 0, 7, 5);
+
+		ok(HDFeetPick(0, 0, hers, 0, true, true, withMod) == 207,
+			"feet: her weapon item, HD and bare - the bare set",
+			HDFeetPick(0, 0, hers, 0, true, true, withMod), 207);
+		ok(HDFeetPick(0, 0, hers, 0, true, false, withMod) == 209,
+			"feet: her weapon item, HD in boots over a mod - unmodded boots",
+			HDFeetPick(0, 0, hers, 0, true, false, withMod), 209);
+		ok(HDFeetPick(0, 0, other, 0, true, true, withMod) == 0,
+			"feet: a weapon item not hers - the ordinary chain",
+			HDFeetPick(0, 0, other, 0, true, true, withMod), 0);
+		ok(HDFeetPick(0, 0, hers, 0, false, true, withMod) == 0,
+			"feet: her weapon item drawn classic - the ordinary chain",
+			HDFeetPick(0, 0, hers, 0, false, true, withMod), 0);
+
+		// The index decides, never the object number.
+		ok(HDFeetCallerOf(3, 0, 7, 5) == 3 && HDFeetCallerOf(37, 0, 5, 5)
+			== 0 && HDFeetCallerOf(0, 0, -1, 5) == 0 &&
+			HDFeetCallerOf(-1, 0, -1, -1) == -1,
+			"feet: the caller is asked by the item's index", 0, 0);
+	}
+
 	/* The floor layer (ids 288..294, Lara's alone): quiet only while she is
 	 * drawn HD, barefoot, on a bare set - all eight cases. */
 	for (int hd = 0; hd < 2; hd++)
@@ -11934,6 +12005,259 @@ static void hd_build_gate()
 	free(outfit);
 	free(file);
 	free(opts);
+}
+
+/* The words the project draws, in German (game\gameflow.cpp, CustomText's
+ * table), read out of the sources: every literal the F4 outfit window hands
+ * to CustomText has its row, the phrases of its head and shine rows have
+ * theirs but for a file's and a key's name, the F12 notice goes through it,
+ * and each German word stands in its row and fits its column on the game
+ * font's own widths (game\chardef.inc, added up as GetStringLength does). A
+ * label is held to "Kamerageschwindigkeit", the widest label of the table;
+ * a value to the value column, at least 0.375 of the screen's width W; a
+ * centred line to the screen. InitFont scales a glyph to w * (W - 1) / 512
+ * and a space is W / 80, so a string is never wider than W / 2560 times
+ * caption_share's number: a value fits at every W when that is at most
+ * 960, a line when it is at most 2560. */
+struct caption_glyph
+{
+	float u, v;
+	short w, h, y;
+	unsigned char top, bottom;
+};
+
+static const caption_glyph caption_font[106] =
+{
+#include "../../../TOMB5 Code/TOMB5/game/chardef.inc"
+};
+
+// Five per glyph unit (W / 512) and 32 per space (W / 80), in W / 2560.
+static long caption_share(const char* s)
+{
+	long n = 0;
+
+	for (; *s; s++)
+	{
+		int c = (unsigned char)*s;
+
+		// An umlaut is drawn as its base letter with the accent over it.
+		if (c == 0xE4 || c == 0xF6 || c == 0xFC)
+			c = c == 0xE4 ? 'a' : c == 0xF6 ? 'o' : 'u';
+		else if (c == 0xC4 || c == 0xD6 || c == 0xDC)
+			c = c == 0xC4 ? 'A' : c == 0xD6 ? 'O' : 'U';
+
+		if (c == ' ')
+			n += 32;
+		else if (c < ' ')
+			n += 5 * caption_font[c + 74].w;
+		else if (c <= '~')
+			n += 5 * caption_font[c - '!'].w;
+		else
+			return 100000;	// a byte the font has no glyph for
+	}
+
+	return n;
+}
+
+// The row of `key` as text, from its brace to the brace that closes it.
+static bool caption_row(const char* flow, const char* key, char* row,
+	size_t size)
+{
+	char at[96];
+
+	snprintf(at, sizeof(at), "{ \"%s\",", key);
+
+	const char* p = flow ? strstr(flow, at) : 0;
+	const char* e = p ? strstr(p, "},") : 0;
+
+	if (!e || hd_switch_count(flow, at) != 1 || (size_t)(e - p) >= size)
+		return false;
+
+	memcpy(row, p, (size_t)(e - p));
+	row[e - p] = 0;
+	return true;
+}
+
+static void caption_rows()
+{
+	char* flow = hd_switch_text("../../game/gameflow.cpp");
+	char* outfit = hd_switch_text("hd_outfitmenu.cpp");
+	char* robe = hd_switch_text("hd_wardrobe.cpp");
+	char* sw = hd_switch_text("hd_switch.cpp");
+	char row[512];
+	char what[160];
+	int n;
+
+	ok(flow && outfit && robe && sw, "captions: the four files are read",
+		!!flow + !!outfit + !!robe + !!sw, 4);
+
+	enum { LABEL, VALUE, LINE, NOTICE };
+	struct word
+	{
+		const char* key;
+		const char* source;	// the German column as the table spells it
+		const char* german;	// and as the font draws it
+		int kind;
+	};
+	static const word words[] = {
+		{ "HD build", "\"HD-Aufbau\"", "HD-Aufbau", LABEL },
+		{ "Reflections", "\"Spiegelungen\"", "Spiegelungen", LABEL },
+		{ "Outfit", "\"Outfit\"", "Outfit", LINE },
+		{ "Level facts", "\"Levelvorgabe\"", "Levelvorgabe *", LABEL },
+		{ "the level and the run decide", "\"nach Level und Lauf\"",
+			"nach Level und Lauf", VALUE },
+		{ "Footsteps", "\"Schritte\"", "Schritte", LABEL },
+		{ "Head", "\"Kopf\"", "Kopf", LABEL },
+		{ "Shine", "\"Glanz\"", "Glanz", LABEL },
+		{ "Skin glow", "\"Hautglanz\"", "Hautglanz", LABEL },
+		{ "as the outfit says", "\"laut Outfit\"", "laut Outfit", VALUE },
+		{ "Bare", "\"Barfuss\"", "Barfuss", VALUE },
+		{ "Boots", "\"Stiefel\"", "Stiefel", VALUE },
+		{ "Bare - no second set in this level", "\"Barfuss - fehlt hier\"",
+			"Barfuss - fehlt hier", VALUE },
+		{ "Boots - no second set in this level", "\"Stiefel - fehlt hier\"",
+			"Stiefel - fehlt hier", VALUE },
+		{ "applies at the next level",
+			"\"gilt ab dem n\\xE4\" \"chsten Level\"",
+			"gilt ab dem n\xE4" "chsten Level", LINE },
+		{ "TR5 head", "\"TR5\"", "TR5", VALUE },
+		{ "TR5 hair", "\"mit Zopf\"", "mit Zopf", VALUE },
+		{ "own head", "\"eigener\"", "eigener", VALUE },
+		{ "measured", "\"gemessen\"", "gemessen", VALUE },
+		{ "the table", "\"Tabelle\"", "Tabelle", VALUE },
+		{ "the list", "\"Liste\"", "Liste", VALUE },
+		{ "the default", "\"Standard\"", "Standard", VALUE },
+		{ "HD is off", "\"HD ist aus\"", "HD ist aus", NOTICE },
+	};
+	const long label = caption_share("Kamerageschwindigkeit");
+
+	for (const word& w : words)
+	{
+		const bool have = caption_row(flow, w.key, row, sizeof(row));
+		const long share = caption_share(w.german);
+		const long room = w.kind == LABEL ? label : w.kind == VALUE ? 960 :
+			w.kind == LINE ? 2560 : 0;
+		bool fits;
+
+		snprintf(what, sizeof(what), "captions: \"%s\" has one row, "
+			"German in it", w.key);
+		ok(have && strstr(row, w.source) != 0, what, have, 1);
+
+		if (w.kind == NOTICE)
+			fits = strlen(w.german) <= 11;
+		else
+			fits = share <= room;
+
+		snprintf(what, sizeof(what), "captions: \"%s\" fits its column",
+			w.german);
+		ok(fits, what, share, room);
+	}
+
+	// Every literal the window hands to CustomText has its row.
+	for (const char* p = outfit ? strstr(outfit, "CustomText(") : 0; p;
+		p = strstr(p + 1, "CustomText("))
+	{
+		const char* q = p + 11;
+		int depth = 1;
+
+		for (; *q && depth; q++)
+		{
+			if (*q == '(')
+				depth++;
+			else if (*q == ')')
+				depth--;
+			else if (*q == '"')
+			{
+				const char* end = strchr(q + 1, '"');
+				char lit[96];
+
+				if (!end || end - q - 1 >= (long)sizeof(lit))
+					break;
+
+				memcpy(lit, q + 1, (size_t)(end - q - 1));
+				lit[end - q - 1] = 0;
+				snprintf(what, sizeof(what), "captions: F4's \"%s\" has a "
+					"row", lit);
+				ok(caption_row(flow, lit, row, sizeof(row)), what, 0, 1);
+				q = end;
+			}
+		}
+	}
+
+	// The head and shine phrases: through CustomText at every call, and a
+	// row for each word but the file's name and the key's.
+	n = hd_switch_count(outfit, "HDWardrobeHeadPhrase(");
+	ok(n == 1 && hd_switch_count(outfit, "CustomText(HDWardrobeHeadPhrase(")
+		== n, "captions: the head phrase goes through CustomText", n, 1);
+	n = hd_switch_count(outfit, "HDWardrobeFromWord(");
+	ok(n == 3 && hd_switch_count(outfit, "CustomText(HDWardrobeFromWord(")
+		== n, "captions: the three from-words go through CustomText", n, 3);
+
+	{
+		const char* fns[2] = { "const char* HDWardrobeHeadPhrase(int head)",
+			"const char* HDWardrobeFromWord(int from)" };
+
+		for (const char* fn : fns)
+		{
+			const char* p = robe ? strstr(robe, fn) : 0;
+			const char* end = p ? strstr(p, "\n}") : 0;
+
+			for (const char* r = p ? strstr(p, "return \"") : 0;
+				r && r < end; r = strstr(r + 1, "return \""))
+			{
+				const char* q = r + 8;
+				const char* e = strchr(q, '"');
+				char lit[64];
+
+				if (!e || e - q >= (long)sizeof(lit))
+					break;
+
+				memcpy(lit, q, (size_t)(e - q));
+				lit[e - q] = 0;
+
+				const bool name = !strcmp(lit, "outfit.txt") ||
+					!strcmp(lit, "origin");
+
+				snprintf(what, sizeof(what), "captions: the phrase \"%s\" %s",
+					lit, name ? "is a name, no row" : "has a row");
+				ok(caption_row(flow, lit, row, sizeof(row)) != name, what,
+					name, 0);
+			}
+		}
+	}
+
+	// The widest head value the window can build fits the value column.
+	{
+		const char* heads[3] = { "TR5", "mit Zopf", "eigener" };
+		const char* froms[7] = { "gemessen", "Tabelle", "outfit.txt",
+			"origin", "Liste", "Standard", 0 };
+		long widest = 0;
+
+		for (const char* h : heads)
+			for (int f = 0; froms[f]; f++)
+			{
+				char line[64];
+
+				snprintf(line, sizeof(line), "%s (%s)", h, froms[f]);
+
+				if (caption_share(line) > widest)
+					widest = caption_share(line);
+			}
+
+		ok(widest <= 960,
+			"captions: the widest German head value fits", widest, 960);
+	}
+
+	// The F12 notice: through CustomText, no raw literal left.
+	n = hd_switch_count(sw,
+		"strcpy(ammo_change_buf, CustomText(\"HD is off\"));");
+	ok(n == 1 && hd_switch_count(sw, "strcpy(ammo_change_buf, \"") == 0,
+		"captions: the F12 notice goes through CustomText", n, 1);
+
+	free(flow);
+	free(outfit);
+	free(robe);
+	free(sw);
 }
 
 // Where `what` first stands in `text` from `from` on, or -1.
@@ -27655,6 +27979,7 @@ int main()
 	glass_hue();
 	glass_look();
 	hd_build_gate();
+	caption_rows();
 	load_keep();
 	load_mode();
 	load_brake();

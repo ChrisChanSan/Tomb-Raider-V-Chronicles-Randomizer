@@ -12518,17 +12518,16 @@ Not played: the head was not run in the game.
 `specific/hd/hd_outfitmenu.cpp` at the F4 apply ("two shorts in the level's sound map")
 and `specific/hd/hd_level.cpp` above `HDLevelBuild` ("whenever hd_enable is on"). The FEET
 line is written at the load; an F4 change is in its own `HDLOG f4` line. The shotgun's
-weapon item walks on Lara's set since #234, which takes the item at `lara.weapon_item`
-for her by its index after the play test. A
-footstep mod whose own landing the loop refused keeps the level's own landing in the bare
-set, which is the ordinary landing by Decision (2); it is not held to the steps' rule. A
-mod whose takes of id 0 all reached their slots but only some differ from the bank's is a
-mod's own mix and is taken as it stands. In the randomized RICH1, DOOR_TYPE4 (slot 290)
-animation 655 lists 2,650 commands including ids 0 and 4 (the classic level: 64); measured
-in #230, 655 is the slot's own first animation, whose command count the original level
-carries as 0xAAAA - the engine reads it as a negative short and runs nothing, the AnimCmd
-tool reads it unsigned and walks into the commands of the animations the randomizer
-appends.
+weapon item walks on Lara's set since #234, which takes the item at `lara.weapon_item` for
+her by its index after the play test. A footstep mod whose own landing the loop refused
+keeps the level's own landing in the bare set, which is the ordinary landing by Decision
+(2); it is not held to the steps' rule. A mod whose takes of id 0 all reached their slots
+but only some differ from the bank's is a mod's own mix and is taken as it stands. In the
+randomized RICH1, DOOR_TYPE4 (slot 290) animation 655 lists 2,650 commands including ids 0
+and 4 (the classic level: 64); measured in #230, 655 is the slot's own first animation,
+whose command count the original level carries as 0xAAAA - the engine reads it as a
+negative short and runs nothing, the AnimCmd tool reads it unsigned and walks into the
+commands of the animations the randomizer appends.
 
 **Commits.** `b9b64d5d` (the sets in memory), `57d462f3` (the choice per step and the
 caller), `574afdd6` (the floor layer), `c3e5c85b` (the checks and the FEET line),
@@ -32260,22 +32259,23 @@ Controller*) or a mark (`---`) stays without one. A footstep is Lara's when its 
 level is built with its HD data, and it stands above *HD-Texturen*; *Spiegelungen* for
 *Reflections*; *HD ist aus*, ten letters where the caption's buffer holds eleven; the F4
 window's *Outfit*, *Levelvorgabe*, *nach Level und Lauf*, *Schritte*, *Kopf*, *Glanz*,
-*Hautglanz*, *laut Outfit*, *Barfuss*, *Stiefel*, *Barfuss - fehlt hier*, *Stiefel -
-fehlt hier* and `"gilt ab dem n\xE4" "chsten Level"` (split at the umlaut because `c` is a
-hex digit); the phrases *TR5* for TR5's head, *mit Zopf* for the outfit's own head under
-TR5's braid, *eigener* for its own head alone (the row's label already says *Kopf*),
-*gemessen*, *Tabelle*, *Liste*, *Standard*. (2) *Barfuss* is written with "ss": the font
-has no sharp s. (3) Every German value is chosen to fit the value column at every screen
-width by the rule above, also where the English word it replaces does not; *TR5-Kopf* and
-*TR5-Haar* fitted only at 640 x 480 and gave way to *TR5* and *mit Zopf*. (4) *Outfit*
-has its row although the German is the same word, as *Audio* and *Normal* have theirs.
-(5) The weapon item is asked by its index, never by its object number, and `AnimateItem`
-hands over `NO_ITEM` for an item that is not one of the level's, so no other item can be
-taken for hers. `SfxCommandCaller` keeps the object number: the `SFXLOG` line's `obj=`
-still names the weapon object, and its end says `feet=bare` or `feet=boots` as for her
-own step; the FEET line is unchanged. (6) All three long guns count, though only the
-shotgun's animation carries a step in the levels measured. (7) MenuTest's check of the
-notice, outside the files this round named, follows the call it reads; its count stays.
+*Hautglanz*, *laut Outfit*, *Barfuss*, *Stiefel*, *Barfuss - fehlt hier*, *Stiefel - fehlt
+hier* and `"gilt ab dem n\xE4" "chsten Level"` (split at the umlaut because `c` is a hex
+digit); the phrases *TR5* for TR5's head, *mit Zopf* for the outfit's own head under TR5's
+braid, *eigener* for its own head alone (the row's label already says *Kopf*), *gemessen*,
+*Tabelle*, *Liste*, *Standard*. (2) *Barfuss* is written with "ss": the font has no sharp
+s. (3) Every German value is chosen to fit the value column at every screen width by the
+rule above, also where the English word it replaces does not; *TR5-Kopf* and *TR5-Haar*,
+with the source word behind them, ran past the column at some screen widths (the figures
+are in Measured) and gave way to *TR5* and *mit Zopf*. (4) *Outfit* has its row although
+the German is the same word, as *Audio* and *Normal* have theirs. (5) The weapon item is
+asked by its index, never by its object number, and `AnimateItem` hands over `NO_ITEM` for
+an item that is not one of the level's, so no other item can be taken for hers.
+`SfxCommandCaller` keeps the object number: the `SFXLOG` line's `obj=` still names the
+weapon object, and its end says `feet=bare` or `feet=boots` as for her own step; the FEET
+line is unchanged. (6) All three long guns count, though only the shotgun's animation
+carries a step in the levels measured. (7) MenuTest's check of the notice, outside the
+files this round named, follows the call it reads; its count stays.
 
 **Checked.** The nine builds of `Preparation/Tools/Diagnose` exit 0 (`be`, `broom`,
 `btrg`, `bmodel`, `bmap`, `bmt`, `bmenu`, `bit`, `blips`). The suites at the base and at
@@ -32305,8 +32305,9 @@ shine value whose exponent an `outfit.txt` writes with many digits. #232's
 Decision (4) records the shotgun as it was decided then; its Left says what changed.
 
 **Commits.** `cadc598b` (the captions in German and the notice), `a7e16445` (the weapon
-item's step and its checks), `aea7137f` (this record), and the commit that holds the head
-words and the width rule to every screen width.
+item's step and its checks), `aea7137f` (this record), `fd3d460b` (the head words and the
+width rule to every screen width), `4364b4ed` (the width figures corrected, the legacy
+page names dropped) and the record's last corrections.
 
 ## 3. Randomizer changes since Beta 1.0
 

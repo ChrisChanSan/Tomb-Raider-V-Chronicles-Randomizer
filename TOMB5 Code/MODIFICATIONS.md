@@ -12517,8 +12517,9 @@ Not played: the head was not run in the game.
 `specific/hqsfx.h` at `HQSfxPayloadBoots` ("Null means keep the level's own"),
 `specific/hd/hd_outfitmenu.cpp` at the F4 apply ("two shorts in the level's sound map")
 and `specific/hd/hd_level.cpp` above `HDLevelBuild` ("whenever hd_enable is on"). The FEET
-line is written at the load; an F4 change is in its own `HDLOG f4` line. Whether the
-shotgun's weapon item should walk on Lara's set too is a question for the play test. A
+line is written at the load; an F4 change is in its own `HDLOG f4` line. The shotgun's
+weapon item walks on Lara's set since #234, which takes the item at `lara.weapon_item`
+for her by its index after the play test. A
 footstep mod whose own landing the loop refused keeps the level's own landing in the bare
 set, which is the ordinary landing by Decision (2); it is not held to the steps' rule. A
 mod whose takes of id 0 all reached their slots but only some differ from the bank's is a
@@ -29473,7 +29474,7 @@ same roots and notes.
 line, the result rows and `spoiler.txt` are proved from the code, the builds and
 MenuTest's reading of the tree, and the first look is the play test's. The row's caption
 has no string row in `game/gameflow.cpp`'s table, outside this round's files, so it reads
-*HD build* in every language; its string row follows in #234 with the other captions
+*HD build* in every language; its string row came with #234 with the other captions
 outside the table. The HD font, made once a session, stays after the row turns the build
 off while *HD textures* is on (`HDFontGlyphAt` asks the draw alone, a line of the HD gate
 this round does not edit); accepted after the play test of 2026-10-22 and written into the
@@ -32000,6 +32001,298 @@ The game is not run; nothing in it changes.
 **Commits.** `fce7d89f` (the setting, the tool and the checks), `08f13011` (this record)
 and the record's correction after the proof.
 
+### The captions in German, and Lara's weapon item steps as she does (#234)
+2026-10-22
+
+**What.** Two things. (1) Every word the project draws on the options pages, in the F4
+outfit window and as the F12 notice has its German now: 23 new rows in `CustomText`'s
+table (`game/gameflow.cpp`), the German word in its column and the English word in the
+French, Italian and Spanish columns, as in every row. The F4 window passes the head and
+shine phrases it asks the wardrobe for (`HDWardrobeHeadPhrase`, `HDWardrobeFromWord`)
+through `CustomText`; the log lines that print the same phrases stay English. The F12
+notice *HD is off* goes through `CustomText` into the ammo caption. (2) Lara's weapon
+item - the shotgun, HK or crossbow she holds, an item of its own (`lara.weapon_item`,
+made by `draw_shotgun`) - counts as her for the footstep's choice: `AnimateItem` hands
+the item's index in `items[]` and `lara.weapon_item` to `HDFeetStepItem` around an
+animation command's sound, beside `SfxCommandCaller`, and `HDFeetStepInfo` asks the pure
+`HDFeetCallerOf`, which answers `LARA` for the item at `lara.weapon_item` and the caller
+itself for every other item. Her draw and her outfit then choose as for her own step.
+
+**Why.** The play test, asked whether the *HD build* caption may have its translation
+row: "is everything in the translation current for all languages now? In between I had
+seen a few things that did not switch along." On the shotgun's weapon item carrying its
+own footstep: "I did not know that at all. What are the consequences." The consequence:
+only in randomized levels, where the weapon import brings the shotgun's animation set
+with sound id 0, the step of the drawn shotgun played the level's ordinary set - boots -
+even while Lara was drawn HD and barefoot. The order: "go for the shotgun and the
+translation". Only German is translated by this project; the other languages keep the
+English word, as the table does.
+
+**Measured.** How a word reaches the screen. A row of the options pages
+(`game/menu_frame.cpp`, the `MENU_*` tables) draws its caption from the game's language
+file when it carries a string id (`SCRIPT_TEXT`) and through `CustomText(label)`
+otherwise; a value comes from the row's `MenuVal...` function, through `CustomText`, from
+the language file or as a raw literal; a page's title the same way as a caption.
+`CustomText` returns the table's column for French, German, Italian and Spanish when the
+English matches a row and the English literal itself when none does, so a project word
+without a row was English in every language. The F4 window
+(`specific/hd/hd_outfitmenu.cpp`) passed its own literals through `CustomText` but had no
+rows for them, and printed the wardrobe's phrases raw; the F12 notice
+(`specific/hd/hd_switch.cpp`) was copied into the caption raw. The census, read out of
+the sources: 162 distinct strings - 27 from the language file, 130 through `CustomText`
+(120 before: 93 with a German row before, 116 after), 5 raw literals (15 before). The
+table had 93 rows; it has 116. The options pages draw no hint line; the F4 window has one,
+*applies at the next level*. No original row draws English in German through the
+project's path: every caption with a string id draws the language file's own word.
+
+Widths on the game font's glyph table (`game/chardef.inc`, added up as
+`GetStringLength` does, an umlaut as its base letter): the label column holds
+*Kamerageschwindigkeit*, 223 units; the value column is 240 pixels where *Mod+Stick R
+Down*, 180 units, is 215 (`MenuValBinding`'s measurement), about 200 units. Every German
+label is 135 units or less (*Levelvorgabe* with its mark), every German value 191 or
+less, the widest German head value *TR5-Haar (outfit.txt)* 200; the centred hint
+`gilt ab dem n\xE4chsten Level`, drawn across the screen, is 254. The English F4 values
+*the level and the run decide* (262), *Bare - no second set in this level* (311),
+*Boots - no second set in this level* (319) and *own head (the default)* (214) are wider
+than the column.
+
+The census, every caption, value and hint of the project's rows and of the F4 window,
+where it is drawn from, and what a German player saw before and sees now (a phrase of the
+wardrobe is listed by its words; `\x18` to `\x1B` are the keyboard list's arrow glyphs):
+
+| string | kind | drawn from (after) | German before | German after | file |
+|---|---|---|---|---|---|
+| `\x18` | caption | `CustomText` | English | English | menu_frame.cpp |
+| `\x19` | caption | `CustomText` | English | English | menu_frame.cpp |
+| `\x1A` | caption | `CustomText` | English | English | menu_frame.cpp |
+| `\x1B` | caption | `CustomText` | English | English | menu_frame.cpp |
+| Action | caption | `CustomText` | *Aktion* | *Aktion* | menu_frame.cpp |
+| Action | caption | language file `TXT_Action` | the language file's own | the language file's own | menu_frame.cpp |
+| All items | caption | `CustomText` | `Alle Gegenst\xE4nde` | `Alle Gegenst\xE4nde` | menu_frame.cpp |
+| All weapons | caption | `CustomText` | *Alle Waffen* | *Alle Waffen* | menu_frame.cpp |
+| Ammo counter | caption | `CustomText` | *Munitionsanzeige* | *Munitionsanzeige* | menu_frame.cpp |
+| Ammotype hotkeys | caption | `CustomText` | *Munitions-Hotkeys* | *Munitions-Hotkeys* | menu_frame.cpp |
+| Audio | caption | `CustomText` | *Audio* | *Audio* | menu_frame.cpp |
+| Bar mode | caption | `CustomText` | *Balkenstil* | *Balkenstil* | menu_frame.cpp |
+| Bar positions | caption | `CustomText` | *Balkenposition* | *Balkenposition* | menu_frame.cpp |
+| Body | caption | `CustomText` | `K\xF6rper` | `K\xF6rper` | menu_frame.cpp |
+| Body physics | caption | `CustomText` | `K\xF6rperphysik` | `K\xF6rperphysik` | menu_frame.cpp |
+| Camera damping | caption | `CustomText` | `Kamerad\xE4mpfung` | `Kamerad\xE4mpfung` | menu_frame.cpp |
+| Camera speed | caption | `CustomText` | *Kamerageschwindigkeit* | *Kamerageschwindigkeit* | menu_frame.cpp |
+| Cheats | caption | `CustomText` | *Cheats* | *Cheats* | menu_frame.cpp |
+| Combat mode | caption | `CustomText` | *Kampfmodus* | *Kampfmodus* | menu_frame.cpp |
+| Control layout | caption | `CustomText` | *Steuerungslayout* | *Steuerungslayout* | menu_frame.cpp |
+| Control type | caption | `CustomText` | *Steuerungsart* | *Steuerungsart* | menu_frame.cpp |
+| Controls | caption | `CustomText` | *Steuerung* | *Steuerung* | menu_frame.cpp |
+| Crawl Tilting | caption | `CustomText` | *Kriechneigung* | *Kriechneigung* | menu_frame.cpp |
+| Credits | caption | `CustomText` | *Credits* | *Credits* | menu_frame.cpp |
+| Crossbow | caption | `CustomText` | *Armbrust* | *Armbrust* | menu_frame.cpp |
+| Cutscene skipper | caption | `CustomText` | *Cutscene-Skipper* | *Cutscene-Skipper* | menu_frame.cpp |
+| Dash | caption | language file `TXT_Dash` | the language file's own | the language file's own | menu_frame.cpp |
+| Dead zone | caption | `CustomText` | *Deadzone* | *Deadzone* | menu_frame.cpp |
+| Death camera | caption | `CustomText` | *Todeskamera* | *Todeskamera* | menu_frame.cpp |
+| Display | caption | `CustomText` | *Display* | *Display* | menu_frame.cpp |
+| Distance fog | caption | `CustomText` | *Distanznebel* | *Distanznebel* | menu_frame.cpp |
+| Draw Weapon | caption | language file `TXT_Draw_Weapon` | the language file's own | the language file's own | menu_frame.cpp |
+| Duck | caption | language file `TXT_Duck` | the language file's own | the language file's own | menu_frame.cpp |
+| Duck mode | caption | `CustomText` | *Duckmodus* | *Duckmodus* | menu_frame.cpp |
+| Enemy bars | caption | `CustomText` | *Gegnerbalken* | *Gegnerbalken* | menu_frame.cpp |
+| Field of view | caption | `CustomText` | *Sichtfeld* | *Sichtfeld* | menu_frame.cpp |
+| First person view | caption | `CustomText` | *Ego-Sicht* | *Ego-Sicht* | menu_frame.cpp |
+| Fix climb up delay | caption | `CustomText` | *Klettern ohne Pause* | *Klettern ohne Pause* | menu_frame.cpp |
+| Flexible crawling | caption | `CustomText` | *Flexibles Kriechen* | *Flexibles Kriechen* | menu_frame.cpp |
+| Fly mode | caption | `CustomText` | *Flugmodus* | *Flugmodus* | menu_frame.cpp |
+| Fog | caption | `CustomText` | *Nebel* | *Nebel* | menu_frame.cpp |
+| Follow head bone | caption | `CustomText` | *Kopfknochen folgen* | *Kopfknochen folgen* | menu_frame.cpp |
+| Footprints | caption | `CustomText` | *Trittspuren* | *Trittspuren* | menu_frame.cpp |
+| Frame rate | caption | `CustomText` | *Bildrate* | *Bildrate* | menu_frame.cpp |
+| Gallery | caption | `CustomText` | *Galerie* | *Galerie* | LoadSave.cpp |
+| Gameover menu | caption | `CustomText` | `Game-Over-Men\xFC` | `Game-Over-Men\xFC` | menu_frame.cpp |
+| Gamma | caption | `CustomText` | English | English | menu_frame.cpp |
+| Grab mode | caption | `CustomText` | *Greifmodus* | *Greifmodus* | menu_frame.cpp |
+| Graphics | caption | `CustomText` | *Grafik* | *Grafik* | menu_frame.cpp |
+| HD / SD | caption | `CustomText` | English | English | menu_frame.cpp |
+| HD build | caption | `CustomText` | English | *HD-Aufbau* | menu_frame.cpp |
+| HD textures | caption | `CustomText` | *HD-Texturen* | *HD-Texturen* | menu_frame.cpp |
+| HD water | caption | `CustomText` | *HD-Wasser* | *HD-Wasser* | menu_frame.cpp |
+| Heal | caption | `CustomText` | *Heilen* | *Heilen* | menu_frame.cpp |
+| HK | caption | language file `TXT_HKSTRING0` | the language file's own | the language file's own | menu_frame.cpp |
+| HUD | caption | `CustomText` | *HUD* | *HUD* | menu_frame.cpp |
+| Inventory | caption | language file `TXT_Inventory` | the language file's own | the language file's own | menu_frame.cpp |
+| Invert mouse | caption | `CustomText` | *Maus invertieren* | *Maus invertieren* | menu_frame.cpp |
+| Jump | caption | language file `TXT_Jump` | the language file's own | the language file's own | menu_frame.cpp |
+| Key bindings | caption | `CustomText` | *Tastenbelegung* | *Tastenbelegung* | menu_frame.cpp |
+| Language | caption | `CustomText` | *Sprache* | *Sprache* | menu_frame.cpp |
+| Large Medipack | caption | language file `TXT_Large_Medipack` | the language file's own | the language file's own | menu_frame.cpp |
+| Ledge hang | caption | `CustomText` | *Kantengriff* | *Kantengriff* | menu_frame.cpp |
+| Level Select | caption | `CustomText` | *Levelauswahl* | *Levelauswahl* | gameflow.cpp, menu_frame.cpp |
+| Load | caption | language file `TXT_Load` | the language file's own | the language file's own | menu_frame.cpp |
+| Loadbar style | caption | `CustomText` | *Ladebalken* | *Ladebalken* | menu_frame.cpp |
+| Loading text | caption | `CustomText` | *Ladetext* | *Ladetext* | menu_frame.cpp |
+| Look | caption | language file `TXT_Look` | the language file's own | the language file's own | menu_frame.cpp |
+| Look transparency | caption | `CustomText` | *Umsehen transparent* | *Umsehen transparent* | menu_frame.cpp |
+| Modes | caption | `CustomText` | *Modi* | *Modi* | menu_frame.cpp |
+| Modifier | caption | `CustomText` | *Modifikator* | *Modifikator* | menu_frame.cpp |
+| Mono screen style | caption | `CustomText` | *Mono-Screen-Stil* | *Mono-Screen-Stil* | menu_frame.cpp |
+| Mouse sensitivity | caption | `CustomText` | *Mausempfindlichkeit* | *Mausempfindlichkeit* | menu_frame.cpp |
+| Music Volume | caption | language file `TXT_Music_Volume` | the language file's own | the language file's own | menu_frame.cpp |
+| Pause | caption | `CustomText` | *Pause* | *Pause* | menu_frame.cpp |
+| Pistols | caption | language file `TXT_Pistols` | the language file's own | the language file's own | menu_frame.cpp |
+| PSX skies | caption | `CustomText` | *PSX-Himmel* | *PSX-Himmel* | menu_frame.cpp |
+| Reflections | caption | `CustomText` | English | *Spiegelungen* | menu_frame.cpp |
+| Reset to defaults | caption | `CustomText` | *Standard wiederherstellen* | *Standard wiederherstellen* | menu_frame.cpp |
+| Revolver | caption | language file `TXT_Revolver` | the language file's own | the language file's own | menu_frame.cpp |
+| Roll | caption | language file `TXT_Roll` | the language file's own | the language file's own | menu_frame.cpp |
+| Save | caption | language file `TXT_Save` | the language file's own | the language file's own | menu_frame.cpp |
+| Secondary | caption | `CustomText` | `Sekund\xE4r` | `Sekund\xE4r` | menu_frame.cpp |
+| SFX Volume | caption | language file `TXT_SFX_Volume` | the language file's own | the language file's own | menu_frame.cpp |
+| Shadow mode | caption | `CustomText` | *Schatten* | *Schatten* | menu_frame.cpp |
+| Shimmer | caption | `CustomText` | *Schimmern* | *Schimmern* | menu_frame.cpp |
+| Shotgun | caption | language file `TXT_Shotgun` | the language file's own | the language file's own | menu_frame.cpp |
+| Skip level | caption | `CustomText` | `Level \xFCberspringen` | `Level \xFCberspringen` | menu_frame.cpp |
+| Small Medipack | caption | language file `TXT_Small_Medipack` | the language file's own | the language file's own | menu_frame.cpp |
+| Sound Quality | caption | language file `TXT_Sound_Quality` | the language file's own | the language file's own | menu_frame.cpp |
+| Special Features | caption | language file `TXT_Special_Features` | the language file's own | the language file's own | menu_frame.cpp |
+| Sprint mode | caption | `CustomText` | *Sprintmodus* | *Sprintmodus* | menu_frame.cpp |
+| Static lighting | caption | `CustomText` | *Statisches Licht* | *Statisches Licht* | menu_frame.cpp |
+| Step Left | caption | language file `TXT_Step_Left` | the language file's own | the language file's own | menu_frame.cpp |
+| Step Right | caption | language file `TXT_Step_Right` | the language file's own | the language file's own | menu_frame.cpp |
+| Targeting | caption | language file `TXT_Targeting` | the language file's own | the language file's own | menu_frame.cpp |
+| tomb5 options | caption | `CustomText` | *tomb5-Optionen* | *tomb5-Optionen* | menu_frame.cpp |
+| Use Flare | caption | language file `TXT_Use_Flare` | the language file's own | the language file's own | menu_frame.cpp |
+| UW Effect | caption | `CustomText` | *Unterwasser-Effekt* | *Unterwasser-Effekt* | menu_frame.cpp |
+| Uzi | caption | language file `TXT_Uzi` | the language file's own | the language file's own | menu_frame.cpp |
+| View | caption | `CustomText` | *Ansicht* | *Ansicht* | menu_frame.cpp |
+| VSync | caption | `CustomText` | *VSync* | *VSync* | menu_frame.cpp |
+| Walk | caption | language file `TXT_Walk` | the language file's own | the language file's own | menu_frame.cpp |
+| Options | page title | language file `TXT_Options` | the language file's own | the language file's own | menu_frame.cpp |
+| Special Features | page title | `CustomText` | English | English | menu_frame.cpp |
+| --- | value | raw literal | English | English | menu_frame.cpp |
+| animated | value | `CustomText` | *animiert* | *animiert* | menu_frame.cpp |
+| Circle | value | `CustomText` | *Kreis* | *Kreis* | menu_frame.cpp |
+| Clear | value | `CustomText` | *Klar* | *Klar* | menu_frame.cpp |
+| Display (60) | value | `CustomText` | English | English | menu_frame.cpp |
+| Faded circle | value | `CustomText` | *Weicher Kreis* | *Weicher Kreis* | menu_frame.cpp |
+| First person | value | `CustomText` | *Ego-Sicht* | *Ego-Sicht* | menu_frame.cpp |
+| Hold | value | `CustomText` | *Halten* | *Halten* | menu_frame.cpp |
+| Improved | value | `CustomText` | *Verbessert* | *Verbessert* | menu_frame.cpp |
+| Light | value | `CustomText` | *Leicht* | *Leicht* | menu_frame.cpp |
+| Medium | value | `CustomText` | *Mittel* | *Mittel* | menu_frame.cpp |
+| Modern | value | `CustomText` | *Modern* | *Modern* | menu_frame.cpp |
+| Normal | value | `CustomText` | *Normal* | *Normal* | menu_frame.cpp |
+| off | value | `CustomText` | *aus* | *aus* | menu_frame.cpp |
+| off (restart) | value | `CustomText` | *aus (Neustart)* | *aus (Neustart)* | menu_frame.cpp |
+| on | value | `CustomText` | *an* | *an* | menu_frame.cpp |
+| on (restart) | value | `CustomText` | *an (Neustart)* | *an (Neustart)* | menu_frame.cpp |
+| One key | value | `CustomText` | *Eine Taste* | *Eine Taste* | menu_frame.cpp |
+| Original | value | `CustomText` | English | English | menu_frame.cpp |
+| Projected | value | `CustomText` | *Projiziert* | *Projiziert* | menu_frame.cpp |
+| PS5 Controller | value | raw literal | English | English | menu_frame.cpp |
+| PSX | value | `CustomText` | English | English | menu_frame.cpp |
+| Separate | value | `CustomText` | *Getrennt* | *Getrennt* | menu_frame.cpp |
+| still | value | `CustomText` | *ruhig* | *ruhig* | menu_frame.cpp |
+| Strong | value | `CustomText` | *Stark* | *Stark* | menu_frame.cpp |
+| Subtle | value | `CustomText` | *Dezent* | *Dezent* | menu_frame.cpp |
+| Tank | value | `CustomText` | *Panzer* | *Panzer* | menu_frame.cpp |
+| Third person | value | `CustomText` | *Dritte Person* | *Dritte Person* | menu_frame.cpp |
+| Toggle | value | `CustomText` | *Umschalten* | *Umschalten* | menu_frame.cpp |
+| TR4 | value | `CustomText` | English | English | menu_frame.cpp |
+| TR5 | value | `CustomText` | English | English | menu_frame.cpp |
+| Xbox Controller | value | raw literal | English | English | menu_frame.cpp |
+| applies at the next level | F4 | `CustomText` | English | `gilt ab dem n\xE4chsten Level` | hd_outfitmenu.cpp |
+| as the outfit says | F4 | `CustomText` | English | *laut Outfit* | hd_outfitmenu.cpp |
+| Bare | F4 | `CustomText` | English | *Barfuss* | hd_outfitmenu.cpp |
+| Bare - no second set in this level | F4 | `CustomText` | English | *Barfuss - fehlt hier* | hd_outfitmenu.cpp |
+| Boots | F4 | `CustomText` | English | *Stiefel* | hd_outfitmenu.cpp |
+| Boots - no second set in this level | F4 | `CustomText` | English | *Stiefel - fehlt hier* | hd_outfitmenu.cpp |
+| Footsteps | F4 | `CustomText` | English | *Schritte* | hd_outfitmenu.cpp |
+| Head | F4 | `CustomText` | English | *Kopf* | hd_outfitmenu.cpp |
+| Level facts | F4 | `CustomText` | English | *Levelvorgabe* | hd_outfitmenu.cpp |
+| Outfit | F4 | `CustomText` | English | *Outfit* | hd_outfitmenu.cpp |
+| Shine | F4 | `CustomText` | English | *Glanz* | hd_outfitmenu.cpp |
+| Skin glow | F4 | `CustomText` | English | *Hautglanz* | hd_outfitmenu.cpp |
+| the level and the run decide | F4 | `CustomText` | English | *nach Level und Lauf* | hd_outfitmenu.cpp |
+| I-III | F4 value | raw literal | English | English | hd_outfitmenu.cpp |
+| IV-VI | F4 value | raw literal | English | English | hd_outfitmenu.cpp |
+| measured | F4 value | `CustomText` | English | *gemessen* | hd_outfitmenu.cpp |
+| origin | F4 value | `CustomText` | English | English | hd_outfitmenu.cpp |
+| outfit.txt | F4 value | `CustomText` | English | English | hd_outfitmenu.cpp |
+| own head | F4 value | `CustomText` | English | *eigener* | hd_outfitmenu.cpp |
+| the default | F4 value | `CustomText` | English | *Standard* | hd_outfitmenu.cpp |
+| the list | F4 value | `CustomText` | English | *Liste* | hd_outfitmenu.cpp |
+| the table | F4 value | `CustomText` | English | *Tabelle* | hd_outfitmenu.cpp |
+| TR5 hair | F4 value | `CustomText` | English | *TR5-Haar* | hd_outfitmenu.cpp |
+| TR5 head | F4 value | `CustomText` | English | *TR5-Kopf* | hd_outfitmenu.cpp |
+| HD is off | F12 notice | `CustomText` | English | *HD ist aus* | hd_switch.cpp |
+
+The weapon item. The emitter census of #232 found SHOTGUN_ANIM playing sound id 0 in three
+randomized levels and in no classic one, and no step in HK_ANIM's or CROSSBOW_ANIM's
+animations. The footstep harness of #232, linking the engine's own `hqsfx.cpp` and
+`hd_feet.cpp` against the randomizer's level reader, the base's and the head's, now asks
+for her weapon item as item 5 with `lara.weapon_item` 5 (as SHOTGUN_ANIM, CROSSBOW_ANIM
+and HK_ANIM), for a shotgun at item 7 that is not hers, and for Lara and the seven other
+callers of #232's table, over the randomized ANDREA1, JOBY5 and RICH3, the classic
+ANDREA1 and JOBY5 and the title, with the game's Mods folder, without mods and with a
+footstep mod of loose wav files made for this test. Base against head the output differs
+in the HD draw's lines alone and there only in the three entries of her weapon item,
+which take her own entries: under a barefoot outfit the bare set (ANDREA1 207/208 instead
+of 0/4), under boots over the footstep mod the unmodded boots (209/210); the shotgun that
+is not hers, every enemy, the classic draw's lines, the sample table and the infos are
+the base's. With `hd_build` 0 the whole output is the base's, byte for byte, in all
+sixteen runs; the title has no footstep and is the base's in both.
+
+**The rule.** A word the project draws has its row in the table. A word that is the same
+in German (*Gamma*, *HD / SD*, *Display (60)*, *Original*, *PSX*, *TR4*, *TR5*, the arrow
+glyphs), a name (*outfit.txt*, *origin*, *I-III*, *IV-VI*, *PS5 Controller*, *Xbox
+Controller*) or a mark (`---`) stays without one. A footstep is Lara's when its caller is
+`LARA` or the item that plays it is the one at `lara.weapon_item`, asked by its index.
+
+**Decisions.** (1) The words: *HD-Aufbau* for *HD build* - the gate decides whether a
+level is built with its HD data, and it stands above *HD-Texturen*; *Spiegelungen* for
+*Reflections*; *HD ist aus*, ten letters where the caption's buffer holds eleven; the F4
+window's *Outfit*, *Levelvorgabe*, *nach Level und Lauf*, *Schritte*, *Kopf*, *Glanz*,
+*Hautglanz*, *laut Outfit*, *Barfuss*, *Stiefel*, *Barfuss - fehlt hier*, *Stiefel -
+fehlt hier* and `"gilt ab dem n\xE4" "chsten Level"` (split at the umlaut because `c` is a
+hex digit); the phrases *TR5-Kopf*, *TR5-Haar*, *eigener* (the row's label already says
+*Kopf*), *gemessen*, *Tabelle*, *Liste*, *Standard*. (2) *Barfuss* is written with "ss":
+the font has no sharp s. (3) Every German value is chosen to fit the value column, also
+where the English word it replaces does not. (4) *Outfit* has its row although the
+German is the same word, as *Audio* and *Normal* have theirs. (5) The weapon item is
+asked by its index, never by its object number, and `AnimateItem` hands over `NO_ITEM`
+for an item that is not one of the level's, so no other item can be taken for hers.
+`SfxCommandCaller` keeps the object number: the `SFXLOG` line's `obj=` still names the
+weapon object, and its end says `feet=bare` or `feet=boots` as for her own step; the FEET
+line is unchanged. (6) All three long guns count, though only the shotgun's animation
+carries a step in the levels measured. (7) MenuTest's check of the notice, outside the
+files this round named, follows the call it reads; its count stays.
+
+**Checked.** The nine builds of `Preparation/Tools/Diagnose` exit 0 (`be`, `broom`,
+`btrg`, `bmodel`, `bmap`, `bmt`, `bmenu`, `bit`, `blips`). The suites at the base and at
+the head: ModernTest 16,329 and 16,522, MenuTest 44,938 and 44,938, InterpTest 754 and 754
+with the player's `ANDREA1.TRC`, LipsTest 299 and 299 with the `.OBJ` folder, 272 and 272
+without (the cutseq file named by hand), 0 failed each. ModernTest's new `caption_rows`
+(76 checks): every German word has its one row and stands in it, fits its column on the
+font's widths, every literal of the F4 window has its row, the phrases go through
+`CustomText` at every call and have their rows but the two names, the widest German head
+value fits, the notice goes through `CustomText`; a row changed by hand made three of them
+fail. `hd_feet` gains 117: her shotgun, crossbow and HK, a shotgun not hers, the guard,
+none out and no item, over both draws, both outfits, with and without a footstep mod and
+ids 0 and 4, against the expectation written out on its own; the four cases by name (HD
+and bare: the bare set; HD in boots over a mod: the unmodded boots; a weapon item not
+hers: the ordinary chain; drawn classic: the ordinary chain) and the index rule. The
+harness's step table as above. No line asking `g_level_active`, `HDEnabled()` or
+`HDDrawn()` was edited. Not played: the head was not run in the game.
+
+**Left.** English that stays outside these pages: the Credits screen's headings
+(`tomb5/troyestuff.cpp`), the ammo hotkeys' captions *Normal*, *Wideshot*, *Burst*,
+*Sniper*, *Rapid* (`specific/input.cpp`, the engine's own), the pad's button names in the
+Key bindings' value column and the decimal point of the F4 window's shine numbers. The
+English F4 values named above run past the value column, as they did before. #232's
+Decision (4) records the shotgun as it was decided then; its Left says what changed.
+
+**Commits.** `cadc598b` (the captions in German and the notice), `a7e16445` (the weapon
+item's step and its checks), and this record.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -32253,3 +32546,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #231 | Audit round B1 (#231) |
 | #232 | Lara's footstep follows the draw and her outfit, and nobody else's does (#232) |
 | #233 | The glow's normal, re-derived (#233) |
+| #234 | The captions in German, and Lara's weapon item steps as she does (#234) |

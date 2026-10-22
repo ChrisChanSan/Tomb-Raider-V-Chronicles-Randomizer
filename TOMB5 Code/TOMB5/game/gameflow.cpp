@@ -1297,10 +1297,12 @@ static char* LanguageFileName(long idx)
 	return s;
 }
 
-// Display name for the options menu - only characters the game font knows.
+// Display name for the options menu: each language by its own name, an
+// accented letter as a Latin-1 escape that the font composes (AccentToCode).
 const char* LanguageName(long idx)
 {
-	static const char* names[8] = { "English", "Francais", "Deutsch", "Italiano", "Espanol", "English US", "Japanese", "Nederlands" };
+	static const char* names[8] = { "English", "Fran\xE7" "ais", "Deutsch",
+		"Italiano", "Espa\xF1ol", "English US", "Japanese", "Nederlands" };
 	const char* file = LanguageFileName(idx);
 
 	if (!file)
@@ -1650,7 +1652,7 @@ const char* CustomText(const char* engl)
 		// their values Hold and Toggle are already in this table above.
 		{ "Sprint mode", "Mode sprint", "Sprintmodus", "Modo scatto",
 			"Modo carrera" },
-		{ "Duck mode", "Mode accroupi", "Duckmodus", "Modo abbassamento",
+		{ "Duck mode", "Mode accroupi", "Duckmodus", "Modo accovacciato",
 			"Modo agachado" },
 		// "Modi" is both the page title for these five mode rows and the
 		// tab's own label: one literal, one row, exactly as "Key bindings"
@@ -1773,8 +1775,8 @@ const char* CustomText(const char* engl)
 		{ "PSX skies", "Ciels PSX", "PSX-Himmel", "Cieli PSX", "Cielos PSX" },
 		{ "Loadbar style", "Barre de chargement", "Ladebalken",
 			"Barra caricamento", "Barra de carga" },
-		{ "Mono screen style", "Style \xE9" "cran mono", "Mono-Screen-Stil",
-			"Stile schermo mono", "Estilo pantalla mono" },
+		{ "Mono screen style", "Style d'\xE9" "cran mono", "Mono-Screen-Stil",
+			"Stile schermo mono", "Estilo de pantalla mono" },
 		{ "Loading text", "Texte de chargement", "Ladetext",
 			"Testo caricamento", "Texto de carga" },
 		{ "Shimmer", "Miroitement", "Schimmern", "Tremolio", "Ondulaci\xF3n" },
@@ -1802,8 +1804,8 @@ const char* CustomText(const char* engl)
 		// Shadow mode's fifth value, offered while HD is on.
 		{ "Projected", "Projet\xE9" "e", "Projiziert", "Proiettata",
 			"Proyectada" },
-		{ "Improved", "Am\xE9lior\xE9", "Verbessert", "Migliorato",
-			"Mejorado" },
+		{ "Improved", "Am\xE9lior\xE9" "e", "Verbessert", "Migliorata",
+			"Mejorada" },
 		{ "Clear", "Transparent", "Klar", "Trasparente", "Transparente" },
 		{ "Light", "L\xE9ger", "Leicht", "Leggero", "Ligero" },
 		{ "Medium", "Moyen", "Mittel", "Medio", "Medio" },

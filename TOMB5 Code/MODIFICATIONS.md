@@ -32751,7 +32751,7 @@ per space, an accented letter as its base letter):
 
 | column | English | French | German | Italian | Spanish |
 |---|---|---|---|---|---|
-| label, 223 | 177.4 *Ammotype hotkeys* | 208.8 *Schéma de commandes* | 223.0 *Kamerageschwindigkeit* | 212.4 *Frequenza fotogrammi* | 212.6 *Menú de fin de partida* |
+| label, 223 | 177.4 *Ammotype hotkeys* | 208.8 *Schéma de commandes* | 223.0 *Kamerageschwindigkeit* | 212.4 *Frequenza fotogrammi* | 219.2 *Estilo de pantalla mono* |
 | F4 label with mark, 223 | 112.8 | 169.2 *Propre au niveau \** | 106.4 | 100.8 | 90.8 |
 | value, 192 | 183.2 *level and run decide* | 186.2 *par niveau et partie* | 186.2 *nach Level und Lauf* | 176.2 *Stivali - manca qui* | 188.2 *Descalza - falta aquí* |
 | pad behind *Mod+*, 192 | 176.8 *Mod+Stick R Down* | 186.8 *Mod+Stick R gauche* | 180.8 *Mod+Stick R rechts* (see below) | 152.8 *Mod+Stick R giù* | 185.4 *Mod+Cruceta arriba* |
@@ -32776,6 +32776,7 @@ The census of in-game text on the project's path that does not pass the table:
 | the Credits screen's names and the lines with English joining words | `tomb5/troyestuff.cpp` | raw | as written (the play test: they stay) |
 | *Next*, *Previous* of the Special Features pages | `GetStupidText`, `specific/LoadSave.cpp` | its own literal per language | French, Italian and Spanish already |
 | slider numbers, the page count *1/N* | the options pages | numbers | numbers |
+| the language names (`LanguageName`, `game/gameflow.cpp`) | the *Language* value | raw literal, each language by its own name | *Français* and *Español* now with their accents (80.0 and 72.0 of 192) |
 
 **The rule.** The language file is the first source of every word the game names; the
 project's own words come from `extrastrings.txt` when it has them, then from the table,
@@ -32805,7 +32806,12 @@ head words are *à tresse*, *treccia*, *trenza*, the French tier *default* is *p
 (*défaut* alone reads as a flaw) and the Spanish *estándar* (*predeterminado* ran over).
 The review of the words gave *Telecamera di morte* for the death camera, *Première
 personne* beside *Troisième personne*, *Lissage caméra*, *Modo agachado* and the notice
-*HD desactivado*; the Spanish *activo*/*inactivo* of the values stay. (4)
+*HD desactivado*; the Spanish *activo*/*inactivo* of the values stay. Its second reading
+gave the Italian duck mode *Modo accovacciato* (*abbassamento* reads as lowering), the
+bar positions' *Improved* the feminine of their label (*Améliorée*, *Migliorata*,
+*Mejorada*, as *Projected* agrees with the shadow), *Style d'écran mono* and *Estilo de
+pantalla mono* with their preposition, and the Language row's *Français* and *Español*
+their accents, which the font composes. (4)
 *Display (60)* and *Original* get rows because their French, Italian or Spanish word
 differs (*Écran (60)*, *Originale*); their German is the English word, so the German
 output is unchanged. (5) The Credits' name lines stay English (the play test's answer).
@@ -32882,12 +32888,25 @@ English. With Japanese chosen, Lara's "no" plays the engine's Japanese sample
 the engine always did for that value; whether the levels carry that sample was not
 measured. A Japanese font for Japanese text is a later task. The comment over
 `MenuValFrameRate` (`game/menu_frame.cpp`) still says that *Display* and *Display (60)*
-have no German entry. The Credits screen's lines of names stay as written.
+have no German entry. Three more comments in files this round may not change are now
+stale: the one over the pad's names in `game/menu_frame.cpp` (`JoyRoleIsChord`) says the
+names have their German and that *Mod+Stick R Runter* is the widest pair and fits, but
+*Runter* is gone and *Mod+Steuerkreuz rechts* runs over; the one over the F12 notice in
+`specific/hd/hd_switch.cpp` says the buffer holds eleven letters and the notice's row is
+ten letters or fewer, but the buffer holds 63 and *HD desactivado* has 14; and the
+include comment at the head of `specific/audio.cpp` says `Gameflow->Language` picks *HQ
+DE* or *HQ EN*, where it picks DE, FR, IT, ES, JP or EN (the round changed only that
+file's two sentences it named). The `-log` line `MENULOG set` prints a row's value as
+the row draws it, so on French, Italian or Spanish it now writes that language's word
+in Latin-1 bytes, as it did for German before; changing it would edit
+`game/menu_frame.cpp`. `Preparation/extrastrings.txt` goes into the release package at
+the merge. The Credits screen's lines of names stay as written.
 
 **Commits.** `824afc2d` (the captions from the language file, the buffer, the pad words),
 `255d5c18` (the French, Italian and Spanish words), `e27bb3df` (`extrastrings.txt`),
-`51b772cf` (Japanese for the HQ audio), this record and the review's fix pass (the
-words above, a check's message, the manual's sentence on the folder test).
+`51b772cf` (Japanese for the HQ audio), this record and the review's two fix passes (the
+words above, a check's message, the manual's sentence on the folder test; the second
+reading's words, the language names and this record's Left).
 
 ## 3. Randomizer changes since Beta 1.0
 

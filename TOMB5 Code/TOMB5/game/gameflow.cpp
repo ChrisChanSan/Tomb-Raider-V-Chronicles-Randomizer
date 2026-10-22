@@ -2042,6 +2042,31 @@ long SwitchLanguage(long idx)
 	if (!name || !*name || idx > 7)	// Gameflow->Language is a 3-bit field
 		return 0;
 
+	/* The Japanese entry is the Japanese audio with English text. No text
+	 * file of that entry can be drawn - the Steam edition's JAPAN.DAT is a
+	 * TR4 file the header check below rejects, and a Japanese file in the
+	 * TR5 layout passes it but holds glyph numbers of the PlayStation's
+	 * kana font, which this game's font does not have - so it is decided
+	 * by the entry, not by its file: when the HQ JP set lies in
+	 * audio\HQ JP beside the executable (specific\audio.cpp,
+	 * ACMEmulateCDPlay, plays it for JAPAN), the English entry's file is
+	 * loaded under the same check and the language becomes JAPAN; without
+	 * the folder the entry is not offered, and a saved choice of it leaves
+	 * the language as it was. CustomText gives JAPAN the English literal,
+	 * so every text stays English. */
+	if (idx == LNG_JAPAN)
+	{
+		const DWORD at = GetFileAttributesA("audio\\HQ JP");
+
+		if (at == INVALID_FILE_ATTRIBUTES || !(at & FILE_ATTRIBUTE_DIRECTORY))
+			return 0;
+
+		name = LanguageFileName(LNG_ENGLISH);
+
+		if (!name || !*name)
+			return 0;
+	}
+
 	d = 0;
 
 	if (!LoadFile(name, &d))

@@ -493,9 +493,10 @@ void ACMEmulateCDPlay(long track, long mode)
 	// Look for an HQ version first: audio\HQ <language>\<nr>.OGG, chosen
 	// via the language choice in the options menu; if the language's set
 	// is missing, audio\HQ EN\<nr>.OGG steps in, and if that is missing
-	// too, the original WAV runs. Italian has no set of its own (yet); the
-	// JP set only becomes reachable once a real Japanese language file is
-	// selectable.
+	// too, the original WAV runs. German, French, Italian, Spanish and
+	// Japanese each have a set of their own; Japanese is offered on the
+	// Language row when audio\HQ JP is there, with English text
+	// (game\gameflow.cpp, SwitchLanguage).
 	// S_CDPlay called S_CDStop beforehand, OggStream is always 0 here.
 	if (track >= 0 && track < 136)
 	{

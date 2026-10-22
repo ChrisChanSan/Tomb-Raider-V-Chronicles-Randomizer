@@ -13485,6 +13485,107 @@ static void extra_strings()
 	free(file);
 }
 
+/* The Japanese entry (game\gameflow.cpp, SwitchLanguage): the Japanese HQ
+ * audio with English text. The entry is decided by its value, before any
+ * file is opened: with audio\HQ JP there it loads the English entry's file
+ * under the same header check and becomes JAPAN, without it it returns 0,
+ * so the Language row skips it and a saved choice leaves the language as it
+ * was. Every other entry keeps the header check alone. The sound path is
+ * the base's: ACMEmulateCDPlay's mapping still sends JAPAN to HQ JP and
+ * falls back to HQ EN; CustomText still returns the literal for JAPAN; the
+ * German keyboard test and the title logo do not name JAPAN, so a value of
+ * JAPAN takes the English keyboard table and the logo every language
+ * without one of its own takes. */
+static void japanese_audio()
+{
+	char* flow = hd_switch_text("../../game/gameflow.cpp");
+	char* audio = hd_switch_text("../audio.cpp");
+	char* frame = hd_switch_text("../../game/menu_frame.cpp");
+	char* file = hd_switch_text("../file.cpp");
+
+	ok(flow && audio && frame && file, "japanese: the four files are read",
+		!!flow + !!audio + !!frame + !!file, 4);
+
+	const char* sw = flow ? strstr(flow, "long SwitchLanguage(long idx)") : 0;
+	const char* end = sw ? strstr(sw, "\n}") : 0;
+	const char* jp = sw ? strstr(sw, "if (idx == LNG_JAPAN)") : 0;
+	const char* dir = jp ? strstr(jp, "GetFileAttributesA(\"audio\\\\HQ JP\")")
+		: 0;
+	const char* none = dir ? strstr(dir, "if (at == INVALID_FILE_ATTRIBUTES || "
+		"!(at & FILE_ATTRIBUTE_DIRECTORY))\r\n\t\t\treturn 0;") : 0;
+	const char* eng = none ? strstr(none, "name = LanguageFileName("
+		"LNG_ENGLISH);") : 0;
+	const char* load = eng ? strstr(eng, "if (!LoadFile(name, &d))") : 0;
+	const char* check = load ? strstr(load, "if (sh.nStrings != 195 || "
+		"sh.nPCStrings != 58)") : 0;
+	const char* set = check ? strstr(check, "Gameflow->Language = idx;") : 0;
+
+	ok(jp && dir && none && eng && load && check && set && set < end,
+		"japanese: the entry asks for HQ JP, then loads the English file "
+		"under the header check", !!jp + !!dir + !!none + !!eng + !!load +
+		!!check + !!set, 7);
+	ok(hd_switch_count(sw, "LNG_JAPAN") == 1 && hd_switch_count(flow,
+		"LNG_DUTCH") == 0, "japanese: only the Japanese entry has a case; "
+		"Dutch keeps the check alone", hd_switch_count(sw, "LNG_JAPAN"), 1);
+
+	// CustomText: no case for JAPAN, so the literal.
+	const char* ct = flow ? strstr(flow, "const char* CustomText(const char* "
+		"engl)") : 0;
+	const char* ct_end = ct ? strstr(ct, "\n}") : 0;
+	const char* jcase = ct ? strstr(ct, "case JAPAN") : 0;
+
+	ok(ct && (!jcase || jcase > ct_end), "japanese: CustomText returns the "
+		"literal for JAPAN", !!jcase, 0);
+
+	// The HQ music's mapping, line for line as the base has it.
+	static const char* const mapping[] = {
+		"\t\tswitch (Gameflow->Language)\r\n\t\t{\r\n"
+		"\t\tcase GERMAN:  hq = \"DE\"; break;\r\n"
+		"\t\tcase FRENCH:  hq = \"FR\"; break;\r\n"
+		"\t\tcase ITALIAN: hq = \"IT\"; break;\r\n"
+		"\t\tcase SPANISH: hq = \"ES\"; break;\r\n"
+		"\t\tcase JAPAN:   hq = \"JP\"; break;\r\n"
+		"\t\tdefault:      hq = 0;    break;\t// English, US, Dutch\r\n"
+		"\t\t}\r\n",
+		"\t\t\twsprintf(name, \"audio\\\\HQ %s\\\\%d.OGG\", hq, track);\r\n"
+		"\t\t\tOggStream = stb_vorbis_open_filename(name, &err, 0);\r\n",
+		"\t\t\twsprintf(name, \"audio\\\\HQ EN\\\\%d.OGG\", track);\r\n"
+		"\t\t\tOggStream = stb_vorbis_open_filename(name, &err, 0);\r\n",
+	};
+	int same = 0;
+
+	for (const char* m : mapping)
+		same += hd_switch_count(audio, m) == 1;
+
+	ok(same == 3, "japanese: the HQ audio's mapping is the base's, JAPAN to "
+		"HQ JP, then HQ EN", same, 3);
+
+	// The German keyboard table and the title logo name no Japanese case.
+	ok(hd_switch_count(frame, "Gameflow->Language == 2 ? GermanKeyboard : "
+		"KeyboardButtons") == 1 && hd_switch_count(frame, "== JAPAN") +
+		hd_switch_count(frame, "LNG_JAPAN") + hd_switch_count(frame,
+		"Language == 6") == 0,
+		"japanese: the German keyboard test is the base's", 0, 0);
+
+	const char* logo = file ? strstr(file, "if (Gameflow->Language == GERMAN)"
+		"\r\n\t\t\tsize = LoadFile(\"data\\\\grlogo.pak\", &CompressedData);")
+		: 0;
+	const char* rest = logo ? strstr(logo, "\t\telse\r\n\t\t\tsize = "
+		"LoadFile(\"data\\\\logo512.pak\", &CompressedData);") : 0;
+	const char* fall = rest ? strstr(rest, "if (!size || !CompressedData)")
+		: 0;
+
+	ok(logo && rest && fall && hd_switch_count(file, "== JAPAN") +
+		hd_switch_count(file, "LNG_JAPAN") == 0,
+		"japanese: the title logo of JAPAN is logo512.pak, with its fallback",
+		!!logo + !!rest + !!fall, 3);
+
+	free(flow);
+	free(audio);
+	free(frame);
+	free(file);
+}
+
 static long load_keep_at(const char* text, const char* from, const char* what)
 {
 	const char* start = text ? strstr(text, from) : 0;
@@ -29205,6 +29306,7 @@ int main()
 	caption_rows();
 	caption_columns();
 	extra_strings();
+	japanese_audio();
 	load_keep();
 	load_mode();
 	load_brake();

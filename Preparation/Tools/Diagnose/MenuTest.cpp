@@ -1200,6 +1200,54 @@ static int tree_quoted(const char* at, char out[][64], int max)
 	return n;
 }
 
+/* The columns of the table row that starts at `at`, up to `max`, read to
+ * the row's closing brace over as many lines as it takes: a row wraps
+ * after a comma where it would pass 80 columns, and a literal split around
+ * a hex escape ("Cr\xE9" "dits") is one column, its pieces joined. Each
+ * column is the source spelling, escapes as written. */
+static int tree_row_cols(const char* at, char out[][64], int max)
+{
+	int n = 0;
+	int k = 0;
+	bool in_col = false;
+
+	while (*at && *at != '}' && n < max)
+	{
+		if (*at == ',')
+		{
+			if (in_col)
+				out[n++][k] = 0;
+
+			in_col = false;
+			k = 0;
+			at++;
+			continue;
+		}
+
+		if (*at++ != '"')
+			continue;
+
+		in_col = true;
+
+		while (*at && *at != '"' && k < 63)
+		{
+			if (*at == '\\' && at[1])
+				out[n][k++] = *at++;
+
+			if (k < 63)
+				out[n][k++] = *at++;
+		}
+
+		if (*at == '"')
+			at++;
+	}
+
+	if (in_col && n < max)
+		out[n++][k] = 0;
+
+	return n;
+}
+
 /* ------------------------------------------------ the pad scheme repair -- */
 
 /* The four One-key rows of specific\input.cpp, which live there as static
@@ -1775,7 +1823,7 @@ static void controls_mouse_rows()
 		"rows: the invert shows the table's own on and off");
 
 	// The five strings of each label: English first, German translated, the
-	// other three repeating the English, as every other row of the table.
+	// other three in their own words, as every row of the table has them.
 	{
 		static const char* const names[2] = { "Mouse sensitivity", "Invert mouse" };
 		static const char* const german[2] =
@@ -1795,13 +1843,15 @@ static void controls_mouse_rows()
 			if (!at)
 				continue;
 
-			n = tree_quoted(at, col, 5);
+			n = tree_row_cols(at, col, 5);
 			check(n, 5, "rows: five columns, one per language");
 			check(strcmp(col[0], names[i]), 0, "rows: the English column is the label itself");
 			check(strcmp(col[2], german[i]), 0,
 				"rows: the German column is its translation");
-			check(!strcmp(col[1], names[i]) && !strcmp(col[3], names[i]) && !strcmp(col[4], names[i]), 1,
-				"rows: French, Italian and Spanish repeat the English");
+			check(strcmp(col[1], names[i]) && strcmp(col[3], names[i]) &&
+				strcmp(col[4], names[i]) && col[1][0] && col[3][0] &&
+				col[4][0], 1,
+				"rows: French, Italian and Spanish carry their own word");
 			check((int)strlen(col[2]) <= (int)strlen("Kamerageschwindigkeit"), 1,
 				"rows: the German label is no longer than the longest the column holds");
 			check(tree_count(flow, key), 1, "rows: and the label has exactly one row");
@@ -1990,13 +2040,17 @@ static void graphics_softbody_row()
 			if (!at)
 				continue;
 
-			n = tree_quoted(at, col, 5);
+			n = tree_row_cols(at, col, 5);
 			check(n, 5, "softbody row: five columns, one per language");
 			check(strcmp(col[0], names[i]), 0, "softbody row: the English column is the string itself");
 			check(strcmp(col[2], german[i]), 0,
 				"softbody row: the German column is its translation");
-			check(!strcmp(col[1], names[i]) && !strcmp(col[3], names[i]) && !strcmp(col[4], names[i]), 1,
-				"softbody row: French, Italian and Spanish repeat the English");
+			// A word each, the English one only where the language uses it
+			// ("Normal" in French and Spanish), so never all three.
+			check(col[1][0] && col[3][0] && col[4][0] &&
+				(strcmp(col[1], names[i]) || strcmp(col[3], names[i]) ||
+				strcmp(col[4], names[i])), 1,
+				"softbody row: French, Italian and Spanish carry their words");
 			check((int)strlen(col[2]) <= (int)strlen("Kamerageschwindigkeit"), 1,
 				"softbody row: the German string is no longer than the longest label the column holds");
 			check(tree_count(flow, key), 1, "softbody row: and the string has exactly one row");
@@ -2013,7 +2067,8 @@ static void graphics_softbody_row()
 
 			snprintf(key, sizeof(key), "{ \"%s\",", had[i]);
 			at = strstr(flow, key);
-			check(at != 0 && tree_quoted(at, col, 5) == 5 && !strcmp(col[2], hadDe[i]), 1,
+			check(at != 0 && tree_row_cols(at, col, 5) == 5 &&
+				!strcmp(col[2], hadDe[i]), 1,
 				"softbody row: off and Strong are in the table already, aus and Stark");
 		}
 	}
@@ -2426,23 +2481,28 @@ static void graphics_shadow_row()
 		char col[5][64];
 		const char* at = strstr(flow, "{ \"Projected\",");
 
-		check(at != 0 && tree_quoted(at, col, 5) == 5, 1, "shadow row: Projected has its row in CustomText's table");
+		check(at != 0 && tree_row_cols(at, col, 5) == 5, 1,
+			"shadow row: Projected has its row in CustomText's table");
 
 		if (at)
 		{
 			check(strcmp(col[0], "Projected"), 0, "shadow row: the English column is the string itself");
 			check(strcmp(col[2], "Projiziert"), 0, "shadow row: the German column is Projiziert");
-			check(!strcmp(col[1], "Projected") && !strcmp(col[3], "Projected") && !strcmp(col[4], "Projected"), 1,
-				"shadow row: French, Italian and Spanish repeat the English");
+			check(strcmp(col[1], "Projected") && strcmp(col[3], "Projected") &&
+				strcmp(col[4], "Projected"), 1,
+				"shadow row: French, Italian and Spanish carry their own word");
 		}
 
 		check(tree_count(flow, "{ \"Projected\","), 1, "shadow row: and the string has exactly one row");
 
 		at = strstr(flow, "{ \"Faded circle\",");
-		check(at != 0 && tree_quoted(at, col, 5) == 5 && !strcmp(col[2], "Weicher Kreis"), 1,
+		check(at != 0 && tree_row_cols(at, col, 5) == 5 &&
+			!strcmp(col[2], "Weicher Kreis"), 1,
 			"shadow row: Faded circle is in the table already, Weicher Kreis");
-		check(tree_count(flow, "{ \"PSX\",") + tree_count(flow, "{ \"Original\","), 0,
-			"shadow row: PSX and Original have no row and fall back to the English");
+		check(tree_count(flow, "{ \"PSX\",") == 0 &&
+			tree_count(flow, "{ \"Original\",") == 1, 1,
+			"shadow row: PSX has no row and falls back to itself, Original has "
+			"its row for the Italian word");
 	}
 
 	// The running level: the draw reads the option every frame, forgets the

@@ -1317,25 +1317,36 @@ const char* LanguageName(long idx)
 	return file;
 }
 
-// Self-added menu rows ("Language", "Level Select", ...) have no string ID
-// in the language wad, so each gets its own row in the table below. Only
-// German carries a real translation; French/Italian/Spanish repeat the
-// English literal on purpose, because the function only returns
-// table[i][column] once engl has matched a row at all - an empty string
-// there would print blank, not fall back to English the way an absent row
-// does. Rows with no German entry (PSX/TR4/TR5, "Display"/"Display (60)",
-// "Original") are left out of the table for the same reason: CustomText
-// falls back to the English literal on its own when nothing matches.
+// The project's own words - menu rows and values, the F4 outfit window, the
+// Credits screen's headings, the pad's names, the F12 notice - have no
+// string ID in the language wad, so each gets its own row in the table
+// below: the English literal the code passes, then the French, German,
+// Italian and Spanish word. Every row carries all four words. Where a
+// language uses the English word itself ("Audio", "HUD", "VSync", French
+// "Pause", Spanish "Normal"), its cell repeats it: the function returns
+// table[i][column] once engl has matched a row, so an empty cell would
+// print blank, not fall back to English the way an absent row does. A
+// literal that is the same in every language ("PSX", "TR4", "TR5",
+// "Gamma", "HD / SD", a file's or a button's name) has no row, and the
+// function returns it as it is when nothing matches. A word of
+// extrastrings.txt goes before the table's (LoadExtraStrings below).
+// English, US, Japanese and Dutch read the English literal.
 //
 // Only characters the game font can draw without escape codes (ASCII) are
-// written directly. German umlauts are Latin-1 hex escapes (\xE4/\xF6/\xFC
-// for a/o/u-umlaut), keeping this file itself ASCII: AccentToCode
-// (text.cpp) maps those bytes to codes 128+4/128+20/128+1, which
-// PrintString composes from CharDef plus AccentTable's rows (accent.inc) -
-// the same path the German language file's own umlauts take. Every escape
-// below is followed by a letter that is not a hex digit, or by the end of
-// the string, so it ends where it should - keep it that way when editing.
-// The sharp s has no accent row, so no string here needs one.
+// written directly. Accented letters are Latin-1 hex escapes (\xE4 for
+// a-umlaut, \xE9 for e-acute, ...), keeping this file itself ASCII:
+// AccentToCode (text.cpp) maps those bytes to the font's codes 128..173,
+// which PrintString composes from CharDef plus AccentTable's rows
+// (accent.inc) - the same path the language files' own accented letters
+// take. It composes 33 of them: a, e, i, o and u each with the acute, the
+// grave, the circumflex and the diaeresis, c-cedilla, n-tilde, y-diaeresis,
+// the capitals A-umlaut, A-circumflex, A-acute, E-acute, O-umlaut, O-acute,
+// U-umlaut and N-tilde, and the inverted ? and !; every word below keeps to
+// those. Every escape below is followed by a letter that is not a
+// hex digit, or by the end of the string, so it ends where it should; where
+// a hex digit follows, the literal is split there ("d\xE9" "faut") - keep
+// it that way when editing. The sharp s has no accent row, so no string
+// here needs one.
 //
 // The Steam edition's ITALIAN.DAT is just an English copy - whoever still
 // has it sees five Italian rows in an English menu; with a real
@@ -1343,38 +1354,47 @@ const char* LanguageName(long idx)
 const char* CustomText(const char* engl)
 {
 	static const char* table[][5] =
-	{	// English           French             German            Italian               Spanish
-		{ "Language",        "Langue",          "Sprache",        "Lingua",             "Idioma" },
-		{ "Level Select",    "Choix du niveau", "Levelauswahl",   "Selezione livello",  "Seleccion de nivel" },
-		{ "Pause",           "Pause",           "Pause",          "Pausa",              "Pausa" },
-		{ "Gallery",         "Galerie",         "Galerie",        "Galleria",           "Galeria" },
-		{ "tomb5 options",   "Options tomb5",   "tomb5-Optionen", "Opzioni tomb5",      "Opciones tomb5" },
-		{ "Credits",         "Credits",         "Credits",        "Crediti",            "Creditos" },
-		{ "Controls",        "Controls",        "Steuerung",      "Controls",           "Controls" },
-		{ "Control type",    "Control type",    "Steuerungsart",  "Control type",       "Control type" },
-		{ "Tank",            "Tank",            "Panzer",         "Tank",               "Tank" },
-		{ "Modern",          "Modern",          "Modern",         "Modern",             "Modern" },
-		{ "Combat mode",     "Combat mode",     "Kampfmodus",     "Combat mode",        "Combat mode" },
-		{ "Toggle",          "Toggle",          "Umschalten",     "Toggle",             "Toggle" },
-		{ "Hold",            "Hold",            "Halten",         "Hold",               "Hold" },
-		{ "Action",          "Action",          "Aktion",         "Action",             "Action" },
-		{ "One key",         "One key",         "Eine Taste",     "One key",            "One key" },
-		{ "Separate",        "Separate",        "Getrennt",       "Separate",           "Separate" },
+	{	// English, French, German, Italian, Spanish
+		{ "Language", "Langue", "Sprache", "Lingua", "Idioma" },
+		{ "Level Select", "Choix du niveau", "Levelauswahl",
+			"Selezione livello", "Selecci\xF3n de nivel" },
+		{ "Pause", "Pause", "Pause", "Pausa", "Pausa" },
+		{ "Gallery", "Galerie", "Galerie", "Galleria", "Galer\xED" "a" },
+		{ "tomb5 options", "Options tomb5", "tomb5-Optionen", "Opzioni tomb5",
+			"Opciones tomb5" },
+		{ "Credits", "Cr\xE9" "dits", "Credits", "Crediti", "Cr\xE9" "ditos" },
+		{ "Controls", "Commandes", "Steuerung", "Controlli", "Controles" },
+		{ "Control type", "Type de commandes", "Steuerungsart",
+			"Tipo di controllo", "Tipo de control" },
+		{ "Tank", "Char", "Panzer", "Carro armato", "Tanque" },
+		{ "Modern", "Moderne", "Modern", "Moderno", "Moderno" },
+		{ "Combat mode", "Mode de combat", "Kampfmodus", "Modo combattimento",
+			"Modo de combate" },
+		{ "Toggle", "Basculer", "Umschalten", "Commuta", "Alternar" },
+		{ "Hold", "Maintenir", "Halten", "Mantieni", "Mantener" },
+		{ "Action", "Action", "Aktion", "Azione", "Acci\xF3n" },
+		{ "One key", "Une touche", "Eine Taste", "Un tasto", "Una tecla" },
+		{ "Separate", "S\xE9par\xE9" "e", "Getrennt", "Separata", "Separada" },
 		// The Secondary action's bind row: the Key bindings page offers it
 		// only while "Action" says Separate.
-		{ "Secondary",       "Secondary",       "Sekund\xE4r",    "Secondary",          "Secondary" },
+		{ "Secondary", "Secondaire", "Sekund\xE4r", "Secondaria",
+			"Secundaria" },
 		// The two mode rows under Combat mode; only the labels are new,
 		// their values Hold and Toggle are already in this table above.
-		{ "Sprint mode",     "Sprint mode",     "Sprintmodus",    "Sprint mode",        "Sprint mode" },
-		{ "Duck mode",       "Duck mode",       "Duckmodus",      "Duck mode",          "Duck mode" },
+		{ "Sprint mode", "Mode sprint", "Sprintmodus", "Modo scatto",
+			"Modo carrera" },
+		{ "Duck mode", "Mode accroupi", "Duckmodus", "Modo abbassamento",
+			"Modo agacharse" },
 		// "Modi" is both the page title for these five mode rows and the
 		// tab's own label: one literal, one row, exactly as "Key bindings"
 		// and "Credits" are above.
-		{ "Grab mode",       "Grab mode",       "Greifmodus",     "Grab mode",          "Grab mode" },
+		{ "Grab mode", "Mode saisie", "Greifmodus", "Modo presa",
+			"Modo agarre" },
 		// The fifth mode row; its values are "on"/"off", already in this
 		// table below.
-		{ "Ledge hang",      "Ledge hang",      "Kantengriff",    "Ledge hang",         "Ledge hang" },
-		{ "Modes",           "Modes",           "Modi",           "Modes",              "Modes" },
+		{ "Ledge hang", "Prise de rebord", "Kantengriff", "Presa sul bordo",
+			"Agarre de cornisa" },
+		{ "Modes", "Modes", "Modi", "Modalit\xE0", "Modos" },
 		// Bind rows for hotkeys that used to be hard-wired keys. Only six
 		// of the sixteen new rows are here: the other ten take the string
 		// wad's own names through SCRIPT_TEXT (the medipacks, save, load
@@ -1383,106 +1403,155 @@ const char* CustomText(const char* engl)
 		// "Level \xFC" "berspringen" is one string split into two pieces
 		// on purpose: the letter after the umlaut is 'b', which is a hex
 		// digit, so "\xFCb" would be read as one oversized escape. Every
-		// other umlaut in this table is followed by a letter that is not,
-		// which is why none of them needs the split.
-		{ "Crossbow",        "Crossbow",        "Armbrust",       "Crossbow",           "Crossbow" },
-		{ "Fly mode",        "Fly mode",        "Flugmodus",      "Fly mode",           "Fly mode" },
-		{ "All weapons",     "All weapons",     "Alle Waffen",    "All weapons",        "All weapons" },
-		{ "All items",       "All items",       "Alle Gegenst\xE4nde", "All items",     "All items" },
-		{ "Heal",            "Heal",            "Heilen",         "Heal",               "Heal" },
-		{ "Skip level",      "Skip level",      "Level \xFC" "berspringen", "Skip level", "Skip level" },
+		// other escape in this table that a hex digit follows is split the
+		// same way ("Cr\xE9" "dits", "d\xE9" "faut").
+		{ "Crossbow", "Arbal\xE8te", "Armbrust", "Balestra", "Ballesta" },
+		{ "Fly mode", "Mode vol", "Flugmodus", "Modo volo", "Modo vuelo" },
+		{ "All weapons", "Toutes les armes", "Alle Waffen", "Tutte le armi",
+			"Todas las armas" },
+		{ "All items", "Tous les objets", "Alle Gegenst\xE4nde",
+			"Tutti gli oggetti", "Todos los objetos" },
+		{ "Heal", "Soigner", "Heilen", "Cura", "Curar" },
+		{ "Skip level", "Passer le niveau", "Level \xFC" "berspringen",
+			"Salta livello", "Saltar nivel" },
 		// The pad's Modifier row, which the keyboard list has no twin for.
 		// "Modifikator" reads as what it is on a German keyboard page; the
 		// value column beside it prints the button's own name, so the word
 		// never has to carry which button it is.
-		{ "Modifier",        "Modifier",        "Modifikator",    "Modifier",           "Modifier" },
-		{ "Camera speed",    "Camera speed",    "Kamerageschwindigkeit", "Camera speed", "Camera speed" },
+		{ "Modifier", "Modificateur", "Modifikator", "Modificatore",
+			"Modificador" },
+		{ "Camera speed", "Vitesse cam\xE9ra", "Kamerageschwindigkeit",
+			"Velocit\xE0 telecamera", "Velocidad de c\xE1mara" },
 		// "Standard wiederherstellen" is longer than the value column
 		// allows for a label, but it is a centred action row where the
 		// whole width of the screen is its own, so the width limit that
 		// "Kamerageschwindigkeit" sets for labels does not reach it.
-		{ "Audio",           "Audio",           "Audio",          "Audio",              "Audio" },
-		{ "Graphics",        "Graphics",        "Grafik",         "Graphics",           "Graphics" },
-		{ "Display",         "Display",         "Display",        "Display",            "Display" },
-		{ "Key bindings",    "Key bindings",    "Tastenbelegung", "Key bindings",       "Key bindings" },
-		{ "Reset to defaults", "Reset to defaults", "Standard wiederherstellen", "Reset to defaults", "Reset to defaults" },
-		{ "Control layout",  "Control layout",  "Steuerungslayout", "Control layout",   "Control layout" },
+		{ "Audio", "Audio", "Audio", "Audio", "Audio" },
+		{ "Graphics", "Graphismes", "Grafik", "Grafica", "Gr\xE1" "ficos" },
+		{ "Display", "\xC9" "cran", "Display", "Schermo", "Pantalla" },
+		{ "Display (60)", "\xC9" "cran (60)", "Display (60)", "Schermo (60)",
+			"Pantalla (60)" },
+		{ "Key bindings", "Configuration des touches", "Tastenbelegung",
+			"Assegnazione tasti", "Asignaci\xF3n de teclas" },
+		{ "Reset to defaults", "R\xE9tablir les valeurs par d\xE9" "faut",
+			"Standard wiederherstellen", "Ripristina predefiniti",
+			"Restablecer valores predeterminados" },
+		{ "Control layout", "Sch\xE9ma de commandes", "Steuerungslayout",
+			"Schema di controllo", "Esquema de control" },
 		// German keeps the borrowed loanword "Deadzone", which is also the
 		// shorter of the two.
-		{ "Dead zone",       "Dead zone",       "Deadzone",       "Dead zone",          "Dead zone" },
+		{ "Dead zone", "Zone morte", "Deadzone", "Zona morta", "Zona muerta" },
 		// The two mouse rows under it; their values are "on"/"off" and the
 		// slider, already here. "Mausempfindlichkeit" is two letters shorter
 		// than "Kamerageschwindigkeit", the longest label the column holds.
-		{ "Mouse sensitivity", "Mouse sensitivity", "Mausempfindlichkeit", "Mouse sensitivity", "Mouse sensitivity" },
-		{ "Invert mouse",    "Invert mouse",    "Maus invertieren", "Invert mouse",     "Invert mouse" },
-		{ "HUD",             "HUD",             "HUD",            "HUD",                "HUD" },
-		{ "View",            "View",            "Ansicht",        "View",               "View" },
-		{ "First person view", "First person view", "Ego-Sicht",  "First person view",  "First person view" },
-		{ "Field of view",   "Field of view",   "Sichtfeld",      "Field of view",      "Field of view" },
-		{ "Death camera",    "Death camera",    "Todeskamera",    "Death camera",       "Death camera" },
-		{ "Follow head bone", "Follow head bone", "Kopfknochen folgen", "Follow head bone", "Follow head bone" },
-		{ "Camera damping",  "Camera damping",  "Kamerad\xE4mpfung", "Camera damping",    "Camera damping" },
-		{ "Body",            "Body",            "K\xF6rper",        "Body",               "Body" },
-		{ "Frame rate",      "Frame rate",      "Bildrate",       "Frame rate",         "Frame rate" },
-		{ "VSync",           "VSync",           "VSync",          "VSync",              "VSync" },
-		{ "Ammotype hotkeys", "Ammotype hotkeys", "Munitions-Hotkeys", "Ammotype hotkeys", "Ammotype hotkeys" },
-		{ "Look transparency", "Look transparency", "Umsehen transparent", "Look transparency", "Look transparency" },
-		{ "Static lighting", "Static lighting", "Statisches Licht", "Static lighting",  "Static lighting" },
-		{ "Footprints",      "Footprints",      "Trittspuren",    "Footprints",         "Footprints" },
-		{ "Shadow mode",     "Shadow mode",     "Schatten",       "Shadow mode",        "Shadow mode" },
-		{ "Fix climb up delay", "Fix climb up delay", "Klettern ohne Pause", "Fix climb up delay", "Fix climb up delay" },
-		{ "Flexible crawling", "Flexible crawling", "Flexibles Kriechen", "Flexible crawling", "Flexible crawling" },
-		{ "Cutscene skipper", "Cutscene skipper", "Cutscene-Skipper", "Cutscene skipper", "Cutscene skipper" },
-		{ "Cheats",          "Cheats",          "Cheats",         "Cheats",             "Cheats" },
-		{ "Bar mode",        "Bar mode",        "Balkenstil",     "Bar mode",           "Bar mode" },
-		{ "Bar positions",   "Bar positions",   "Balkenposition", "Bar positions",      "Bar positions" },
-		{ "Enemy bars",      "Enemy bars",      "Gegnerbalken",   "Enemy bars",         "Enemy bars" },
-		{ "Ammo counter",    "Ammo counter",    "Munitionsanzeige", "Ammo counter",     "Ammo counter" },
-		{ "Gameover menu",   "Gameover menu",   "Game-Over-Men\xFC", "Gameover menu",     "Gameover menu" },
-		{ "Fog",             "Fog",             "Nebel",          "Fog",                "Fog" },
-		{ "HD textures",     "HD textures",     "HD-Texturen",    "HD textures",        "HD textures" },
+		{ "Mouse sensitivity", "Sensibilit\xE9 souris", "Mausempfindlichkeit",
+			"Sensibilit\xE0 mouse", "Sensibilidad del rat\xF3n" },
+		{ "Invert mouse", "Inverser souris", "Maus invertieren",
+			"Inverti mouse", "Invertir rat\xF3n" },
+		{ "HUD", "HUD", "HUD", "HUD", "HUD" },
+		{ "View", "Vue", "Ansicht", "Visuale", "Vista" },
+		{ "First person view", "Vue subjective", "Ego-Sicht",
+			"Visuale soggettiva", "Vista subjetiva" },
+		{ "Field of view", "Champ de vision", "Sichtfeld", "Campo visivo",
+			"Campo de visi\xF3n" },
+		{ "Death camera", "Cam\xE9ra de mort", "Todeskamera",
+			"Telecamera morte", "C\xE1mara de muerte" },
+		{ "Follow head bone", "Suivre la t\xEAte", "Kopfknochen folgen",
+			"Segui la testa", "Seguir la cabeza" },
+		{ "Camera damping", "Amorti cam\xE9ra", "Kamerad\xE4mpfung",
+			"Fluidit\xE0 telecamera", "Suavizado de c\xE1mara" },
+		{ "Body", "Corps", "K\xF6rper", "Corpo", "Cuerpo" },
+		{ "Frame rate", "Fr\xE9quence d'images", "Bildrate",
+			"Frequenza fotogrammi", "Tasa de fotogramas" },
+		{ "VSync", "VSync", "VSync", "VSync", "VSync" },
+		{ "Ammotype hotkeys", "Raccourcis munitions", "Munitions-Hotkeys",
+			"Tasti rapidi munizioni", "Atajos de munici\xF3n" },
+		{ "Look transparency", "Scruter transparent", "Umsehen transparent",
+			"Guarda trasparente", "Mirar transparente" },
+		{ "Static lighting", "\xC9" "clairage statique", "Statisches Licht",
+			"Illuminazione statica", "Iluminaci\xF3n est\xE1tica" },
+		{ "Footprints", "Empreintes de pas", "Trittspuren", "Impronte",
+			"Huellas" },
+		{ "Shadow mode", "Ombres", "Schatten", "Ombre", "Sombras" },
+		{ "Fix climb up delay", "Escalade sans pause", "Klettern ohne Pause",
+			"Scalata senza pausa", "Trepar sin pausa" },
+		{ "Flexible crawling", "Reptation flexible", "Flexibles Kriechen",
+			"Strisciata flessibile", "Arrastre flexible" },
+		{ "Cutscene skipper", "Passer cin\xE9matiques", "Cutscene-Skipper",
+			"Salta filmati", "Saltar escenas" },
+		{ "Cheats", "Codes de triche", "Cheats", "Trucchi", "Trucos" },
+		{ "Bar mode", "Style des barres", "Balkenstil", "Stile barre",
+			"Estilo de barras" },
+		{ "Bar positions", "Position des barres", "Balkenposition",
+			"Posizione barre", "Posici\xF3n de barras" },
+		{ "Enemy bars", "Barres ennemies", "Gegnerbalken", "Barre nemici",
+			"Barras de enemigos" },
+		{ "Ammo counter", "Compteur munitions", "Munitionsanzeige",
+			"Contatore munizioni", "Contador de munici\xF3n" },
+		{ "Gameover menu", "Menu Game Over", "Game-Over-Men\xFC",
+			"Menu Game Over", "Men\xFA de fin de partida" },
+		{ "Fog", "Brouillard", "Nebel", "Nebbia", "Niebla" },
+		{ "HD textures", "Textures HD", "HD-Texturen", "Texture HD",
+			"Texturas HD" },
 		// The row under it and two of its values; "off" and "Strong" are
-		// already in this table below. "Normal" is the same word in all five
-		// and stands here so that every value of the row has its own entry.
-		{ "Body physics",    "Body physics",    "K\xF6rperphysik", "Body physics",      "Body physics" },
-		{ "Subtle",          "Subtle",          "Dezent",         "Subtle",             "Subtle" },
-		{ "Normal",          "Normal",          "Normal",         "Normal",             "Normal" },
-		{ "Crawl Tilting",   "Crawl Tilting",   "Kriechneigung",  "Crawl Tilting",      "Crawl Tilting" },
-		{ "PSX skies",       "PSX skies",       "PSX-Himmel",     "PSX skies",          "PSX skies" },
-		{ "Loadbar style",   "Loadbar style",   "Ladebalken",     "Loadbar style",      "Loadbar style" },
-		{ "Mono screen style", "Mono screen style", "Mono-Screen-Stil", "Mono screen style", "Mono screen style" },
-		{ "Loading text",    "Loading text",    "Ladetext",       "Loading text",       "Loading text" },
-		{ "Shimmer",         "Shimmer",         "Schimmern",      "Shimmer",            "Shimmer" },
-		{ "Distance fog",    "Distance fog",    "Distanznebel",   "Distance fog",       "Distance fog" },
-		{ "UW Effect",       "UW Effect",       "Unterwasser-Effekt", "UW Effect",      "UW Effect" },
+		// already in this table below. "Normal" is the same word in French,
+		// German and Spanish and stands here so that every value of the row
+		// has its own entry.
+		{ "Body physics", "Physique du corps", "K\xF6rperphysik",
+			"Fisica del corpo", "F\xEDsica corporal" },
+		{ "Subtle", "Subtil", "Dezent", "Lieve", "Sutil" },
+		{ "Normal", "Normal", "Normal", "Normale", "Normal" },
+		{ "Crawl Tilting", "Inclinaison reptation", "Kriechneigung",
+			"Inclinazione strisciata", "Inclinaci\xF3n en arrastre" },
+		{ "PSX skies", "Ciels PSX", "PSX-Himmel", "Cieli PSX", "Cielos PSX" },
+		{ "Loadbar style", "Barre de chargement", "Ladebalken",
+			"Barra caricamento", "Barra de carga" },
+		{ "Mono screen style", "Style \xE9" "cran mono", "Mono-Screen-Stil",
+			"Stile schermo mono", "Estilo pantalla mono" },
+		{ "Loading text", "Texte de chargement", "Ladetext",
+			"Testo caricamento", "Texto de carga" },
+		{ "Shimmer", "Miroitement", "Schimmern", "Tremolio", "Ondulaci\xF3n" },
+		{ "Distance fog", "Brouillard lointain", "Distanznebel",
+			"Nebbia distanza", "Niebla de distancia" },
+		{ "UW Effect", "Effet sous-marin", "Unterwasser-Effekt",
+			"Effetto subacqueo", "Efecto submarino" },
 		// The build gate above "HD textures" and the polished floors'
 		// mirror under "Body physics"; their values are "on"/"off" of this
 		// table. "HD-Installation" names what the gate switches: whether a
 		// level is built with the HD data of the installation at all.
-		{ "HD build", "HD build", "HD-Installation", "HD build",
-			"HD build" },
-		{ "Reflections", "Reflections", "Spiegelungen", "Reflections",
-			"Reflections" },
+		{ "HD build", "Installation HD", "HD-Installation", "Installazione HD",
+			"Instalaci\xF3n HD" },
+		{ "Reflections", "Reflets", "Spiegelungen", "Riflessi", "Reflejos" },
 		// Values, not row labels - "on/off", "Circle" etc. reused across many
-		// rows. "PSX"/"TR4"/"TR5" and "Original" are not here for the same
-		// reason as above: they fall back to English.
-		{ "on",              "on",              "an",             "on",                 "on" },
-		{ "off",             "off",             "aus",            "off",                "off" },
-		{ "Circle",          "Circle",          "Kreis",          "Circle",             "Circle" },
-		{ "Faded circle",    "Faded circle",    "Weicher Kreis",  "Faded circle",       "Faded circle" },
+		// rows. "PSX"/"TR4"/"TR5" are not here: they are the same in every
+		// language and fall back to themselves. "Original" has its row for
+		// the Italian "Originale", as "Display (60)" above has its own for
+		// the word "Display".
+		{ "on", "activ\xE9", "an", "attivo", "activo" },
+		{ "off", "d\xE9sactiv\xE9", "aus", "disattivo", "inactivo" },
+		{ "Circle", "Rond", "Kreis", "Cerchio", "C\xEDrculo" },
+		{ "Faded circle", "Rond flou", "Weicher Kreis", "Cerchio sfumato",
+			"C\xEDrculo difuso" },
 		// Shadow mode's fifth value, offered while HD is on.
-		{ "Projected",       "Projected",       "Projiziert",     "Projected",          "Projected" },
-		{ "Improved",        "Improved",        "Verbessert",     "Improved",           "Improved" },
-		{ "Clear",           "Clear",           "Klar",           "Clear",              "Clear" },
-		{ "Light",           "Light",           "Leicht",         "Light",              "Light" },
-		{ "Medium",          "Medium",          "Mittel",         "Medium",             "Medium" },
-		{ "Strong",          "Strong",          "Stark",          "Strong",             "Strong" },
-		{ "First person",    "First person",    "Ego-Sicht",      "First person",       "First person" },
-		{ "Third person",    "Third person",    "Dritte Person",  "Third person",       "Third person" },
-		{ "still",           "still",           "ruhig",          "still",              "still" },
-		{ "animated",        "animated",        "animiert",       "animated",           "animated" },
-		{ "on (restart)",    "on (restart)",    "an (Neustart)",  "on (restart)",       "on (restart)" },
-		{ "off (restart)",   "off (restart)",   "aus (Neustart)", "off (restart)",      "off (restart)" },
+		{ "Projected", "Projet\xE9" "e", "Projiziert", "Proiettata",
+			"Proyectada" },
+		{ "Improved", "Am\xE9lior\xE9", "Verbessert", "Migliorato",
+			"Mejorado" },
+		{ "Clear", "Transparent", "Klar", "Trasparente", "Transparente" },
+		{ "Light", "L\xE9ger", "Leicht", "Leggero", "Ligero" },
+		{ "Medium", "Moyen", "Mittel", "Medio", "Medio" },
+		{ "Strong", "Fort", "Stark", "Forte", "Fuerte" },
+		{ "First person", "Vue subjective", "Ego-Sicht", "Prima persona",
+			"Primera persona" },
+		{ "Third person", "Troisi\xE8me personne", "Dritte Person",
+			"Terza persona", "Tercera persona" },
+		{ "still", "immobile", "ruhig", "fermo", "quieto" },
+		{ "animated", "anim\xE9", "animiert", "animato", "animado" },
+		{ "on (restart)", "activ\xE9 (relancer)", "an (Neustart)",
+			"attivo (riavvio)", "activo (reinicio)" },
+		{ "off (restart)", "d\xE9sactiv\xE9 (relancer)", "aus (Neustart)",
+			"disattivo (riavvio)", "inactivo (reinicio)" },
+		{ "Original", "Original", "Original", "Originale", "Original" },
 		// The F4 outfit window (specific\hd\hd_outfitmenu.cpp): its title,
 		// the first row's name and value, the four labels under the list,
 		// their values, and the line under them. It draws in the options
@@ -1492,34 +1561,33 @@ const char* CustomText(const char* engl)
 		// pixels wide at most and a space W / 80 (game\text.cpp, InitFont
 		// and GetStringLength), so a value whose glyph units plus 6.4 per
 		// space stay at or under 192 fits at every screen width W: every
-		// German value below does, and so does every English one: the
-		// window's own English words are chosen to fit as well. "Outfit" is
-		// the German word as well and stands here so that every word of the
-		// window has its row. "Barfuss" is written with "ss" because the
-		// font has no sharp s.
-		{ "Outfit", "Outfit", "Outfit", "Outfit", "Outfit" },
-		{ "Level facts", "Level facts", "Leveleigen", "Level facts",
-			"Level facts" },
-		{ "level and run decide", "level and run decide",
-			"nach Level und Lauf", "level and run decide",
-			"level and run decide" },
-		{ "Footsteps", "Footsteps", "Schritte", "Footsteps", "Footsteps" },
-		{ "Head", "Head", "Kopf", "Head", "Head" },
-		{ "Shine", "Shine", "Glanz", "Shine", "Shine" },
-		{ "Skin glow", "Skin glow", "Hautglanz", "Skin glow", "Skin glow" },
-		{ "as the outfit says", "as the outfit says", "laut Outfit",
-			"as the outfit says", "as the outfit says" },
-		{ "Bare", "Bare", "Barfuss", "Bare", "Bare" },
-		{ "Boots", "Boots", "Stiefel", "Boots", "Boots" },
-		{ "Bare - no 2nd set", "Bare - no 2nd set", "Barfuss - fehlt hier",
-			"Bare - no 2nd set", "Bare - no 2nd set" },
-		{ "Boots - no 2nd set", "Boots - no 2nd set", "Stiefel - fehlt hier",
-			"Boots - no 2nd set", "Boots - no 2nd set" },
+		// value below does, in all five languages. "Outfit" is the German
+		// word as well and stands here so that every word of the window has
+		// its row. "Barfuss" is written with "ss" because the font has no
+		// sharp s.
+		{ "Outfit", "Tenue", "Outfit", "Costume", "Atuendo" },
+		{ "Level facts", "Propre au niveau", "Leveleigen", "Del livello",
+			"Del nivel" },
+		{ "level and run decide", "par niveau et partie", "nach Level und Lauf",
+			"da livello e partita", "por nivel y partida" },
+		{ "Footsteps", "Pas", "Schritte", "Passi", "Pasos" },
+		{ "Head", "T\xEAte", "Kopf", "Testa", "Cabeza" },
+		{ "Shine", "Brillance", "Glanz", "Lucentezza", "Brillo" },
+		{ "Skin glow", "\xC9" "clat de la peau", "Hautglanz",
+			"Lucentezza pelle", "Brillo de piel" },
+		{ "as the outfit says", "selon la tenue", "laut Outfit",
+			"come da costume", "seg\xFAn atuendo" },
+		{ "Bare", "Pieds nus", "Barfuss", "Scalza", "Descalza" },
+		{ "Boots", "Bottes", "Stiefel", "Stivali", "Botas" },
+		{ "Bare - no 2nd set", "Pieds nus - pas ici", "Barfuss - fehlt hier",
+			"Scalza - manca qui", "Descalza - falta aqu\xED" },
+		{ "Boots - no 2nd set", "Bottes - pas ici", "Stiefel - fehlt hier",
+			"Stivali - manca qui", "Botas - falta aqu\xED" },
 		// "n\xE4" "chsten" is split for the same reason as "berspringen"
 		// above: 'c' is a hex digit.
-		{ "applies at the next level", "applies at the next level",
-			"gilt ab dem n\xE4" "chsten Level", "applies at the next level",
-			"applies at the next level" },
+		{ "applies at the next level", "s'applique au niveau suivant",
+			"gilt ab dem n\xE4" "chsten Level", "vale dal livello successivo",
+			"se aplica en el siguiente nivel" },
 		// The head row's and the two shine rows' words: the window's own
 		// head words (specific\hd\hd_outfitmenu.cpp, head_word) and the
 		// one-word tiers it asks HDWardrobeFromTag for
@@ -1528,37 +1596,40 @@ const char* CustomText(const char* engl)
 		// ("eigener"), TR5's head "TR5" and its own head under TR5's braid
 		// "TR5 hair" ("mit Zopf"), short enough that each, with
 		// "(outfit.txt)" behind it, stays within the 192 units of the value
-		// column at every screen width, in English and in German. "TR5" is
-		// the same in German, and "outfit.txt" and "origin" are a file's
-		// name and the key of a mod.txt line: all three fall back to
-		// themselves, as "PSX" does.
-		{ "TR5 hair", "TR5 hair", "mit Zopf", "TR5 hair", "TR5 hair" },
-		{ "own", "own", "eigener", "own", "own" },
-		{ "measured", "measured", "gemessen", "measured", "measured" },
-		{ "table", "table", "Tabelle", "table", "table" },
-		{ "list", "list", "Liste", "list", "list" },
-		{ "default", "default", "Standard", "default", "default" },
+		// column at every screen width, in every language, and so does the
+		// widest shine value, "1.00/128" before a tier. "TR5" is the same
+		// in every language, and "outfit.txt" and "origin" are a file's name
+		// and the key of a mod.txt line: all three fall back to themselves,
+		// as "PSX" does.
+		{ "TR5 hair", "\xE0 tresse", "mit Zopf", "treccia", "trenza" },
+		{ "own", "propre", "eigener", "propria", "propia" },
+		{ "measured", "mesur\xE9", "gemessen", "misurato", "medido" },
+		{ "table", "table", "Tabelle", "tabella", "tabla" },
+		{ "list", "liste", "Liste", "lista", "lista" },
+		{ "default", "d\xE9" "faut", "Standard", "predefinito", "est\xE1ndar" },
 		// The notice at the top of the screen when the HD/SD key has
 		// nothing to switch (specific\hd\hd_switch.cpp). It borrows the
 		// ammo hotkeys' caption, whose buffer holds 63 letters
 		// (specific\input.cpp).
-		{ "HD is off", "HD is off", "HD ist aus", "HD is off", "HD is off" },
+		{ "HD is off", "HD d\xE9sactiv\xE9", "HD ist aus", "HD disattivo",
+			"HD inactivo" },
 		// The Credits screen's headings (tomb5\troyestuff.cpp), each drawn
 		// centred across the screen; its title is "Credits" above. The
 		// names under them are names and have no rows.
-		{ "TOMB5 Engine", "TOMB5 Engine", "TOMB5-Engine", "TOMB5 Engine",
-			"TOMB5 Engine" },
-		{ "TR3 Enemies from tomb3", "TR3 Enemies from tomb3",
-			"TR3-Gegner aus tomb3", "TR3 Enemies from tomb3",
-			"TR3 Enemies from tomb3" },
-		{ "Randomizer and Windows 11 Port", "Randomizer and Windows 11 Port",
-			"Randomizer und Windows-11-Port", "Randomizer and Windows 11 Port",
-			"Randomizer and Windows 11 Port" },
-		{ "Contributors", "Contributors", "Mitwirkende", "Contributors",
-			"Contributors" },
-		{ "Tools and Libraries", "Tools and Libraries",
-			"Werkzeuge und Bibliotheken", "Tools and Libraries",
-			"Tools and Libraries" },
+		{ "TOMB5 Engine", "Moteur TOMB5", "TOMB5-Engine", "Motore TOMB5",
+			"Motor TOMB5" },
+		{ "TR3 Enemies from tomb3", "Ennemis de TR3 issus de tomb3",
+			"TR3-Gegner aus tomb3", "Nemici di TR3 da tomb3",
+			"Enemigos de TR3 de tomb3" },
+		{ "Randomizer and Windows 11 Port", "Randomizer et portage Windows 11",
+			"Randomizer und Windows-11-Port",
+			"Randomizer e porting per Windows 11",
+			"Randomizer y adaptaci\xF3n a Windows 11" },
+		{ "Contributors", "Contributeurs", "Mitwirkende", "Collaboratori",
+			"Colaboradores" },
+		{ "Tools and Libraries", "Outils et biblioth\xE8ques",
+			"Werkzeuge und Bibliotheken", "Strumenti e librerie",
+			"Herramientas y bibliotecas" },
 		// The pad's button names in the Key bindings' value column
 		// (specific\input.cpp, JoyButtonName, through game\menu_frame.cpp,
 		// MenuValBinding). The PS5 pad's shapes are the German shapes
@@ -1568,31 +1639,34 @@ const char* CustomText(const char* engl)
 		// Xbox pad's View and Menu buttons are "Ansicht" ("View" is above,
 		// the page's caption, the same word) and "Men\xFC". A letter, a
 		// number and a name printed on the pad ("Share", "Options",
-		// "Touchpad", "Joy 13") fall back to themselves. Every German name
-		// fits the value column at every screen width on its own; behind
-		// "Mod+", as a chord prints it, the four "Steuerkreuz" names are
-		// wider than the column.
-		{ "Square", "Square", "Quadrat", "Square", "Square" },
-		{ "Cross", "Cross", "Kreuz", "Cross", "Cross" },
-		{ "Triangle", "Triangle", "Dreieck", "Triangle", "Triangle" },
-		{ "PS Button", "PS Button", "PS-Taste", "PS Button", "PS Button" },
-		{ "Menu", "Menu", "Men\xFC", "Menu", "Menu" },
-		{ "Stick R Up", "Stick R Up", "Stick R oben", "Stick R Up",
-			"Stick R Up" },
-		{ "Stick R Down", "Stick R Down", "Stick R unten", "Stick R Down",
-			"Stick R Down" },
-		{ "Stick R Left", "Stick R Left", "Stick R links", "Stick R Left",
-			"Stick R Left" },
-		{ "Stick R Right", "Stick R Right", "Stick R rechts", "Stick R Right",
-			"Stick R Right" },
-		{ "D-Pad Up", "D-Pad Up", "Steuerkreuz oben", "D-Pad Up",
-			"D-Pad Up" },
-		{ "D-Pad Down", "D-Pad Down", "Steuerkreuz unten", "D-Pad Down",
-			"D-Pad Down" },
-		{ "D-Pad Left", "D-Pad Left", "Steuerkreuz links", "D-Pad Left",
-			"D-Pad Left" },
-		{ "D-Pad Right", "D-Pad Right", "Steuerkreuz rechts", "D-Pad Right",
-			"D-Pad Right" },
+		// "Touchpad", "Joy 13") fall back to themselves. Every name fits
+		// the value column at every screen width on its own, and behind
+		// "Mod+", as a chord prints it, in every language but for the four
+		// German "Steuerkreuz" names, which are wider than the column there.
+		// French, Italian and Spanish name the stick "Stick R" as German
+		// does; Italian and Spanish shorten left and right ("sx"/"dx",
+		// "izq."/"der.") so that a chord fits.
+		{ "Square", "Carr\xE9", "Quadrat", "Quadrato", "Cuadrado" },
+		{ "Cross", "Croix", "Kreuz", "Croce", "Cruz" },
+		{ "Triangle", "Triangle", "Dreieck", "Triangolo", "Tri\xE1ngulo" },
+		{ "PS Button", "Touche PS", "PS-Taste", "Tasto PS", "Bot\xF3n PS" },
+		{ "Menu", "Menu", "Men\xFC", "Menu", "Men\xFA" },
+		{ "Stick R Up", "Stick R haut", "Stick R oben", "Stick R su",
+			"Stick R arriba" },
+		{ "Stick R Down", "Stick R bas", "Stick R unten", "Stick R gi\xF9",
+			"Stick R abajo" },
+		{ "Stick R Left", "Stick R gauche", "Stick R links", "Stick R sx",
+			"Stick R izq." },
+		{ "Stick R Right", "Stick R droite", "Stick R rechts", "Stick R dx",
+			"Stick R der." },
+		{ "D-Pad Up", "Croix haut", "Steuerkreuz oben", "Croce su",
+			"Cruceta arriba" },
+		{ "D-Pad Down", "Croix bas", "Steuerkreuz unten", "Croce gi\xF9",
+			"Cruceta abajo" },
+		{ "D-Pad Left", "Croix gauche", "Steuerkreuz links", "Croce sx",
+			"Cruceta izq." },
+		{ "D-Pad Right", "Croix droite", "Steuerkreuz rechts", "Croce dx",
+			"Cruceta der." },
 	};
 
 	long column;

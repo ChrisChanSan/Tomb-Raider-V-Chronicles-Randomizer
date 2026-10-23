@@ -223,8 +223,9 @@ cave fades into the haze as Lara dives.</td>
 </tr>
 <tr>
 <td width="50%"><img src="docs/hd-distance.jpg" alt="A view to the horizon at dusk"><br>
-The view across the level to the horizon: the far hills, the trees and the
-standing stones under the sky at dusk, with the moon over them.</td>
+The view distance: across the level to the horizon, the far hills, the trees
+and the standing stones under the sky at dusk. The engine draws things to
+forty-one sectors, twice the original's twenty; there is no switch for it.</td>
 <td width="50%"><img src="docs/first-person.jpg" alt="First person view"><br>
 The <b>first-person view</b> (<i>Controls -> View -> First person
 view</i>): the camera sits behind her eyes, her head is not drawn, and her

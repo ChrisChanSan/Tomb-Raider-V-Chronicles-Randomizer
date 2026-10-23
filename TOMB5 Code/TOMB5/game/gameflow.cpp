@@ -1651,7 +1651,7 @@ const char* CustomText(const char* engl)
 		// The two mode rows under Combat mode; only the labels are new,
 		// their values Hold and Toggle are already in this table above.
 		{ "Sprint mode", "Mode sprint", "Sprintmodus", "Modo scatto",
-			"Modo carrera" },
+			"Modo sprint" },
 		{ "Duck mode", "Mode accroupi", "Duckmodus", "Modo accovacciato",
 			"Modo agachado" },
 		// "Modi" is both the page title for these five mode rows and the
@@ -1707,6 +1707,12 @@ const char* CustomText(const char* engl)
 			"Restablecer valores predeterminados" },
 		{ "Control layout", "Sch\xE9ma de commandes", "Steuerungslayout",
 			"Schema di controllo", "Esquema de control" },
+		// Its two pad values (game\menu_frame.cpp, MenuValControlLayout);
+		// the third, the keyboard's or a plain joystick's, is the script's.
+		{ "PS5 Controller", "Manette PS5", "PS5-Controller", "Controller PS5",
+			"Mando PS5" },
+		{ "Xbox Controller", "Manette Xbox", "Xbox-Controller",
+			"Controller Xbox", "Mando Xbox" },
 		// German keeps the borrowed loanword "Deadzone", which is also the
 		// shorter of the two.
 		{ "Dead zone", "Zone morte", "Deadzone", "Zona morta", "Zona muerta" },
@@ -1794,8 +1800,8 @@ const char* CustomText(const char* engl)
 		// Values, not row labels - "on/off", "Circle" etc. reused across many
 		// rows. "PSX"/"TR4"/"TR5" are not here: they are the same in every
 		// language and fall back to themselves. "Original" has its row for
-		// the Italian "Originale", as "Display (60)" above has its own for
-		// the word "Display".
+		// the French "D'origine" and the Italian "Originale", as
+		// "Display (60)" above has its own for the word "Display".
 		{ "on", "activ\xE9", "an", "attivo", "activo" },
 		{ "off", "d\xE9sactiv\xE9", "aus", "disattivo", "inactivo" },
 		{ "Circle", "Rond", "Kreis", "Cerchio", "C\xEDrculo" },
@@ -1820,7 +1826,7 @@ const char* CustomText(const char* engl)
 			"attivo (riavvio)", "activo (reinicio)" },
 		{ "off (restart)", "d\xE9sactiv\xE9 (relancer)", "aus (Neustart)",
 			"disattivo (riavvio)", "inactivo (reinicio)" },
-		{ "Original", "Original", "Original", "Originale", "Original" },
+		{ "Original", "D'origine", "Original", "Originale", "Original" },
 		// The F4 outfit window (specific\hd\hd_outfitmenu.cpp): its title,
 		// the first row's name and value, the four labels under the list,
 		// their values, and the line under them. It draws in the options

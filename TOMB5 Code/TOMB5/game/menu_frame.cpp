@@ -403,11 +403,11 @@ static const char* MenuValControlLayout(long, char* buf)
 	switch (ActiveJoyStyle())
 	{
 	case JOYSTYLE_PS5:
-		strcpy(buf, "PS5 Controller");
+		strcpy(buf, CustomText("PS5 Controller"));
 		break;
 
 	case JOYSTYLE_XBOX:
-		strcpy(buf, "Xbox Controller");
+		strcpy(buf, CustomText("Xbox Controller"));
 		break;
 
 	default:

@@ -12762,6 +12762,8 @@ static const caption_site caption_sites[] =
 	{ "Reset to defaults", CC_LINE, CF_FRAME,
 		"MENU_ACTION(\"Reset to defaults\"," },
 	{ "Control layout", CC_LABEL, CF_FRAME, "MENU_VALUE(\"Control layout\"," },
+	{ "PS5 Controller", CC_VALUE, CF_FRAME, 0 },
+	{ "Xbox Controller", CC_VALUE, CF_FRAME, 0 },
 	{ "Dead zone", CC_LABEL, CF_FRAME, "MENU_SLIDER(\"Dead zone\"," },
 	{ "Mouse sensitivity", CC_LABEL, CF_FRAME,
 		"MENU_SLIDER(\"Mouse sensitivity\"," },
@@ -12903,7 +12905,6 @@ static const caption_same_word caption_same[] =
 	{ "VSync", 4, "a technical name" },
 	{ "Normal", 1, "the same word in French" },
 	{ "Normal", 4, "the same word in Spanish" },
-	{ "Original", 1, "the same word in French" },
 	{ "Original", 4, "the same word in Spanish" },
 	{ "table", 1, "the same word in French" },
 	{ "Triangle", 1, "the same word in French" },
@@ -13047,8 +13048,8 @@ static void caption_columns()
 		read += (files[f] = hd_switch_text(names[f])) != 0;
 
 	ok(read == CF_COUNT, "columns: the eight files are read", read, CF_COUNT);
-	ok(caption_table(files[CF_FLOW], rows) && rows.size() == 134,
-		"columns: the table has its 134 rows", (long)rows.size(), 134);
+	ok(caption_table(files[CF_FLOW], rows) && rows.size() == 136,
+		"columns: the table has its 136 rows", (long)rows.size(), 136);
 
 	// The pad's names: the literals of the four pages (specific\input.cpp).
 	const char* pads = files[CF_INPUT] ? strstr(files[CF_INPUT],
@@ -13091,6 +13092,24 @@ static void caption_columns()
 
 	ok(sites_found == nsites, "columns: every site of the census is in its "
 		"source", sites_found, nsites);
+
+	// The Control layout row's two pad values are table words, not bare
+	// literals: each is copied through CustomText into the row's value
+	// buffer, so a language switch renames them with the rest of the page.
+	{
+		const char* frame = files[CF_FRAME];
+		const int routed =
+			hd_switch_count(frame,
+				"strcpy(buf, CustomText(\"PS5 Controller\"));") +
+			hd_switch_count(frame,
+				"strcpy(buf, CustomText(\"Xbox Controller\"));");
+		const int bare =
+			hd_switch_count(frame, "strcpy(buf, \"PS5 Controller\");") +
+			hd_switch_count(frame, "strcpy(buf, \"Xbox Controller\");");
+
+		ok(routed == 2 && bare == 0, "columns: the pad layout's two names "
+			"pass through CustomText", routed - bare, 2);
+	}
 
 	int rows_with_site = 0;
 
@@ -13222,6 +13241,15 @@ static void caption_columns()
 				printf("  columns: widest %s, %s: %.1f \"%s\"\n", kind[k],
 					lang[c], widest[k][c] / 5.0, widest_s[k][c]);
 
+	// The Control layout row's pad values in every language, printed so
+	// that their width in the value column (192) can be read off.
+	for (const caption_cells& r : rows)
+		if (!strcmp(r.cell[0], "PS5 Controller") ||
+			!strcmp(r.cell[0], "Xbox Controller"))
+			for (int c = 0; c < 5; c++)
+				printf("  columns: pad layout value, %s: %.1f \"%s\"\n",
+					lang[c], caption_share(r.cell[c]) / 5.0, r.cell[c]);
+
 	// French, Italian and Spanish: the English word only where listed.
 	for (int c = 1; c < 5; c++)
 	{
@@ -13340,9 +13368,9 @@ static void extra_strings()
 	std::vector<caption_cells> rows;
 	char what[200];
 
-	ok(flow && file && caption_table(flow, rows) && rows.size() == 134,
+	ok(flow && file && caption_table(flow, rows) && rows.size() == 136,
 		"extra strings: the table and the shipped file are read",
-		(long)rows.size(), 134);
+		(long)rows.size(), 136);
 
 	// The shipped file, read line by line: UTF-8 without a byte order mark
 	// (the shipped copy holds only Latin-1 letters, in two bytes each), CRLF.

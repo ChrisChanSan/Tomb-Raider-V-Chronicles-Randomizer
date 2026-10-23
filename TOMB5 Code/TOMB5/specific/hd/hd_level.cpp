@@ -3654,7 +3654,7 @@ static bool g_vis_logged = false;
  * is for the most part a second copy of other rooms' art, and listed by it
  * the hull is drawn whole: its copies over the listed rooms' own faces,
  * which fight them for the depth, and what the copy holds that the room
- * does not - a lift shaft's art put its wall into the open door of a lift
+ * does not - a lift shaft's art puts its wall into the open door of a lift
  * car standing in the shaft and its cables through the car. So a hull is
  * listed by the portals, the openings and the wide portals alone, never as
  * a guest. Made once a level, at the first walk after the build has marked

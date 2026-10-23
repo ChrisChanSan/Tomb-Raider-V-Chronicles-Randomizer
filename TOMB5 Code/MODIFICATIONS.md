@@ -32909,6 +32909,119 @@ the merge. The Credits screen's lines of names stay as written.
 words above, a check's message, the manual's sentence on the folder test; the second
 reading's words, the language names and this record's Left).
 
+### A second shell is never a guest of the visibility walk (#240)
+2026-10-23
+
+**What.** On the visibility path (`hd_vis` 1) the walk lists, beside the rooms the portals
+reach, the guests: rooms whose art reaches out of their own room into a listed room. A
+hull - a group whose art beyond its own room is for the most part a second copy of other
+rooms' art (`MarkAirHulls`, `hd_render.cpp`) - is no longer listed so: `HDVisRoomGuests`
+(`hd_level.cpp`) hands the walk the guest table without a hull's pairs (`g_vis_guests`,
+`VisKeepGuests`, made once a level at the first walk, after the build has marked the
+hulls). A hull is still listed by the portals, the openings and the wide portals. The
+`HDLOG level= vis=1` line ends in `hull_guests=`, the pairs left out. RoomProbe's walk
+takes `-visnoguest <group,...>` to do the same, since the walk alone builds no hull list;
+the caller names the level's hulls (the `HDLOG hull` lines with `hull=1`).
+
+**Why.** The play test of RICH2's lift shaft with `hd_air` 1 and 2: "the texture that
+should be in room 61 is rendered, flickering with the camera, at the bottom of the shaft";
+"in places textures again lie doubled over themselves"; "portals do not become
+see-through, they carry textures"; "the lift's holding cables pass through it into room
+31"; "in certain rooms, when I turn, many textures come doubled and lie over one another";
+air 1 and 2 look the same, the classic look is fine. The missing, doubled and opaque
+textures are the worst.
+
+**Measured.** RoomProbe of `6fe7b16c` on the visibility path at the play test's eyes (the
+ROOMLIST frames and the CAMLOG target before each, the walk `-vis 1` and the picture with
+the walk's rooms in their windows, 1280 x 720), `-air` 1 and 2; *fight* the pixels
+differing by more than 24 with the eye one unit along x, *ties of a group* the pixels that
+differ between its art pushed by +1/2048 and by -1/2048 of its distance (`-push`): where
+it lies in depth on other art beyond the hull push.
+
+*The opaque door and the cables* - the eye in the lift car, room 31. The walk lists 31, 57
+(the corridor through the car's door) and 61 as a guest: group 61, the shaft, has 10,296
+triangles in the floor-level slice of the shaft below its own floor (108 in room 31's
+inside box) and reaches into the car's inside, which its hatch links with 61; its art box
+holds the eye, so the guest takes the whole window and 61 is drawn whole. Its shaft front
+wall stands in the car's open door and its cable bundles run through the car. Left out
+(`-skipgroup 61`): 278,475 pixels change at the door view (the corridor and its lift doors
+come back, fight 1,147 to 378) and 102,919 at the cable view (fight 2,099 to 1,935).
+
+*The doubled shell from the lower rooms* - the eye in rooms 62 and 63 at the frames whose
+VISLOG lists `61g`: group 61 is a hull (`HDLOG hull group=61 air_tris=51475 host_art=36285
+hull=1 behind=237865`: 51,475 of its triangles stand in the air of rooms it has no link
+with, 36,285 of them where the host's own art stands, and 237,865 are drawn pushed back by
+1/512); listed as a guest it is drawn whole, and its ties are 845 to 1,820 pixels a view,
+its art 88,473 to 119,051.
+
+*The doubled art with the eye in room 61* - the shaft's top room, listed by the portals as
+the eye's room: ties of 61 3,176 to 11,569 pixels at four frames, against rooms 31 (the
+car top's brick band), 35, 37 and 38 (the shaft walls of the floor below) and 62; there
+the floor-level rooms tie among themselves as well (31 against 57 and 62: 4,629 with 61
+left out). With the eye in rooms 62 and 63 and 61 not listed, every listed group ties 1 to
+33 pixels. The overlap lines: room 39 holds 774 of 61's triangles (61's copy of the car
+standing in the car's box, 630 claimed by two faces), room 40 56 (the shaft wall's edge),
+and room 61 970 of car 39's (the car's frame above 39's ceiling, 888 claimed).
+
+*The opening at the ledge* - the eye in rooms 140 and 141, the ledge beside the shaft and
+the duct to it, at the four frames of the `hd_air` 2 session whose camera stands there
+(the `hd_air` 1 session has none). The ledge's opening into the shaft is see-through at
+all four, at `-air` 1 and 2: the walk lists 140, 141 and the shaft's lower rooms 62 to 65,
+and at two of the frames 61 as a guest, whose art puts a column of the shaft into the
+opening. No portal face carrying art shows there; the opaque opening the play test names
+at the ledge is not reproduced at these eyes.
+
+**The rule.** A guest is listed so that art no listed room draws, standing in a listed
+room, is seen - a palm's crown through a doorway. A hull's art beyond its own room is for
+the most part another room's art again, so listing a hull by its art lists a copy, and
+what the copy holds that the room does not: a hull is listed by the portals, the openings
+and the wide portals alone.
+
+**Decisions.** The rule leaves the guest table (`hd_vis.cpp`) and the walk
+(`game/draw.cpp`) as they are and filters where the engine hands the table to the walk; a
+hull is known only after the renderer's build, so the filtered list is made at the first
+walk. Not taken in this round: a rule for room 61's own art when the eye stands in it
+(below, Left).
+
+**Checked.** The shaft's 14 views (`-air` 1 and 2, 28 pictures): changed at `-air` 1 the
+two car views and the two guest views of room 62 (102,919, 278,475, 119,051 and 100,648
+pixels), at `-air` 2 these and three views where 61 is still listed by the portals and its
+window no longer takes the guest's (2,007, 104 and 20,473 pixels: the hull's air art is
+held to that window at 2); the other 17 pictures are byte-identical, the four views with
+the eye in room 61 among them. New clear: 844 and 2,229 pixels at the car views (the
+grating's holes over the shaft below), 11,672 and 1,217 at the two guest views (the gaps
+between the shaft's cable bundles where 61's copy of the wall stood behind them). The
+ledge's four views (eight pictures): 22,905 pixels at `-air` 1 and 13,596 at 2 at the
+frame where 61 was a guest (the column in the opening goes, 1,970 and 1,756 new clear), 0
+and 486 at the frame where 61 is now listed by the portals instead, the other four
+byte-identical. The 131
+room-centre views of the air rule at `-vis 1`: 128 byte-identical, three of ANDREA1 (rooms
+82, 83 and 84 at yaw 180) change by 15 to 19 pixels where its hull 68 is no longer a
+guest, none of them new clear. Round 236's parity sets, which draw the room-art path: the
+six classic views, the six HD views, the census eyes at `hd_water` 0 and 1 and the fifteen
+parity cameras at both, 72 of 72 identical. `hd_vis` 0, `hd_air` 0 (no hulls), `hd_build`
+0, `hd_marble` 0, `hd_fog` 0 and the classic path are the base's by construction: the rule
+is in the visibility walk's guest accessor. No line asking `g_level_active`, `HDEnabled()`
+or `HDDrawn()` was edited. ModernTest 16,751 checks, MenuTest 44,931, InterpTest 754,
+LipsTest 299 with the `.OBJ` folder and 272 without, 0 failed, at the base and at the
+head; no check fits a rule that needs the renderer's hulls. Not played.
+
+**Left.** With the eye in room 61 the shaft's own art is drawn whole by the portals, and
+its copies of the car's top and the floor-level walls still tie with rooms 31, 35, 37 and
+38 (3,176 to 11,569 pixels at the four frames): some of 61's triangles there stand inside
+its own box and reach below its floor, so the hull push never takes them, and the others
+lie on the other copy closer than the push. A rule for it would leave out a hull's art
+where a listed room's own art stands, per room and per frame. The floor-level rooms 31, 35
+to 38 and 57 overlap and tie among themselves (31 against 57 and 62, 4,629 pixels at one
+frame). The counterweight, the pulleys and the braced cage frames in the shaft's middle,
+which only 61's art has, are no longer drawn from the lower rooms and the ledge where 61
+was only a guest. The opaque opening at the ledge is not reproduced at the ledge's four
+logged eyes, so its cause is not measured. The lift's animated parts are seen in the
+flyby and the fixed camera only, as the play test says; not measured.
+
+**Commits.** `d0303371` (a hull is no guest, RoomProbe's `-visnoguest`), this record, and
+a fix pass: the guest comment in the present tense; the ledge's views, the vis line's last
+field and the art the rule takes in the record and the manual.
 ### Beta 3.0's pictures in the README, and three words (#241)
 2026-10-23
 
@@ -33275,4 +33388,5 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #237 | Two words renamed; the credits, the pad's names and the ammo captions in German (#237) |
 | #238 | The old water value leaves the registry at the next save (#238) |
 | #239 | Every language gets all its texts; Japanese for the HQ audio (#239) |
+| #240 | A second shell is never a guest of the visibility walk (#240) |
 | #241 | Beta 3.0's pictures in the README, and three words (#241) |

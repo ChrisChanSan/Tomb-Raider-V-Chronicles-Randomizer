@@ -1707,8 +1707,8 @@ const char* CustomText(const char* engl)
 			"Restablecer valores predeterminados" },
 		{ "Control layout", "Sch\xE9ma de commandes", "Steuerungslayout",
 			"Schema di controllo", "Esquema de control" },
-		// Its two pad values (game\menu_frame.cpp, MenuValControlLayout);
-		// the third, the keyboard's or a plain joystick's, is the script's.
+		// Its two pad values (game\menu_frame.cpp, MenuValControlLayout); the
+		// keyboard's and a plain joystick's are the script's.
 		{ "PS5 Controller", "Manette PS5", "PS5-Controller", "Controller PS5",
 			"Mando PS5" },
 		{ "Xbox Controller", "Manette Xbox", "Xbox-Controller",

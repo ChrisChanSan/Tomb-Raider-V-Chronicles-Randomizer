@@ -282,7 +282,7 @@ a `*`.
 <td width="50%"><img src="docs/outfit-changer.jpg" alt="The F4 outfit changer"><br>
 The bodies of the installed Remasters, with the footsteps, the head rule,
 the shine and the skin glow of the highlighted one — and, in brackets, which
-tier decided each.</td>
+tier decided the head rule, the shine and the glow.</td>
 <td width="50%"><img src="docs/outfit-changer-mods.jpg" alt="The F4 outfit changer with mod outfits"><br>
 The same list with a mod folder installed: every row names the folder it came
 out of. The outfits shown here are a third-party mod, credited under

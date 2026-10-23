@@ -32944,10 +32944,15 @@ words. The mirror picture came with a note naming the MP5 model's mod and its au
   `hd-shadows`, `hd-fog`, `hd-distance`, `first-person` and `hd-loading-screen`. The
   first-person picture sits in the HD table, beside the shadow and the fog, rather than
   beside the View caption, where the table's two columns are full.
-- `hd-reflection-surface` is not a water surface: it shows a lamp's light on a wall and
-  on the metal round Lara, so its caption names the gloss of metal, marble and ice, not a
-  reflection on water. `hd-distance` has no option row; its caption names the view
-  distance of forty-one sectors and says there is no switch, as the engine manual does.
+- `hd-reflection-surface` is not a water surface: it shows a lamp's light on a wall and on
+  the metal round Lara, so its caption names the gloss of metal, marble and ice, not a
+  reflection on water. `hd-distance` has no option row, and nothing in it is shown to
+  stand past the original's twenty sectors, where the engine's longer view distance of
+  things (doors, pickups, enemies) would begin to count; the rooms were always drawn that
+  far. Its caption names only what is seen, and what the picture is meant to show is a
+  question for the project.
+- The line that says where the HD art is read from stays where it stood, once, between the
+  menu table and the new HD table.
 - The captions corrected against their new pictures: Graphics names only its first page's
   rows (*Display*, HD build, HD textures, Body physics, Reflections, Fog, Distance fog,
   Shimmer) and says a second page follows; View says the *Body* row keeps her body
@@ -32979,7 +32984,9 @@ all 25: 1440 x 810, baseline, no EXIF and no other metadata, at most 320 KB. A p
 census of the README and the two manuals, at the base and at the head: at the base 41
 references to 32 files, 34 pictures in `docs/`, two unreferenced; at the head 54
 references to 45 files, 45 pictures, none missing and none unreferenced. A search of the
-tree and of the diff finds no sentence saying a picture is Beta 2.0's. ModernTest learns
+README, the two manuals and the diff finds no sentence left saying a picture is Beta
+2.0's. The tree keeps one such line, in the Left of the #231 entry above, which this entry
+settles, and the first commit's message names the sentences it removed. ModernTest learns
 the two rows: `caption_columns` and `extra_strings` expect 136 rows, the census gains the
 two pad values in the value column, the French *Original* leaves the list of words that
 repeat the English, and a new check asserts that both names pass through `CustomText` and
@@ -32988,17 +32995,27 @@ builds of `Preparation/Tools/Diagnose` exit 0. The suites at the base and at the
 ModernTest 16,751 and 16,751 (one check gone with the French *Original*, one new),
 MenuTest 44,931 and 44,931, InterpTest 754 and 754 with the player's `ANDREA1.TRC`,
 LipsTest 299 and 299 with the `.OBJ` folder, 272 and 272 without (the cutseq file named
-by hand), 0 failed each. The classic files changed words only (`game/gameflow.cpp` the
-table, `game/menu_frame.cpp` the two copies); no draw, sound or option path changed. No
-line asking `g_level_active`, `HDEnabled()` or `HDDrawn()` was edited. Not played.
+by hand), 0 failed each. LipsTest finds the installed Remaster as the engine does, through
+the Steam path in the registry, and reads its item files. The classic files changed words
+only (`game/gameflow.cpp` the table, `game/menu_frame.cpp` the two copies); no draw,
+sound or option path changed. No line asking `g_level_active`, `HDEnabled()` or
+`HDDrawn()` was edited. Not played.
 
-**Left.** Whether the outfits Lara wears in several of the HD pictures are Remaster
-bodies chosen in the outfit changer or a mod is a question for the project; a mod would
-get its row in the README's mods table. The play test sees the two pad names and the two
-words on the Controls and Modes pages and in the shadow row.
+**Left.** Whether the outfits Lara wears in several of the HD pictures are Remaster bodies
+chosen in the outfit changer or a mod is a question for the project, the black clothes in
+the view distance picture and the sleeves and Uzis of the first-person picture among them;
+a mod would get its row in the README's mods table. The engine manual still calls a row
+the cursor steps over "greyed out", where the README's Options caption says red, as the
+picture and the colour (128, 0, 0) do; the manual's sentences are not this entry's. The
+French *D'origine* is every *Original* value, not only *Shadow mode*'s, though the second
+commit's message names only that one: *Mono screen style*, *UW Effect*, *Bar mode* and
+*Bar positions* show it too. The play test sees the two pad names on the Controls page,
+*Modo sprint* on Modes and *D'origine* in those five rows.
 
 **Commits.** `47cd676c` (the pictures and the README), `d4bed182` (the three words and
-the checks) and this record, with the README's view distance caption.
+the checks), `7df4f8f1` (this record, with the README's view distance caption), and the
+corrections after the review: the view distance caption names only what is seen, the HD
+art line stands once, and this record says what the search found and what is left.
 
 ## 3. Randomizer changes since Beta 1.0
 

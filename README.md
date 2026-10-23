@@ -223,9 +223,8 @@ cave fades into the haze as Lara dives.</td>
 </tr>
 <tr>
 <td width="50%"><img src="docs/hd-distance.jpg" alt="A view to the horizon at dusk"><br>
-The view distance: across the level to the horizon, the far hills, the trees
-and the standing stones under the sky at dusk. The engine draws things to
-forty-one sectors, twice the original's twenty; there is no switch for it.</td>
+A long view across the level at dusk: the windmill, the far hills, the trees
+and the standing stones against the evening sky.</td>
 <td width="50%"><img src="docs/first-person.jpg" alt="First person view"><br>
 The <b>first-person view</b> (<i>Controls -> View -> First person
 view</i>): the camera sits behind her eyes, her head is not drawn, and her
@@ -238,9 +237,6 @@ An HD loading screen with <b>Loading text</b> on (<i>HUD</i>): the level's
 name at the top centre, the TR5 bar along the bottom.</td>
 </tr>
 </table>
-
-<sup>HD art is read at run time from the player's own Tomb Raider IV-VI
-Remastered installation — none of it is included here.</sup>
 
 <table>
 <tr>

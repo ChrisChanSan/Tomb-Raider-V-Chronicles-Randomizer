@@ -32963,6 +32963,14 @@ left out). With the eye in rooms 62 and 63 and 61 not listed, every listed group
 standing in the car's box, 630 claimed by two faces), room 40 56 (the shaft wall's edge),
 and room 61 970 of car 39's (the car's frame above 39's ceiling, 888 claimed).
 
+*The opening at the ledge* - the eye in rooms 140 and 141, the ledge beside the shaft and
+the duct to it, at the four frames of the `hd_air` 2 session whose camera stands there
+(the `hd_air` 1 session has none). The ledge's opening into the shaft is see-through at
+all four, at `-air` 1 and 2: the walk lists 140, 141 and the shaft's lower rooms 62 to 65,
+and at two of the frames 61 as a guest, whose art puts a column of the shaft into the
+opening. No portal face carrying art shows there; the opaque opening the play test names
+at the ledge is not reproduced at these eyes.
+
 **The rule.** A guest is listed so that art no listed room draws, standing in a listed
 room, is seen - a palm's crown through a doorway. A hull's art beyond its own room is for
 the most part another room's art again, so listing a hull by its art lists a copy, and
@@ -32982,7 +32990,11 @@ window no longer takes the guest's (2,007, 104 and 20,473 pixels: the hull's air
 held to that window at 2); the other 17 pictures are byte-identical, the four views with
 the eye in room 61 among them. New clear: 844 and 2,229 pixels at the car views (the
 grating's holes over the shaft below), 11,672 and 1,217 at the two guest views (the gaps
-between the shaft's cable bundles where 61's copy of the wall stood behind them). The 131
+between the shaft's cable bundles where 61's copy of the wall stood behind them). The
+ledge's four views (eight pictures): 22,905 pixels at `-air` 1 and 13,596 at 2 at the
+frame where 61 was a guest (the column in the opening goes, 1,970 and 1,756 new clear), 0
+and 486 at the frame where 61 is now listed by the portals instead, the other four
+byte-identical. The 131
 room-centre views of the air rule at `-vis 1`: 128 byte-identical, three of ANDREA1 (rooms
 82, 83 and 84 at yaw 180) change by 15 to 19 pixels where its hull 68 is no longer a
 guest, none of them new clear. Round 236's parity sets, which draw the room-art path: the
@@ -33001,11 +33013,15 @@ its own box and reach below its floor, so the hull push never takes them, and th
 lie on the other copy closer than the push. A rule for it would leave out a hull's art
 where a listed room's own art stands, per room and per frame. The floor-level rooms 31, 35
 to 38 and 57 overlap and tie among themselves (31 against 57 and 62, 4,629 pixels at one
-frame). The counterweight and pulleys of the shaft, which only 61's art has, are no longer
-drawn from the lower rooms where 61 was only a guest. The lift's animated parts are seen
-in the flyby and the fixed camera only, as the play test says; not measured.
+frame). The counterweight, the pulleys and the braced cage frames in the shaft's middle,
+which only 61's art has, are no longer drawn from the lower rooms and the ledge where 61
+was only a guest. The opaque opening at the ledge is not reproduced at the ledge's four
+logged eyes, so its cause is not measured. The lift's animated parts are seen in the
+flyby and the fixed camera only, as the play test says; not measured.
 
-**Commits.** `d0303371` (a hull is no guest, RoomProbe's `-visnoguest`) and this record.
+**Commits.** `d0303371` (a hull is no guest, RoomProbe's `-visnoguest`), this record, and
+a fix pass: the guest comment in the present tense; the ledge's views, the vis line's last
+field and the art the rule takes in the record and the manual.
 
 ## 3. Randomizer changes since Beta 1.0
 

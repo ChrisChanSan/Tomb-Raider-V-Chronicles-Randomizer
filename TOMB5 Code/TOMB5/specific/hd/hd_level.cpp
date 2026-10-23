@@ -3647,6 +3647,23 @@ static void BuildStaticPlaces()
  * reads them. The renderer's build adds the art (HDVisLevelBuild). */
 static bool g_vis_level = false;
 static bool g_vis_logged = false;
+/* The guests the walk is handed (HDVisRoomGuests): the table's, but for a
+ * hull's (HDRenderGroupHull, MarkAirHulls in hd_render.cpp). A guest is
+ * listed so that art no listed room draws, standing in a listed room, is
+ * seen - a palm's crown through a doorway. A hull's art beyond its own room
+ * is for the most part a second copy of other rooms' art, and listed by it
+ * the hull is drawn whole: its copies over the listed rooms' own faces,
+ * which fight them for the depth, and what the copy holds that the room
+ * does not - a lift shaft's art put its wall into the open door of a lift
+ * car standing in the shaft and its cables through the car. So a hull is
+ * listed by the portals, the openings and the wide portals alone, never as
+ * a guest. Made once a level, at the first walk after the build has marked
+ * the hulls; `g_vis_hull_guests` the (room, hull) pairs left out, for the
+ * HDLOG vis line. */
+static std::vector<HDVisGuest> g_vis_guests;
+static std::vector<int> g_vis_guest_first, g_vis_guest_count;
+static bool g_vis_guests_made = false;
+static int g_vis_hull_guests = 0;
 static std::vector<short> g_vis_main;
 /* Per room, where its statics begin in the list handed to hd_vis.cpp
  * (HDVisLevelStatics): every MESH_INFO of every room, in the rooms' order
@@ -3712,6 +3729,7 @@ static void BuildRoomVis()
 {
 	g_vis_level = tomb5.hd_vis == 1;
 	g_vis_logged = false;
+	g_vis_guests_made = false;
 	g_piece_wall.clear();
 	g_piece_wall_built = false;
 	g_vis_main.assign((size_t)(number_rooms > 0 ? number_rooms : 0), -1);
@@ -8519,7 +8537,7 @@ static int SurfaceRoom()
  *
  *   HDLOG level=<stem> vis=1 rooms= art_rooms= walls= bare= void= guests=
  *         guest_tris= wide= ms= twin= wide_bare= edge= statics_held=
- *         statics_ms= enclosed=
+ *         statics_ms= enclosed= hull_guests=
  *
  * art_rooms the rooms whose walls were asked, walls their classic wall
  * faces, bare those the art leaves bare (the openings), void those with no
@@ -8529,7 +8547,9 @@ static int SurfaceRoom()
  * instead, wide_bare and edge HDVisDefaults' two numbers of the walk;
  * statics_held the static meshes the art lies on (HDVisStaticCovers) and
  * statics_ms what asking them cost; enclosed the rooms that stand inside
- * another whose art stands in them (HDVisTables::enclosedBy). */
+ * another whose art stands in them (HDVisTables::enclosedBy); hull_guests
+ * the guest pairs whose group is a hull, which the walk is not handed
+ * (g_vis_guests). */
 
 static int VisContents(int roomIndex)
 {
@@ -8537,6 +8557,40 @@ static int VisContents(int roomIndex)
 		return -1;
 
 	return g_room_group[roomIndex];
+}
+
+// The guests the walk is handed, a hull's left out - see g_vis_guests.
+static void VisKeepGuests(const HDVisTables* t)
+{
+	if (g_vis_guests_made)
+		return;
+
+	g_vis_guests_made = true;
+	g_vis_guests.clear();
+	g_vis_guest_first.assign((size_t)t->rooms, 0);
+	g_vis_guest_count.assign((size_t)t->rooms, 0);
+	g_vis_hull_guests = 0;
+
+	for (int c = 0; c < t->rooms; c++)
+	{
+		g_vis_guest_first[(size_t)c] = (int)g_vis_guests.size();
+
+		for (int k = 0; k < t->guestCount[(size_t)c]; k++)
+		{
+			const HDVisGuest& guest =
+				t->guests[(size_t)(t->guestFirst[(size_t)c] + k)];
+			int air = 0, covered = 0;
+
+			if (HDRenderGroupHull(guest.group, &air, &covered))
+			{
+				g_vis_hull_guests++;
+				continue;
+			}
+
+			g_vis_guests.push_back(guest);
+			g_vis_guest_count[(size_t)c]++;
+		}
+	}
 }
 
 bool HDVisWalkOn()
@@ -8551,13 +8605,15 @@ bool HDVisWalkOn()
 		g_vis_logged = true;
 		const HDVisParams p = HDVisDefaults();
 
+		VisKeepGuests(t);
 		Log("HDLOG level=%s vis=1 rooms=%d art_rooms=%d walls=%d bare=%d "
 			"void=%d guests=%d guest_tris=%lld wide=%d ms=%.0f twin=%d "
 			"wide_bare=%.2f edge=%.5f statics_held=%d statics_ms=%.0f "
-			"enclosed=%d", g_stem, t->rooms, t->artRooms, t->wallFaces,
-			t->bareFaces, t->voidFaces, t->guestPairs, t->guestTris,
-			t->widePortals, t->ms, t->openingsTwin, p.wideBare, p.edge,
-			t->staticsHeld, t->staticMs, t->roomsEnclosed);
+			"enclosed=%d hull_guests=%d", g_stem, t->rooms, t->artRooms,
+			t->wallFaces, t->bareFaces, t->voidFaces, t->guestPairs,
+			t->guestTris, t->widePortals, t->ms, t->openingsTwin, p.wideBare,
+			p.edge, t->staticsHeld, t->staticMs, t->roomsEnclosed,
+			g_vis_hull_guests);
 	}
 
 	return true;
@@ -8570,11 +8626,16 @@ int HDVisRoomGuests(int roomIndex, const HDVisGuest** out)
 
 	*out = 0;
 
-	if (!t || c < 0 || c >= t->rooms || !t->guestCount[(size_t)c])
+	if (!t || c < 0 || c >= t->rooms)
 		return 0;
 
-	*out = &t->guests[(size_t)t->guestFirst[(size_t)c]];
-	return t->guestCount[(size_t)c];
+	VisKeepGuests(t);
+
+	if (!g_vis_guest_count[(size_t)c])
+		return 0;
+
+	*out = &g_vis_guests[(size_t)g_vis_guest_first[(size_t)c]];
+	return g_vis_guest_count[(size_t)c];
 }
 
 int HDVisRoomOpenings(int roomIndex, const HDVisOpening** out)

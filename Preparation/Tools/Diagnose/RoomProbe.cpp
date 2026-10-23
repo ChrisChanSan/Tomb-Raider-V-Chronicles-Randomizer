@@ -5125,6 +5125,11 @@ namespace walkoff
 	 * edge, 0xff not queued. */
 	static bool g_vis = false;
 	static int g_vis_sources = 7;
+	/* -visnoguest <group,...>: those groups are never a guest, as the
+	 * engine hands the walk no hull's guest pairs (hd_level.cpp,
+	 * g_vis_guests); the walk alone builds no hull list, so the caller names
+	 * the level's hulls (the HDLOG hull lines with hull=1). */
+	static std::set<int> g_vis_noguest;
 	static HDVisParams g_vis_params = HDVisDefaults();
 	static HDVisTables g_vis_tables;
 	static std::vector<HDVisRoom> g_vis_rooms;
@@ -5382,7 +5387,8 @@ namespace walkoff
 				t.guests[(size_t)(t.guestFirst[(size_t)c] + k)];
 			const int b = VisRoomOfGroup(g.group);
 
-			if (b < 0 || (size_t)b >= g_room.size() || b == here)
+			if (b < 0 || (size_t)b >= g_room.size() || b == here ||
+				g_vis_noguest.count(g.group))
 				continue;
 
 			const char before = g_room[(size_t)b].bound_active;
@@ -17547,6 +17553,9 @@ static void SpringBlocks(const char* stem, std::vector<HDSpringBlock>& out,
  *                     of HDVisDefaults'
  *   -viswidebare <share>   the bare share that lets a face widen a portal
  *   -visedge <share>  the window's edge, as a share of the screen's width
+ *   -visnoguest <group,...>   those groups never a guest, as the engine
+ *                     leaves a hull out of the guests (name the level's
+ *                     hulls, the HDLOG hull lines with hull=1)
  *   -viswin <rule>    how -vis 1 answers the pieces of intruding art (see
  *                     g_vis_win): 2, the default, as the engine; 0 every
  *                     piece whole
@@ -17604,6 +17613,19 @@ static bool VisArg(int argc, char** argv, int* at)
 		walkoff::g_vis_params.wideBare = atof(argv[*at + 1]);
 	else if (!strcmp(a, "-visedge"))
 		walkoff::g_vis_params.edge = atof(argv[*at + 1]);
+	else if (!strcmp(a, "-visnoguest"))
+	{
+		for (const char* p = argv[*at + 1]; *p; )
+		{
+			walkoff::g_vis_noguest.insert(atoi(p));
+
+			while (*p && *p != ',')
+				p++;
+
+			if (*p == ',')
+				p++;
+		}
+	}
 	else if (!strcmp(a, "-viswin"))
 		g_vis_win = atoi(argv[*at + 1]);
 	else if (!strcmp(a, "-visportals"))

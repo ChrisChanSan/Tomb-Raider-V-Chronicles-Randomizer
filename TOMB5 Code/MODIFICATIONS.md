@@ -32909,6 +32909,114 @@ the merge. The Credits screen's lines of names stay as written.
 words above, a check's message, the manual's sentence on the folder test; the second
 reading's words, the language names and this record's Left).
 
+### Beta 3.0's pictures in the README, and three words (#241)
+2026-10-23
+
+**What.** The README's menu table shows Beta 3.0's pages: the eleven menu and credits
+pictures are replaced under their names, and the outfit changer's picture by a new one of
+the same page. A new table after the menu table shows the HD look in thirteen pictures,
+each with a caption read against it. The seven sentences that said the pictures were Beta
+2.0's are gone, and so is the engine manual's one under the tomb5 options picture. The
+mods table gains the mod whose MP5 the washroom mirror picture shows. Two pictures no
+document showed are removed. Three words change: the Spanish *Sprint mode* is *Modo
+sprint*, the French *Original* is *D'origine*, and the *Control layout* row's two pad
+values pass through `CustomText` with two new table rows.
+
+**Why.** The project took Beta 3.0's pictures - the menu pages again and the HD look -
+and said of them: "I think that should be everything." The README had written its Beta 3.0
+captions ahead of the pictures and said so; that note goes with them. The three words are
+the play test's answers to round #239's questions: "1. Leave it. 2. Yes. 3. He can do
+that." - the d-pad chords stay as they are, the reviewer's *Modo sprint* and *D'origine*
+are taken, and the two controller names get their French, German, Italian and Spanish
+words. The mirror picture came with a note naming the MP5 model's mod and its author.
+
+**Decisions.**
+- Replaced under their names: `menu-options`, `menu-audio`, `menu-controls`,
+  `menu-key-bindings`, `menu-modes`, `menu-view`, `menu-display`, `menu-graphics`,
+  `menu-hud`, `menu-tomb5-options`, `gui-credits` and `outfit-changer` (the new picture
+  shows the same page: the installed Remasters' bodies, with footsteps, head, shine and
+  skin glow and their tiers in brackets).
+- New, in the HD table: `hd-water-river` (floats on a canal), `hd-water-foam` (water
+  falling into a flooded corridor and its foam), `hd-water-spring` (a spring's bubbles
+  rising from a crack, seen from under the surface; the name holds, the picture shows the
+  crack), `hd-water-underwater` (Deepsea Dive's sea seen from below), `hd-water-fish` (the
+  fish tank), `hd-reflection-floor`, `hd-reflection-mirror`, `hd-reflection-surface`,
+  `hd-shadows`, `hd-fog`, `hd-distance`, `first-person` and `hd-loading-screen`. The
+  first-person picture sits in the HD table, beside the shadow and the fog, rather than
+  beside the View caption, where the table's two columns are full.
+- `hd-reflection-surface` is not a water surface: it shows a lamp's light on a wall and on
+  the metal round Lara, so its caption names the gloss of metal, marble and ice, not a
+  reflection on water. `hd-distance` has no option row, and nothing in it is shown to
+  stand past the original's twenty sectors, where the engine's longer view distance of
+  things (doors, pickups, enemies) would begin to count; the rooms were always drawn that
+  far. Its caption names only what is seen, and what the picture is meant to show is a
+  question for the project.
+- The line that says where the HD art is read from stays where it stood, once, between the
+  menu table and the new HD table.
+- The captions corrected against their new pictures: Graphics names only its first page's
+  rows (*Display*, HD build, HD textures, Body physics, Reflections, Fog, Distance fog,
+  Shimmer) and says a second page follows; View says the *Body* row keeps her body
+  animated or still, where it said "whether her body is drawn"; Options says
+  *Special Features* is drawn in red away from the title screen, as the picture shows it;
+  Display names the frame rate's *Display* value the picture shows; Key bindings says the
+  picture shows the pad's page.
+- `features-2.jpg` and `gui-language.jpg` are removed: neither the README nor the two
+  manuals reference them. `ingame-08.jpg` stays; the engine manual shows it under *First
+  person view*.
+- The new mods row: *Tomb Raider - Angel of Darkness - Mag Vega*, its author linked as
+  the Underworld AIO row links the same author, shown in the washroom mirror picture.
+- The pictures: 1440 x 810, LANCZOS, baseline JPEG at quality 85 with nothing else
+  passed; all 25 came out under 320 KB at 85 (84,139 to 280,463 bytes). Added 4,687,676
+  bytes, removed 2,357,134 (the twelve replaced and the two removed), net 2,330,542.
+- The words: the Spanish cell of *Sprint mode* is *Modo sprint*; the French cell of
+  *Original* is *D'origine*. The rows *PS5 Controller* (*Manette PS5*, *PS5-Controller*,
+  *Controller PS5*, *Mando PS5*) and *Xbox Controller* (*Manette Xbox*,
+  *Xbox-Controller*, *Controller Xbox*, *Mando Xbox*) stand under *Control layout*;
+  `MenuValControlLayout` copies them through `CustomText` into the row's buffer, the
+  menu's 256-byte value buffer, which holds the longest, 15 bytes, many times over. In
+  the value column (192): *PS5 Controller* 131.4, *Manette PS5* 115.4, *PS5-Controller*
+  133.0, *Controller PS5* 131.4, *Mando PS5* 100.4; *Xbox Controller* 144.4, *Manette
+  Xbox* 128.4, *Xbox-Controller* 146.0, *Controller Xbox* 144.4, *Mando Xbox* 113.4.
+  `Preparation/extrastrings.txt` is regenerated from the table: 136 keys.
+
+**Checked.** Every new picture opened and its caption read against it; a PIL check of
+all 25: 1440 x 810, baseline, no EXIF and no other metadata, at most 320 KB. A picture
+census of the README and the two manuals, at the base and at the head: at the base 41
+references to 32 files, 34 pictures in `docs/`, two unreferenced; at the head 54
+references to 45 files, 45 pictures, none missing and none unreferenced. A search of the
+README, the two manuals and the diff finds no sentence left saying a picture is Beta
+2.0's. The tree keeps one such line, in the Left of the #231 entry above, which this entry
+settles, and the first commit's message names the sentences it removed. ModernTest learns
+the two rows: `caption_columns` and `extra_strings` expect 136 rows, the census gains the
+two pad values in the value column, the French *Original* leaves the list of words that
+repeat the English, and a new check asserts that both names pass through `CustomText` and
+neither is left bare; the two rows' widths are printed in all five languages. The nine
+builds of `Preparation/Tools/Diagnose` exit 0. The suites at the base and at the head:
+ModernTest 16,751 and 16,751 (one check gone with the French *Original*, one new),
+MenuTest 44,931 and 44,931, InterpTest 754 and 754 with the player's `ANDREA1.TRC`,
+LipsTest 299 and 299 with the `.OBJ` folder, 272 and 272 without (the cutseq file named
+by hand), 0 failed each. LipsTest finds the installed Remaster as the engine does, through
+the Steam path in the registry, and reads its item files. The classic files changed words
+only (`game/gameflow.cpp` the table, `game/menu_frame.cpp` the two copies); no draw,
+sound or option path changed. No line asking `g_level_active`, `HDEnabled()` or
+`HDDrawn()` was edited. Not played.
+
+**Left.** Whether the outfits Lara wears in several of the HD pictures are Remaster bodies
+chosen in the outfit changer or a mod is a question for the project, the black clothes in
+the view distance picture and the sleeves and Uzis of the first-person picture among them;
+a mod would get its row in the README's mods table. The engine manual still calls a row
+the cursor steps over "greyed out", where the README's Options caption says red, as the
+picture and the colour (128, 0, 0) do; the manual's sentences are not this entry's. The
+French *D'origine* is every *Original* value, not only *Shadow mode*'s, though the second
+commit's message names only that one: *Mono screen style*, *UW Effect*, *Bar mode* and
+*Bar positions* show it too. The play test sees the two pad names on the Controls page,
+*Modo sprint* on Modes and *D'origine* in those five rows.
+
+**Commits.** `47cd676c` (the pictures and the README), `d4bed182` (the three words and
+the checks), `7df4f8f1` (this record, with the README's view distance caption), and the
+corrections after the review: the view distance caption names only what is seen, the HD
+art line stands once, and this record says what the search found and what is left.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -33167,3 +33275,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #237 | Two words renamed; the credits, the pad's names and the ammo captions in German (#237) |
 | #238 | The old water value leaves the registry at the next save (#238) |
 | #239 | Every language gets all its texts; Japanese for the HQ audio (#239) |
+| #241 | Beta 3.0's pictures in the README, and three words (#241) |

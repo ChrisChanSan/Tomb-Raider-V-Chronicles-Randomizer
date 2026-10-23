@@ -753,9 +753,7 @@ stay as they are.
 
 <p align="center"><em>The HD art in this and every other screenshot is read at
 run time from the player's own <strong>Tomb Raider IV-VI Remastered</strong>
-installation — none of it is included here. The picture shows this page as
-Beta 2.0 had it, until Beta 3.0's is taken; the text below is this
-build's.</em></p>
+installation — none of it is included here.</em></p>
 
 Six settings the original never had, and that belong neither to *Graphics*
 nor to *HUD* (see **The options menu** above):

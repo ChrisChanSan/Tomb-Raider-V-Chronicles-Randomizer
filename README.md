@@ -107,34 +107,31 @@ the title screen, as a tree of tabs: **Audio**, **Controls**, **Graphics**,
 **HUD**, **tomb5 options**, **Special Features** and **Credits** — with
 sub-pages of their own, *Key bindings*, *View* and *Modes* under Controls and
 *Display* under Graphics. The original's own rows are where they always were;
-nothing was taken away. The pictures below show Beta 2.0's pages until Beta
-3.0's are taken; the captions name the rows as Beta 3.0 has them, so a caption
-can name a row its picture does not show yet.
+nothing was taken away.
 
 <table>
 <tr>
 <td width="50%"><img src="docs/menu-options.jpg" alt="The Options menu"><br>
-The seven tabs. <i>Special Features</i> opens from the title screen; in a
-pause session it is shown greyed out.</td>
+The seven tabs. <i>Special Features</i> opens from the title screen only;
+anywhere else it is drawn in red, as here, and the cursor steps over it.</td>
 <td width="50%"><img src="docs/menu-tomb5-options.jpg" alt="tomb5 options"><br>
 <b>tomb5 options</b>: the cutscene skipper, cheats, level select, and the
 three movement fixes — climb-up delay, flexible crawling, crawl tilting.</td>
 </tr>
 <tr>
 <td width="50%"><img src="docs/menu-graphics.jpg" alt="Graphics"><br>
-<b>Graphics</b>, over two pages: HD textures with Body physics under it,
-Reflections, fog and distance fog, shimmer, the mono screen and shadow styles,
-PSX skies, static lighting, the underwater effect, look transparency and
-footprints. The picture is Beta 2.0's page, without Body physics and
-Reflections.</td>
+<b>Graphics</b>, over two pages, the first shown here: <i>Display</i> on
+top, then HD build, HD textures with Body physics under it, Reflections, Fog,
+Distance fog and Shimmer. The arrows at the bottom turn to the second page and
+its seven rows.</td>
 <td width="50%"><img src="docs/menu-display.jpg" alt="Display"><br>
-<b>Display</b>, under Graphics: the frame rate — 30, 60 or whatever your
-screen refreshes at; 60 is what a fresh installation gets — VSync, and
-Gamma, a slider that lightens or darkens every picture the game shows, in a
-window or full screen; its middle, the default, changes nothing, and the
-number beside the bar, a percentage, says where it stands (with the percent
-sign on screens of about 3:2 and wider, without it on narrower ones such as
-4:3). The picture is Beta 2.0's page, without Gamma.</td>
+<b>Display</b>, under Graphics: the frame rate — 30, 60 or <i>Display</i>,
+whatever your screen refreshes at; 60 is what a fresh installation gets —
+VSync, and Gamma, a slider that lightens or darkens every picture the game
+shows, in a window or full screen; its middle, the default, changes nothing,
+and the number beside the bar, a percentage, says where it stands (with the
+percent sign on screens of about 3:2 and wider, without it on narrower ones
+such as 4:3).</td>
 </tr>
 <tr>
 <td width="50%"><img src="docs/menu-controls.jpg" alt="Controls"><br>
@@ -142,34 +139,102 @@ sign on screens of about 3:2 and wider, without it on narrower ones such as
 Secondary button, the pad layout, and for Modern controls camera speed, dead
 zone and mouse sensitivity (bars with their number beside them, a percentage,
 its sign shown as on Display) and Invert mouse; then targeting and the ammo
-hotkeys. The picture is Beta 2.0's page, without the mouse rows and the
-numbers.</td>
+hotkeys.</td>
 <td width="50%"><img src="docs/menu-key-bindings.jpg" alt="Key bindings"><br>
-<b>Key bindings</b>: every role rebindable, on the keyboard and on the pad
-alike, over as many pages as the list needs, with <i>Reset to defaults</i>
-standing above each of them.</td>
+<b>Key bindings</b>: every role rebindable, on the keyboard and - as here -
+on the pad, over as many pages as the list needs, with <i>Reset to
+defaults</i> standing above each of them.</td>
 </tr>
 <tr>
 <td width="50%"><img src="docs/menu-view.jpg" alt="View"><br>
 <b>View</b>: the first-person view, its field of view, the death camera, the
-head-bone look, the damping, and whether her body is drawn.</td>
+head-bone look, the damping, and whether her body stays animated or holds
+still while she stands.</td>
 <td width="50%"><img src="docs/menu-modes.jpg" alt="Modes"><br>
 <b>Modes</b>: Combat, Sprint, Duck and Grab, each of them Toggle or Hold, and
-Ledge hang (Modern controls only, off by default). The picture is Beta 2.0's
-page, without Ledge hang.</td>
+Ledge hang (Modern controls only, off by default).</td>
 </tr>
 <tr>
 <td width="50%"><img src="docs/menu-hud.jpg" alt="HUD"><br>
 <b>HUD</b>: bar mode and positions, enemy bars, the ammo counter, the
 game-over menu, the loading bar style (TR5, TR4 or off - no loading screen
 for a short load) and the loading text (the name of the level being
-loaded). The picture is Beta 2.0's page: its <i>TR4 loadscreens</i> row is
-gone, and every load that shows a screen shows the level's own picture.</td>
+loaded).</td>
 <td width="50%"><img src="docs/menu-audio.jpg" alt="Audio"><br>
 <b>Audio</b>: music and effect volume, each a bar with its number beside it,
 a percentage from 0 to 100 (its sign shown as on Display), sound quality —
-and the language, which can be changed while the game runs. The picture is
-Beta 2.0's page, without the numbers.</td>
+and the language, which can be changed while the game runs.</td>
+</tr>
+</table>
+
+<sup>HD art is read at run time from the player's own Tomb Raider IV-VI
+Remastered installation — none of it is included here.</sup>
+
+The HD look, in pictures: the engine's own water, mirrors, shine, shadows and
+fog over the Remaster's art, with *HD textures* on.
+
+<table>
+<tr>
+<td width="50%"><img src="docs/hd-water-river.jpg" alt="Floats on a canal"><br>
+<b>HD water</b> on a canal: the engine's own moving surface, the floor seen
+bent through it, and a barrel and smaller things drifting on its current.</td>
+<td width="50%"><img src="docs/hd-water-foam.jpg" alt="Falling water and foam"><br>
+<b>HD water</b>: water falls from the ceiling of a flooded corridor, and foam
+spreads on the surface where it lands.</td>
+</tr>
+<tr>
+<td width="50%"><img src="docs/hd-water-spring.jpg" alt="A spring, from below"><br>
+<b>HD water</b> from below: a spring's small bubbles rise from a crack in the
+floor, the light the waves gather plays on the rock, and the surface overhead
+shows the room above it, bent.</td>
+<td width="50%"><img src="docs/hd-water-underwater.jpg" alt="Under the sea"><br>
+<b>HD water</b> in Deepsea Dive: the sea's surface seen from below, a dark
+blue underside with its small waves and a soft glow of light through it.</td>
+</tr>
+<tr>
+<td width="50%"><img src="docs/hd-water-fish.jpg" alt="The fish tank"><br>
+The fish tank in the VCI building holds a school of fish behind its glass,
+and the black marble in front of it mirrors the room (<i>Reflections</i>,
+on Graphics).</td>
+<td width="50%"><img src="docs/hd-reflection-floor.jpg" alt="A mirroring floor"><br>
+<b>Reflections</b>: a polished floor mirrors the room standing over it - the
+columns in the dark marble, the walls in the mosaic under Lara. <i>Options
+-> Graphics -> Reflections</i> switches it.</td>
+</tr>
+<tr>
+<td width="50%"><img src="docs/hd-reflection-mirror.jpg" alt="A washroom mirror"><br>
+A washroom of the VCI building: Lara in the mirror on the wall, and the green
+tiles of the floor mirroring the room (<i>Reflections</i>). The MP5 on her
+back is a third-party mod, credited under <i>Mods shown in the
+screenshots</i> below.</td>
+<td width="50%"><img src="docs/hd-reflection-surface.jpg" alt="Lamplight on metal"><br>
+A lamp's light lies on the wall where it hangs, and the metal round Lara
+catches it: in an HD room metal, marble and ice shine. It is a gloss, not a
+mirror - nothing of the room is drawn a second time.</td>
+</tr>
+<tr>
+<td width="50%"><img src="docs/hd-shadows.jpg" alt="Lara's projected shadow"><br>
+<b>Shadow mode</b> <i>Projected</i> (<i>Graphics</i>, second page), the
+default, offered while HD is on: Lara's own outline lies soft-edged on the
+deck beside her, in place of the round blob.</td>
+<td width="50%"><img src="docs/hd-fog.jpg" alt="Fog in a cave"><br>
+<b>Fog</b> and <b>Distance fog</b> (<i>Graphics</i>): the far side of the
+cave fades into the haze as Lara dives.</td>
+</tr>
+<tr>
+<td width="50%"><img src="docs/hd-distance.jpg" alt="A view to the horizon at dusk"><br>
+The view across the level to the horizon: the far hills, the trees and the
+standing stones under the sky at dusk, with the moon over them.</td>
+<td width="50%"><img src="docs/first-person.jpg" alt="First person view"><br>
+The <b>first-person view</b> (<i>Controls -> View -> First person
+view</i>): the camera sits behind her eyes, her head is not drawn, and her
+arms aim the Uzis down the street.</td>
+</tr>
+<tr>
+<td colspan="2" align="center">
+<img src="docs/hd-loading-screen.jpg" alt="An HD loading screen" width="640"><br>
+An HD loading screen with <b>Loading text</b> on (<i>HUD</i>): the level's
+name at the top centre, the TR5 bar along the bottom.</td>
 </tr>
 </table>
 
@@ -782,6 +847,7 @@ Remastered installation — none of it is included here.</sup>
 | [IMI Uzi Replacement for Mac-10](https://www.nexusmods.com/tombraidertrilogyremastered/mods/187) | [xKhalix](https://www.nexusmods.com/profile/xKhalix) | the Uzi picture |
 | [Tomb Raider - Underworld - AIO](https://www.nexusmods.com/tombraidertrilogyremastered/mods/954) | [DarkLegendAoD](https://www.nexusmods.com/profile/DarkLegendAoD) | the outfit changer with mods, and the Uzi picture |
 | [OPERA DRESS (Tomb Raider 5)](https://www.nexusmods.com/tombraidertrilogyremastered/mods/281) | [Zellphie](https://www.nexusmods.com/profile/Zellphie) | the shotgun picture |
+| [Tomb Raider - Angel of Darkness - Mag Vega](https://www.nexusmods.com/tombraidertrilogy2remastered/mods/79) | [DarkLegendAoD](https://www.nexusmods.com/profile/DarkLegendAoD) | the washroom mirror picture (the MP5) |
 
 These are third-party mods by their respective authors. They are not part of
 this project and are not included; get them from the authors' pages.

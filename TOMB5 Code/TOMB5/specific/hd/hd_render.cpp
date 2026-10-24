@@ -1819,6 +1819,17 @@ namespace
 		return (cx << 20) | (cy << 10) | cz;
 	}
 
+	/* One axis of a CellKey back in units. A world y below -32768 (a group
+	 * at its y shift) wraps to the field's top quarter, which no short
+	 * reaches from below: it is read back as the cell it is, so the field
+	 * holds -98304 .. 163839 and every key a short makes reads as before. */
+	inline float CellAxisOf(unsigned int field)
+	{
+		const int cell = field >= 768u ? (int)field - 1152 : (int)field - 128;
+
+		return (float)cell * 256.0f;
+	}
+
 	/* One destructible piece of a room's art.
 	 *
 	 * Some parts carry a material with bit 15 set and a counter under it.
@@ -29292,9 +29303,9 @@ int HDRenderGroupCellsIn(int group, const float* mins, const float* maxs,
 		const unsigned int key = cells[i];
 		const float p[3] =
 		{
-			(float)((int)((key >> 20) & 0x3FF) - 128) * 256.0f,
-			(float)((int)((key >> 10) & 0x3FF) - 128) * 256.0f,
-			(float)((int)(key & 0x3FF) - 128) * 256.0f
+			CellAxisOf((key >> 20) & 0x3FF),
+			CellAxisOf((key >> 10) & 0x3FF),
+			CellAxisOf(key & 0x3FF)
 		};
 		bool in = true;
 

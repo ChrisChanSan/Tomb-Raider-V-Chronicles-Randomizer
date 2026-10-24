@@ -2288,6 +2288,43 @@ bool HDRenderShellLine(int index, HDShellLine* out);
 void HDRenderShellCounts(int* groups, int* pairs, int* dropped, int* rest,
 	int* air, int* flagged);
 int HDRenderGroupShellDropped(int group);
+
+/* The hollow groups of the level built last: a room's group with
+ * triangles none of whose centroids stands in the room's own box with
+ * HD_OVERHANG_SLACK (HDRenderGroupOverhangTriangles equal to
+ * HDRenderGroupTriangles). The art is the room's, modelled where the
+ * room's window shows it - outside the room's own box. Per group: its
+ * triangles as the fill took them, the box of their centroids and the
+ * room's own box in world units, the rooms whose own box holds centroids
+ * of it (`rooms` of them, the HD_HOLLOW_ROOMS with the most in `room` and
+ * `in`, a centroid counted in every box that holds it) and those in no
+ * room's box. Measured at the build when the room boxes are handed in
+ * (HDRenderSetRoomBoxes); nothing is drawn or left out by it. */
+#define HD_HOLLOW_ROOMS	6
+
+struct HDHollowGroup
+{
+	int group;
+	int tris;
+	float lo[3], hi[3];
+	float ownLo[3], ownHi[3];
+	int rooms;
+	int room[HD_HOLLOW_ROOMS];
+	int in[HD_HOLLOW_ROOMS];
+	int none;
+	// The same for every room's whole grid, the wall ring taken back.
+	int gridRooms;
+	int gridRoom[HD_HOLLOW_ROOMS];
+	int gridIn[HD_HOLLOW_ROOMS];
+	int gridNone;
+};
+
+int HDRenderHollowGroups();
+bool HDRenderHollowGroup(int index, HDHollowGroup* out);
+/* One group's line, as the engine's log (after "HDLOG hollow ") and
+ * RoomProbe's -hollowlist (after "hollow: ") print it. False past the
+ * last. */
+bool HDRenderHollowText(int index, const char* stem, char* out, size_t size);
 /* How many pair faces the build found inside a larger face of a room their
  * room intrudes in (MarkCoveredFaces in hd_render.cpp), whose art is drawn
  * pushed back; 0 with the rooms' air off. */

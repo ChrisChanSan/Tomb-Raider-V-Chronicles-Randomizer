@@ -2675,6 +2675,8 @@ namespace
 	std::vector<HDShellLine> g_shell_lines;
 	std::vector<int> g_shell_group;
 	int g_shell_counts[6] = { 0, 0, 0, 0, 0, 0 };
+	// The hollow groups of the level built last (HDHollowGroup).
+	std::vector<HDHollowGroup> g_hollow;
 
 	/* The rule's numbers. A triangle stands where its centroid does; a
 	 * group's own box is widened by 64 before its art counts as standing
@@ -3025,6 +3027,148 @@ namespace
 	{
 		if ((size_t)first < g_shell_drop.size())
 			g_shell_drop[first] = 1;
+	}
+
+	/* The hollow groups (HDHollowGroup in hd_render.h), after the fill: a
+	 * room group with triangles, every one of them overhang. Their
+	 * triangles are asked again as the fill took them - the second shells
+	 * dropped - by their centroids against every room's own box, in world
+	 * units: where the art the room's window shows really stands. */
+	void NoteHollowGroups(const trf::remaster::Trg& trg)
+	{
+		g_hollow.clear();
+
+		if (!g_boxes || g_box_count <= 0)
+			return;
+
+		const int groups = g_room_groups < g_box_count ? g_room_groups
+			: g_box_count;
+
+		for (int g = 0; g < groups && g < (int)trg.groups.size(); g++)
+		{
+			const HDGroup& built = g_groups[(size_t)g];
+			const unsigned int here = built.triangles[0] +
+				built.triangles[1] + built.triangles[2];
+			const unsigned int out = built.overhang[0] + built.overhang[1] +
+				built.overhang[2];
+
+			if (!here || out < here)
+				continue;
+
+			HDHollowGroup one;
+			// Per room: centroids in its own box, and in its whole grid.
+			std::vector<int> in((size_t)g_box_count * 2, 0);
+			const HDRoomBox& own = g_boxes[g];
+			const float dy = GroupDY((size_t)g);
+
+			std::memset(&one, 0, sizeof(one));
+			one.group = g;
+
+			for (int k = 0; k < 3; k++)
+			{
+				one.lo[k] = HD_AIR_NONE;
+				one.hi[k] = -HD_AIR_NONE;
+				one.ownLo[k] = own.mins[k];
+				one.ownHi[k] = own.maxs[k];
+			}
+
+			one.ownLo[0] += own.originX;
+			one.ownHi[0] += own.originX;
+			one.ownLo[2] += own.originZ;
+			one.ownHi[2] += own.originZ;
+
+			ShellEachTri(trg.groups[(size_t)g], [&](unsigned int first)
+			{
+				if (!g_shell_drop.empty() && g_shell_drop[first])
+					return;
+
+				if ((size_t)first + 2 >= trg.indices.size())
+					return;
+
+				float c[3] = { 0.0f, 0.0f, 0.0f };
+
+				for (int v = 0; v < 3; v++)
+				{
+					const trf::remaster::TrgVertex& tv =
+						trg.vertices[trg.indices[first + v]];
+
+					c[0] += (float)tv.x;
+					c[1] += (float)tv.y;
+					c[2] += (float)tv.z;
+				}
+
+				c[0] = c[0] / 3.0f + own.originX;
+				c[1] = c[1] / 3.0f + dy;
+				c[2] = c[2] / 3.0f + own.originZ;
+				one.tris++;
+
+				for (int k = 0; k < 3; k++)
+				{
+					if (c[k] < one.lo[k]) one.lo[k] = c[k];
+					if (c[k] > one.hi[k]) one.hi[k] = c[k];
+				}
+
+				/* The own box is a sector in from the grid's edge; the
+				 * whole grid takes the wall ring back. */
+				bool any[2] = { false, false };
+
+				for (int r = 0; r < g_box_count; r++)
+					for (int w = 0; w < 2 && r != g; w++)
+					{
+						const HDRoomBox& b = g_boxes[r];
+						const float ring = w ? 1024.0f : 0.0f;
+
+						if (c[0] < b.mins[0] + b.originX - ring ||
+							c[0] > b.maxs[0] + b.originX + ring ||
+							c[1] < b.mins[1] || c[1] > b.maxs[1] ||
+							c[2] < b.mins[2] + b.originZ - ring ||
+							c[2] > b.maxs[2] + b.originZ + ring)
+							continue;
+
+						in[(size_t)r * 2 + (size_t)w]++;
+						any[w] = true;
+					}
+
+				one.none += any[0] ? 0 : 1;
+				one.gridNone += any[1] ? 0 : 1;
+			});
+
+			// The rooms that hold its art, the most first, per kind of box.
+			for (int w = 0; w < 2; w++)
+			{
+				int& rooms = w ? one.gridRooms : one.rooms;
+				int* room = w ? one.gridRoom : one.room;
+				int* count = w ? one.gridIn : one.in;
+
+				for (int r = 0; r < g_box_count; r++)
+				{
+					const int n = in[(size_t)r * 2 + (size_t)w];
+
+					if (!n)
+						continue;
+
+					rooms++;
+
+					for (int s = 0; s < HD_HOLLOW_ROOMS; s++)
+					{
+						if (s < rooms - 1 && n <= count[s])
+							continue;
+
+						for (int t = HD_HOLLOW_ROOMS - 1; t > s; t--)
+						{
+							room[t] = room[t - 1];
+							count[t] = count[t - 1];
+						}
+
+						room[s] = r;
+						count[s] = n;
+						break;
+					}
+				}
+			}
+
+			g_hollow.push_back(one);
+		}
 	}
 
 	/* The three scans, group by group (HDShellRoom in hd_render.h has the
@@ -6672,6 +6816,50 @@ bool HDRenderYShiftOf(int group, HDYShiftGroup* out)
 int HDRenderGroupYShift(int group)
 {
 	return group >= 0 ? GroupYShift((size_t)group) : 0;
+}
+
+int HDRenderHollowGroups()
+{
+	return (int)g_hollow.size();
+}
+
+bool HDRenderHollowGroup(int index, HDHollowGroup* out)
+{
+	if (index < 0 || index >= (int)g_hollow.size())
+		return false;
+
+	*out = g_hollow[(size_t)index];
+	return true;
+}
+
+bool HDRenderHollowText(int index, const char* stem, char* out, size_t size)
+{
+	HDHollowGroup h;
+
+	if (!out || !size || !HDRenderHollowGroup(index, &h))
+		return false;
+
+	int at = snprintf(out, size, "level=%s group=%d tris=%d art=%.0f..%.0f,"
+		"%.0f..%.0f,%.0f..%.0f own=%.0f..%.0f,%.0f..%.0f,%.0f..%.0f rooms=%d "
+		"none=%d in=", stem ? stem : "?", h.group, h.tris, h.lo[0], h.hi[0],
+		h.lo[1], h.hi[1], h.lo[2], h.hi[2], h.ownLo[0], h.ownHi[0], h.ownLo[1],
+		h.ownHi[1], h.ownLo[2], h.ownHi[2], h.rooms, h.none);
+
+	for (int s = 0; s < HD_HOLLOW_ROOMS && s < h.rooms && at > 0 &&
+		(size_t)at < size; s++)
+		at += snprintf(out + at, size - (size_t)at, "%s%d:%d", s ? "," : "",
+			h.room[s], h.in[s]);
+
+	if (at > 0 && (size_t)at < size)
+		at += snprintf(out + at, size - (size_t)at,
+			" grid_rooms=%d grid_none=%d grid=", h.gridRooms, h.gridNone);
+
+	for (int s = 0; s < HD_HOLLOW_ROOMS && s < h.gridRooms && at > 0 &&
+		(size_t)at < size; s++)
+		at += snprintf(out + at, size - (size_t)at, "%s%d:%d", s ? "," : "",
+			h.gridRoom[s], h.gridIn[s]);
+
+	return at > 0;
 }
 
 int HDRenderShellLines()
@@ -10764,6 +10952,8 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 	}
 
 	lap(HD_BEGIN_INDEX);
+	// What the hollow groups' art is and where it stands, for the log.
+	NoteHollowGroups(trg);
 
 	if (stats)
 	{

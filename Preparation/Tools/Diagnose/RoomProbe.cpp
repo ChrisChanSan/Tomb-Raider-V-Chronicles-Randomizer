@@ -501,6 +501,13 @@
  *                     faces, triangles, how many stand in a DUMMY item's
  *                     box and the verdict (`standlist:` lines), then the
  *                     boxes. Needs -roombox.
+ *     -hollowlist     every hollow group of the level as the engine's log
+ *                     names it (`hollow:` lines: its triangles, the box of
+ *                     their centroids, its room's own box, the rooms whose
+ *                     own box and whole grid hold them), and per group its
+ *                     room's classic faces, portals, the room whose art
+ *                     encloses it and the stand rule's state; a level line
+ *                     last. Needs -roombox and -vis 1.
  *     -ties [n]       the pixels at which a -classicroom face lies within
  *                     1/n (20000) of its distance of the art in front of
  *                     it: a `ties:` line.
@@ -4269,6 +4276,13 @@ static std::map<int, double> g_push_group;
 static double g_push_eye[3] = { 0.0, 0.0, 0.0 };
 static bool g_stand_list = false;
 static int g_no_front = 0;
+/* -hollowlist: the hollow groups as the engine's log names them
+ * (HDRenderHollowText), and per group what the visibility path asks of
+ * its room: its classic faces, the rooms its portals lead to - the
+ * windows it is seen through -, the room whose art encloses it
+ * (HDVisTables::enclosedBy) and the stand rule's state. Needs -roombox
+ * and -vis 1; -nodraw keeps it to the lines. */
+static bool g_hollow_list = false;
 // The boxes of the items of DUMMY slots, with their item and slot.
 static std::vector<HDStandBox> g_baked_boxes;
 static std::vector<int> g_baked_items;
@@ -4300,6 +4314,8 @@ static bool TieArg(int argc, char** argv, int* at)
 	}
 	else if (!strcmp(a, "-standlist"))
 		g_stand_list = true;
+	else if (!strcmp(a, "-hollowlist"))
+		g_hollow_list = true;
 	else if (!strcmp(a, "-nofront"))
 	{
 		g_no_front = 1;
@@ -13209,6 +13225,80 @@ static bool RangeBaked(int g, const HDStandRange& range,
 /* -standlist: every stand range of every HD group, its holder, kind, faces,
  * triangles, the count above and the verdict, and the DUMMY items it lies in;
  * then the boxes. */
+/* -hollowlist (see g_hollow_list): after the level build. The walk's
+ * level and tables are read here as -walk reads them. */
+static void HollowList(const char* stem, const std::string& root)
+{
+	if (!g_hollow_list)
+		return;
+
+	const bool tables = !g_roombox.empty() && walkoff::g_vis &&
+		walkoff::Load(g_roombox, stem) && walkoff::LoadHd(root, stem);
+	const HDVisTables& t = walkoff::g_vis_tables;
+	int tris = 0, enclosed = 0;
+	char line[512];
+
+	g_stand_quiet = true;
+
+	for (int i = 0; i < HDRenderHollowGroups(); i++)
+	{
+		HDHollowGroup h;
+
+		if (!HDRenderHollowGroup(i, &h) ||
+			!HDRenderHollowText(i, stem, line, sizeof(line)))
+			continue;
+
+		printf("hollow: %s\n", line);
+		tris += h.tris;
+
+		const int r = h.group;
+
+		if (!tables || r < 0 || r >= t.rooms ||
+			(size_t)r >= walkoff::g_vis_rooms.size())
+		{
+			printf("hollow: room=%d no tables (-roombox and -vis 1)\n", r);
+			continue;
+		}
+
+		const HDVisRoom& room = walkoff::g_vis_rooms[(size_t)r];
+		std::string windows;
+		std::set<int> seen;
+
+		for (int k = 0; k < room.portalCount; k++)
+		{
+			const int at = room.firstPortal + k;
+
+			if (at < 0 || at >= (int)walkoff::g_vis_portals.size())
+				continue;
+
+			const int to = walkoff::g_vis_portals[(size_t)at].to;
+
+			if (!seen.insert(to).second)
+				continue;
+
+			windows += (windows.empty() ? "" : ",") + std::to_string(to);
+		}
+
+		int carrier = -1;
+		const int state = StandState(r, &carrier);
+
+		if (t.enclosedBy[(size_t)r] >= 0)
+			enclosed++;
+
+		printf("hollow: room=%d faces=%d outside=%d windows=%s "
+			"enclosed_by=%d enclosed_tris=%d stand=%s carrier=%d\n", r,
+			room.faceCount, (room.flags & 8) ? 1 : 0,
+			windows.empty() ? "-" : windows.c_str(), t.enclosedBy[(size_t)r],
+			t.enclosedTris[(size_t)r], state == HD_STAND_ROOM_COVERED ?
+			"covered" : state == HD_STAND_ROOM_PART ? "part" : "classic",
+			carrier);
+	}
+
+	g_stand_quiet = false;
+	printf("hollow: level=%s groups=%d tris=%d enclosed=%d\n", stem,
+		HDRenderHollowGroups(), tris, enclosed);
+}
+
 static void ListStand()
 {
 	if (!g_stand_list)
@@ -19579,6 +19669,8 @@ static int ProbeMain(int argc, char** argv)
 			"plain: its art in place\n");
 		printf("       -standlist   the stand ranges and the DUMMY item boxes "
 			"they lie in\n");
+		printf("       -hollowlist   the hollow groups, where their art "
+			"stands, and their rooms\n");
 		printf("       -ties [n]   classic faces within 1/n of the art's "
 			"depth, counted\n");
 		printf("       -push classic|<g> <f>   faces or group g moved by f of "
@@ -21759,6 +21851,8 @@ static int ProbeMain(int argc, char** argv)
 	}
 
 	HDRenderSetShellRooms(0, 0);
+	// -hollowlist: the hollow groups and their rooms, from the build.
+	HollowList(stem, root);
 
 	// -yshift: the engine's HDLOG yshift lines (ReportYShift), from the build.
 	if (!yshiftRooms.empty())

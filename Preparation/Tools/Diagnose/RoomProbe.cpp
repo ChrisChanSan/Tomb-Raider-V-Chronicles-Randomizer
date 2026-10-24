@@ -528,7 +528,11 @@
  *                     room's box, hd_level.cpp's fourth way a room stays
  *                     classic) is left out as -skipgroup leaves a group out,
  *                     one "hollow:" line each: the engine draws no such
- *                     group, while -with draws whatever group it is given.
+ *                     group with hd_vis 0, while -with draws whatever group
+ *                     it is given.
+ *     -hollowdraw     with -vis 1: every hollow group drawn whole inside its
+ *                     -roomwin window and nowhere else, as the engine draws
+ *                     a hollow group's art beside its classic room.
  *     -opensky        with -vis 1 and -walk: `outside` (FARCULL's outside=)
  *                     also turns on for a listed room the visibility path
  *                     leaves out that is not under the sky, as the walk of
@@ -4234,6 +4238,10 @@ static bool g_coincide_mark = false;
  * holder's verdict; `g_stand_draws` are this picture's in-holder draws. */
 static bool g_stand_rule = false;
 static bool g_hollow = false;			// -hollow
+/* -hollowdraw: with -vis 1 every hollow group is drawn whole inside its
+ * -roomwin window and nowhere else, as hd_level.cpp draws a hollow group's
+ * art beside its classic room (g_group_hollow, DrawRoomWindowed). */
+static bool g_hollow_draw = false;
 // StandState's lines held back while -statictable asks every room.
 static bool g_stand_quiet = false;
 static std::set<int> g_skip_groups;
@@ -8174,8 +8182,13 @@ static bool DrawOneGroup(int group, const D3DMATRIX* world,
 	{
 		HDRenderScissorOff();
 
-		// -viswin 5: the group's whole art inside its window.
-		if (g_vis_option && g_vis_win == 5 && !full)
+		/* -viswin 5: the group's whole art inside its window; and with
+		 * -hollowdraw a hollow group's. */
+		const int tris = HDRenderGroupTriangles(group, -1);
+		const bool hollow = g_hollow_draw && tris > 0 &&
+			HDRenderGroupOverhangTriangles(group) >= tris;
+
+		if (g_vis_option && (g_vis_win == 5 || hollow) && !full)
 		{
 			bool drew = false;
 
@@ -13235,7 +13248,7 @@ static void HollowList(const char* stem, const std::string& root)
 	const bool tables = !g_roombox.empty() && walkoff::g_vis &&
 		walkoff::Load(g_roombox, stem) && walkoff::LoadHd(root, stem);
 	const HDVisTables& t = walkoff::g_vis_tables;
-	int tris = 0, enclosed = 0;
+	int tris = 0, enclosed = 0, hiddenRooms = 0;
 	char line[512];
 
 	g_stand_quiet = true;
@@ -13285,18 +13298,27 @@ static void HollowList(const char* stem, const std::string& root)
 		if (t.enclosedBy[(size_t)r] >= 0)
 			enclosed++;
 
+		/* The visibility path's verdict on its faces, the art drawn
+		 * (HDVisClassicRoomVerdict with hollowDrawn). */
+		const bool hidden = HDVisClassicRoomVerdict(t, r, false,
+			state != HD_STAND_ROOM_CLASSIC, room.faceCount,
+			[](int) { return false; }, true);
+
+		if (hidden)
+			hiddenRooms++;
+
 		printf("hollow: room=%d faces=%d outside=%d windows=%s "
-			"enclosed_by=%d enclosed_tris=%d stand=%s carrier=%d\n", r,
-			room.faceCount, (room.flags & 8) ? 1 : 0,
+			"enclosed_by=%d enclosed_tris=%d stand=%s carrier=%d hidden=%d\n",
+			r, room.faceCount, (room.flags & 8) ? 1 : 0,
 			windows.empty() ? "-" : windows.c_str(), t.enclosedBy[(size_t)r],
 			t.enclosedTris[(size_t)r], state == HD_STAND_ROOM_COVERED ?
 			"covered" : state == HD_STAND_ROOM_PART ? "part" : "classic",
-			carrier);
+			carrier, hidden ? 1 : 0);
 	}
 
 	g_stand_quiet = false;
-	printf("hollow: level=%s groups=%d tris=%d enclosed=%d\n", stem,
-		HDRenderHollowGroups(), tris, enclosed);
+	printf("hollow: level=%s groups=%d tris=%d enclosed=%d hidden=%d\n",
+		stem, HDRenderHollowGroups(), tris, enclosed, hiddenRooms);
 }
 
 static void ListStand()
@@ -19681,6 +19703,8 @@ static int ProbeMain(int argc, char** argv)
 			"push\n");
 		printf("       -skipgroup <g>   group g left out of the picture and "
 			"not listed\n");
+		printf("       -hollow | -hollowdraw   the hollow groups left out, or "
+			"drawn whole in their window\n");
 		printf("       -statictable   every static's answer, old and new, the "
 			"shares and the shatterable\n");
 		printf("                      ones, then no picture (needs -roombox)\n");
@@ -20421,11 +20445,14 @@ static int ProbeMain(int argc, char** argv)
 		else if (!strcmp(argv[at], "-staticsonly"))
 			probestatics::g_only = true;
 		else if (!strcmp(argv[at], "-hollow") ||
+			!strcmp(argv[at], "-hollowdraw") ||
 			!strcmp(argv[at], "-opensky") ||
 			(!strcmp(argv[at], "-skipgroup") && at + 1 < argc))
 		{
 			// One branch for all three: the chain is at the compiler's depth.
-			if (argv[at][1] == 'h')
+			if (!strcmp(argv[at], "-hollowdraw"))
+				g_hollow_draw = true;
+			else if (argv[at][1] == 'h')
 				g_hollow = true;
 			else if (argv[at][1] == 'o')
 				walkoff::g_open_sky = true;

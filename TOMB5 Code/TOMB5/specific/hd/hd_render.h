@@ -2258,6 +2258,27 @@ struct HDShellLine
 };
 
 void HDRenderSetShellRooms(const HDShellRoom* rooms, int count);
+
+/* --- a room group stored off its height (hd_scan.h) ----------------------
+ *
+ * HDRenderSetYShiftRooms hands in, before HDRenderLevelBegin, the classic
+ * corners of every room in room order (HDYShiftRoom), the pointer kept
+ * until the next call. The build reads every room group's y shift out of
+ * them (HDYShiftScan) before anything else reads the .TRG; every reader of
+ * a corner's y then reads the world y, the stored y plus the group's shift,
+ * and the group is drawn moved by it. Nothing handed in: every shift is 0
+ * and the build is the one it was.
+ *
+ * After the build: HDRenderYShiftGroups the room groups it counted,
+ * HDRenderYShiftOf one group's count (false past them) and
+ * HDRenderGroupYShift a group's shift, 0 for nearly all. */
+struct HDYShiftRoom;
+struct HDYShiftGroup;
+
+void HDRenderSetYShiftRooms(const HDYShiftRoom* rooms, int count);
+int HDRenderYShiftGroups();
+bool HDRenderYShiftOf(int group, HDYShiftGroup* out);
+int HDRenderGroupYShift(int group);
 /* After the build: the lines, and the level's counts - groups with a
  * second-shell pair, such pairs, triangles the pairs dropped, the rest,
  * the air, the groups flagged and never asked. HDRenderGroupShellDropped

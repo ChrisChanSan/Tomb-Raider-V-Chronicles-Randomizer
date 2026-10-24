@@ -174,7 +174,8 @@ namespace
 bool HDVisBuild(const trf::remaster::Trg& trg, const HDVisRoom* rooms,
 	int roomCount, const HDCoverFace* faces, int faceCount,
 	const HDVisPortal* portals, int portalCount, const int* links,
-	int linkCount, const HDVisParams& params, HDVisTables* out)
+	int linkCount, const HDVisParams& params, HDVisTables* out,
+	const int* yShift)
 {
 	const auto started = std::chrono::steady_clock::now();
 	HDVisTables& t = *out;
@@ -357,7 +358,8 @@ bool HDVisBuild(const trf::remaster::Trg& trg, const HDVisRoom* rooms,
 							trg.vertices[trg.indices[first + (unsigned)c]];
 
 						v[c][0] = (float)tv.x;
-						v[c][1] = (float)tv.y;
+						v[c][1] = (float)tv.y +
+							(yShift ? (float)yShift[g] : 0.0f);
 						v[c][2] = (float)tv.z;
 					}
 
@@ -845,7 +847,7 @@ bool HDVisBuild(const trf::remaster::Trg& trg, const HDVisRoom* rooms,
 void HDVisStaticCovers(const trf::remaster::Trg& trg, const HDVisRoom* rooms,
 	int roomCount, const HDVisStatic* statics, int staticCount,
 	const HDCoverFace* faces, int faceCount, const HDVisParams& params,
-	HDVisTables* out)
+	HDVisTables* out, const int* yShift)
 {
 	HDVisTables& t = *out;
 	const int count = statics && staticCount > 0 ? staticCount : 0;
@@ -897,8 +899,10 @@ void HDVisStaticCovers(const trf::remaster::Trg& trg, const HDVisRoom* rooms,
 					const trf::remaster::TrgVertex& tv =
 						trg.vertices[trg.indices[i]];
 
+					const int y = tv.y + (yShift ? yShift[one.room] : 0);
+
 					cells.push_back((((long long)(tv.x >> 8) + 4096) << 26) |
-						(((long long)(tv.y >> 8) + 4096) << 13) |
+						(((long long)(y >> 8) + 4096) << 13) |
 						((long long)(tv.z >> 8) + 4096));
 				}
 			}
@@ -1022,7 +1026,8 @@ void HDVisStaticCovers(const trf::remaster::Trg& trg, const HDVisRoom* rooms,
 							trg.vertices[trg.indices[first + (unsigned)c]];
 
 						v[c][0] = (float)tv.x;
-						v[c][1] = (float)tv.y;
+						v[c][1] = (float)tv.y +
+							(yShift ? (float)yShift[g] : 0.0f);
 						v[c][2] = (float)tv.z;
 
 						for (int k = 0; k < 3; k++)
@@ -1146,17 +1151,24 @@ void HDVisLevelStatics(const HDVisStatic* statics, int staticCount,
 		g_in_static_faces.assign(faces, faces + faceCount);
 }
 
-void HDVisLevelBuild(const trf::remaster::Trg& trg)
+void HDVisLevelBuild(const trf::remaster::Trg& trg, const int* yShift,
+	int count)
 {
 	if (!g_armed)
 		return;
+
+	// One shift per room handed in, 0 for a room the caller did not name.
+	std::vector<int> shifts(g_in_rooms.size() + 1, 0);
+
+	for (int r = 0; yShift && r < count && r < (int)g_in_rooms.size(); r++)
+		shifts[(size_t)r] = yShift[r];
 
 	g_armed = false;
 	g_built = HDVisBuild(trg, &g_in_rooms[0], (int)g_in_rooms.size(),
 		g_in_faces.empty() ? 0 : &g_in_faces[0], (int)g_in_faces.size(),
 		g_in_portals.empty() ? 0 : &g_in_portals[0],
 		(int)g_in_portals.size(), g_in_links.empty() ? 0 : &g_in_links[0],
-		(int)g_in_links.size(), HDVisDefaults(), &g_tables);
+		(int)g_in_links.size(), HDVisDefaults(), &g_tables, &shifts[0]);
 
 	if (g_built && !g_in_statics.empty())
 	{
@@ -1165,7 +1177,8 @@ void HDVisLevelBuild(const trf::remaster::Trg& trg)
 		HDVisStaticCovers(trg, &g_in_rooms[0], (int)g_in_rooms.size(),
 			&g_in_statics[0], (int)g_in_statics.size(),
 			g_in_static_faces.empty() ? 0 : &g_in_static_faces[0],
-			(int)g_in_static_faces.size(), HDVisDefaults(), &g_tables);
+			(int)g_in_static_faces.size(), HDVisDefaults(), &g_tables,
+			&shifts[0]);
 		g_tables.staticMs = std::chrono::duration<double, std::milli>(
 			std::chrono::steady_clock::now() - started).count();
 	}

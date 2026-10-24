@@ -4129,6 +4129,23 @@ static int g_air_option = 1;
 /* -vis 1: the engine's tomb5.hd_vis 1 - the walk of BuildRoomVis' path and
  * no carried rooms; the intrusion list and the air are built as with 0. */
 static bool g_vis_option = false;
+/* -yshift 0|1: the room groups' y shift (hd_scan.h, "a room group stored off
+ * its height") read out of the classic rooms of -roombox, as the engine's
+ * level build reads it on the visibility path, or the .TRG drawn as it is
+ * stored (0); on by default with -vis 1, as the engine reads it there only.
+ * The build, the walk's carried art and -shellscan all see the world height
+ * while it is on; the build's `yshift` lines follow the shell lines. */
+static int g_yshift_option = -1;
+
+static bool YShiftOn()
+{
+	return g_yshift_option < 0 ? g_vis_option : g_yshift_option != 0;
+}
+
+// The shifts of a level's room groups, one per group of `trg`, all 0 when
+// `on` is false or without -roombox (defined with -yshiftscan).
+static void ProbeYShifts(const trf::remaster::Trg& trg, const char* stem,
+	bool on, std::vector<int>& out);
 /* -viswin <rule>: how -vis 1 answers the pieces of a group's intruding art
  * (DecideGroup): 0 every piece whole; 1 a piece in unlinked air inside the
  * group's window unless a claimed face of its pair survives the window, the
@@ -6023,6 +6040,9 @@ namespace walkoff
 
 		std::map<std::pair<int, int>, int> pairs, copies;
 		std::vector<std::pair<long long, int> > cents;
+		std::vector<int> shifts;	// the groups' y shifts (-yshift)
+
+		ProbeYShifts(trg, stem, YShiftOn(), shifts);
 
 		// Every triangle's world centroid cell, for the copies.
 		for (size_t g = 0; g < g_room.size() && g < trg.groups.size(); g++)
@@ -6048,7 +6068,8 @@ namespace walkoff
 						cents.push_back(std::make_pair(HDCarryCopyKey(
 							((float)ta.x + (float)tb.x + (float)tc.x) / 3.0f +
 							(float)g_room[g].x,
-							((float)ta.y + (float)tb.y + (float)tc.y) / 3.0f,
+							((float)ta.y + (float)tb.y + (float)tc.y) / 3.0f +
+							(float)shifts[g],
 							((float)ta.z + (float)tb.z + (float)tc.z) / 3.0f +
 							(float)g_room[g].z), (int)g));
 					}
@@ -6080,7 +6101,8 @@ namespace walkoff
 							trg.vertices[trg.indices[first + 2]];
 						float c[3] = {
 							((float)ta.x + (float)tb.x + (float)tc.x) / 3.0f,
-							((float)ta.y + (float)tb.y + (float)tc.y) / 3.0f,
+							((float)ta.y + (float)tb.y + (float)tc.y) / 3.0f +
+							(float)shifts[g],
 							((float)ta.z + (float)tb.z + (float)tc.z) / 3.0f };
 						HDRoomBox ob;
 
@@ -15594,10 +15616,16 @@ namespace probestatics
 			rooms.push_back(one);
 		}
 
+		// The groups at their world height, as on the visibility path.
+		std::vector<int> shifts;
+
+		ProbeYShifts(trg, stem, g_yshift_option != 0, shifts);
+		shifts.resize((std::max)(shifts.size(), rooms.size() + 1), 0);
+
 		HDVisStaticCovers(trg, rooms.empty() ? 0 : &rooms[0], (int)rooms.size(),
 			statics.empty() ? 0 : &statics[0], (int)statics.size(),
 			faces.empty() ? 0 : &faces[0], (int)faces.size(), g_cover_params,
-			&g_cover);
+			&g_cover, &shifts[0]);
 		g_cover_ms = std::chrono::duration<double, std::milli>(
 			std::chrono::steady_clock::now() - started).count();
 	}
@@ -17719,6 +17747,7 @@ namespace probeshell
 		int tris;
 		int nx, nz;
 		std::vector<float> air;		// HDSectorAir per square
+		float dy = 0.0f;	// the group's y shift (-yshift)
 	};
 
 	struct HostTri
@@ -17782,7 +17811,7 @@ namespace probeshell
 			const trf::remaster::TrgVertex& tv = trg.vertices[i];
 
 			v[c][0] = (float)tv.x + r.ox;
-			v[c][1] = (float)tv.y;
+			v[c][1] = (float)tv.y + r.dy;
 			v[c][2] = (float)tv.z + r.oz;
 		}
 
@@ -18153,6 +18182,15 @@ static int ProbeShellScan(const char* root, const char* stem)
 
 	ReadRooms(level, rooms);
 
+	// The groups at their world height, as the engine's build has them on
+	// the visibility path, but with -yshift 0.
+	std::vector<int> shifts;
+
+	ProbeYShifts(trg, stem, g_yshift_option != 0, shifts);
+
+	for (size_t r = 0; r < rooms.size() && r < shifts.size(); r++)
+		rooms[r].dy = (float)shifts[r];
+
 	const int n = (int)rooms.size();
 
 	for (int r = 0; r < n; r++)
@@ -18488,25 +18526,57 @@ static int ProbeShellScan(const char* root, const char* stem)
 static bool g_yshift_scan = false;
 static std::string g_yshift_dump;
 
-// The rooms' classic corners for HDYShiftScan, out of probemarks' blobs.
+/* The rooms' classic corners for HDYShiftScan, out of probemarks' blobs,
+ * copied into `store` so that a later read of the blobs leaves them be. */
 static void ProbeYShiftRooms(const Tr5Level& level,
-	std::vector<HDYShiftRoom>& out)
+	std::vector<std::vector<float> >& store, std::vector<HDYShiftRoom>& out)
 {
 	probemarks::Build(level);
 
 	const int n = (std::min)(level.roomCount(),
 		(int)probemarks::g_rooms.size());
 
+	store.assign((size_t)n, std::vector<float>());
 	out.assign((size_t)n, HDYShiftRoom());
 
 	for (int r = 0; r < n; r++)
 	{
-		const std::vector<float>& vtx = probemarks::g_rooms[(size_t)r].vtx;
+		store[(size_t)r] = probemarks::g_rooms[(size_t)r].vtx;
+
+		const std::vector<float>& vtx = store[(size_t)r];
 
 		out[(size_t)r].vtx = vtx.empty() ? 0 : &vtx[0];
 		out[(size_t)r].count = (int)(vtx.size() / 7);
 		out[(size_t)r].stride = 7;
 	}
+}
+
+static void ProbeYShifts(const trf::remaster::Trg& trg, const char* stem,
+	bool on, std::vector<int>& out)
+{
+	out.assign(trg.groups.size(), 0);
+
+	Tr5Level level;
+	std::string error;
+
+	if (!on || g_roombox.empty() ||
+		!level.load(std::wstring(g_roombox.begin(), g_roombox.end()) + L"\\" +
+		std::wstring(stem, stem + strlen(stem)) + L".TRC", error))
+		return;
+
+	std::vector<std::vector<float> > store;
+	std::vector<HDYShiftRoom> rooms;
+
+	ProbeYShiftRooms(level, store, rooms);
+
+	const int n = (std::min)((int)rooms.size(), (int)trg.groups.size());
+	std::vector<HDYShiftGroup> counts((size_t)(std::max)(n, 1));
+
+	if (n > 0)
+		HDYShiftScan(trg, &rooms[0], n, &counts[0]);
+
+	for (int g = 0; g < n; g++)
+		out[(size_t)g] = counts[(size_t)g].shift;
 }
 
 static int ProbeYShiftScan(const char* root, const char* stem)
@@ -18532,9 +18602,10 @@ static int ProbeYShiftScan(const char* root, const char* stem)
 		return 2;
 	}
 
+	std::vector<std::vector<float> > store;
 	std::vector<HDYShiftRoom> rooms;
 
-	ProbeYShiftRooms(level, rooms);
+	ProbeYShiftRooms(level, store, rooms);
 
 	const int groups = (std::min)((int)rooms.size(), (int)trg.groups.size());
 	std::vector<HDYShiftGroup> counts((size_t)(std::max)(groups, 1));
@@ -18720,6 +18791,8 @@ static bool SkyArg(int argc, char** argv, int* at)
 		g_sky_gpu = atoi(argv[++*at]);
 	else if (!strcmp(a, "-shellscan"))
 		g_shell_scan = true;
+	else if (!strcmp(a, "-yshift") && *at + 1 < argc)
+		g_yshift_option = atoi(argv[++*at]) != 0 ? 1 : 0;
 	else if (!strcmp(a, "-yshiftscan"))
 		g_yshift_scan = true;
 	else if (!strcmp(a, "-yshiftdump") && *at + 1 < argc)
@@ -21605,6 +21678,26 @@ static int ProbeMain(int argc, char** argv)
 	HDRenderSetShellRooms(shellRooms.empty() ? 0 : &shellRooms[0],
 		(int)shellRooms.size());
 
+	// -yshift: the rooms' classic corners, as BuildYShiftRooms hands them.
+	static std::vector<std::vector<float> > yshiftStore;
+	static std::vector<HDYShiftRoom> yshiftRooms;
+
+	yshiftStore.clear();
+	yshiftRooms.clear();
+
+	if (YShiftOn() && !g_roombox.empty())
+	{
+		Tr5Level level;
+		std::string error;
+
+		if (level.load(std::wstring(g_roombox.begin(), g_roombox.end()) +
+			L"\\" + std::wstring(stem, stem + strlen(stem)) + L".TRC", error))
+			ProbeYShiftRooms(level, yshiftStore, yshiftRooms);
+	}
+
+	HDRenderSetYShiftRooms(yshiftRooms.empty() ? 0 : &yshiftRooms[0],
+		(int)yshiftRooms.size());
+
 	if (!HDRenderLevelBegin(root, stem, rooms, managed, threads, &stats, &why))
 	{
 		printf("RoomProbe: HDRenderLevelBegin failed - %s\n", why);
@@ -21657,6 +21750,31 @@ static int ProbeMain(int argc, char** argv)
 	}
 
 	HDRenderSetShellRooms(0, 0);
+
+	// -yshift: the engine's HDLOG yshift lines (ReportYShift), from the build.
+	if (!yshiftRooms.empty())
+	{
+		char line[256];
+		int shifted = 0;
+
+		for (int g = 0; g < HDRenderYShiftGroups(); g++)
+		{
+			HDYShiftGroup count;
+
+			if (!HDRenderYShiftOf(g, &count) || !count.shift)
+				continue;
+
+			shifted++;
+			HDYShiftGroupLine(line, sizeof(line), stem, g, count);
+			printf("%s\n", line);
+		}
+
+		HDYShiftLevelLine(line, sizeof(line), stem, shifted,
+			HDRenderYShiftGroups());
+		printf("%s\n", line);
+	}
+
+	HDRenderSetYShiftRooms(0, 0);
 
 	{
 		const HDSkyCapCount cap = HDRenderSkyCapLast();

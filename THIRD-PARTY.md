@@ -4615,7 +4615,8 @@ carries the tables.
     own (RICH2's shaft: 15,751 pixels with no art at all from the lift car's roof; JOBY3:
     a cloth cut through). DATA: the census of the fifteen levels' pairs.
 481. **A room group stored off its height** (`specific/hd/hd_scan.h`, `HDYShiftCount`,
-    `HDYShiftScan`, `HDYShiftPick`, `HDYShiftClamp16`, `HDYShiftGroupLine`,
+    `HDYShiftScan`, `HDYShiftPick`, `HDYShiftClamp16`, `HDYShiftDropClamped`,
+    `HDYShiftApply`, `HDYShiftGroupLine`,
     `HDYShiftLevelLine`; `specific/hd/hd_level.cpp`, `BuildYShiftRooms`,
     `ReportYShift`; `specific/hd/hd_render.cpp`, `GroupYShift`, `GroupRow`,
     `CellAxisOf`, `HDRenderSetYShiftRooms`, `HDRenderYShiftOf`, `HDRenderGroupYShift`
@@ -4632,8 +4633,13 @@ carries the tables.
     the shift kept per group and added by every reader rather than copied corners (the
     vendored reader's y stays int16), the draw moving the group by its shift, the
     distinct corners and the 8-unit hash cells, the cells' read-back below -32,768, the
-    test of twice as many and of the tolerance, the log lines and the probe. DATA: the
-    census of the fifteen levels (one group shifted, one near miss).
+    test of twice as many and of the tolerance, the log lines and the probe; and the
+    clamp: in a group with a shift a triangle whose three corners sit at the stored
+    -32,768 is dropped (`clamped_dropped=` in the log line, 29,272 in RICH2's group 61).
+    TROne keeps those triangles and so a flat plate at -49,152 over the shaft; this
+    project does not, because they are art above the storable range collapsed onto the
+    int16 floor, not art of its own, and the HD shaft has no such top - it goes on
+    higher. DATA: the census of the fifteen levels (one group shifted, one near miss).
 482. **A lift door's delay kept while its pad is held** (`game/lift_door_rule.h`,
     `LiftDoorKeepsTimer`; `game/control.cpp`, `_TestTriggers`; ModernTest's
     `lift_door_rule`) - a trigger's timer is not written into a lift door that holds all

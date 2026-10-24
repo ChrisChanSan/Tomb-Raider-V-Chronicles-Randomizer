@@ -210,14 +210,16 @@ struct HDYShiftRoom
 };
 
 /* One group's count: its room's distinct classic corners, how many of them
- * were found at each shift, the shift taken (0 for most) and the group's own
- * distinct corners, the ones its shift moves. */
+ * were found at each shift, the shift taken (0 for most), the group's own
+ * distinct corners, the ones its shift moves, and the triangles of a shifted
+ * group taken out as the file's clamp (HDYShiftDropClamped). */
 struct HDYShiftGroup
 {
 	int corners;
 	int hits[HD_YSHIFT_SHIFTS];
 	int shift;
 	int moved;
+	int clampedDropped;
 };
 
 // The rule's pick out of the hits at the five shifts.
@@ -435,6 +437,95 @@ int HDYShiftScan(const Trg& trg, const HDYShiftRoom* rooms, int count,
 	return shifted;
 }
 
+/* The file's clamp in a shifted group. A corner whose world y lies above
+ * what a short holds is stored at -32768, the int16 floor; where all three
+ * corners of a triangle sit there, the triangle is art above the storable
+ * range collapsed onto that one plane, not art of its own - at the world
+ * height it would close the group's top with a flat lid the art never has.
+ * Such triangles are taken out of the group's passes: each pass is
+ * compacted in place, the kept triangles in their order, and the indices
+ * past a pass's new end are no longer read by anything. A triangle with one
+ * or two corners at the floor keeps them as stored, so a wall reaching it
+ * ends open there. A group with no shift is never asked: in it -32768 is
+ * a height like any other. Returns the triangles taken out. */
+template <class Trg>
+int HDYShiftDropClamped(Trg& trg, int group)
+{
+	if (group < 0 || (size_t)group >= trg.groups.size())
+		return 0;
+
+	const int floor16 = -32768;
+	int dropped = 0;
+
+	for (auto& part : trg.groups[(size_t)group].parts)
+		for (int pass = 0; pass < 3; pass++)
+		{
+			auto& run = part.pass[pass];
+			const size_t start = run.start;
+			const size_t end = start + run.count;
+			size_t put = start;
+			size_t at = start;
+			int here = 0;
+
+			if (end > trg.indices.size())
+				continue;
+
+			for (; at + 2 < end; at += 3)
+			{
+				bool lid = true;
+
+				for (int c = 0; c < 3; c++)
+				{
+					const size_t v = trg.indices[at + (size_t)c];
+
+					if (v >= trg.vertices.size() ||
+						trg.vertices[v].y != floor16)
+						lid = false;
+				}
+
+				if (lid)
+				{
+					here++;
+					continue;
+				}
+
+				for (int c = 0; c < 3; c++)
+					trg.indices[put + (size_t)c] = trg.indices[at + (size_t)c];
+
+				put += 3;
+			}
+
+			if (!here)
+				continue;
+
+			// An odd tail past the last whole triangle goes along.
+			for (; at < end; at++)
+				trg.indices[put++] = trg.indices[at];
+
+			run.count = (decltype(run.count))(put - start);
+			dropped += here;
+		}
+
+	return dropped;
+}
+
+/* The clamp taken out of every shifted group of `counts` (HDYShiftScan's),
+ * each group's count booked in it. Returns the triangles taken out. */
+template <class Trg>
+int HDYShiftApply(Trg& trg, HDYShiftGroup* counts, int count)
+{
+	int dropped = 0;
+
+	for (int g = 0; counts && g < count; g++)
+		if (counts[g].shift != 0)
+		{
+			counts[g].clampedDropped = HDYShiftDropClamped(trg, g);
+			dropped += counts[g].clampedDropped;
+		}
+
+	return dropped;
+}
+
 /* The log's two lines, written alike by the engine (after its HDLOG) and by
  * RoomProbe: one per shifted group, one for the level. */
 inline int HDYShiftGroupLine(char* buffer, size_t size, const char* stem,
@@ -447,8 +538,9 @@ inline int HDYShiftGroupLine(char* buffer, size_t size, const char* stem,
 			at = k;
 
 	return snprintf(buffer, size, "yshift level=%s group=%d shift=%d "
-		"corners=%d/%d unshifted=%d moved=%d", stem, group, c.shift,
-		c.hits[at], c.corners, c.hits[HD_YSHIFT_SHIFTS / 2], c.moved);
+		"corners=%d/%d unshifted=%d moved=%d clamped_dropped=%d", stem, group,
+		c.shift, c.hits[at], c.corners, c.hits[HD_YSHIFT_SHIFTS / 2], c.moved,
+		c.clampedDropped);
 }
 
 inline int HDYShiftLevelLine(char* buffer, size_t size, const char* stem,

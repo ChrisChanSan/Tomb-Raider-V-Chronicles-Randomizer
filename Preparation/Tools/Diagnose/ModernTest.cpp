@@ -25867,6 +25867,67 @@ static void yshift_rule()
 			HDYShiftClamp16(world), -32768);
 	}
 
+	/* The file's clamp in a shifted group: a triangle with all three corners
+	 * at -32768 is taken out, one with two there stays, the triangles after
+	 * it close up in their order; an unshifted group keeps the same lid. */
+	{
+		const std::vector<float> room = yshift_room(32, -31232);
+		const HDYShiftRoom rooms[1] = { yshift_of(room) };
+		trf::remaster::Trg trg;
+		HDYShiftGroup c[1];
+
+		yshift_group(trg, 0, room, 16384);
+
+		const uint32_t base = (uint32_t)trg.vertices.size();
+		trf::remaster::TrgVertex v;
+
+		for (int k = 0; k < 6; k++)
+		{
+			v.x = (int16_t)(k * 64);
+			v.y = (int16_t)(k < 5 ? -32768 : -32000);
+			trg.vertices.push_back(v);
+		}
+
+		// The lid (0 1 2), a wall reaching it (3 4 5), a second lid (2 3 4).
+		const uint32_t tris[9] = { 0, 1, 2, 3, 4, 5, 2, 3, 4 };
+		trf::remaster::TrgPart part;
+
+		part.pass[0].start = (uint32_t)trg.indices.size();
+		part.pass[0].count = 9;
+		part.pass[1].start = part.pass[2].start = part.pass[0].start + 9;
+
+		for (int k = 0; k < 9; k++)
+			trg.indices.push_back(base + tris[k]);
+
+		trg.groups[0].parts.push_back(part);
+
+		trf::remaster::Trg kept = trg;
+
+		HDYShiftScan(trg, rooms, 1, c);
+
+		const int dropped = HDYShiftApply(trg, c, 1);
+		const trf::remaster::TrgPart::Pass& run =
+			trg.groups[0].parts[1].pass[0];
+
+		ok(c[0].shift == -16384 && dropped == 2 && c[0].clampedDropped == 2,
+			"yshift: the two lids on the clamp are taken out", dropped, 2);
+		ok(run.count == 3 && trg.indices[run.start] == base + 3 &&
+			trg.indices[run.start + 2] == base + 5,
+			"yshift: the wall reaching the clamp stays", run.count, 3);
+		ok(trg.groups[0].parts[0].pass[0].count ==
+			kept.groups[0].parts[0].pass[0].count,
+			"yshift: a pass with no lid keeps its count",
+			trg.groups[0].parts[0].pass[0].count,
+			kept.groups[0].parts[0].pass[0].count);
+
+		HDYShiftGroup none[1] = { HDYShiftGroup() };
+
+		ok(HDYShiftApply(kept, none, 1) == 0 &&
+			kept.groups[0].parts[1].pass[0].count == 9,
+			"yshift: an unshifted group keeps its triangles at -32768",
+			kept.groups[0].parts[1].pass[0].count, 9);
+	}
+
 	// Too few matches do not shift: 8 corners, under the 16 the rule asks.
 	{
 		const std::vector<float> room = yshift_room(8, -26112);
@@ -25928,9 +25989,10 @@ static void yshift_rule()
 		c.hits[2] = 30;
 		c.shift = -16384;
 		c.moved = 326326;
+		c.clampedDropped = 29272;
 		HDYShiftGroupLine(line, sizeof(line), "LEVEL", 7, c);
 		ok(!strcmp(line, "yshift level=LEVEL group=7 shift=-16384 "
-			"corners=98/112 unshifted=30 moved=326326"),
+			"corners=98/112 unshifted=30 moved=326326 clamped_dropped=29272"),
 			"yshift: the group's line", (long)strlen(line), 0);
 		HDYShiftLevelLine(line, sizeof(line), "LEVEL", 1, 179);
 		ok(!strcmp(line, "yshift level=LEVEL groups=1 of 179"),

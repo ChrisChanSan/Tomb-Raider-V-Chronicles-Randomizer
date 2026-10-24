@@ -4144,7 +4144,7 @@ static bool YShiftOn()
 
 // The shifts of a level's room groups, one per group of `trg`, all 0 when
 // `on` is false or without -roombox (defined with -yshiftscan).
-static void ProbeYShifts(const trf::remaster::Trg& trg, const char* stem,
+static void ProbeYShifts(trf::remaster::Trg& trg, const char* stem,
 	bool on, std::vector<int>& out);
 /* -viswin <rule>: how -vis 1 answers the pieces of a group's intruding art
  * (DecideGroup): 0 every piece whole; 1 a piece in unlinked air inside the
@@ -5937,6 +5937,12 @@ namespace walkoff
 			return false;
 		}
 
+		/* The groups' y shifts (-yshift) right after the read, as the
+		 * engine's build takes them: the file's clamp leaves a shifted
+		 * group before anything below reads it (HDYShiftDropClamped). */
+		std::vector<int> shifts;
+
+		ProbeYShifts(trg, stem, YShiftOn(), shifts);
 		g_hd.assign(g_room.size(), 0);
 
 		for (size_t g = 0; g < g_room.size() && g < trg.groups.size(); g++)
@@ -6040,9 +6046,6 @@ namespace walkoff
 
 		std::map<std::pair<int, int>, int> pairs, copies;
 		std::vector<std::pair<long long, int> > cents;
-		std::vector<int> shifts;	// the groups' y shifts (-yshift)
-
-		ProbeYShifts(trg, stem, YShiftOn(), shifts);
 
 		// Every triangle's world centroid cell, for the copies.
 		for (size_t g = 0; g < g_room.size() && g < trg.groups.size(); g++)
@@ -18521,8 +18524,8 @@ static int ProbeShellScan(const char* root, const char* stem)
  * -shellgroups names, its room's corners as listed (`r group x y z`), its
  * distinct classic corners (`c group x y z bits`, bit k found at shift k)
  * and its triangles (`t group i0 i1 i2` and the corners `v index x y z`,
- * room local, y as stored). `listed=` is the room's corner count with the
- * repeats. */
+ * room local, y as stored, the lids on the clamp still in). `listed=` is
+ * the room's corner count with the repeats. */
 static bool g_yshift_scan = false;
 static std::string g_yshift_dump;
 
@@ -18551,7 +18554,7 @@ static void ProbeYShiftRooms(const Tr5Level& level,
 	}
 }
 
-static void ProbeYShifts(const trf::remaster::Trg& trg, const char* stem,
+static void ProbeYShifts(trf::remaster::Trg& trg, const char* stem,
 	bool on, std::vector<int>& out)
 {
 	out.assign(trg.groups.size(), 0);
@@ -18573,7 +18576,10 @@ static void ProbeYShifts(const trf::remaster::Trg& trg, const char* stem,
 	std::vector<HDYShiftGroup> counts((size_t)(std::max)(n, 1));
 
 	if (n > 0)
+	{
 		HDYShiftScan(trg, &rooms[0], n, &counts[0]);
+		HDYShiftApply(trg, &counts[0], n);
+	}
 
 	for (int g = 0; g < n; g++)
 		out[(size_t)g] = counts[(size_t)g].shift;
@@ -18684,6 +18690,9 @@ static int ProbeYShiftScan(const char* root, const char* stem)
 
 	if (dump)
 		fclose(dump);
+
+	// The file's clamp out of the shifted groups, as the build takes it.
+	HDYShiftApply(trg, counts.empty() ? 0 : &counts[0], groups);
 
 	char line[256];
 

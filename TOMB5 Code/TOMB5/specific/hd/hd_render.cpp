@@ -7387,6 +7387,11 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 
 		for (int g = 0; g < asked; g++)
 			g_yshift[(size_t)g] = g_yshift_counts[(size_t)g].shift;
+
+		/* A shifted group's triangles lying wholly on the file's clamp are
+		 * no art (HDYShiftDropClamped): out before anything reads them. */
+		if (asked > 0)
+			HDYShiftApply(trg, &g_yshift_counts[0], asked);
 	}
 
 	// The sky band's poles closed (HDRenderSkyCaps, the sky dome below).

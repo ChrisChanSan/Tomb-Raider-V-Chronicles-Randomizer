@@ -157,6 +157,17 @@ struct Tr5OneShotHit
 };
 
 //----------------------------------------------------------------------------
+// The trigger setTriggerTimer found: its chain start, the file position of
+// its setup word, and that word before and after.
+//----------------------------------------------------------------------------
+struct Tr5TimerHit
+{
+    int      chain = 0;
+    size_t   fileAt = 0;
+    uint16_t before = 0, after = 0;
+};
+
+//----------------------------------------------------------------------------
 // The three rules for walking a floordata chain, kept as free functions
 // rather than duplicated by every reader - a copied bit layout is a
 // second chance to get it wrong. Each one names the engine line it was
@@ -481,6 +492,25 @@ public:
     bool    setTriggerOneShot(int room, int kind, int slot,
                               std::vector<Tr5OneShotHit>& hits,
                               std::string& error);
+
+    // Changes the timer byte (bits 0-7 of the setup word) of the trigger
+    // on this sector from fromTimer to toTimer. The trigger must be of this
+    // kind and carry fromTimer; anything else is refused, so an entry
+    // written against one file cannot rewrite a different trigger.
+    //
+    // Written IN PLACE like setTriggerOneShot: one setup word, no chain
+    // rebuilt, the file keeps its size, only the word's low byte changes.
+    // A chain that any other sector reads as well - in this room or in
+    // another one - is refused, since the new timer would reach it too.
+    //
+    // What the byte is (_TestTriggers, control.cpp): a signed char; an
+    // object command stores it times 30 in the woken item's timer (1 is
+    // kept as 1). A negative timer holds the item inactive while
+    // TriggerActive counts it up to 0, so 240 (-16) is sixteen seconds of
+    // waiting and 255 (-1) is one.
+    bool    setTriggerTimer(int room, int sx, int sz, int kind,
+                            int fromTimer, int toTimer, Tr5TimerHit& hit,
+                            std::string& error);
 
     // May a trigger be appended to this chain? Returns the obstacle or
     // nullptr. See the derivation in the implementation.

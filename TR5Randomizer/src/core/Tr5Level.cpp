@@ -1436,6 +1436,97 @@ bool Tr5Level::setTriggerOneShot(int room, int kind, int slot,
     return true;
 }
 
+bool Tr5Level::setTriggerTimer(int room, int sx, int sz, int kind,
+                               int fromTimer, int toTimer, Tr5TimerHit& hit,
+                               std::string& error)
+{
+    hit = Tr5TimerHit();
+    char buf[256];
+
+    const int start = sectorIndex(room, sx, sz);
+    if (start < 0)
+    {
+        std::snprintf(buf, sizeof(buf), "sector %d,%d,%d does not exist",
+                      room, sx, sz);
+        error = buf;
+        return false;
+    }
+
+    std::vector<Tr5FloorEntry> entries;
+    if (!readChain(start, entries))
+    {
+        error = "chain runs out of the block";
+        return false;
+    }
+
+    // The first trigger of the chain is the one _TestTriggers reads. Its
+    // setup word sits one behind its head word, and the head's index is
+    // the chain start plus the entries in front of it.
+    size_t pos = static_cast<size_t>(start);
+    const Tr5FloorEntry* trig = nullptr;
+    for (const Tr5FloorEntry& e : entries)
+    {
+        if (e.function == FN_TRIGGER) { trig = &e; break; }
+        pos += e.words.size();
+    }
+    if (!trig)
+    {
+        std::snprintf(buf, sizeof(buf), "sector %d,%d,%d carries no trigger",
+                      room, sx, sz);
+        error = buf;
+        return false;
+    }
+
+    const uint16_t setup = trig->words[1];
+    if (trig->kind != kind || (setup & 0xFF) != (fromTimer & 0xFF))
+    {
+        std::snprintf(buf, sizeof(buf),
+                      "sector %d,%d,%d: trigger of kind %d with timer %d, "
+                      "expected kind %d with timer %d",
+                      room, sx, sz, trig->kind, setup & 0xFF, kind,
+                      fromTimer & 0xFF);
+        error = buf;
+        return false;
+    }
+    const size_t word = pos + 1;
+
+    // Any other sector whose chain covers the word would get the new timer
+    // as well. Nothing is written in that case.
+    for (size_t rm = 0; rm < m_rooms.size(); ++rm)
+    {
+        const Tr5Room& o = m_rooms[rm];
+        for (int ox = 0; ox < o.numXSectors; ++ox)
+        {
+            for (int oz = 0; oz < o.numZSectors; ++oz)
+            {
+                if (static_cast<int>(rm) == room && ox == sx && oz == sz)
+                    continue;
+                const int s = sectorIndex(static_cast<int>(rm), ox, oz);
+                if (s <= 0 || !readChain(s, entries)) continue;
+
+                size_t len = 0;
+                for (const Tr5FloorEntry& e : entries) len += e.words.size();
+                const size_t from = static_cast<size_t>(s);
+                if (word < from || word >= from + len) continue;
+
+                std::snprintf(buf, sizeof(buf),
+                              "the trigger's chain is shared with room "
+                              "%d sector %d,%d",
+                              static_cast<int>(rm), ox, oz);
+                error = buf;
+                return false;
+            }
+        }
+    }
+
+    hit.chain = start;
+    hit.fileAt = m_floorAt + word * 2;
+    hit.before = setup;
+    hit.after = static_cast<uint16_t>((setup & 0xFF00) | (toTimer & 0xFF));
+    std::memcpy(m_bytes.data() + hit.fileAt, &hit.after, 2);
+    return true;
+}
+
 bool Tr5Level::addTrigger(int room, int sx, int sz, int kind, int timer, bool oneShot,
                           int mask, const std::vector<Tr5TriggerCmd>& cmds,
                           std::string& error, int refItem)

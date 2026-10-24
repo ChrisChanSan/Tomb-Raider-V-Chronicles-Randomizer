@@ -189,6 +189,26 @@ int apply(Tr5Level& level, const std::string& levelName,
         warnings.push_back(buf);
     }
 
+    for (const TriggerTimer& k : kTriggerTimers)
+    {
+        if (!sameName(levelName, k.level)) continue;
+
+        std::string error;
+        Tr5TimerHit hit;
+        if (level.setTriggerTimer(k.room, k.sx, k.sz, k.kind, k.fromTimer,
+                                  k.toTimer, hit, error))
+        {
+            ++applied;
+            continue;
+        }
+
+        char buf[400];
+        std::snprintf(buf, sizeof(buf),
+                      "LevelFix not applied (%s -> room %d sector %d,%d): %s",
+                      k.reason, k.room, k.sx, k.sz, error.c_str());
+        warnings.push_back(buf);
+    }
+
     return applied;
 }
 

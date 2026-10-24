@@ -33130,6 +33130,170 @@ the checks), `7df4f8f1` (this record, with the README's view distance caption), 
 corrections after the review: the view distance caption names only what is seen, the HD
 art line stands once, and this record says what the search found and what is left.
 
+### A room's second shell is left out at the level build (#242)
+2026-10-24
+
+**What.** On the visibility path (`hd_vis` 1) the HD level build finds the art of a room
+that is a second copy of other rooms' art and leaves it out of the level's index buffer
+for good: `MarkSecondShells` (`hd_render.cpp`) runs before the hulls are marked and the
+fill skips every triangle it marks, so the range table never sees them; `BuildShellRooms`
+(`hd_level.cpp`) hands it the rooms' boxes, their flipmap twins and their floor squares'
+air, and with `hd_vis` 0 hands nothing in. With `-log` one `HDLOG shell level= group=
+host= tris= covered= exact= dropped=` line per pair the scans weighed (`refused=` and the
+reason at its end when it was not taken whole), one `HDLOG shell level= group= rest= air=`
+per group with a taken pair and one `HDLOG shell level= groups= pairs= dropped= rest= air=
+flagged=` for the level; the `HDLOG hull` line ends in `shell=`, what the group lost.
+RoomProbe takes `-shellscan` (the scans as a twin of the engine's code over the two files,
+no device), `-shelldump` and `-shellgroups` (the triangles and their verdicts), `-shell
+0|1` (the build with and without, on by default with `-vis 1`) and `-flipindex <n>` (the
+walk and the picture with flip index n applied). ModernTest checks the rule's nine
+numbers, the flag and the gate (16,754 checks).
+
+**Why.** The play test of the build of #240: apart from the lift's portal the shaft looks
+unchanged; with Lara standing still and the camera turning, textures and lamps pop up on
+the walls and go again, "as if the whole shaft were doubled". Looking down the shaft from
+the lift car's roof, a braced cage frame lies at the bottom that belongs on the lift in
+room 61 and is gone when Lara comes near it; after the lift's fall the same frame lies
+over the fallen car, while from the room under the lifts the fallen car looks right and
+the flip works. The double drawing is the shaft's main problem.
+
+**Measured.** RoomProbe of `7cadf498` and of this round on the visibility path at the play
+test's eyes, as in #240 (the walk `-vis 1` at the logged eye, the picture with the walk's
+rooms in their windows, 1280 x 720): #240's fourteen views, four of the play test, the
+view from the car's roof at two logged frames in both flip states, the eye after the fall
+at the top, and the eye in the room under the lifts in both states (`-flipindex 7`, the
+crash's ten pairs). *Fight*, *ties* and *clear* as in #240; *empty* the pixels no art
+covers.
+
+*The frame at the bottom* is group 61's art at y -9,728 to -10,300: 14,922 triangles
+across the shaft, 14,014 of them in room 64's box (three floors below 61, no flipmap
+room), 11,912 of those in no plane of room 64's art. It is not a moved copy of the car
+rooms (31, 33, 39: the best single vector carries 96 of its triangles); the same shape
+stands in groups 66 and 79 at the shaft's floor, 11,264 lower (313 triangles by that one
+vector). No triangle of 61 stands in a flipmap room's box. Wherever 61 is listed the frame
+is drawn, in both flip states: from the car's roof at the bottom of the view, and after
+the fall over the fallen car, which the flip draws at the shaft's floor (rooms 66 to 70
+and their twins). From the room under the lifts 61 is not listed: base and head are the
+same picture there in both states. The car at the top: room 39, whose box lies inside
+61's, is never listed from 61 (it has no doorway to it; from 39 the walk lists 39 and 40),
+so its art - the car's roof - is drawn from the shaft's top room in neither state; the
+holder rule, the push, the window and the hull census do not come into it.
+
+*The pairs* of the fifteen levels (the probe's twin; the engine's lines are the same on
+all fifteen):
+
+| Level | Taken: group in host, triangles | Rest | Air | Refused |
+|---|---|---|---|---|
+| ANDREA1 | 82 in 101, 414 | 0 | 0 | 1 fifth, 5 exact |
+| ANDREA2 | - | - | - | 2 exact |
+| ANDREA3 | - | - | - | 25 in 92, 70 in 85, 70 in 129: shared face |
+| ANDY1, ANDY3 | - | - | - | 6 exact, 1 fifth |
+| JOBY2 | 110 in 135, 5,974 | 2,738 | 0 | 4 exact |
+| JOBY3 | - | - | - | 49 in 123, 123 in 49: shared face |
+| RICH2 | 26 in 28, 864; 57 in 62, 1,812; 61 in 62, 63 and 64, 36,803, 34,870 and 47,136 | 284, 72, 6,671 | 0, 0, 321 | 61 in 35, 37 and 38: shared face; 134 in 137: mirror; 1 fifth, 1 exact |
+| RICH3 | - | - | - | 23 in 62: flip (none carried by both states) |
+| TITLE | - | - | - | 1 exact |
+
+ANDY2, JOBY4, JOBY5, RICH1 and RICHCUT2 have none. In all: 5 groups, 7 pairs, 127,873
+triangles by the pairs, 9,765 by the rest, 321 by the air; 37 groups carry the flag,
+RICH2's 63 among them (the shaft floor below 62, 54,704 triangles). Group 61 loses 125,801
+of its 284,006 triangles; its air is the cables in the two lift cars (108 each), 96 in
+room 65 and 9 in room 142.
+
+*The views*, the head against the base (air 1, with #240's guest rule): with the eye in
+room 61 the fight falls by 49 to 4,666 pixels a view (3,346 to 2,853 at one, 12,289 to
+7,623 after the fall from the top), with the eye below by 0 to 521; the ties of group 61
+fall from 2,093 to 1,089, 1,431 to 350 and 1,162 to 239 with the eye in rooms 63 and 62,
+from 844 to 385 after the fall from the top and from 442 to 251 from the car's roof, and
+by at most 317 at the eight other views from 61 (to 3,072 to 11,822). The views with
+neither 61 nor 57 listed are the base's; the lift car's view with 57 listed changes by 96
+pixels.
+
+*The shared face.* The rule alone left pixels with no art at all from room 61: 15,751 from
+the car's roof, 7,884, 6,674, 2,670, 2,428, 2,293 and 1,628 at six more views, 582 to 125
+at three. Every one lies on 61's copy of the walls of rooms 35, 37 and 38 - the floor
+directly beneath 61, whose boxes touch 61's at its floor - or on its art beside them; the
+rooms' own art there is the same surface, but the walk shows those rooms through their
+doorway windows only, or not at all, and the copy is what is seen past them. With the
+refusal: 20 such pixels at two views, 1 at two. The same refusal keeps JOBY3's rooms 49
+and 123 and ANDREA3's 25 and 70 as they were: dropped, a cloth over a machine in JOBY3 is
+cut through (up to 153,243 pixels change at room-centre eyes) and ANDREA3's room 129
+changes its walls' light (874,569).
+
+*The mirror.* RICH2's room 134 in room 137 (848 triangles, 214 covered) stands 1,030 to
+2,031 units behind the washroom mirror: the far half of its reflection. Dropped, 1,604
+pixels of the pane change; refused, none.
+
+*The guests.* With the shells dropped, a hull listed as a guest (without #240's rule)
+still ties: 460 pixels at the view from room 62 where 61 would come in (212 of them 61's),
+934 at another, 578 under the lifts after the fall, 502 in the lift car, against 37, 46,
+63 and 0 with the rule; the fight rises by 193 to 714 at three of them, and what the lower
+rooms would gain back is 20 pixels of clear at one view and none at the other.
+
+**The rule.** Three scans over the rooms' groups (the sky's not asked); boxes are the
+classic rooms' vertex boxes in world units, a triangle stands where its centroid does.
+*The pairs*: a group's triangles outside its own box widened by 64 and inside exactly one
+other room's box widened by 16, a room with art of its own (the host); covered are those
+in the plane of a triangle of the host's art (the normals within 0.98 either way round,
+within 16 of its plane and of its box widened by 16), exact those whose rounded corners
+are a triangle of the host's. With 200 covered, a fifth of the pair or more and exact
+under half of covered the pair is a second shell, and all of it drops. *The rest*: of a
+group with such a pair, its triangles outside its box widened by 64 in no other box or in
+several, within 512 of a host's box in x and z and 64 in y, covered by that host. *The
+open air*: of the same group, its triangles outside its box in the open air of a room
+standing in the hosts' column (its x and z box inside a host's widened by 512), no room of
+the group's pair lines and no flipmap room - on a floor square with air, more than 32
+below its ceiling and above its floor. A group the `.TRG` flags `0x40000` is never asked.
+A flipmap room's pair drops only what its host carries in both its states. A pair behind a
+mirror of the group's room, and a pair whose host's box shares a face with the group's
+own, stay. The rule and its numbers are TROne's; the code, the two refusals and the
+flipmap reading are this project's (`THIRD-PARTY.md`, entry 480).
+
+**Decisions.** The drop is the fill skipping the triangles, not a degenerate triple: the
+range table, the index buffer and every count after the fill are made without them. The
+hull census still counts the whole group, so a hull stays a hull and its remaining art is
+drawn pushed back as before (61: 112,064 triangles pushed, 237,865 at the base). The
+shared face and the mirror are refusals the measurement asked for (above). The open air
+asks no room of a pair line, taken or refused: asking only the taken hosts' rooms let the
+air scan take 12,251 of 61's triangles in rooms 35, 37 and 38, the copies the shared face
+keeps. #240's rule stays: a hull is never a guest; its remaining art still ties where it
+would come in, and the lower rooms would gain next to nothing. Room 39's art is not
+brought to the shaft's top room: that is a walk question, not this round's.
+
+**Checked.** The engine's `HDLOG shell` lines equal the probe's twin on all fifteen
+levels. Round 236's parity sets (the six classic views, the six HD views, the census eyes
+and the fifteen parity cameras at `hd_water` 0 and 1): 72 of 72 identical. The 131
+room-centre views at `-vis 1`: 117 identical, 14 changed - ANDREA1's two where its group
+82 is listed, JOBY2's one where 110 is, RICH2's five where 26 is and six where 61 is -,
+none with a pixel of no art more than the base. #240's 28 shaft pictures: 12 identical, 16
+changed, each with 61 or 57 listed. The flip: the view under the lifts and the views from
+the top in both states. `hd_build` 0 and `hd_vis` 0 are the base's by construction (no
+rooms are handed in); `hd_marble` 0 and `hd_fog` 0 touch nothing of this round and differ
+from the base on the visibility path by the dropped art only. No classic path file
+changed; no line asking `g_level_active`, `HDEnabled()` or `HDDrawn()` was edited.
+ModernTest 16,751 checks at the base and 16,754 at the head, MenuTest 44,931, InterpTest
+754, LipsTest 299 with the `.OBJ` folder and 272 without, 0 failed. Not played.
+
+**Left.** With the eye in room 61 its copies of the floor directly beneath (rooms 35, 37
+and 38) stay and still tie with those rooms' own art: 61's ties 3,072 to 11,822 pixels at
+eight of the eleven views from 61, 9,875 from the car's roof with 9,165 of room 35's
+against them. Dropping them leaves holes where the walk shows those rooms through their
+doorways only; a rule for it would have to know, per frame, where a listed room's own art
+is drawn. The car's roof at the top (room 39) is not drawn from room 61 in either state,
+since the walk never lists it from there; the cage frames the comparison pictures show on
+it are not drawn from there either. 20 pixels with no art remain from the car's roof (61's
+wall in room 62 just under the floor beneath). The shaft's wall in the lift cars' door
+plane (122 of 61's triangles at z 69,631, one unit outside the cars' boxes) stays: it
+stands on the cars' wall squares, where no square has air, and its pair with room 57 has
+142 covered triangles, under 200; it is not drawn from the car, where 61 is no guest. The
+counterweight and the pulleys stay unseen from the lower rooms and the ledge, as #240 left
+them. RICH3's flipmap pair (23 in 62, 216 triangles) keeps all of its art: none of it is
+carried by both states of room 62.
+
+**Commits.** `86812994` (the three scans, the drop, the refusals, the log lines,
+RoomProbe's switches and ModernTest's checks), `900aabfb` (the header comment names only
+what the scans take) and this record.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -33390,3 +33554,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #239 | Every language gets all its texts; Japanese for the HQ audio (#239) |
 | #240 | A second shell is never a guest of the visibility walk (#240) |
 | #241 | Beta 3.0's pictures in the README, and three words (#241) |
+| #242 | A room's second shell is left out at the level build (#242) |

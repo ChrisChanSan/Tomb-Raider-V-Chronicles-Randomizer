@@ -22,7 +22,8 @@
 #include <vector>
 
 //----------------------------------------------------------------------------
-// Core's own level defects, repaired on EVERY run.
+// Core's own level defects, repaired on EVERY run, and one place where a
+// shuffled run's pace is set.
 //
 // Distinction from the rest of the curation: the zone and range tables in
 // ZoneAnalysis.ps1 say WHERE randomness may put things - they work with the
@@ -375,6 +376,60 @@ namespace LevelFix
     {
         { "rich2", 5, 0 /*TRIGGER*/, 392 /*FLOOR_LASERS*/,
           "floor lasers 34 woken once - they must not re-arm after the flood" },
+    };
+
+    // A trigger's timer byte, changed in place (Tr5Level::setTriggerTimer).
+    // The entry names the kind of trigger it expects on the sector and the
+    // byte it expects to find there; with either one different nothing is
+    // written and the run warns, as for every other kind.
+    struct TriggerTimer
+    {
+        const char* level;                  // file name without extension
+        int room, sx, sz;                   // the sector the trigger sits on
+        int kind;                           // 0 = TRIGGER, 5 = HEAVY, ...
+        int fromTimer, toTimer;             // the setup word's low byte
+        const char* reason;
+    };
+
+    //------------------------------------------------------------------------
+    // rich2: the HK cutscene follows the headset call after one second, not
+    // after sixteen.
+    //
+    // This entry mends no fault of Core's; it sets the pace of a shuffled
+    // run. On Core's route the wait is the length of Lara's headset talk
+    // with Zip. In a shuffled run the talk is beside the point, and the wait
+    // only keeps Lara standing at the HK.
+    //
+    // The chain, from the data and the engine:
+    //   1. Room 8's entry pads, (1,2), (2,2), (3,2) and (4,2), are one-shot
+    //      TRIGGERs: soundtrack 100 (the headset talk) and object 24, the
+    //      XRAY_CONTROLLER of room 12 (OCB 63).
+    //   2. ControlXRayMachine (game/objects.cpp) runs its default branch
+    //      for OCB 63: TestTriggersAtXYZ at its own position, then
+    //      RemoveActiveItem.
+    //   3. Under it, room 12 (2,3), lies a HEAVY trigger, setup word 3EF0:
+    //      timer 240, mask 31, no one-shot, one command - object 11, the
+    //      TRIGGER_TRIGGERER on the HK's square, room 8 (1,5).
+    //   4. _TestTriggers (control.cpp) gives item 11 the timer -16 * 30,
+    //      and TriggerActive holds it inactive while it counts up to 0:
+    //      sixteen seconds.
+    //   5. Then ControlTriggerTriggerer (objects.cpp) marks the TRIGTRIGGER
+    //      entry under itself, and the trigger on that square may play
+    //      cutscene 23, Lara putting the HK down - if the cutscene switch
+    //      in control.cpp agrees: the HK carried, no XRAY_CONTROLLER of
+    //      OCB 0 in its alarm state, richcutfrigflag clear.
+    // The soundtrack runs beside the timer and holds nothing back.
+    //
+    // 255 is -1: an item timer of -30, one second. Not 0: 0 would wake 11 at
+    // once, and whether the triggerer's chain bears that is not measured;
+    // one second is shorter than Lara's walk to the HK anyway. The trigger
+    // never stores a bare -1, which TriggerActive would hold forever - it
+    // stores -1 * 30, which counts up to 0 like any other.
+    //------------------------------------------------------------------------
+    static const TriggerTimer kTriggerTimers[] =
+    {
+        { "rich2", 12, 2, 3, 5 /*HEAVY*/, 240, 255,
+          "HK cutscene one second after the headset call, not sixteen" },
     };
 
     // Apply all entries for this level. Failed entries end up as warnings in

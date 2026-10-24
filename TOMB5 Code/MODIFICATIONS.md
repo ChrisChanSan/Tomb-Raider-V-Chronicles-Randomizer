@@ -33318,6 +33318,78 @@ what the scans take), `31b30f93` (the flipmap pair dropping what either state ca
 build measured above), `20d3f3cf` (back to what every state carries, with each state's
 covered test and the probe's `twin_covered=`) and this record.
 
+### RICH2's HK cutscene after one second: a trigger's timer byte (#244)
+2026-10-24
+
+**What.** On every run the randomizer sets the timer byte of the HEAVY trigger on RICH2's
+room 12 (2,3) from 240 to 255, so the cutscene in which Lara puts the HK down can follow
+the headset call after one second instead of sixteen. The entry is a new kind in
+`TR5Randomizer/src/core/LevelFix.h`, `TriggerTimer` (`kTriggerTimers`): a level, a
+sector, the trigger kind it expects, the byte it expects and the byte it writes.
+`Tr5Level::setTriggerTimer` changes that one byte in place. Unlike the entries before it
+(#214, #223 and the older ones) this one mends no fault of Core's: it sets the pace of a
+shuffled run, and the file's opening comment now says that it holds such a place too. No
+engine file changes.
+
+**Why.** The play test, put into English: in room 8, where the HK lies, a very long timer
+runs in the background, and only then comes the cutscene in which Lara can put the HK
+down; in the vanilla game that makes sense because Lara talks to Zip over the headset, in
+a shuffled run the wait makes no sense any more. One second is fine, Lara has to walk
+there first anyway. The data and the code give the chain:
+
+| Step | The player | The level's data and the engine |
+|---|---|---|
+| 1 | enters room 8 | one of the one-shot TRIGGERs on (1,2), (2,2), (3,2) and (4,2): soundtrack 100 (the headset talk) and object 24, the XRAY_CONTROLLER of room 12 (OCB 63, at 33,280, -24,064, 48,640) |
+| 2 | - | `ControlXRayMachine` (`game/objects.cpp`) runs its `default` branch for OCB 63: `TestTriggersAtXYZ` at the controller's position, then `RemoveActiveItem` |
+| 3 | - | under the controller, room 12 (2,3), chain 666: HEAVY `[8504 3EF0 800B]`, timer 240, mask 31, no one-shot, one command, object 11, the TRIGGER_TRIGGERER on the HK's square, room 8 (1,5) |
+| 4 | walks to the HK | `_TestTriggers` (`game/control.cpp`) gives item 11 the timer byte as a signed char times 30, -16 x 30 = -480; `TriggerActive` counts it up to 0 and reports the item inactive meanwhile: sixteen seconds |
+| 5 | stands on the HK's square with the HK | `ControlTriggerTriggerer` (`game/objects.cpp`) sets the triggered bit on the TRIGTRIGGER entry under itself, and the trigger on (1,5) may play cutscene 23 (timer 1); the cutscene switch in `control.cpp` (`case 23`) still asks for `lara.hk_type_carried`, no XRAY_CONTROLLER of OCB 0 in its alarm state 666, and `richcutfrigflag` clear |
+
+The soundtrack runs beside the timer and holds nothing back. 255 is -1 as a signed char,
+an item timer of -30: one second. 0 would make item 11 active at once; whether the
+triggerer's chain bears that is not measured, and one second was chosen. A bare item timer
+of -1 would be held forever by `TriggerActive` (it neither counts up nor reaches 0), but
+the trigger never stores one: it stores -1 x 30, which counts up to 0 like any other.
+
+| Level | Room | Sector | Trigger | Setup word before | After | File offset (source) |
+|---|---|---|---|---|---|---|
+| RICH2 | 12 | (2,3) | HEAVY, chain 666, object 11 | `3EF0` | `3EFF` | 3,041,860 |
+
+**How.** `LevelFix::apply` runs the entry in both programs (`Randomize.cpp` and the GUI's
+`gui/Main.cpp`) after the level's info is read and before anything is rolled, behind the
+one-shot entries. `setTriggerTimer` reads the sector's chain with `readChain`, takes its
+first trigger (the one `_TestTriggers` reads), holds its kind and its timer byte against
+the entry, refuses a chain that any other sector reads as well, in another room or in the
+same one (the timer would reach that sector too), and writes only the setup word's low
+byte: no chain is rebuilt, no index moves, and the file keeps its size. A trigger of
+another kind or with another byte is left alone with a warning, so an entry written
+against one file cannot rewrite a different trigger. `FixCheck` reports the kind: FOUND
+(the trigger with its sector, its chain and its setup word before and after), SET (the
+saved file read back) and BYTES (source against result), now one comparison per level for
+the one-shot and the timer entries together.
+
+**Checked.** `b1.bat`, `b2.bat` and `bfc.bat` exit 0. FixCheck over the sixteen levels of
+the checksum list: every entry applies without a warning (ANDREA2 5, ANDY1 1, JOBY5 1,
+RICH1 1, RICH2 2); RICH2 FOUND room 12 (2,3), kind 5, chain 666, `3EF0 -> 3EFF` at
+3,041,860, SET timer 255, beside #223's two one-shot words; BYTES 3 of 4,805,655 differ,
+the three setup words' bytes, 0 other. FixCheck run again on its own output refuses the
+entry ("trigger of kind 5 with timer 255, expected kind 5 with timer 240") and changes
+nothing. The regression of `Preparation/Verification.md`, Randomize.exe of `2bc4de2a`
+against the head, seed 380, the thirteen campaign levels, once with no switches and once
+with `mix cross allsanity 8 weapons`: every `.trc` and `.hdm` byte-identical but RICH2's
+`.trc`, which differs in one byte, the setup word `3EF0 -> 3EFF` in the chain words `8504
+3EF0 800B` (offset 4,734,023 plain, 11,085,751 with the switches); for RICH2 the run
+prints `LevelFix 2 fixes applied` where it printed 1. Not played.
+
+**Left.** Timer 0 is not measured. The headset talk (soundtrack 100) still plays in full;
+with the wait gone the cutscene can start while it runs, and how the two sound together is
+not measured. `Preparation/Verification.md` does not list this kind among the changes that
+may move a level's bytes, and `RANDO_BUILD_ID` (`core/BuildId.h`) is not moved, though the
+entry changes what a seed writes on RICH2; neither file was part of this round.
+
+**Commits.** `c00ac945` (the kind, the entry, `setTriggerTimer` and FixCheck) and this
+record.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -33394,6 +33466,11 @@ new.
   seed 380 through the build before and after the bump, over the thirteen
   campaign levels, once with no switches and once with `mix cross allsanity 8
   weapons items20 weather`: all 78 `.trc`, `.hdm` and log files byte-identical.
+- **#244 - RICH2's HK wait.** `core/LevelFix.cpp` / `.h`, `core/Tr5Level.cpp` /
+  `.h`: a new kind, `TriggerTimer`, sets the timer byte of the HEAVY trigger on
+  RICH2's room 12 (2,3) from 240 to 255, so the HK cutscene waits one second
+  instead of sixteen (`c00ac945`). RICH2's `.trc` differs in that one byte and
+  nothing else (section 2.9).
 
 ## 4. Building this yourself
 
@@ -33579,3 +33656,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #240 | A second shell is never a guest of the visibility walk (#240) |
 | #241 | Beta 3.0's pictures in the README, and three words (#241) |
 | #242 | A room's second shell is left out at the level build (#242) |
+| #244 | RICH2's HK cutscene after one second: a trigger's timer byte (#244) |

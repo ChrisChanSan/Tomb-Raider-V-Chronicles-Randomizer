@@ -9,9 +9,16 @@
 //   - SET: the saved file read back, room by room - every trigger of the
 //     entry's kind in its room that names an item of its slot carries the
 //     one-shot bit;
+// For a TriggerTimer entry likewise:
+//   - FOUND: the trigger on the entry's sector, with its chain and its setup
+//     word before and after;
+//   - SET: the saved file read back - the first trigger on that sector is
+//     of the entry's kind and carries the new timer byte.
+// And once per level for both kinds:
 //   - BYTES: the saved file against the source, byte by byte - the only
-//     bytes that differ are the high bytes of those setup words. Skipped
-//     when another entry of the same level changes the file as well.
+//     bytes that differ are the one-shot entries' high bytes and the timer
+//     entries' low bytes of those setup words. Skipped when an entry of
+//     another kind for the same level changes the file as well.
 // A failed check ends with exit code 2.
 #include <cstdio>
 #include <string>
@@ -53,8 +60,9 @@ static bool readFile(const char* path, std::vector<unsigned char>& out)
     return got == out.size();
 }
 
-// Entries of the other kinds for this level - any of them changes the file
-// beyond the setup words, so the byte comparison cannot hold then.
+// Entries of the kinds that rebuild chains or portal lists for this level -
+// any of them changes the file beyond the setup words, so the byte
+// comparison cannot hold then.
 static int otherEntries(const std::string& name)
 {
     using namespace LevelFix;
@@ -129,9 +137,16 @@ int main(int argc, char** argv)
     bool ok = warn.empty();
     const std::string name = argv[2];
 
+    // Every byte the in-place entries of this level may change, with its
+    // value in the source and in the result.
+    struct Expect { size_t at; unsigned char from, to; };
+    std::vector<Expect> expect;
+    bool inPlace = false;
+
     for (const LevelFix::TriggerOneShot& k : LevelFix::kTriggerOneShots)
     {
         if (!sameName(name, k.level)) continue;
+        inPlace = true;
 
         // The FOUND lines: the same search on a fresh copy of the source,
         // for the sectors and the file positions of the words.
@@ -166,42 +181,107 @@ int main(int argc, char** argv)
             ok = false;
         }
 
-        // The BYTES line: source against result.
-        if (otherEntries(name))
+        // The bit sits in the setup word's high byte.
+        for (const Tr5OneShotHit& h : hits)
+            if ((h.before >> 8) != (h.after >> 8))
+                expect.push_back({ h.fileAt + 1,
+                                   (unsigned char)(h.before >> 8),
+                                   (unsigned char)(h.after >> 8) });
+    }
+
+    for (const LevelFix::TriggerTimer& k : LevelFix::kTriggerTimers)
+    {
+        if (!sameName(name, k.level)) continue;
+        inPlace = true;
+
+        // The FOUND line: the same change on a fresh copy of the source,
+        // for the chain and the file position of the word.
+        Tr5Level src;
+        Tr5TimerHit hit;
+        if (!src.load(toW(argv[1]), err) ||
+            !src.setTriggerTimer(k.room, k.sx, k.sz, k.kind, k.fromTimer,
+                                 k.toTimer, hit, err))
         {
-            std::printf("  BYTES  skipped - %d other entr(ies) of this level "
-                        "change the file\n", otherEntries(name));
+            std::printf("  FAIL   timer room %d (%d,%d): %s\n", k.room, k.sx,
+                        k.sz, err.c_str());
+            ok = false;
             continue;
         }
+        std::printf("  FOUND  room %d (%d,%d) kind %d chain %d setup at %zu: "
+                    "%04X -> %04X\n", k.room, k.sx, k.sz, k.kind, hit.chain,
+                    hit.fileAt, hit.before, hit.after);
+
+        // The SET line: the saved file, read back.
+        Tr5Level out;
+        std::vector<Tr5FloorEntry> chain;
+        if (!out.load(toW(argv[3]), err))
+        {
+            std::printf("  FAIL   reload: %s\n", err.c_str());
+            ok = false;
+            continue;
+        }
+        const int start = out.sectorIndex(k.room, k.sx, k.sz);
+        const Tr5FloorEntry* trig = nullptr;
+        if (start > 0 && out.readChain(start, chain))
+            for (const Tr5FloorEntry& e : chain)
+                if (e.function == 4) { trig = &e; break; }
+        if (!trig)
+        {
+            std::printf("  FAIL   no trigger on room %d (%d,%d) in the saved "
+                        "file\n", k.room, k.sx, k.sz);
+            ok = false;
+            continue;
+        }
+        const bool set = trig->kind == k.kind &&
+                         (trig->words[1] & 0xFF) == (k.toTimer & 0xFF);
+        std::printf("  SET    room %d (%d,%d) kind %d setup %04X timer %d "
+                    "%s\n", k.room, k.sx, k.sz, trig->kind, trig->words[1],
+                    trig->words[1] & 0xFF, set ? "yes" : "NO");
+        if (!set) ok = false;
+
+        // The timer is the setup word's low byte.
+        if ((hit.before & 0xFF) != (hit.after & 0xFF))
+            expect.push_back({ hit.fileAt,
+                               (unsigned char)(hit.before & 0xFF),
+                               (unsigned char)(hit.after & 0xFF) });
+    }
+
+    // The BYTES line: source against result, once for all in-place entries.
+    if (inPlace && otherEntries(name))
+        std::printf("  BYTES  skipped - %d other entr(ies) of this level "
+                    "change the file\n", otherEntries(name));
+    else if (inPlace)
+    {
         std::vector<unsigned char> a, b;
         if (!readFile(argv[1], a) || !readFile(argv[3], b) ||
             a.size() != b.size())
         {
             std::printf("  FAIL   source and result differ in size\n");
             ok = false;
-            continue;
         }
-        size_t diff = 0, expected = 0, other = 0;
-        for (size_t i = 0; i < a.size(); ++i)
+        else
         {
-            if (a[i] == b[i]) continue;
-            ++diff;
-            bool mine = false;
-            for (const Tr5OneShotHit& h : hits)
-                if (i == h.fileAt + 1 && a[i] == (h.before >> 8) &&
-                    b[i] == (h.after >> 8))
-                    mine = true;
-            if (mine) ++expected;
-            else
+            size_t diff = 0, expected = 0, other = 0;
+            for (size_t i = 0; i < a.size(); ++i)
             {
-                ++other;
-                std::printf("  BYTES  unexpected difference at %zu: "
-                            "%02X -> %02X\n", i, a[i], b[i]);
+                if (a[i] == b[i]) continue;
+                ++diff;
+                bool mine = false;
+                for (const Expect& x : expect)
+                    if (i == x.at && a[i] == x.from && b[i] == x.to)
+                        mine = true;
+                if (mine) ++expected;
+                else
+                {
+                    ++other;
+                    std::printf("  BYTES  unexpected difference at %zu: "
+                                "%02X -> %02X\n", i, a[i], b[i]);
+                }
             }
+            std::printf("  BYTES  %zu of %zu differ: %zu setup word(s), %zu "
+                        "other\n", diff, a.size(), expected, other);
+            if (other || expected != expect.size()) ok = false;
         }
-        std::printf("  BYTES  %zu of %zu differ: %zu setup word(s), %zu "
-                    "other\n", diff, a.size(), expected, other);
-        if (other) ok = false;
     }
 
     std::printf("%s\n", ok ? "HOLDS" : "FAILS");

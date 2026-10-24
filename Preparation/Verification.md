@@ -122,6 +122,17 @@ beside it, and says so when the two disagree.
   log one line longer (`LevelFix 1 fixes applied`). `FixCheck` on the
   vanilla RICH2 gives the same two words at their source offsets and
   `BYTES 2 of 4805655 differ`.
+- **A trigger's timer byte (LevelFix, `TriggerTimer`, #244).** Every run
+  on RICH2 sets the timer byte of the heavy trigger under the X-ray
+  controller, room 12 (2,3), from 240 to 255, so RICH2 differs from a build
+  without it on every seed and with no switches at all: the same size,
+  exactly one byte, the low byte of a setup word, `3EF0 -> 3EFF` inside the
+  chain words `8504 3EF0 800B`. Measured at seed 380, plain and with `mix
+  cross allsanity 8 weapons`: every other `.trc` and every `.hdm`
+  byte-identical, and the log line `LevelFix 2 fixes applied` for RICH2.
+  `FixCheck` on the vanilla RICH2 gives the word at its source offset
+  3,041,860 and `BYTES 3 of 4805655 differ`, the two one-shot bytes and this
+  one.
 - **The cyborg in the cross pool.** One more foreign kind to draw
   from, so a `cross` run places a different set. Byte-identity with a
   build lacking the cyborg is claimed when the two new rows are
@@ -133,7 +144,9 @@ beside it, and says so when the two disagree.
   `spoiler.txt`, in the GUI and in the version resources only. Measured at
   seed 380 over the thirteen levels, plain and with `mix cross allsanity 8
   weapons items20 weather`: all 78 files (`.trc`, `.hdm`, log) of the
-  `Randomize.exe` before the bump and after it byte-identical.
+  `Randomize.exe` before the bump and after it byte-identical. With #244 it
+  moved from 20 to 21: one byte of RICH2's level changes at every seed, the
+  version string stays.
 
 In every one of these the difference is EXPECTED. What still has to hold
 is the other half of the recipe: the same seed twice must give the same

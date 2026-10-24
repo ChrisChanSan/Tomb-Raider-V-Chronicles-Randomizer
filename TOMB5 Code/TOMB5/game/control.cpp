@@ -62,6 +62,7 @@
 #include "../specific/hd/hd_level.h"
 #include "../specific/hd/hd_feet.h"	// HDFeetStepItem - her weapon's step
 #include "../tomb5/tomb5.h"
+#include "lift_door_rule.h"	// LiftDoorKeepsTimer - a held pad's delay
 
 uchar ShatterSounds[18][10] =
 {
@@ -2233,6 +2234,13 @@ void TestTriggers(short* data, long heavy, long HeavyFlags)
 			richcutfrigflag = 0;
 }
 
+// The rule's own copy of the trigger types and the code bits.
+static_assert(LIFT_DOOR_SWITCH == SWITCH && LIFT_DOOR_ANTIPAD == ANTIPAD &&
+	LIFT_DOOR_ANTITRIGGER == ANTITRIGGER &&
+	LIFT_DOOR_HEAVYSWITCH == HEAVYSWITCH &&
+	LIFT_DOOR_HEAVYANTITRIGGER == HEAVYANTITRIGGER &&
+	LIFT_DOOR_CODEBITS == IFL_CODEBITS, "lift_door_rule.h disagrees");
+
 void _TestTriggers(short* data, long heavy, long HeavyFlags)
 {
 	ITEM_INFO* item;
@@ -2468,10 +2476,19 @@ void _TestTriggers(short* data, long heavy, long HeavyFlags)
 				((type != ANTIPAD && type != ANTITRIGGER && type != HEAVYANTITRIGGER) && (item->object_number == DART_EMITTER && item->active)))
 				break;
 
-			item->timer = timer;
+			/* A lift door that holds all its code bits keeps its running
+			 * delay or its open state when a plain trigger with a delay hits
+			 * it again, as it does on every frame its pad is stood on
+			 * (lift_door_rule.h); every other hit takes the timer. */
+			if (!LiftDoorKeepsTimer((signed char)timer, heavy, type,
+				item->object_number >= LIFT_DOORS1 &&
+				item->object_number <= LIFT_DOORS2, item->flags))
+			{
+				item->timer = timer;
 
-			if (timer != 1)
-				item->timer *= 30;
+				if (timer != 1)
+					item->timer *= 30;
+			}
 
 			if (type == SWITCH || type == HEAVYSWITCH)
 			{

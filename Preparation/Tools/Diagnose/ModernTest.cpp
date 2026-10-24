@@ -106,6 +106,8 @@
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_water_under.h"
 // The sky band's closed poles (sky_cap).
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_sky_cap.h"
+// A lift door's delay kept while its pad is held (lift_door_rule).
+#include "../../../TOMB5 Code/TOMB5/game/lift_door_rule.h"
 // A room group stored off its height: the count, the pick (yshift_rule).
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_scan.h"
 // The fog bulbs' body: the span, the column, the veil, the breath (fog_body),
@@ -25936,6 +25938,46 @@ static void yshift_rule()
 	}
 }
 
+// A lift door's delay kept while its pad is held (game\lift_door_rule.h).
+static void lift_door_rule()
+{
+	printf("a lift door's delay kept while its pad is held\n");
+
+	const int all = LIFT_DOOR_CODEBITS;
+	const int pad = 1;		// PAD, a plain floor trigger
+	const signed char delay = -3;	// about three seconds
+
+	ok(LiftDoorKeepsTimer(delay, 0, pad, true, all),
+		"lift door: a held pad with a delay keeps the timer", 0, 1);
+	ok(LiftDoorKeepsTimer(delay, 0, 0, true, all | 0x100),
+		"lift door: a plain trigger with other flags too", 0, 1);
+	ok(!LiftDoorKeepsTimer(delay, 0, pad, true, all & ~0x0200),
+		"lift door: without all code bits the timer is set", 1, 0);
+	ok(!LiftDoorKeepsTimer(delay, 0, pad, true, 0),
+		"lift door: a shut door with no code bits takes it", 1, 0);
+	ok(!LiftDoorKeepsTimer(3, 0, pad, true, all),
+		"lift door: a positive timer is set", 1, 0);
+	ok(!LiftDoorKeepsTimer(0, 0, pad, true, all),
+		"lift door: a timer of 0 is set", 1, 0);
+	ok(!LiftDoorKeepsTimer(delay, 1, pad, true, all),
+		"lift door: a heavy hit sets it", 1, 0);
+
+	const int excluded[5] = { LIFT_DOOR_SWITCH, LIFT_DOOR_HEAVYSWITCH,
+		LIFT_DOOR_ANTIPAD, LIFT_DOOR_ANTITRIGGER, LIFT_DOOR_HEAVYANTITRIGGER };
+
+	for (int k = 0; k < 5; k++)
+		ok(!LiftDoorKeepsTimer(delay, 0, excluded[k], true, all),
+			"lift door: a switch or an antitrigger sets it", excluded[k], 0);
+
+	ok(!LiftDoorKeepsTimer(delay, 0, pad, false, all),
+		"lift door: another object takes the timer", 1, 0);
+	// The byte the floor data holds, 253, is the delay of 3.
+	const unsigned char byte = 253;
+
+	ok(LiftDoorKeepsTimer((signed char)byte, 0, pad, true, all),
+		"lift door: the timer is read as a signed char", 0, 1);
+}
+
 /* One part of `rings` rings round the axis, at heights `ys` and radii
  * `radius`, appended to `trg` and `g` as one run of `pass`. */
 static void sky_cap_band(trf::remaster::Trg& trg, trf::remaster::TrgGroup& g,
@@ -29757,6 +29799,7 @@ int main()
 	install_names();
 	glow_normal();
 	yshift_rule();
+	lift_door_rule();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

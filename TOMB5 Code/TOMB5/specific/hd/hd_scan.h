@@ -161,3 +161,299 @@ void HDScanDropTrg();
 bool HDScanReadTrg(const char* installRoot, const char* stem);
 int HDScanKeptPageCount();
 int HDScanKeptPage(int at);
+
+/* --- a room group stored off its height ------------------------------------
+ *
+ * A .TRG corner is int16 x, y, z, with x and z room local and y absolute
+ * (Trg.h). A room group whose art reaches above y -32768 cannot be stored
+ * so, and the file then holds the whole group a multiple of 16,384 lower
+ * (less negative) than it stands, the corners that still do not fit
+ * clamped at -32768. Such a group's world y is its stored y plus its shift.
+ *
+ * The shift is read out of the classic room the group belongs to (group g
+ * is room g's; the sky groups have no room): the room's distinct classic
+ * corners are looked for among the group's corners at each shift k *
+ * 16,384, k = -2..2. A classic corner counts at a shift when a corner of
+ * the group lies within 4 units of (x, y - shift, z) on every axis, x and z
+ * room local on both sides. The best shift is taken when it is not 0, has
+ * 16 hits or more and at least twice the hits of shift 0; otherwise the
+ * group's shift is 0. The rule and its thresholds are TROne's
+ * (THIRD-PARTY.md).
+ *
+ * The shift is per group: a corner another group names as well keeps its
+ * stored y for that group. The file's y stays int16; a world y may lie
+ * below -32768 and is held as an int or a float wherever it is read. The
+ * count is a template so that this header needs no Trg.h of its own and a
+ * test can run the rule on a .TRG it makes itself. */
+#include <algorithm>
+#include <cstdio>
+#include <vector>
+
+#define HD_YSHIFT_STEP		16384
+#define HD_YSHIFT_SHIFTS	5	// k = -2..2, the middle one no shift
+#define HD_YSHIFT_TOLERANCE	4
+#define HD_YSHIFT_LEAST		16
+
+// The shift of candidate k, 0 .. HD_YSHIFT_SHIFTS - 1.
+inline int HDYShiftOf(int k)
+{
+	return (k - HD_YSHIFT_SHIFTS / 2) * HD_YSHIFT_STEP;
+}
+
+/* One room's classic corners for the count: `count` corners `stride` floats
+ * apart, x, y and z the first three of each, x and z room local. */
+struct HDYShiftRoom
+{
+	const float* vtx;
+	int count;
+	int stride;
+};
+
+/* One group's count: its room's distinct classic corners, how many of them
+ * were found at each shift, the shift taken (0 for most) and the group's own
+ * distinct corners, the ones its shift moves. */
+struct HDYShiftGroup
+{
+	int corners;
+	int hits[HD_YSHIFT_SHIFTS];
+	int shift;
+	int moved;
+};
+
+// The rule's pick out of the hits at the five shifts.
+inline int HDYShiftPick(const int* hits)
+{
+	const int none = HD_YSHIFT_SHIFTS / 2;
+	int best = none;
+
+	for (int k = 0; k < HD_YSHIFT_SHIFTS; k++)
+		if (hits[k] > hits[best])
+			best = k;
+
+	if (best == none || hits[best] < HD_YSHIFT_LEAST ||
+		hits[best] < 2 * hits[none])
+		return 0;
+
+	return HDYShiftOf(best);
+}
+
+/* A world y stored as int16 again, clamped into its range: what a shifted
+ * corner above y -32768 becomes where only a short holds it. */
+inline short HDYShiftClamp16(int y)
+{
+	return (short)(y < -32768 ? -32768 : (y > 32767 ? 32767 : y));
+}
+
+namespace hdyshift
+{
+	struct Corner
+	{
+		long long cell;
+		int x, y, z;
+
+		bool operator<(const Corner& o) const { return cell < o.cell; }
+	};
+
+	// The 8-unit cell of a coordinate: a tolerance of 4 reaches two of them.
+	inline long long CellAxis(int v)
+	{
+		return (long long)((v + 1048576) >> 3) & 0xFFFFF;
+	}
+
+	inline long long Cell(int x, int y, int z)
+	{
+		return (CellAxis(x) << 40) | (CellAxis(y) << 20) | CellAxis(z);
+	}
+
+	// A corner of the sorted list within the tolerance of (x, y, z).
+	inline bool Near(const std::vector<Corner>& sorted, int x, int y, int z)
+	{
+		const int t = HD_YSHIFT_TOLERANCE;
+
+		for (int cx = x - t; cx <= x + t; cx += 2 * t)
+			for (int cy = y - t; cy <= y + t; cy += 2 * t)
+				for (int cz = z - t; cz <= z + t; cz += 2 * t)
+				{
+					// The same cell twice when both ends fall in one.
+					if ((cx != x - t && CellAxis(cx) == CellAxis(x - t)) ||
+						(cy != y - t && CellAxis(cy) == CellAxis(y - t)) ||
+						(cz != z - t && CellAxis(cz) == CellAxis(z - t)))
+						continue;
+
+					Corner key;
+
+					key.cell = Cell(cx, cy, cz);
+
+					for (std::vector<Corner>::const_iterator it =
+						std::lower_bound(sorted.begin(), sorted.end(), key);
+						it != sorted.end() && it->cell == key.cell; ++it)
+						if (it->x - x <= t && x - it->x <= t &&
+							it->y - y <= t && y - it->y <= t &&
+							it->z - z <= t && z - it->z <= t)
+							return true;
+				}
+
+		return false;
+	}
+
+	struct Classic
+	{
+		int x, y, z;
+
+		bool operator<(const Classic& o) const
+		{
+			return x != o.x ? x < o.x : (y != o.y ? y < o.y : z < o.z);
+		}
+
+		bool operator==(const Classic& o) const
+		{
+			return x == o.x && y == o.y && z == o.z;
+		}
+	};
+
+	inline int Round(float v)
+	{
+		return (int)(v < 0.0f ? v - 0.5f : v + 0.5f);
+	}
+}
+
+/* Group `group`'s count against its room's classic corners. `found`, when
+ * given, gets one byte per distinct classic corner, bit k set where it was
+ * found at shift k, and `classic` those corners as x, y, z triples, in the
+ * same order. */
+template <class Trg>
+void HDYShiftCount(const Trg& trg, int group, const HDYShiftRoom& room,
+	HDYShiftGroup* out, std::vector<unsigned char>* found = 0,
+	std::vector<int>* classic = 0)
+{
+	*out = HDYShiftGroup();
+
+	if (found)
+		found->clear();
+
+	if (classic)
+		classic->clear();
+
+	if (group < 0 || (size_t)group >= trg.groups.size())
+		return;
+
+	std::vector<unsigned int> own;
+
+	for (const auto& part : trg.groups[(size_t)group].parts)
+		for (int pass = 0; pass < 3; pass++)
+			for (unsigned int at = 0; at < part.pass[pass].count; at++)
+			{
+				const size_t i = (size_t)part.pass[pass].start + at;
+
+				if (i >= trg.indices.size())
+					break;
+
+				if (trg.indices[i] < trg.vertices.size())
+					own.push_back(trg.indices[i]);
+			}
+
+	std::sort(own.begin(), own.end());
+	own.erase(std::unique(own.begin(), own.end()), own.end());
+	out->moved = (int)own.size();
+
+	std::vector<hdyshift::Corner> sorted;
+
+	sorted.reserve(own.size());
+
+	for (unsigned int i : own)
+	{
+		hdyshift::Corner c;
+
+		c.x = trg.vertices[i].x;
+		c.y = trg.vertices[i].y;
+		c.z = trg.vertices[i].z;
+		c.cell = hdyshift::Cell(c.x, c.y, c.z);
+		sorted.push_back(c);
+	}
+
+	std::sort(sorted.begin(), sorted.end());
+
+	std::vector<hdyshift::Classic> corners;
+
+	for (int k = 0; room.vtx && k < room.count; k++)
+	{
+		const float* p = room.vtx + (size_t)k * (size_t)room.stride;
+		hdyshift::Classic c;
+
+		c.x = hdyshift::Round(p[0]);
+		c.y = hdyshift::Round(p[1]);
+		c.z = hdyshift::Round(p[2]);
+		corners.push_back(c);
+	}
+
+	std::sort(corners.begin(), corners.end());
+	corners.erase(std::unique(corners.begin(), corners.end()),
+		corners.end());
+	out->corners = (int)corners.size();
+
+	for (const hdyshift::Classic& c : corners)
+	{
+		unsigned char bits = 0;
+
+		// stored = world - shift
+		for (int k = 0; k < HD_YSHIFT_SHIFTS && !sorted.empty(); k++)
+			if (hdyshift::Near(sorted, c.x, c.y - HDYShiftOf(k), c.z))
+			{
+				out->hits[k]++;
+				bits |= (unsigned char)(1 << k);
+			}
+
+		if (found)
+			found->push_back(bits);
+
+		if (classic)
+		{
+			classic->push_back(c.x);
+			classic->push_back(c.y);
+			classic->push_back(c.z);
+		}
+	}
+
+	out->shift = HDYShiftPick(out->hits);
+}
+
+/* Every room group's count, `rooms[g]` room g's corners: groups beyond
+ * `count` or beyond the file's are not asked (the sky's). Returns the groups
+ * that take a shift. */
+template <class Trg>
+int HDYShiftScan(const Trg& trg, const HDYShiftRoom* rooms, int count,
+	HDYShiftGroup* out)
+{
+	int shifted = 0;
+
+	for (int g = 0; rooms && g < count && (size_t)g < trg.groups.size(); g++)
+	{
+		HDYShiftCount(trg, g, rooms[g], &out[g]);
+		shifted += out[g].shift != 0 ? 1 : 0;
+	}
+
+	return shifted;
+}
+
+/* The log's two lines, written alike by the engine (after its HDLOG) and by
+ * RoomProbe: one per shifted group, one for the level. */
+inline int HDYShiftGroupLine(char* buffer, size_t size, const char* stem,
+	int group, const HDYShiftGroup& c)
+{
+	int at = HD_YSHIFT_SHIFTS / 2;
+
+	for (int k = 0; k < HD_YSHIFT_SHIFTS; k++)
+		if (HDYShiftOf(k) == c.shift)
+			at = k;
+
+	return snprintf(buffer, size, "yshift level=%s group=%d shift=%d "
+		"corners=%d/%d unshifted=%d moved=%d", stem, group, c.shift,
+		c.hits[at], c.corners, c.hits[HD_YSHIFT_SHIFTS / 2], c.moved);
+}
+
+inline int HDYShiftLevelLine(char* buffer, size_t size, const char* stem,
+	int shifted, int groups)
+{
+	return snprintf(buffer, size, "yshift level=%s groups=%d of %d", stem,
+		shifted, groups);
+}

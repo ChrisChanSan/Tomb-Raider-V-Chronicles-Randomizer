@@ -18470,6 +18470,165 @@ static int ProbeShellScan(const char* root, const char* stem)
 	return 0;
 }
 
+/* -yshiftscan: per room group of a level, the y shift the engine's level
+ * build reads out of the classic room (HDYShiftScan in hd_scan.h), out of
+ * the two files with no device: the classic corners are the room blobs'
+ * (probemarks), x and z room local as the .TRG's. One `yshiftscan:` line per
+ * group with art: the distinct classic corners of its room, the hits at the
+ * shifts -32768, -16384, 0, 16384 and 32768, the best non-zero shift with
+ * its hits and the pick, `near=1` where that best has 8 hits or more and is
+ * not taken. Then the engine's lines word for word but the prefix: one
+ * `yshift` line per shifted group and one for the level. -yshiftdump <path>
+ * writes, for every group with such a near or taken shift and every group
+ * -shellgroups names, its room's corners as listed (`r group x y z`), its
+ * distinct classic corners (`c group x y z bits`, bit k found at shift k)
+ * and its triangles (`t group i0 i1 i2` and the corners `v index x y z`,
+ * room local, y as stored). `listed=` is the room's corner count with the
+ * repeats. */
+static bool g_yshift_scan = false;
+static std::string g_yshift_dump;
+
+// The rooms' classic corners for HDYShiftScan, out of probemarks' blobs.
+static void ProbeYShiftRooms(const Tr5Level& level,
+	std::vector<HDYShiftRoom>& out)
+{
+	probemarks::Build(level);
+
+	const int n = (std::min)(level.roomCount(),
+		(int)probemarks::g_rooms.size());
+
+	out.assign((size_t)n, HDYShiftRoom());
+
+	for (int r = 0; r < n; r++)
+	{
+		const std::vector<float>& vtx = probemarks::g_rooms[(size_t)r].vtx;
+
+		out[(size_t)r].vtx = vtx.empty() ? 0 : &vtx[0];
+		out[(size_t)r].count = (int)(vtx.size() / 7);
+		out[(size_t)r].stride = 7;
+	}
+}
+
+static int ProbeYShiftScan(const char* root, const char* stem)
+{
+	trf::remaster::Trg trg;
+	std::string error;
+
+	if (!trf::remaster::read_trg(std::string(root) + "\\DATA\\" + stem +
+		".TRG", trg, error))
+	{
+		printf("yshiftscan: no .TRG (%s)\n", error.c_str());
+		return 2;
+	}
+
+	Tr5Level level;
+
+	if (g_roombox.empty() || !level.load(std::wstring(g_roombox.begin(),
+		g_roombox.end()) + L"\\" + std::wstring(stem, stem + strlen(stem)) +
+		L".TRC", error))
+	{
+		printf("yshiftscan: -roombox and its .TRC needed (%s)\n",
+			error.c_str());
+		return 2;
+	}
+
+	std::vector<HDYShiftRoom> rooms;
+
+	ProbeYShiftRooms(level, rooms);
+
+	const int groups = (std::min)((int)rooms.size(), (int)trg.groups.size());
+	std::vector<HDYShiftGroup> counts((size_t)(std::max)(groups, 1));
+	FILE* dump = 0;
+	int shifted = 0, nearMiss = 0;
+
+	if (!g_yshift_dump.empty())
+		fopen_s(&dump, g_yshift_dump.c_str(), "w");
+
+	for (int g = 0; g < groups; g++)
+	{
+		std::vector<unsigned char> found;
+		std::vector<int> classic;
+		HDYShiftGroup& c = counts[(size_t)g];
+
+		HDYShiftCount(trg, g, rooms[(size_t)g], &c, &found, &classic);
+
+		if (!c.moved)
+			continue;
+
+		int best = -1;
+
+		for (int k = 0; k < HD_YSHIFT_SHIFTS; k++)
+			if (k != HD_YSHIFT_SHIFTS / 2 && (best < 0 ||
+				c.hits[k] > c.hits[best]))
+				best = k;
+
+		const bool nearOne = c.hits[best] >= 8 && c.shift == 0;
+
+		shifted += c.shift != 0 ? 1 : 0;
+		nearMiss += nearOne ? 1 : 0;
+		printf("yshiftscan: level=%s group=%d corners=%d hits=%d,%d,%d,%d,%d "
+			"best=%d best_hits=%d pick=%d listed=%d%s\n", stem, g,
+			c.corners, c.hits[0], c.hits[1], c.hits[2], c.hits[3],
+			c.hits[4], HDYShiftOf(best), c.hits[best], c.shift,
+			rooms[(size_t)g].count, nearOne ? " near=1" : "");
+
+		if (!dump || (!nearOne && c.shift == 0 && !g_shell_groups.count(g)))
+			continue;
+
+		// The room's corners as listed, repeats and all.
+		for (int k = 0; k < rooms[(size_t)g].count; k++)
+		{
+			const float* p = rooms[(size_t)g].vtx + (size_t)k * 7;
+
+			fprintf(dump, "r %d %g %g %g\n", g, p[0], p[1], p[2]);
+		}
+
+		for (size_t k = 0; k < found.size(); k++)
+			fprintf(dump, "c %d %d %d %d %d\n", g, classic[k * 3],
+				classic[k * 3 + 1], classic[k * 3 + 2], (int)found[k]);
+
+		std::set<unsigned> corners;
+
+		for (const trf::remaster::TrgPart& part : trg.groups[(size_t)g].parts)
+			for (int pass = 0; pass < 3; pass++)
+				for (unsigned at = 0; at + 2 < part.pass[pass].count; at += 3)
+				{
+					const size_t i = (size_t)part.pass[pass].start + at;
+
+					if (i + 2 >= trg.indices.size())
+						break;
+
+					fprintf(dump, "t %d %u %u %u\n", g, trg.indices[i],
+						trg.indices[i + 1], trg.indices[i + 2]);
+
+					for (int k = 0; k < 3; k++)
+						corners.insert(trg.indices[i + (size_t)k]);
+				}
+
+		for (unsigned i : corners)
+			if (i < trg.vertices.size())
+				fprintf(dump, "v %u %d %d %d\n", i, trg.vertices[i].x,
+					trg.vertices[i].y, trg.vertices[i].z);
+	}
+
+	if (dump)
+		fclose(dump);
+
+	char line[256];
+
+	for (int g = 0; g < groups; g++)
+		if (counts[(size_t)g].shift != 0)
+		{
+			HDYShiftGroupLine(line, sizeof(line), stem, g, counts[(size_t)g]);
+			printf("%s\n", line);
+		}
+
+	HDYShiftLevelLine(line, sizeof(line), stem, shifted, groups);
+	printf("%s\n", line);
+	printf("yshiftscan: level=%s near=%d\n", stem, nearMiss);
+	return 0;
+}
+
 /* -skycensus: what the sky of one level is made of, read out of the two
  * files and printed, with no device and no picture. The .TRG's groups past
  * the last room are the HD sky; per part and pass a `sky part` line gives
@@ -18561,6 +18720,10 @@ static bool SkyArg(int argc, char** argv, int* at)
 		g_sky_gpu = atoi(argv[++*at]);
 	else if (!strcmp(a, "-shellscan"))
 		g_shell_scan = true;
+	else if (!strcmp(a, "-yshiftscan"))
+		g_yshift_scan = true;
+	else if (!strcmp(a, "-yshiftdump") && *at + 1 < argc)
+		g_yshift_dump = argv[++*at];
 	else if (!strcmp(a, "-flipindex") && *at + 1 < argc)
 		g_flip_index = atoi(argv[++*at]);
 	else if (!strcmp(a, "-shell") && *at + 1 < argc)
@@ -20452,6 +20615,10 @@ static int ProbeMain(int argc, char** argv)
 	// -shellscan needs no device either: the two files and the scans.
 	if (g_shell_scan)
 		return ProbeShellScan(root, stem);
+
+	// -yshiftscan the same: the two files and the count.
+	if (g_yshift_scan)
+		return ProbeYShiftScan(root, stem);
 
 	/* -walk needs no device, no .TRG and no picture - only the classic
 	 * level - so it runs here, before the window exists. */

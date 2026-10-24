@@ -4523,6 +4523,88 @@ static void ReportShells()
 	g_shell_air.clear();
 }
 
+/* The rooms' classic corners for the y shift of their groups (hd_scan.h,
+ * "a room group stored off its height"): per room every roomlet's vertices,
+ * x, y and z, x and z room local as the .TRG's. Only on the visibility
+ * path, as the shells' rooms: with tomb5.hd_vis 0 nothing is handed in,
+ * every shift is 0 and the build is the one it was. Borrowed for the
+ * length of the build. */
+static std::vector<std::vector<float> > g_yshift_corners;
+static std::vector<HDYShiftRoom> g_yshift_rooms;
+
+static void BuildYShiftRooms()
+{
+	g_yshift_corners.clear();
+	g_yshift_rooms.clear();
+
+	if (!VisLevel() || number_rooms <= 0)
+	{
+		HDRenderSetYShiftRooms(0, 0);
+		return;
+	}
+
+	g_yshift_corners.resize((size_t)number_rooms);
+	g_yshift_rooms.assign((size_t)number_rooms, HDYShiftRoom());
+
+	for (int r = 0; r < number_rooms; r++)
+	{
+		const ROOM_INFO* info = &room[r];
+		std::vector<float>& out = g_yshift_corners[(size_t)r];
+
+		for (int i = 0; info->pRoomlets && i < info->nRoomlets; i++)
+		{
+			const ROOMLET* roomlet = &info->pRoomlets[i];
+			const ROOMLET_VERTEX* vtx = (const ROOMLET_VERTEX*)roomlet->pSVtx;
+
+			for (int k = 0; vtx && k < roomlet->nVtx; k++)
+			{
+				out.push_back(vtx[k].x);
+				out.push_back(vtx[k].y);
+				out.push_back(vtx[k].z);
+			}
+		}
+
+		g_yshift_rooms[(size_t)r].vtx = out.empty() ? 0 : &out[0];
+		g_yshift_rooms[(size_t)r].count = (int)(out.size() / 3);
+		g_yshift_rooms[(size_t)r].stride = 3;
+	}
+
+	HDRenderSetYShiftRooms(&g_yshift_rooms[0], number_rooms);
+}
+
+/* What the count found, after the build: with -log one `HDLOG yshift` line
+ * per shifted group and one for the level on the visibility path, as
+ * RoomProbe prints them (HDYShiftGroupLine, HDYShiftLevelLine). Then the
+ * corners are given back. */
+static void ReportYShift()
+{
+	if (gLogEnabled && VisLevel())
+	{
+		char line[256];
+		int shifted = 0;
+
+		for (int g = 0; g < HDRenderYShiftGroups(); g++)
+		{
+			HDYShiftGroup count;
+
+			if (!HDRenderYShiftOf(g, &count) || !count.shift)
+				continue;
+
+			shifted++;
+			HDYShiftGroupLine(line, sizeof(line), g_stem, g, count);
+			Log("HDLOG %s", line);
+		}
+
+		HDYShiftLevelLine(line, sizeof(line), g_stem, shifted,
+			HDRenderYShiftGroups());
+		Log("HDLOG %s", line);
+	}
+
+	HDRenderSetYShiftRooms(0, 0);
+	g_yshift_rooms.clear();
+	g_yshift_corners.clear();
+}
+
 /* The carried art (HDCarryBoxHolds in hd_render.h): the rooms under the sky
  * and the flipmap twins handed to the build, and after it, per room under
  * the sky, the rooms whose art the build found standing in it - what
@@ -7416,6 +7498,7 @@ static void HDLevelBuildHD()
 	BuildRoomAir();			// and the rooms' air, the same contract
 	BuildRoomCarry();		// and the rooms under the sky
 	BuildShellRooms();		// and the second shells' rooms
+	BuildYShiftRooms();		// and the rooms' corners for the y shift
 	lap(LOAD_AIR);
 	BuildPairFaces();		// and its faces, the same contract
 	lap(LOAD_PAIRS);
@@ -7478,6 +7561,7 @@ static void HDLevelBuildHD()
 	// And the art the rooms under the sky carry (HDRoomCarries).
 	ReportRoomCarry();
 	// And the second shells the build dropped.
+	ReportYShift();
 	ReportShells();
 	// And the same for the openings. Before the room lines below, so the log
 	// reads in the order the build ran.

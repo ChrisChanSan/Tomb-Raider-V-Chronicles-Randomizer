@@ -86,6 +86,31 @@
 
 namespace
 {
+	/* The y shift of every room group of the level being built (hd_scan.h,
+	 * "a room group stored off its height"): a group's world y is its
+	 * stored y plus its shift, 0 for nearly every group of every level. Made
+	 * at the start of the build out of the rooms HDRenderSetYShiftRooms
+	 * hands in (none: every shift is 0), before anything reads a corner.
+	 * Every reader of a corner's y below adds the shift of the group whose
+	 * art it reads, as it adds the room's origin to x and z; the vertex
+	 * buffer keeps the stored y (a short) and the draw moves the group by
+	 * its shift instead (prepare). A reader that compares a group's corners
+	 * only with each other (a copy's key, a plane's normal) needs none. */
+	const HDYShiftRoom* g_yshift_rooms = 0;
+	int g_yshift_room_count = 0;
+	std::vector<HDYShiftGroup> g_yshift_counts;
+	std::vector<int> g_yshift;
+
+	inline int GroupYShift(size_t g)
+	{
+		return g < g_yshift.size() ? g_yshift[g] : 0;
+	}
+
+	inline float GroupDY(size_t g)
+	{
+		return (float)GroupYShift(g);
+	}
+
 	/* The vertex on the card is the vertex on disk: 20 bytes, same fields,
 	 * same meaning, plus the four water mark bytes. Written out field by
 	 * field rather than memcpy'd from TrgVertex, because that struct belongs
@@ -1010,7 +1035,8 @@ namespace
 	 * shader's one compare skips the whole thing. A vertex faces up where its
 	 * normal's y byte is over 160, as TrgProbe counts it. */
 	inline bool WaterArtOf(const trf::remaster::Trg& trg,
-		const trf::remaster::TrgPart& part, int at, HDWaterArt& art)
+		const trf::remaster::TrgPart& part, int at, HDWaterArt& art,
+		int dy = 0)
 	{
 		art = HDWaterArt();
 		art.part = at;
@@ -1051,7 +1077,7 @@ namespace
 
 				for (int c = 0; c < 3; c++)
 				{
-					const int p[3] = { v[c]->x, v[c]->z, v[c]->y };
+					const int p[3] = { v[c]->x, v[c]->z, v[c]->y + dy };
 
 					for (int a = 0; a < 3; a++)
 					{
@@ -1793,6 +1819,17 @@ namespace
 		return (cx << 20) | (cy << 10) | cz;
 	}
 
+	/* One axis of a CellKey back in units. A world y below -32768 (a group
+	 * at its y shift) wraps to the field's top quarter, which no short
+	 * reaches from below: it is read back as the cell it is, so the field
+	 * holds -98304 .. 163839 and every key a short makes reads as before. */
+	inline float CellAxisOf(unsigned int field)
+	{
+		const int cell = field >= 768u ? (int)field - 1152 : (int)field - 128;
+
+		return (float)cell * 256.0f;
+	}
+
 	/* One destructible piece of a room's art.
 	 *
 	 * Some parts carry a material with bit 15 set and a counter under it.
@@ -2272,9 +2309,11 @@ namespace
 					const float z = ((float)ta.z + (float)tb.z +
 						(float)tc.z) / 3.0f + own.z;
 					const float y0 = (float)(ta.y < tb.y ? (ta.y < tc.y ?
-						ta.y : tc.y) : (tb.y < tc.y ? tb.y : tc.y)) + own.y;
+						ta.y : tc.y) : (tb.y < tc.y ? tb.y : tc.y)) + own.y +
+						GroupDY((size_t)g);
 					const float y1 = (float)(ta.y > tb.y ? (ta.y > tc.y ?
-						ta.y : tc.y) : (tb.y > tc.y ? tb.y : tc.y)) + own.y;
+						ta.y : tc.y) : (tb.y > tc.y ? tb.y : tc.y)) + own.y +
+						GroupDY((size_t)g);
 					const long long key = AirCellKey(
 						(int)floorf(x / 1024.0f), (int)floorf(z / 1024.0f));
 					AirCells::const_iterator it = std::lower_bound(
@@ -2378,7 +2417,7 @@ namespace
 							trg.vertices[trg.indices[first + c]];
 
 						p[c][0] = (float)v.x + own.originX;
-						p[c][1] = (float)v.y;
+						p[c][1] = (float)v.y + GroupDY((size_t)g);
 						p[c][2] = (float)v.z + own.originZ;
 
 						const float d = n[0] * p[c][0] + n[1] * p[c][1] +
@@ -2714,9 +2753,10 @@ namespace
 			}
 	}
 
-	// A triangle's corners in world units; false past the lists' ends.
+	/* A triangle's corners in world units, `dy` the y shift of the group
+	 * whose art it is; false past the lists' ends. */
 	bool ShellCorners(const trf::remaster::Trg& trg, unsigned int first,
-		const HDShellRoom& room, float v[3][3])
+		const HDShellRoom& room, float v[3][3], float dy)
 	{
 		if ((size_t)first + 2 >= trg.indices.size())
 			return false;
@@ -2731,7 +2771,7 @@ namespace
 			const trf::remaster::TrgVertex& tv = trg.vertices[i];
 
 			v[c][0] = (float)tv.x + room.originX;
-			v[c][1] = (float)tv.y;
+			v[c][1] = (float)tv.y + dy;
 			v[c][2] = (float)tv.z + room.originZ;
 		}
 
@@ -2817,7 +2857,8 @@ namespace
 			float v[3][3];
 			ShellHostTri t;
 
-			if (!ShellCorners(trg, first, g_shell_rooms[h], v))
+			if (!ShellCorners(trg, first, g_shell_rooms[h], v,
+				GroupDY((size_t)h)))
 				return;
 
 			out.corners.push_back(ShellKey(v));
@@ -2934,7 +2975,8 @@ namespace
 				{
 					float v[3][3];
 
-					if (!ShellCorners(trg, run.start + at, own, v))
+					if (!ShellCorners(trg, run.start + at, own, v,
+						GroupDY((size_t)g)))
 						continue;
 
 					for (int w = 0; w < 4; w++)
@@ -3041,7 +3083,8 @@ namespace
 				float v[3][3];
 				ShellTri t;
 
-				if (!ShellCorners(trg, first, own, v))
+				if (!ShellCorners(trg, first, own, v,
+					GroupDY((size_t)g)))
 					return;
 
 				for (int a = 0; a < 3; a++)
@@ -3319,7 +3362,7 @@ namespace
 							trg.vertices[trg.indices[run.start + at]];
 
 						cells.push_back(std::make_pair(HullCellKey(
-							(float)v.x + own.originX, (float)v.y,
+							(float)v.x + own.originX, (float)v.y + GroupDY(g),
 							(float)v.z + own.originZ), (int)g));
 					}
 				}
@@ -3353,7 +3396,8 @@ namespace
 					trg.vertices[trg.indices[first + 2]];
 				const float c[3] = {
 					((float)ta.x + (float)tb.x + (float)tc.x) / 3.0f,
-					((float)ta.y + (float)tb.y + (float)tc.y) / 3.0f,
+					((float)ta.y + (float)tb.y + (float)tc.y) / 3.0f +
+					GroupDY(g),
 					((float)ta.z + (float)tb.z + (float)tc.z) / 3.0f };
 				bool boxed = false;
 
@@ -3442,7 +3486,8 @@ namespace
 						g_carry_cells.push_back(std::make_pair(HDCarryCopyKey(
 							((float)ta.x + (float)tb.x + (float)tc.x) / 3.0f +
 							own.originX,
-							((float)ta.y + (float)tb.y + (float)tc.y) / 3.0f,
+							((float)ta.y + (float)tb.y + (float)tc.y) / 3.0f +
+							GroupDY(g),
 							((float)ta.z + (float)tb.z + (float)tc.z) / 3.0f +
 							own.originZ), (int)g));
 					}
@@ -3488,7 +3533,8 @@ namespace
 						trg.vertices[trg.indices[first + 2]];
 					float c[3] = {
 						((float)ta.x + (float)tb.x + (float)tc.x) / 3.0f,
-						((float)ta.y + (float)tb.y + (float)tc.y) / 3.0f,
+						((float)ta.y + (float)tb.y + (float)tc.y) / 3.0f +
+						GroupDY((size_t)g),
 						((float)ta.z + (float)tb.z + (float)tc.z) / 3.0f };
 
 					if (HDCarryBoxHolds(own, c))
@@ -3743,6 +3789,7 @@ namespace
 				{
 					glow.origin[0] = g_boxes[g].originX;
 					glow.origin[2] = g_boxes[g].originZ;
+					glow.origin[1] = GroupDY(g);
 				}
 
 				for (unsigned int at = 0; at + 2 < run.count; at += 3)
@@ -3761,7 +3808,7 @@ namespace
 					for (int k = 0; k < 3; k++)
 					{
 						P[k][0] = (float)v[k]->x + glow.origin[0];
-						P[k][1] = (float)v[k]->y;
+						P[k][1] = (float)v[k]->y + glow.origin[1];
 						P[k][2] = (float)v[k]->z + glow.origin[2];
 
 						if ((int)v[k]->u < glow.u0) glow.u0 = (int)v[k]->u;
@@ -3973,7 +4020,7 @@ namespace
 						{
 							const float t =
 								((float)v[k]->x + glow.origin[0]) * axis[0] +
-								(float)v[k]->y * axis[1] +
+								((float)v[k]->y + glow.origin[1]) * axis[1] +
 								((float)v[k]->z + glow.origin[2]) * axis[2];
 
 							if (!seen || t < lo) lo = t;
@@ -4001,7 +4048,8 @@ namespace
 				glow.axis[2] = axis[2];
 				glow.lo = lo;
 				glow.hi = hi;
-				glow.shift = glow.origin[0] * axis[0] + glow.origin[2] * axis[2];
+				glow.shift = glow.origin[0] * axis[0] +
+					glow.origin[1] * axis[1] + glow.origin[2] * axis[2];
 				glow.fade = (hi - lo) * kGlowEndShare < kGlowEndFade
 					? (hi - lo) * kGlowEndShare : kGlowEndFade;
 			}
@@ -4280,8 +4328,12 @@ namespace
 	 * their registers on every call - a constant left over from the room
 	 * before is the whole reason this is not done "only when it changes",
 	 * with the single exception of the 64 register water table, which is a
-	 * kilobyte and is keyed on the pointer the engine hands over. */
-	void apply_room_lighting(const HDRoomLighting* r)
+	 * kilobyte and is keyed on the pointer the engine hands over.
+	 *
+	 * `shift` is the y shift of the group drawn (GroupYShift): its vertices
+	 * hold the stored y, so the origin's y takes the shift, and the surface
+	 * and the lights, both compared with the vertex as it is held, lose it. */
+	void apply_room_lighting(const HDRoomLighting* r, int shift = 0)
 	{
 		float origin[4] = { 0, 0, 0, -1.0e9f };	// a surface no vertex sits on
 		float mode[4] = { 0, 0, 0, 0 };
@@ -4293,9 +4345,9 @@ namespace
 		if (r)
 		{
 			origin[0] = r->originX;
-			origin[1] = r->originY;
+			origin[1] = r->originY + (float)shift;
 			origin[2] = r->originZ;
-			origin[3] = r->surfaceY;
+			origin[3] = r->surfaceY - (float)shift;
 
 			mode[0] = r->underwater ? 1.0f : 0.0f;
 			mode[1] = r->choppy ? 1.0f : 0.0f;
@@ -4317,7 +4369,7 @@ namespace
 				const HDLightSource& l = r->lights[i];
 
 				lights[i * 8 + 0] = l.x;
-				lights[i * 8 + 1] = l.y;
+				lights[i * 8 + 1] = l.y - (float)shift;
 				lights[i * 8 + 2] = l.z;
 				lights[i * 8 + 3] = l.falloff;
 				lights[i * 8 + 4] = l.r;
@@ -4438,7 +4490,7 @@ namespace
 	 * addBox), its corners in the group's own coordinates; the range's
 	 * first triangle (count 0) starts the box. */
 	void fog_add_note(HDRange& range, const trf::remaster::Trg& trg,
-		unsigned int first)
+		unsigned int first, float dy)
 	{
 		bool seen = range.count != 0;
 
@@ -4450,7 +4502,7 @@ namespace
 				continue;
 
 			const trf::remaster::TrgVertex& v = trg.vertices[index];
-			const float p[3] = { (float)v.x, (float)v.y, (float)v.z };
+			const float p[3] = { (float)v.x, (float)v.y + dy, (float)v.z };
 
 			for (int i = 0; i < 3; i++)
 			{
@@ -4698,6 +4750,27 @@ namespace
 		}
 
 		g_fog_clock = f->motion ? f->clock : 0.0f;
+	}
+
+	/* The matrix a group's art is drawn with: the caller's world matrix
+	 * with the group moved by its y shift in its own coordinates first,
+	 * since the vertex buffer holds the stored y (row vectors: the shift
+	 * times the matrix's y row joins the translation). `row` itself where
+	 * the shift is 0. */
+	const float* GroupRow(int group, const float* row, float* out)
+	{
+		const float dy = group >= 0 ? GroupDY((size_t)group) : 0.0f;
+
+		if (dy == 0.0f)
+			return row;
+
+		for (int i = 0; i < 16; i++)
+			out[i] = row[i];
+
+		for (int k = 0; k < 4; k++)
+			out[12 + k] += dy * row[4 + k];
+
+		return out;
 	}
 
 	/* A room drawn in the bracket: an additive pass asked makes the pass due
@@ -5215,7 +5288,8 @@ namespace
 		HDPoolRun(asked, threads, [&](int g)
 		{
 			const HDRoomBox& box = g_boxes[g];
-			const float origin[3] = { box.originX, 0.0f, box.originZ };
+			const float origin[3] = { box.originX, GroupDY((size_t)g),
+				box.originZ };
 
 			if (box.maxs[0] <= box.mins[0] || box.maxs[2] <= box.mins[2])
 				return;
@@ -5274,7 +5348,7 @@ namespace
 							const trf::remaster::TrgVertex& v = trg.vertices[index];
 
 							p[c][0] = (float)v.x + origin[0];
-							p[c][1] = (float)v.y;
+							p[c][1] = (float)v.y + origin[1];
 							p[c][2] = (float)v.z + origin[2];
 						}
 
@@ -5347,17 +5421,23 @@ namespace
 					o < (int)g_groups.size(); o++)
 				{
 					const HDGroup& other = g_groups[(size_t)o];
-					const float oo[3] = { g_boxes[o].originX, 0.0f, g_boxes[o].originZ };
+					const float oo[3] = { g_boxes[o].originX,
+						GroupDY((size_t)o), g_boxes[o].originZ };
 
 					if (!other.hasBounds)
 						continue;
 
 					bool meets = true;
 
+					// The bounds' y is the world y already (the fill).
 					for (int k = 0; k < 3; k++)
-						if (other.mins[k] + oo[k] > want_max[k] ||
-							other.maxs[k] + oo[k] < want_min[k])
+					{
+						const float at = k == 1 ? 0.0f : oo[k];
+
+						if (other.mins[k] + at > want_max[k] ||
+							other.maxs[k] + at < want_min[k])
 							meets = false;
+					}
 
 					if (!meets)
 						continue;
@@ -5385,7 +5465,8 @@ namespace
 										continue;
 
 									c[0] += (float)trg.vertices[index].x + oo[0];
-									c[1] += (float)trg.vertices[index].y;
+									c[1] += (float)trg.vertices[index].y +
+										oo[1];
 									c[2] += (float)trg.vertices[index].z + oo[2];
 								}
 
@@ -5423,7 +5504,8 @@ namespace
 									continue;
 
 								c[0] += (float)trg.vertices[index].x + origin[0];
-								c[1] += (float)trg.vertices[index].y;
+								c[1] += (float)trg.vertices[index].y +
+									origin[1];
 								c[2] += (float)trg.vertices[index].z + origin[2];
 							}
 
@@ -6567,6 +6649,31 @@ void HDRenderSetShellRooms(const HDShellRoom* rooms, int count)
 	g_shell_room_count = count > 0 ? count : 0;
 }
 
+void HDRenderSetYShiftRooms(const HDYShiftRoom* rooms, int count)
+{
+	g_yshift_rooms = count > 0 ? rooms : 0;
+	g_yshift_room_count = count > 0 ? count : 0;
+}
+
+int HDRenderYShiftGroups()
+{
+	return (int)g_yshift_counts.size();
+}
+
+bool HDRenderYShiftOf(int group, HDYShiftGroup* out)
+{
+	if (group < 0 || group >= (int)g_yshift_counts.size())
+		return false;
+
+	*out = g_yshift_counts[(size_t)group];
+	return true;
+}
+
+int HDRenderGroupYShift(int group)
+{
+	return group >= 0 ? GroupYShift((size_t)group) : 0;
+}
+
 int HDRenderShellLines()
 {
 	return (int)g_shell_lines.size();
@@ -6827,7 +6934,7 @@ static void NotePlaceTri(const trf::remaster::Trg& trg, int g, int pass, int ran
 		const trf::remaster::TrgVertex& v = trg.vertices[index];
 
 		tri.corner[k * 3 + 0] = (float)v.x;
-		tri.corner[k * 3 + 1] = (float)v.y;
+		tri.corner[k * 3 + 1] = (float)v.y + GroupDY((size_t)g);
 		tri.corner[k * 3 + 2] = (float)v.z;
 
 		for (int axis = 0; axis < 3; axis++)
@@ -7260,6 +7367,33 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 		lap_at = now;
 	};
 
+	/* The room groups' y shifts (hd_scan.h), before anything reads a
+	 * corner: the rooms' classic corners, where they were handed in,
+	 * against the groups. The sky's groups have no room and no shift. */
+	g_yshift.assign(trg.groups.size(), 0);
+	g_yshift_counts.clear();
+
+	if (g_yshift_rooms && g_yshift_room_count > 0)
+	{
+		const int asked = (std::min)((std::min)(g_yshift_room_count,
+			numRooms > 0 ? numRooms : g_yshift_room_count),
+			(int)trg.groups.size());
+
+		g_yshift_counts.assign((size_t)(asked > 0 ? asked : 0),
+			HDYShiftGroup());
+
+		if (asked > 0)
+			HDYShiftScan(trg, g_yshift_rooms, asked, &g_yshift_counts[0]);
+
+		for (int g = 0; g < asked; g++)
+			g_yshift[(size_t)g] = g_yshift_counts[(size_t)g].shift;
+
+		/* A shifted group's triangles lying wholly on the file's clamp are
+		 * no art (HDYShiftDropClamped): out before anything reads them. */
+		if (asked > 0)
+			HDYShiftApply(trg, &g_yshift_counts[0], asked);
+	}
+
 	// The sky band's poles closed (HDRenderSkyCaps, the sky dome below).
 	HDRenderSkyCaps(trg, numRooms);
 
@@ -7286,7 +7420,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 	 * build asks for a page's answer (PageGloss). */
 	ReadGlossFile();
 	HDGlossSeedWalk(trg, g_room_groups, g_grids, g_grid_count, g_sectors,
-		g_sector_count, g_votes);
+		g_sector_count, g_votes, g_yshift.empty() ? 0 : &g_yshift[0]);
 	g_page_gloss.clear();
 
 	for (int k = 0; k < 5; k++)
@@ -7646,7 +7780,8 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 			for (size_t k = 0; k < foot.size(); k += step)
 			{
 				const trf::remaster::TrgVertex& at = trg.vertices[foot[k]];
-				FlowFoot f = { (int)g, (float)at.x, (float)at.y, (float)at.z };
+				FlowFoot f = { (int)g, (float)at.x,
+					(float)at.y + GroupDY(g), (float)at.z };
 
 				g_flow_feet.push_back(f);
 			}
@@ -7761,7 +7896,8 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 				const unsigned long long key =
 					((unsigned long long)(unsigned short)vertex_group[(size_t)i] << 48) |
 					((unsigned long long)(unsigned short)in.x << 32) |
-					((unsigned long long)(unsigned short)in.y << 16) |
+					((unsigned long long)(unsigned short)(in.y +
+					GroupYShift((size_t)vertex_group[(size_t)i])) << 16) |
 					(unsigned long long)(unsigned short)in.z;
 
 				std::unordered_map<unsigned long long, unsigned char>::const_iterator
@@ -7777,7 +7913,8 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 				 * corners were missing. */
 				const unsigned int plane_key =
 					((unsigned int)(unsigned short)vertex_group[(size_t)i] << 16) |
-					(unsigned int)(unsigned short)in.y;
+					(unsigned int)(unsigned short)(in.y +
+					GroupYShift((size_t)vertex_group[(size_t)i]));
 
 				for (int bit = 0; bit < 2; bit++)
 				{
@@ -8101,7 +8238,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 								trg.vertices[trg.indices[first + c]];
 
 							centre[0] += (float)tv.x;
-							centre[1] += (float)tv.y;
+							centre[1] += (float)tv.y + GroupDY((size_t)r);
 							centre[2] += (float)tv.z;
 						}
 
@@ -8171,6 +8308,9 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 		FillOut& o = fill_out[g];
 		HDGroup& group = g_groups[g];
 		const trf::remaster::TrgGroup& source = trg.groups[g];
+		// What every corner's y below is read with: the world y.
+		const int shift = GroupYShift(g);
+		const float dy = (float)shift;
 		/* The group's own index run and sort list; the join appends the runs
 		 * in group order. */
 		std::vector<unsigned int>& sorted = o.sorted;
@@ -8382,7 +8522,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 								trg.vertices[trg.indices[first + c]];
 
 							v[c][0] = (float)tv.x;
-							v[c][1] = (float)tv.y;
+							v[c][1] = (float)tv.y + dy;
 							v[c][2] = (float)tv.z;
 						}
 
@@ -8556,7 +8696,8 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 				 * water to give its ripple (water_art_ripples). */
 				const int art_at = (int)(&part - &source.parts[0]);
 				HDWaterArt art;
-				const bool water_art = WaterArtOf(trg, part, art_at, art);
+				const bool water_art = WaterArtOf(trg, part, art_at, art,
+					shift);
 				const float* ripple = art.ripple;
 				const bool ripples = ripple[1] > 0.0f;
 
@@ -8805,9 +8946,12 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 							trg.vertices[trg.indices[first + 1]];
 						const trf::remaster::TrgVertex& cc =
 							trg.vertices[trg.indices[first + 2]];
-						const float pa[3] = { (float)ca.x, (float)ca.y, (float)ca.z };
-						const float pb[3] = { (float)cb.x, (float)cb.y, (float)cb.z };
-						const float pc[3] = { (float)cc.x, (float)cc.y, (float)cc.z };
+						const float pa[3] = { (float)ca.x, (float)ca.y + dy,
+							(float)ca.z };
+						const float pb[3] = { (float)cb.x, (float)cb.y + dy,
+							(float)cb.z };
+						const float pc[3] = { (float)cc.x, (float)cc.y + dy,
+							(float)cc.z };
 						bool cut = false;
 
 						for (size_t k = 0; k < group.cutAt.size(); k++)
@@ -8889,16 +9033,19 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 							for (int cx = x0 >> 10; cx <= lastX; cx++)
 								for (int cz = z0 >> 10; cz <= lastZ; cz++)
 								{
-									flats.push_back(std::make_pair((int)a.y,
+									flats.push_back(std::make_pair(
+										(int)a.y + shift,
 										SectorKey(cx << 10, cz << 10)));
 
 									if (sheet)
 										waterflats.push_back(std::make_pair(
-											(int)a.y, SectorKey(cx << 10, cz << 10)));
+											(int)a.y + shift,
+											SectorKey(cx << 10, cz << 10)));
 
 									if (clearFloor)
 										clearflats.push_back(std::make_pair(
-											(int)a.y, SectorKey(cx << 10,
+											(int)a.y + shift,
+											SectorKey(cx << 10,
 											cz << 10)));
 								}
 						}
@@ -8922,7 +9069,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 								trg.vertices[trg.indices[first + c]];
 
 							p[c * 3] = (float)v.x;
-							p[c * 3 + 1] = (float)v.y;
+							p[c * 3 + 1] = (float)v.y + dy;
 							p[c * 3 + 2] = (float)v.z;
 							ny += v.normal_y();
 						}
@@ -8971,7 +9118,8 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 						const trf::remaster::TrgVertex& tc = trg.vertices[trg.indices[first + 2]];
 
 						centre[0] = ((float)ta.x + (float)tb.x + (float)tc.x) / 3.0f;
-						centre[1] = ((float)ta.y + (float)tb.y + (float)tc.y) / 3.0f;
+						centre[1] = ((float)ta.y + (float)tb.y +
+							(float)tc.y) / 3.0f + dy;
 						centre[2] = ((float)ta.z + (float)tb.z + (float)tc.z) / 3.0f;
 					}
 
@@ -9046,7 +9194,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 							{
 								const trf::remaster::TrgVertex& tv =
 									trg.vertices[trg.indices[first + c]];
-								const float y = (float)tv.y;
+								const float y = (float)tv.y + dy;
 
 								x[c] = (float)tv.x;
 								z[c] = (float)tv.z;
@@ -9118,7 +9266,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 								trg.vertices[trg.indices[first + c]];
 
 							v[c][0] = (float)tv.x;
-							v[c][1] = (float)tv.y;
+							v[c][1] = (float)tv.y + dy;
 							v[c][2] = (float)tv.z;
 						}
 
@@ -9806,7 +9954,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 
 				// An additive range's box (HDRange::addBox), for the bulbs.
 				if (pass == 2)
-					fog_add_note(range, trg, first);
+					fog_add_note(range, trg, first, dy);
 
 				/* The remaster's water art (HDRange::artTris): horizontal,
 				 * and material 16 or marked at every corner. */
@@ -9844,7 +9992,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 
 							if (!range.artTris)
 							{
-								range.artY = range.artYMax = (int)a.y;
+								range.artY = range.artYMax = (int)a.y + shift;
 								range.artMinX = x0;
 								range.artMaxX = x1;
 								range.artMinZ = z0;
@@ -9852,8 +10000,9 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 							}
 							else
 							{
-								range.artY = lo(range.artY, (int)a.y);
-								range.artYMax = hi(range.artYMax, (int)a.y);
+								range.artY = lo(range.artY, (int)a.y + shift);
+								range.artYMax = hi(range.artYMax,
+									(int)a.y + shift);
 								range.artMinX = lo(range.artMinX, x0);
 								range.artMaxX = hi(range.artMaxX, x1);
 								range.artMinZ = lo(range.artMinZ, z0);
@@ -9882,7 +10031,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 
 							if (!range.flowTris)
 							{
-								range.flowY = range.flowYMax = (int)a.y;
+								range.flowY = range.flowYMax = (int)a.y + shift;
 								range.flowMinX = x0;
 								range.flowMaxX = x1;
 								range.flowMinZ = z0;
@@ -9890,10 +10039,11 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 							}
 							else
 							{
-								range.flowY = (int)a.y < range.flowY ?
-									(int)a.y : range.flowY;
-								range.flowYMax = (int)a.y > range.flowYMax ?
-									(int)a.y : range.flowYMax;
+								range.flowY = (int)a.y + shift < range.flowY ?
+									(int)a.y + shift : range.flowY;
+								range.flowYMax =
+									(int)a.y + shift > range.flowYMax ?
+									(int)a.y + shift : range.flowYMax;
 								range.flowMinX = x0 < range.flowMinX ? x0 :
 									range.flowMinX;
 								range.flowMaxX = x1 > range.flowMaxX ? x1 :
@@ -9933,7 +10083,8 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					if (index < trg.vertices.size())
 					{
 						const trf::remaster::TrgVertex& v = trg.vertices[index];
-						const float p[3] = { (float)v.x, (float)v.y, (float)v.z };
+						const float p[3] = { (float)v.x, (float)v.y + dy,
+							(float)v.z };
 
 						/* Per room: which of this room's vertices
 						 * carry a wind weight and how strong the strongest
@@ -9951,10 +10102,11 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 						 *
 						 * And the same list for the inside half alone - the
 						 * overlap list is asked of that one. */
-						group.cells.push_back(CellKey(v.x, v.y, v.z));
+						group.cells.push_back(CellKey(v.x, v.y + shift, v.z));
 
 						if (!tris[i].overhang)
-							group.cellsIn.push_back(CellKey(v.x, v.y, v.z));
+							group.cellsIn.push_back(
+								CellKey(v.x, v.y + shift, v.z));
 
 						if (tris[i].stand > 0)
 						{
@@ -9963,11 +10115,13 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 							if (group.standCells.size() <= at)
 								group.standCells.resize(at + 1);
 
-							group.standCells[at].push_back(CellKey(v.x, v.y, v.z));
+							group.standCells[at].push_back(
+								CellKey(v.x, v.y + shift, v.z));
 						}
 						else if ((!tris[i].intruding || tris[i].openAir) &&
 							tris[i].overhang)
-							group.cellsFree.push_back(CellKey(v.x, v.y, v.z));
+							group.cellsFree.push_back(
+								CellKey(v.x, v.y + shift, v.z));
 
 						if (tris[i].destructId >= 0)
 						{
@@ -10178,7 +10332,8 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					HDRenderSample sample;
 
 					sample.x = v.x;
-					sample.y = v.y;
+					// A short again: the world y clamped.
+					sample.y = HDYShiftClamp16(v.y + shift);
 					sample.z = v.z;
 					sample.nx = v.nx;
 					sample.ny = v.ny;
@@ -10196,7 +10351,8 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 						const unsigned long long key =
 							((unsigned long long)(unsigned short)g << 48) |
 							((unsigned long long)(unsigned short)v.x << 32) |
-							((unsigned long long)(unsigned short)v.y << 16) |
+							((unsigned long long)(unsigned short)(v.y + shift)
+							<< 16) |
 							(unsigned long long)(unsigned short)v.z;
 
 						std::unordered_map<unsigned long long, unsigned char>::const_iterator
@@ -10243,7 +10399,8 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 	// And the copies among the carried art (MarkCarryCells).
 	MarkCarryCells(trg);
 	// The visibility path's tables, when the level asks for them (hd_vis.h).
-	HDVisLevelBuild(trg);
+	HDVisLevelBuild(trg, g_yshift.empty() ? 0 : &g_yshift[0],
+		(int)g_yshift.size());
 
 	/* The biggest groups first, so that no thread is left alone with a big
 	 * one at the end. Only the order the work is handed out in: every group
@@ -11524,10 +11681,11 @@ namespace
 	void upload_gloss_rows(int group, const float* m)
 	{
 		float regs[6 * 4] = { 0 };
+		// y: the group's shift, which the room matrix `m` carries (prepare).
 		const float origin[3] =
 		{
 			(size_t)group * 2 + 1 < g_group_origin.size() ? g_group_origin[(size_t)group * 2] : 0.0f,
-			0.0f,
+			group >= 0 ? GroupDY((size_t)group) : 0.0f,
 			(size_t)group * 2 + 1 < g_group_origin.size() ? g_group_origin[(size_t)group * 2 + 1] : 0.0f
 		};
 
@@ -11621,8 +11779,8 @@ namespace
 							}
 
 							const trf::remaster::TrgVertex& v = trg.vertices[i];
-							const float p[3] = { (float)v.x + ox, (float)v.y,
-								(float)v.z + oz };
+							const float p[3] = { (float)v.x + ox,
+								(float)v.y + GroupDY(g), (float)v.z + oz };
 
 							for (int a = 0; a < 3; a++)
 							{
@@ -12532,7 +12690,9 @@ namespace
 		if (group < 0 || group >= (int)g_groups.size())
 			return false;
 
-		const float* row = world ? (const float*)world : kIdentity;
+		float moved[16];
+		const float* row = GroupRow(group,
+			world ? (const float*)world : kIdentity, moved);
 
 		/* The view space the fog and the bulbs live in. The classic
 		 * "stash" is the vertex through D3DMView, which is view * world - so
@@ -12548,7 +12708,7 @@ namespace
 		set_matrix_constant(0, wvp);
 		set_worldview_constant(worldview);
 		upload_gloss_rows(group, worldview);
-		apply_room_lighting(lighting);
+		apply_room_lighting(lighting, GroupYShift((size_t)group));
 
 		/* c15, the shore box of this room - where the
 		 * surface bit was flooded to, in room-local x and z, so that the
@@ -21939,7 +22099,7 @@ namespace
 							trg.vertices[trg.indices[first + c]];
 
 						p[c * 3] = (float)v.x;
-						p[c * 3 + 1] = (float)v.y;
+						p[c * 3 + 1] = (float)v.y + GroupDY((size_t)g);
 						p[c * 3 + 2] = (float)v.z;
 						ny += v.normal_y();
 
@@ -22221,7 +22381,7 @@ namespace
 							trg.vertices[trg.indices[first + c]];
 
 						p[c * 3] = (float)v.x;
-						p[c * 3 + 1] = (float)v.y;
+						p[c * 3 + 1] = (float)v.y + GroupDY((size_t)g);
 						p[c * 3 + 2] = (float)v.z;
 						ny += v.normal_y();
 
@@ -22298,7 +22458,7 @@ namespace
 							trg.vertices[trg.indices[first + c]];
 
 						p[c * 3] = (float)v.x + ox;
-						p[c * 3 + 1] = (float)v.y;
+						p[c * 3 + 1] = (float)v.y + GroupDY((size_t)g);
 						p[c * 3 + 2] = (float)v.z + oz;
 					}
 
@@ -26547,7 +26707,8 @@ namespace
 			const bool night = kWaterPalette[g_wlevel.section].night != 0;
 
 			caustic[0] = river || night ? 0.0f : g_motion[3];
-			caustic[1] = g_caustic_top[(size_t)group];
+			// Compared with the vertex as it is held: the stored y.
+			caustic[1] = g_caustic_top[(size_t)group] - GroupDY((size_t)group);
 			caustic[2] = 1.0f / 2048.0f;	// gone two squares down
 		}
 
@@ -29147,9 +29308,9 @@ int HDRenderGroupCellsIn(int group, const float* mins, const float* maxs,
 		const unsigned int key = cells[i];
 		const float p[3] =
 		{
-			(float)((int)((key >> 20) & 0x3FF) - 128) * 256.0f,
-			(float)((int)((key >> 10) & 0x3FF) - 128) * 256.0f,
-			(float)((int)(key & 0x3FF) - 128) * 256.0f
+			CellAxisOf((key >> 20) & 0x3FF),
+			CellAxisOf((key >> 10) & 0x3FF),
+			CellAxisOf(key & 0x3FF)
 		};
 		bool in = true;
 

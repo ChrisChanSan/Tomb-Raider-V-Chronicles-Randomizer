@@ -47,9 +47,12 @@ inline int HDGlossSeedOf(const std::unordered_map<int, HDGlossVotes>& votes, int
 		HDGlossSeedClass(at->second.perFx, at->second.tris);
 }
 
+// `yShift`, one per room group or none: the shift every corner's y takes
+// (hd_scan.h, "a room group stored off its height").
 inline void HDGlossSeedWalk(const trf::remaster::Trg& trg, int roomGroups,
 	const HDRoomGrid* grids, int gridCount, const HDSectorFloor* sectors,
-	int sectorCount, std::unordered_map<int, HDGlossVotes>& votes)
+	int sectorCount, std::unordered_map<int, HDGlossVotes>& votes,
+	const int* yShift = 0)
 {
 	votes.clear();
 
@@ -92,9 +95,13 @@ inline void HDGlossSeedWalk(const trf::remaster::Trg& trg, int roomGroups,
 						continue;
 
 					const int page = (int)trg.textures[v[0]->layer - 1];
-					const float a[3] = { (float)v[0]->x, (float)v[0]->y, (float)v[0]->z };
-					const float b[3] = { (float)v[1]->x, (float)v[1]->y, (float)v[1]->z };
-					const float c[3] = { (float)v[2]->x, (float)v[2]->y, (float)v[2]->z };
+					const float dy = yShift ? (float)yShift[g] : 0.0f;
+					const float a[3] = { (float)v[0]->x, (float)v[0]->y + dy,
+						(float)v[0]->z };
+					const float b[3] = { (float)v[1]->x, (float)v[1]->y + dy,
+						(float)v[1]->z };
+					const float c[3] = { (float)v[2]->x, (float)v[2]->y + dy,
+						(float)v[2]->z };
 					const float ny = (v[0]->normal_y() + v[1]->normal_y() +
 						v[2]->normal_y()) / 3.0f;
 					std::unordered_map<int, HDGlossVotes>::iterator it = votes.find(page);

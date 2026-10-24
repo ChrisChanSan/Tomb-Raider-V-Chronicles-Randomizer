@@ -236,7 +236,8 @@ struct HDVisTables
 bool HDVisBuild(const trf::remaster::Trg& trg, const HDVisRoom* rooms,
 	int roomCount, const HDCoverFace* faces, int faceCount,
 	const HDVisPortal* portals, int portalCount, const int* links,
-	int linkCount, const HDVisParams& params, HDVisTables* out);
+	int linkCount, const HDVisParams& params, HDVisTables* out,
+	const int* yShift = 0);
 
 /* The engine's copy. hd_level.cpp hands the classic side in before the
  * level's build (HDVisLevelInput), the renderer's build hands in the .TRG it
@@ -250,7 +251,11 @@ void HDVisLevelInput(const HDVisRoom* rooms, int roomCount,
  * asked by HDVisLevelBuild after the three tables (HDVisStaticCovers). */
 void HDVisLevelStatics(const HDVisStatic* statics, int staticCount,
 	const HDCoverFace* faces, int faceCount);
-void HDVisLevelBuild(const trf::remaster::Trg& trg);
+/* `yShift`, `shifts` long or none: the y shift of each room's group, which
+ * every read of a .TRG corner's y adds (hd_scan.h, "a room group stored off
+ * its height"), as in the two builds above, where it is one per room. */
+void HDVisLevelBuild(const trf::remaster::Trg& trg, const int* yShift = 0,
+	int shifts = 0);
 void HDVisLevelClear();
 const HDVisTables* HDVisLevelTables();
 
@@ -268,7 +273,7 @@ const HDVisTables* HDVisLevelTables();
 void HDVisStaticCovers(const trf::remaster::Trg& trg, const HDVisRoom* rooms,
 	int roomCount, const HDVisStatic* statics, int staticCount,
 	const HDCoverFace* faces, int faceCount, const HDVisParams& params,
-	HDVisTables* out);
+	HDVisTables* out, const int* yShift = 0);
 
 /* Whether a static mesh the frame would draw classic is left to the art on
  * the visibility path: the share of its samples the art of one group lies

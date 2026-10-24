@@ -106,6 +106,10 @@
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_water_under.h"
 // The sky band's closed poles (sky_cap).
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_sky_cap.h"
+// A lift door's delay kept while its pad is held (lift_door_rule).
+#include "../../../TOMB5 Code/TOMB5/game/lift_door_rule.h"
+// A room group stored off its height: the count, the pick (yshift_rule).
+#include "../../../TOMB5 Code/TOMB5/specific/hd/hd_scan.h"
 // The fog bulbs' body: the span, the column, the veil, the breath (fog_body),
 // the strength and the art's mist (fog_art).
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_fog.h"
@@ -25718,6 +25722,324 @@ static trf::remaster::TrgVertex sky_cap_vertex(int x, int y, int z, int u,
 	return o;
 }
 
+/* A room's classic corners for yshift_rule: `n` corners on a 256 grid at
+ * height y, three floats each. */
+static std::vector<float> yshift_room(int n, int y)
+{
+	std::vector<float> out;
+
+	for (int k = 0; k < n; k++)
+	{
+		out.push_back((float)(1024 + (k % 8) * 256));
+		out.push_back((float)y);
+		out.push_back((float)(1024 + (k / 8) * 256));
+	}
+
+	return out;
+}
+
+/* The room's corners as group g of `trg`, every corner stored dy lower than
+ * it stands (y + dy) and one unit off in x, as the rebuilt art is, the run a
+ * whole number of triangles. */
+static void yshift_group(trf::remaster::Trg& trg, size_t g,
+	const std::vector<float>& room, int dy)
+{
+	if (trg.groups.size() <= g)
+		trg.groups.resize(g + 1);
+
+	trf::remaster::TrgPart part;
+
+	part.pass[0].start = (uint32_t)trg.indices.size();
+
+	for (size_t k = 0; k + 2 < room.size(); k += 3)
+	{
+		trf::remaster::TrgVertex v;
+
+		v.x = (int16_t)(room[k] + 1.0f);
+		v.y = (int16_t)(room[k + 1] + (float)dy);
+		v.z = (int16_t)room[k + 2];
+		trg.indices.push_back((uint32_t)trg.vertices.size());
+		trg.vertices.push_back(v);
+	}
+
+	while (trg.indices.size() % 3)
+		trg.indices.push_back(trg.indices.back());
+
+	part.pass[0].count = (uint32_t)trg.indices.size() - part.pass[0].start;
+	part.pass[1].start = part.pass[2].start = (uint32_t)trg.indices.size();
+	trg.groups[g].parts.push_back(part);
+}
+
+static HDYShiftRoom yshift_of(const std::vector<float>& room)
+{
+	HDYShiftRoom r;
+
+	r.vtx = room.empty() ? 0 : &room[0];
+	r.count = (int)(room.size() / 3);
+	r.stride = 3;
+	return r;
+}
+
+// A room group stored a multiple of 16,384 off its height (hd_scan.h).
+static void yshift_rule()
+{
+	printf("a room group stored off its height\n");
+
+	// An unshifted group stays.
+	{
+		const std::vector<float> room = yshift_room(32, -20000);
+		const HDYShiftRoom rooms[1] = { yshift_of(room) };
+		trf::remaster::Trg trg;
+		HDYShiftGroup c[1];
+
+		yshift_group(trg, 0, room, 0);
+
+		const int shifted = HDYShiftScan(trg, rooms, 1, c);
+
+		ok(shifted == 0, "yshift: an unshifted group is not moved", shifted, 0);
+		ok(c[0].shift == 0, "yshift: its shift is 0", c[0].shift, 0);
+		ok(c[0].hits[2] == 32, "yshift: all 32 corners found at 0",
+			c[0].hits[2], 32);
+	}
+
+	/* A group stored 16,384 low goes up, and a corner of it that another
+	 * group names keeps its stored place for that group. */
+	{
+		const std::vector<float> room0 = yshift_room(32, -26112);
+		const std::vector<float> room1 = yshift_room(32, -20000);
+		const HDYShiftRoom rooms[2] = { yshift_of(room0), yshift_of(room1) };
+		trf::remaster::Trg trg;
+		HDYShiftGroup c[2];
+
+		yshift_group(trg, 0, room0, 16384);
+		yshift_group(trg, 1, room1, 0);
+		trg.indices[trg.groups[1].parts[0].pass[0].start] = 0;
+
+		const int shifted = HDYShiftScan(trg, rooms, 2, c);
+		const uint32_t first =
+			trg.indices[trg.groups[0].parts[0].pass[0].start];
+
+		ok(shifted == 1, "yshift: one group of two is moved", shifted, 1);
+		ok(c[0].shift == -16384, "yshift: the low group's shift",
+			c[0].shift, -16384);
+		ok(c[1].shift == 0, "yshift: the other group's shift", c[1].shift, 0);
+		ok(c[0].hits[1] == 32 && c[0].hits[2] == 0,
+			"yshift: 32 corners at -16384, none at 0", c[0].hits[1], 32);
+		ok(c[0].moved == 32, "yshift: the group's 32 corners move",
+			c[0].moved, 32);
+		ok(trg.vertices[first].y + c[0].shift == -26112,
+			"yshift: its corner at its world height",
+			trg.vertices[first].y + c[0].shift, -26112);
+		ok(trg.vertices[0].y + c[1].shift == -26112 + 16384,
+			"yshift: the shared corner keeps its place in the other group",
+			trg.vertices[0].y + c[1].shift, -26112 + 16384);
+	}
+
+	/* A shift past int16 is kept: a corner clamped at -32768 in the file
+	 * lands at -49152, and a short holding it again is clamped. */
+	{
+		const std::vector<float> room = yshift_room(32, -31232);
+		const HDYShiftRoom rooms[1] = { yshift_of(room) };
+		trf::remaster::Trg trg;
+		trf::remaster::TrgVertex top;
+		HDYShiftGroup c[1];
+
+		yshift_group(trg, 0, room, 16384);
+		top.y = -32768;
+		trg.vertices.push_back(top);
+
+		for (int k = 0; k < 3; k++)
+			trg.indices.push_back((uint32_t)trg.vertices.size() - 1);
+
+		trg.groups[0].parts[0].pass[0].count += 3;
+		trg.groups[0].parts[0].pass[1].start += 3;
+		trg.groups[0].parts[0].pass[2].start += 3;
+		HDYShiftScan(trg, rooms, 1, c);
+
+		const int world = trg.vertices.back().y + c[0].shift;
+
+		ok(c[0].shift == -16384, "yshift: the high room's group moves",
+			c[0].shift, -16384);
+		ok(world == -49152, "yshift: the clamped corner lands at -49152",
+			world, -49152);
+		ok(HDYShiftClamp16(world) == -32768,
+			"yshift: held as a short again it is clamped",
+			HDYShiftClamp16(world), -32768);
+	}
+
+	/* The file's clamp in a shifted group: a triangle with all three corners
+	 * at -32768 is taken out, one with two there stays, the triangles after
+	 * it close up in their order; an unshifted group keeps the same lid. */
+	{
+		const std::vector<float> room = yshift_room(32, -31232);
+		const HDYShiftRoom rooms[1] = { yshift_of(room) };
+		trf::remaster::Trg trg;
+		HDYShiftGroup c[1];
+
+		yshift_group(trg, 0, room, 16384);
+
+		const uint32_t base = (uint32_t)trg.vertices.size();
+		trf::remaster::TrgVertex v;
+
+		for (int k = 0; k < 6; k++)
+		{
+			v.x = (int16_t)(k * 64);
+			v.y = (int16_t)(k < 5 ? -32768 : -32000);
+			trg.vertices.push_back(v);
+		}
+
+		// The lid (0 1 2), a wall reaching it (3 4 5), a second lid (2 3 4).
+		const uint32_t tris[9] = { 0, 1, 2, 3, 4, 5, 2, 3, 4 };
+		trf::remaster::TrgPart part;
+
+		part.pass[0].start = (uint32_t)trg.indices.size();
+		part.pass[0].count = 9;
+		part.pass[1].start = part.pass[2].start = part.pass[0].start + 9;
+
+		for (int k = 0; k < 9; k++)
+			trg.indices.push_back(base + tris[k]);
+
+		trg.groups[0].parts.push_back(part);
+
+		trf::remaster::Trg kept = trg;
+
+		HDYShiftScan(trg, rooms, 1, c);
+
+		const int dropped = HDYShiftApply(trg, c, 1);
+		const trf::remaster::TrgPart::Pass& run =
+			trg.groups[0].parts[1].pass[0];
+
+		ok(c[0].shift == -16384 && dropped == 2 && c[0].clampedDropped == 2,
+			"yshift: the two lids on the clamp are taken out", dropped, 2);
+		ok(run.count == 3 && trg.indices[run.start] == base + 3 &&
+			trg.indices[run.start + 2] == base + 5,
+			"yshift: the wall reaching the clamp stays", run.count, 3);
+		ok(trg.groups[0].parts[0].pass[0].count ==
+			kept.groups[0].parts[0].pass[0].count,
+			"yshift: a pass with no lid keeps its count",
+			trg.groups[0].parts[0].pass[0].count,
+			kept.groups[0].parts[0].pass[0].count);
+
+		HDYShiftGroup none[1] = { HDYShiftGroup() };
+
+		ok(HDYShiftApply(kept, none, 1) == 0 &&
+			kept.groups[0].parts[1].pass[0].count == 9,
+			"yshift: an unshifted group keeps its triangles at -32768",
+			kept.groups[0].parts[1].pass[0].count, 9);
+	}
+
+	// Too few matches do not shift: 8 corners, under the 16 the rule asks.
+	{
+		const std::vector<float> room = yshift_room(8, -26112);
+		const HDYShiftRoom rooms[1] = { yshift_of(room) };
+		trf::remaster::Trg trg;
+		HDYShiftGroup c[1];
+
+		yshift_group(trg, 0, room, 16384);
+		HDYShiftScan(trg, rooms, 1, c);
+		ok(c[0].hits[1] == 8 && c[0].shift == 0,
+			"yshift: 8 matches are too few to move a group", c[0].shift, 0);
+	}
+
+	/* Twice as many: a best shift with 16 hits or more is taken only with at
+	 * least twice the hits of 0 - 32 against 16 moves the group, 31 against
+	 * 16 does not, and a tie stays where it is stored. */
+	{
+		int hits[HD_YSHIFT_SHIFTS] = { 0, 32, 16, 0, 0 };
+
+		ok(HDYShiftPick(hits) == -16384, "yshift: 32 against 16 is taken",
+			HDYShiftPick(hits), -16384);
+		hits[1] = 31;
+		ok(HDYShiftPick(hits) == 0, "yshift: 31 against 16 is not",
+			HDYShiftPick(hits), 0);
+		hits[1] = 16;
+		ok(HDYShiftPick(hits) == 0, "yshift: a tie stays", HDYShiftPick(hits),
+			0);
+		hits[2] = 0;
+		hits[1] = 15;
+		ok(HDYShiftPick(hits) == 0, "yshift: 15 against none is too few",
+			HDYShiftPick(hits), 0);
+		hits[1] = 0;
+		hits[4] = 40;
+		ok(HDYShiftPick(hits) == 32768, "yshift: two steps down is a shift too",
+			HDYShiftPick(hits), 32768);
+
+		// The tolerance: 4 units on every axis count, 5 do not.
+		const std::vector<float> room = yshift_room(16, -26112);
+		const HDYShiftRoom rooms[1] = { yshift_of(room) };
+		trf::remaster::Trg near4, near5;
+		HDYShiftGroup c[1];
+
+		yshift_group(near4, 0, room, 16384 + 4);
+		yshift_group(near5, 0, room, 16384 + 5);
+		HDYShiftScan(near4, rooms, 1, c);
+		ok(c[0].hits[1] == 16, "yshift: 4 units off is found", c[0].hits[1],
+			16);
+		HDYShiftScan(near5, rooms, 1, c);
+		ok(c[0].hits[1] == 0, "yshift: 5 units off is not", c[0].hits[1], 0);
+	}
+
+	// The log lines the engine and RoomProbe write alike.
+	{
+		HDYShiftGroup c = HDYShiftGroup();
+		char line[160];
+
+		c.corners = 112;
+		c.hits[1] = 98;
+		c.hits[2] = 30;
+		c.shift = -16384;
+		c.moved = 326326;
+		c.clampedDropped = 29272;
+		HDYShiftGroupLine(line, sizeof(line), "LEVEL", 7, c);
+		ok(!strcmp(line, "yshift level=LEVEL group=7 shift=-16384 "
+			"corners=98/112 unshifted=30 moved=326326 clamped_dropped=29272"),
+			"yshift: the group's line", (long)strlen(line), 0);
+		HDYShiftLevelLine(line, sizeof(line), "LEVEL", 1, 179);
+		ok(!strcmp(line, "yshift level=LEVEL groups=1 of 179"),
+			"yshift: the level's line", (long)strlen(line), 0);
+	}
+}
+
+// A lift door's delay kept while its pad is held (game\lift_door_rule.h).
+static void lift_door_rule()
+{
+	printf("a lift door's delay kept while its pad is held\n");
+
+	const int all = LIFT_DOOR_CODEBITS;
+	const int pad = 1;		// PAD, a plain floor trigger
+	const signed char delay = -3;	// about three seconds
+
+	ok(LiftDoorKeepsTimer(delay, 0, pad, true, all),
+		"lift door: a held pad with a delay keeps the timer", 0, 1);
+	ok(LiftDoorKeepsTimer(delay, 0, 0, true, all | 0x100),
+		"lift door: a plain trigger with other flags too", 0, 1);
+	ok(!LiftDoorKeepsTimer(delay, 0, pad, true, all & ~0x0200),
+		"lift door: without all code bits the timer is set", 1, 0);
+	ok(!LiftDoorKeepsTimer(delay, 0, pad, true, 0),
+		"lift door: a shut door with no code bits takes it", 1, 0);
+	ok(!LiftDoorKeepsTimer(3, 0, pad, true, all),
+		"lift door: a positive timer is set", 1, 0);
+	ok(!LiftDoorKeepsTimer(0, 0, pad, true, all),
+		"lift door: a timer of 0 is set", 1, 0);
+	ok(!LiftDoorKeepsTimer(delay, 1, pad, true, all),
+		"lift door: a heavy hit sets it", 1, 0);
+
+	const int excluded[5] = { LIFT_DOOR_SWITCH, LIFT_DOOR_HEAVYSWITCH,
+		LIFT_DOOR_ANTIPAD, LIFT_DOOR_ANTITRIGGER, LIFT_DOOR_HEAVYANTITRIGGER };
+
+	for (int k = 0; k < 5; k++)
+		ok(!LiftDoorKeepsTimer(delay, 0, excluded[k], true, all),
+			"lift door: a switch or an antitrigger sets it", excluded[k], 0);
+
+	ok(!LiftDoorKeepsTimer(delay, 0, pad, false, all),
+		"lift door: another object takes the timer", 1, 0);
+	// The byte the floor data holds, 253, is the delay of 3.
+	const unsigned char byte = 253;
+
+	ok(LiftDoorKeepsTimer((signed char)byte, 0, pad, true, all),
+		"lift door: the timer is read as a signed char", 0, 1);
+}
+
 /* One part of `rings` rings round the axis, at heights `ys` and radii
  * `radius`, appended to `trg` and `g` as one run of `pass`. */
 static void sky_cap_band(trf::remaster::Trg& trg, trf::remaster::TrgGroup& g,
@@ -29538,6 +29860,8 @@ int main()
 	object_rules();
 	install_names();
 	glow_normal();
+	yshift_rule();
+	lift_door_rule();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

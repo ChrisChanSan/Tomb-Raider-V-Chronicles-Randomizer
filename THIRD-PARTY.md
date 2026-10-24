@@ -59,6 +59,7 @@ file:
 | `TOMB5 Code/TOMB5/specific/hd/hd_shader/hd_glow.hlsl` | TROne's rules for its glow material | The fade near the eye and the `|N.V|` term, translated to HLSL for Direct3D 9; not a line of the original is copied. The edge fade and the end fade are this project's own, and so is the per-part choice between the file's normal and the face's normal, re-derived on this project's own measurement. Origin ledger, entries 31 and 475. |
 | `TOMB5 Code/TOMB5/specific/hd/hd_vis.cpp/.h` | `host/render/hd_visibility_tr2.inc`, its TR2 visibility prototype (the copy handed over on 2026-10-14) | The **approach**, not the code: the portal walk as the room list, every listed room's art drawn whole, a group listed by its art in a listed room's box, and the count of eight triangles that makes a guest. The walk, the tables and their other rules are this project's own. Origin ledger, entries 209 and 210. |
 | `TOMB5 Code/TOMB5/specific/hd/hd_level.cpp`, `hd_render.cpp/.h`: the second shells (`BuildShellRooms`, `MarkSecondShells`) | `host/render/dupshell.h` and the `schacht` and `rich2lift` blocks of `hd_load` (the copy of 2026-10-23, read on 2026-10-24) | The **rule and its thresholds**, not the code: a group's art standing outside its own box (widened by 64) in exactly one other room's box (widened by 16) is a second shell of that room when 200 of its triangles, a fifth of the pair or more, lie in the plane of the room's own art (normals within 0.98, 16 units) and fewer than half of those are the room's very triangles, and then the whole pair goes; the rest of such a group by those rooms (within 512 in x and z, 64 in y) and its art in the open air of the rooms in their column (32 units off a square's floor and ceiling); the 0x40000 group flag as art meant to reach past its room; a flipmap room's pair not taken whole. The scans, the plane cells, the mirror and the shared-face refusals, the log lines and the probe are this project's own. Origin ledger, entry 480. |
+| `TOMB5 Code/TOMB5/specific/hd/hd_scan.h` and its readers in `hd_level.cpp`, `hd_render.cpp/.h`, `hd_vis.cpp/.h` and `hd_gloss_seed.h`: a room group stored off its height (`HDYShiftScan`); `TOMB5 Code/TOMB5/game/lift_door_rule.h` and `game/control.cpp`: a lift door's delay | the handover of its rounds K166 (`trgyshift.h`, `test_trgyshift.cpp`, the notes on the shaft) and K159 (the lift doors' code and notes), given to this project by its author on 2026-10-24 | K166: the **finding and the rule with its thresholds**, not the code - a room group whose art reaches above y -32,768 lies in the `.TRG` a multiple of 16,384 too low (RICH2's group 61); per room group the room's classic corners looked for in the group at k * 16,384, k -2..2, within 4 units on every axis, the best shift taken when not 0, with 16 hits or more and twice the hits of 0; the shift per group, a shared corner keeping its place in the other group; a world y wider than int16; and the four tests, written again against this project's structures. This project's own: the shift kept per group and added by every reader instead of copied corners, the draw moving the group by its shift, the distinct corners, the hash cells, the cells' read-back below -32,768, the log lines and the probe. K159: the **condition**, as its code has it - a trigger's timer not written into a lift door that holds all its code bits when the timer is negative, the hit not heavy and the trigger no switch, heavy switch, antipad, antitrigger or heavy antitrigger; the pure function and its checks are this project's own. Origin ledger, entries 481 and 482. |
 | `TOMB5 Code/TOMB5/game/spotcam_math.h` and its use in `game/spotcam.cpp` | `games/tr5/src/game/spotcam.cpp` (`CalculateSpotCams`, its SNAPBACK branch) and `games/tr5/glue/hostglue_input5.cpp` (the copy handed over on 2026-10-14) | The **cause and the rules**, re-derived, no code: a skipped flyby ends a SNAPBACK sequence while the frame still stands at the camera before the last, so the last camera's own place and room are tested; and the census rule for the sequences that end short. The form and the words are this project's own. Origin ledger, entry 227. |
 | `TOMB5 Code/TOMB5/specific/hd/hd_trl.cpp/.h` | its porting notes for TR4 and its measurement of the faces | The **layout** of a face's `.TRL` track file and the deform of a face by the joints such a file moves (a frame's matrix times the inverse of the bind's), both found by TROne on the data files and measured again here on the installation's own files (`LipsTest`); which column drives which joint is read out of the face's own `.TRM`. Origin ledger, entries 10 and 34. |
 | `TOMB5 Code/TOMB5/game/interpolate_math.h`, `InterpRootFlip` | its frame blend in `games/tr5/src/game/draw.cpp`, read for comparison | The **approach**, re-derived, no code: the previous frame expressed in the current one before the blend. TROne blends whole node matrices; this engine blends Euler angles and a separate offset, so that step is done by hand, two signs for half a turn. Not on the HD path, so not in the origin ledger: `MODIFICATIONS.md`, "Lara facing the wrong way for one tick in the jump twists: the early half turn". |
@@ -4613,6 +4614,41 @@ carries the tables.
     1,604 pixels of the pane) and a pair whose host's box shares a face with the group's
     own (RICH2's shaft: 15,751 pixels with no art at all from the lift car's roof; JOBY3:
     a cloth cut through). DATA: the census of the fifteen levels' pairs.
+481. **A room group stored off its height** (`specific/hd/hd_scan.h`, `HDYShiftCount`,
+    `HDYShiftScan`, `HDYShiftPick`, `HDYShiftClamp16`, `HDYShiftDropClamped`,
+    `HDYShiftApply`, `HDYShiftGroupLine`,
+    `HDYShiftLevelLine`; `specific/hd/hd_level.cpp`, `BuildYShiftRooms`,
+    `ReportYShift`; `specific/hd/hd_render.cpp`, `GroupYShift`, `GroupRow`,
+    `CellAxisOf`, `HDRenderSetYShiftRooms`, `HDRenderYShiftOf`, `HDRenderGroupYShift`
+    and every reader of a corner's y; `hd_render.h`; `specific/hd/hd_vis.cpp/.h` and
+    `hd_gloss_seed.h`, the shift as a parameter; RoomProbe's `-yshiftscan`,
+    `-yshiftdump`, `-yshift`; ModernTest's `yshift_rule`) - on the visibility path the
+    level build reads every room group's y shift out of its classic room and every
+    reader of a corner's y reads the world y; the group is drawn moved by its shift.
+    THIRD: TROne (Copyright 2026 Todesengel, GPLv3), its round K166, `trgyshift.h` and
+    `test_trgyshift.cpp` with its notes on the shaft (the handover of 2026-10-24) - the
+    finding (RICH2's group 61 stored 16,384 too low) and the rule with every threshold
+    (k * 16,384 for k -2..2, 4 units, 16 hits, twice the hits of 0, per group), and its
+    four tests, credited, written again against this project's structures. OWN: the code,
+    the shift kept per group and added by every reader rather than copied corners (the
+    vendored reader's y stays int16), the draw moving the group by its shift, the
+    distinct corners and the 8-unit hash cells, the cells' read-back below -32,768, the
+    test of twice as many and of the tolerance, the log lines and the probe; and the
+    clamp: in a group with a shift a triangle whose three corners sit at the stored
+    -32,768 is dropped (`clamped_dropped=` in the log line, 29,272 in RICH2's group 61).
+    TROne keeps those triangles and so a flat plate at -49,152 over the shaft; this
+    project does not, because they are art above the storable range collapsed onto the
+    int16 floor, not art of its own, and the HD shaft has no such top - it goes on
+    higher. DATA: the census of the fifteen levels (one group shifted, one near miss).
+482. **A lift door's delay kept while its pad is held** (`game/lift_door_rule.h`,
+    `LiftDoorKeepsTimer`; `game/control.cpp`, `_TestTriggers`; ModernTest's
+    `lift_door_rule`) - a trigger's timer is not written into a lift door that holds all
+    its code bits when the timer is negative, the hit is not heavy and the trigger is no
+    switch, heavy switch, antipad, antitrigger or heavy antitrigger. THIRD: TROne
+    (Copyright 2026 Todesengel, GPLv3), its round K159, the lift doors' code and notes
+    (the handover of 2026-10-24) - the condition, credited, unchanged. OWN: the pure
+    function, the check that its copy of the trigger types agrees with the engine's, and
+    the 14 checks. Not on the HD path: it is the trigger code's, in both looks.
 
 ## Credited, but not contained here
 

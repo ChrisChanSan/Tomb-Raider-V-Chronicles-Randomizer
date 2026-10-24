@@ -33318,6 +33318,170 @@ what the scans take), `31b30f93` (the flipmap pair dropping what either state ca
 build measured above), `20d3f3cf` (back to what every state carries, with each state's
 covered test and the probe's `twin_covered=`) and this record.
 
+### A room group stored too low is drawn at its world height (#243)
+2026-10-24
+
+**What.** A `.TRG` corner holds its y as an int16, absolute; a room group whose art
+reaches above y -32,768 is held in the file a multiple of 16,384 too low, the corners that
+still do not fit clamped at -32,768. On the visibility path (`hd_vis` 1) the level build
+now reads every room group's shift out of its classic room before anything reads the
+`.TRG` (`BuildYShiftRooms` in `hd_level.cpp` hands the rooms' corners in, `HDYShiftScan`
+in `hd_scan.h` counts them), and every reader of a corner's y reads the world y, the
+stored y plus its group's shift: the hull census, the three shell scans, the pair faces,
+the cuts, the stand and the places of the statics, the statics' covers (`hd_vis.cpp`), the
+mirrors, the glow, the gloss seed (`hd_gloss_seed.h`), the water marks and the groups'
+bounds and cells. The vertex buffer keeps the stored y, a short; the draw moves the group
+by its shift (`GroupRow` in `prepare`, with the room origin's y, the surface and the
+lights, which the shader compares with the vertex as it is held). A group's cells now read
+back below y -32,768 (`CellAxisOf`). With `-log` one `HDLOG yshift level= group= shift=
+corners= unshifted= moved=` line per shifted group and one `HDLOG yshift level= groups=
+of` line for the level. RoomProbe takes `-yshiftscan` (the count of every room group of a
+level, no device), `-yshiftdump <path>` (the corners and triangles of the groups with a
+shift or a near miss) and `-yshift 0|1` (on by default with `-vis 1`; 0 draws the file as
+stored), and its `-shellscan`, `-staticcover` and walk see the world height. Separately, a
+lift door keeps its running delay while its pad is held (`game/control.cpp`,
+`game/lift_door_rule.h`).
+
+**Why.** The play test of the build of #242: the flying texture that belongs to room 61
+was gone at the ground floor but had not come to room 61, and in parts the whole shaft was
+still doubled as the camera turned; a comparison picture of the car's roof showed how it
+must look - braced decks, turquoise anchor boxes, pulleys - and the floor textures there
+had always been missing, the very ones that had stood wrongly at the ground floor; every
+brace of the shaft may exist exactly once and never pop in. Then: above room 61 the
+classic shaft converges, the meshes making it look so, while the HD shaft goes on without
+them and looks wrong; the classic view is fine. The other project's handover (TROne, its
+rounds K166 and K159) named the cause: RICH2's group 61 lies in its `.TRG` 16,384 units
+too low. In the left lift the doors shut and never open while Lara stands on the pad
+before them, and an open door shuts when she steps back on.
+
+**Measured.** RoomProbe of `2bc4de2a` (the base) and of this round.
+
+*The census* (`-yshiftscan`, the fifteen levels, 2,616 room groups with art): one group
+takes a shift, RICH2's 61: of its room's 112 distinct classic corners 98 lie in the group
+16,384 lower and 30 where they stand (counted over the room's 143 listed corners, with the
+roomlets' repeats: 129 and 40, the handover's numbers); its 326,326 corners move. One more
+group has 8 hits or more at a shift other than 0: RICH2's group 3, 39 at 0 and 39 at
+16,384 higher - a tie, which keeps the stored y (its art is tall, stacked modules up to
+the clamp). Every other group of every level has no hit but at 0.
+
+*Group 61* (284,006 triangles, stored y -32,768..-7,679): at its world height it is the
+machine room in room 61's box (48,905 triangles, 15,103 more shared with the boxes of the
+parked car 39 and of 40), the X-braced decks with the anchor boxes and the pulleys on the
+cars' roof plane -26,112 (13,692 triangles between -26,624 and -26,113), the cables down
+into the cars (632), and above the machine room's ceiling the shaft going on for 18,000
+units (2,957 to 7,446 triangles every 512 units over the shaft's footprint, a module of
+two shaft floors repeated: 79.6 % of its corners have a twin 10,240 units off), topped by
+the clamped corners: 34,066 of them, 29,272 triangles with all three, 18,324 of those with
+an area, a plate over the whole shaft at -49,152. As stored, 52,809, 51,531 and 47,787 of
+its triangles stood in rooms 62, 63 and 64; at the world height none. The 30 unshifted
+hits lie at classic y -29,696 and -26,112, each found at -16,384 as well, on 40 of the
+group's 26,719 connected pieces, tower pieces: no piece of their own.
+
+*The scans of RICH2* (the engine's lines through RoomProbe's build, equal to the twin's on
+all fifteen levels; no other level's line changes):
+
+| | Base | Head |
+|---|---|---|
+| shell, group 61 | in 62, 63, 64: 36,803, 34,870, 47,136 dropped; in 35, 37, 38 refused touch (7,300, 1,867, 1,970); rest 6,671, air 321 | no line |
+| shell, level | groups=3 pairs=5 dropped=121,485 rest=7,027 air=321 | groups=2 pairs=2 dropped=2,676 rest=356 air=0 |
+| hull, group 61 | air_tris=51,475 host_art=36,285 hull=1 behind=112,064 shell=125,801 | no line: no art in unlinked air |
+| hull, group 142 | host_art=8 of 9 | 9 of 9 |
+| unlinked, group 61 | in 33, 39, 62, 63, 64, 107: 72, 728, 102, 40, 20, 145 | in 39: 4,504 |
+| static 49 of room 61 (the converging mesh, box -39,415..-31,232) | classic (468 of 14,784 cells) | art (1,465) |
+| statics 47 and 43 of room 61 | art (20 of 176, 2 of 12 cells) | art (66 of 176, 8 to 12 of 12) |
+
+*The views*, #242's 49 and five more (the car's roof looking up the shaft, the deck beside
+the anchor boxes, the machine room's floor looking up, room 63 looking up at the cars, and
+the play test's eye in room 64 at the braces' pop-in), at `hd_air` 1 with the hulls of
+each build left out of the guests (26, 61 and 142 at the base; 26 and 142 at the head,
+where 61 is none). The ties of group 61 (its art pushed by 1/2048 of its distance either
+way, the pixels that change) fall from 8,048 to 159, 8,034 to 26, 11,822 to 493, 3,072 to
+40, 8,887 to 29, 3,137 to 70, 8,564 to 60 and 9,875 to 18 with the eye in room 61 (3,544
+to 217, 6,846 to 33 and 2,709 to 222 at the three new views there), from 1,089 to 25, 350
+to 0, 239 to 0, 1,103 to 28 and 41 to 0 with the eye below, from 600 to 94, 7,188 to 0,
+187 to 12 and 14 to 0 beside and in the cars, and from 535 to 2 at the pop-in. With the
+eye in room 64 at the pop-in group 61 now adds 4,773 pixels, the top of the shaft that
+only it holds, where it added 65,941. The deck view shows what the comparison picture
+shows: the X-braced decks, the anchor boxes with their cables, the pulleys and the wall
+lamp; looking up from the roof the shaft rises with its lamps where a flat dark top and
+the classic converging mesh stood. The machine room is brighter than it was: the upper
+half of the view up from its floor has a mean luma of 35.7 of 255 at the head, 6.7 at the
+base; the comparison picture from a similar eye 22.1. The fight (the pixels that change
+with the eye one unit along x) rises where the shaft above is in sight, by up to 36,903
+pixels (the view up from the machine room's floor), the far lattice aliasing; the clear
+pixels fall by up to 23,396. The views that do not list 61 change only where the gloss
+seed now counts the decks on the machine room's floor: page 12042 becomes a metal page of
+the seed (a build with the seed reading the stored y draws all 20 of them as the base
+does). The shift off (`-yshift 0`) draws all 54 views as the base does.
+
+*The lift door.* The condition, case by case, in ModernTest (14 checks): a held pad with a
+delay and all code bits keeps the timer; without all code bits, with a positive or a zero
+timer, a heavy hit, a switch, a heavy switch, an antipad, an antitrigger or a heavy
+antitrigger, or another object, the timer is set; the byte 253 is the delay of 3. Not
+played.
+
+**The rule.** Per room group g (room g's; the sky's groups have no room) the distinct
+classic corners of room g are looked for among the group's corners at each shift k *
+16,384, k = -2..2: a corner counts at a shift when a group corner lies within 4 units of
+(x, y - shift, z) on every axis, x and z room local on both sides. The best shift is taken
+when it is not 0, has 16 hits or more and at least twice the hits of shift 0; otherwise
+the group's shift is 0. The world y of every corner of the group is its stored y plus the
+shift; a corner another group names keeps its stored y there. The rule and its thresholds
+are TROne's (`THIRD-PARTY.md`, entry 481). The lift door: a trigger's timer is not written
+into a lift door (`LIFT_DOORS1` to `LIFT_DOORS2`) that holds all its code bits when the
+timer is negative, the hit is not heavy and the trigger is no switch, heavy switch,
+antipad, antitrigger or heavy antitrigger (entry 482).
+
+**Decisions.** The shift is kept per group and added wherever a corner's y is read, not
+made by copying the group's corners as TROne does: the vendored reader's y stays an int16
+(its code is unchanged), so a copy could not hold -49,152, and the per-group shift needs
+no second vertex array; a reader that compares a group's corners only with each other (a
+stacked copy's key, a flow's height span, the coat of a flow range) needs none. The vertex
+buffer holds the stored y and the group is drawn moved by its shift; a group with a shift
+and a water sheet of its own would need the sheet drawn unmoved, which none of the fifteen
+levels has. The shift is read on the visibility path only, like the shells: with `hd_vis`
+0 nothing is handed in, so `hd_build` 0 and `hd_vis` 0 are the base's by construction;
+`hd_marble` 0 and `hd_fog` 0 touch nothing of this round and differ from the base on the
+visibility path by the shift alone. Whole group, not per band or per piece: the unshifted
+hits have no piece of their own (above). The shaft findings of #238, #240 and #242 for
+RICH2 described this shift: the second shell of 61 in 62 to 64, its rest and its air, the
+cage at the shaft's bottom, the frame over the fallen car, the bare car roofs and the
+pop-in were its art 16 sectors low. Their rules stand and still act on RICH2 at the world
+height: #240's census finds no hull in 61 (26 and 142 stay hulls), #242's scans take 26 in
+28 and 57 in 62 (864 and 1,812 triangles, and 356 by the rest) and refuse 134 in 137 and
+136 and 79 in 66 as before; nothing of 61 is asked any more. The gloss seed reads the
+world y too, and with it page 12042 shines across the level: it is the seed's own rule
+seeing the decks on the floor they stand on. The lift door's commit changes the classic
+path by design, in both looks: the condition is the trigger code's, not the renderer's.
+
+**Checked.** The engine's `HDLOG shell` and `HDLOG yshift` lines through RoomProbe's build
+equal the twins' (`-shellscan`, `-yshiftscan`) on all fifteen levels; the level's build
+hash of the other fourteen is the base's at `-vis 1`, and RICH2's at `-vis 0` and with
+`-yshift 0`. Round 236's parity sets (the six classic views, the six HD views, the census
+eyes and the fifteen parity cameras at `hd_water` 0 and 1): 72 of 72 identical. The 131
+room-centre views at `-vis 1`: 118 of 131 identical, the 13 changed RICH2's: six list 61,
+seven change by the gloss seed alone (drawn with the seed reading the stored y they are
+the base's). No classic path file changed in the HD commits, and no line asking
+`g_level_active`, `HDEnabled()` or `HDDrawn()` was edited. ModernTest 16,754 checks at the
+base and 16,791 at the head, MenuTest 44,931, InterpTest 754, LipsTest 299 with the `.OBJ`
+folder and 272 without, 0 failed. Not played.
+
+**Left.** The machine room and the shaft above it are brighter than in the comparison
+picture (above): TROne names the same and suspects the shift is needed per band; the data
+here gives no band. The clamped corners stand as a plate at -49,152, 18,000 units up;
+their true height is not in the file. Group 61's ties do not reach 0 everywhere: 25 and 28
+pixels from room 63, 3 to 493 from room 61; a ray cast puts the 25 and 28 on its art far
+up the shaft or on the plane -26,112 its floor shares with the rooms beneath (the cast
+cannot tell which), and 1 to 4 of them tie with room 35's or 142's art as well. The fight
+rises where the shaft above is in sight. Room 39 (the parked car) is still not drawn from
+61. A group with a shift and water of its own would draw its water sheet moved; none has
+one. RICH2's group 3 reaches the clamp as well (685 corners) and keeps its stored y.
+
+**Commits.** `857c9308` (RoomProbe's count and the rule in `hd_scan.h`), `3c86031b` (the
+shift in the level build and the draw, the log lines, RoomProbe's `-yshift` and the twins,
+ModernTest's checks), `4489c53b` (the lift door), `ea3093ef` (a group's cells read back
+below y -32,768) and this record.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -33579,3 +33743,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #240 | A second shell is never a guest of the visibility walk (#240) |
 | #241 | Beta 3.0's pictures in the README, and three words (#241) |
 | #242 | A room's second shell is left out at the level build (#242) |
+| #243 | A room group stored too low is drawn at its world height (#243) |

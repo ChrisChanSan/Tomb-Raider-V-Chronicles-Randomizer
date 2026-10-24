@@ -2625,6 +2625,636 @@ namespace
 		}
 	}
 
+	/* The second shells (HDShellRoom in hd_render.h), found before the
+	 * groups are filled and left out of the fill for good: `g_shell_drop`
+	 * marks a dropped triangle by its first index into the .TRG's index
+	 * list, empty when no scan ran; `g_shell_lines` is what the log and
+	 * RoomProbe print, `g_shell_group` the triangles each group lost. */
+	const HDShellRoom* g_shell_rooms = 0;
+	int g_shell_room_count = 0;
+	std::vector<unsigned char> g_shell_drop;
+	std::vector<HDShellLine> g_shell_lines;
+	std::vector<int> g_shell_group;
+	int g_shell_counts[6] = { 0, 0, 0, 0, 0, 0 };
+
+	/* The rule's numbers. A triangle stands where its centroid does; a
+	 * group's own box is widened by 64 before its art counts as standing
+	 * outside it, a foreign box by 16. Covered: in the plane of a triangle
+	 * of the host's art - the two unit normals within 0.98 of each other
+	 * either way round, the centroid within 16 of the plane and of that
+	 * triangle's box. A pair is a second shell with 200 covered triangles,
+	 * a fifth of the pair or more, and fewer than half of them the host's
+	 * very corners (those draw the same depth and never tie). The rest
+	 * is asked within 512 of a host's box in x and z and 64 in y, the open
+	 * air 32 off a square's ceiling and floor. A group flagged 0x40000 in
+	 * the .TRG is art meant to reach past its room and is never asked. */
+	const float kShellOwn = 64.0f;
+	const float kShellForeign = 16.0f;
+	const float kShellPlane = 16.0f;
+	const float kShellDot = 0.98f;
+	const float kShellRestXZ = 512.0f;
+	const float kShellRestY = 64.0f;
+	const float kShellAirGap = 32.0f;
+	const float kShellCell = 256.0f;
+	const int kShellCovered = 200;
+	const unsigned int kShellFlagReach = 0x40000;
+
+	struct ShellHostTri
+	{
+		float v0[3], n[3], lo[3], hi[3];
+	};
+
+	/* A host's art for the covered test: its triangles in 256-unit world
+	 * cells, each in every cell its widened box meets, so that the test
+	 * asks one cell - a shaft wall holds ten thousand triangles in one
+	 * plane, and asking them all per triangle would be quadratic - and its
+	 * corner triples, sorted, for the exact test. */
+	struct ShellHost
+	{
+		bool made = false;
+		std::vector<ShellHostTri> tris;
+		std::unordered_map<long long, std::vector<int> > cells;
+		std::vector<std::array<int, 9> > corners;
+	};
+
+	struct ShellTri
+	{
+		unsigned int first;
+		float c[3], n[3];
+		bool good;		// a normal: not a degenerate triangle
+		bool out64;		// outside the own box widened by kShellOwn
+		int foreign;		// foreign boxes, widened, holding the centroid
+		int host;		// the one, when foreign is 1
+		bool covered, exact;
+		std::array<int, 9> key;
+	};
+
+	long long ShellCellKey(int x, int y, int z)
+	{
+		return ((long long)(x + 1048576) << 42) |
+			((long long)(y + 1048576) << 21) | (long long)(z + 1048576);
+	}
+
+	int ShellCellOf(float v)
+	{
+		return (int)floorf(v / kShellCell);
+	}
+
+	template <typename F>
+	void ShellEachTri(const trf::remaster::TrgGroup& group, F f)
+	{
+		for (const trf::remaster::TrgPart& part : group.parts)
+			for (int pass = 0; pass < 3; pass++)
+			{
+				const trf::remaster::TrgPart::Pass& run = part.pass[pass];
+
+				for (unsigned int at = 0; at + 2 < run.count; at += 3)
+					f(run.start + at);
+			}
+	}
+
+	// A triangle's corners in world units; false past the lists' ends.
+	bool ShellCorners(const trf::remaster::Trg& trg, unsigned int first,
+		const HDShellRoom& room, float v[3][3])
+	{
+		if ((size_t)first + 2 >= trg.indices.size())
+			return false;
+
+		for (int c = 0; c < 3; c++)
+		{
+			const unsigned int i = trg.indices[first + c];
+
+			if (i >= trg.vertices.size())
+				return false;
+
+			const trf::remaster::TrgVertex& tv = trg.vertices[i];
+
+			v[c][0] = (float)tv.x + room.originX;
+			v[c][1] = (float)tv.y;
+			v[c][2] = (float)tv.z + room.originZ;
+		}
+
+		return true;
+	}
+
+	bool ShellNormal(const float v[3][3], float* n)
+	{
+		const float a[3] = { v[1][0] - v[0][0], v[1][1] - v[0][1],
+			v[1][2] - v[0][2] };
+		const float b[3] = { v[2][0] - v[0][0], v[2][1] - v[0][1],
+			v[2][2] - v[0][2] };
+
+		n[0] = a[1] * b[2] - a[2] * b[1];
+		n[1] = a[2] * b[0] - a[0] * b[2];
+		n[2] = a[0] * b[1] - a[1] * b[0];
+
+		const float l = sqrtf(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
+
+		if (!(l > 1e-6f))
+			return false;
+
+		n[0] /= l;
+		n[1] /= l;
+		n[2] /= l;
+		return true;
+	}
+
+	// The three corners rounded and sorted: the same triangle, any order.
+	std::array<int, 9> ShellKey(const float v[3][3])
+	{
+		std::array<int, 3> p[3];
+		std::array<int, 9> k;
+
+		for (int c = 0; c < 3; c++)
+			for (int a = 0; a < 3; a++)
+				p[c][a] = (int)floorf(v[c][a] + 0.5f);
+
+		std::sort(p, p + 3);
+
+		for (int c = 0; c < 3; c++)
+			for (int a = 0; a < 3; a++)
+				k[(size_t)(c * 3 + a)] = p[c][a];
+
+		return k;
+	}
+
+	bool ShellIn(const HDShellRoom& r, const float* c, float wx, float wy,
+		float wz)
+	{
+		return c[0] >= r.mins[0] - wx && c[0] <= r.maxs[0] + wx &&
+			c[1] >= r.mins[1] - wy && c[1] <= r.maxs[1] + wy &&
+			c[2] >= r.mins[2] - wz && c[2] <= r.maxs[2] + wz;
+	}
+
+	/* Whether two rooms' boxes share a face, or more: in two axes their
+	 * spans overlap by more than kShellForeign, in the third they meet
+	 * within it. Boxes meeting along an edge or a corner only do not. */
+	bool ShellTouch(const HDShellRoom& a, const HDShellRoom& b)
+	{
+		int overlap = 0;
+
+		for (int k = 0; k < 3; k++)
+		{
+			const float lo = a.mins[k] > b.mins[k] ? a.mins[k] : b.mins[k];
+			const float hi = a.maxs[k] < b.maxs[k] ? a.maxs[k] : b.maxs[k];
+
+			if (hi - lo < -kShellForeign)
+				return false;
+
+			overlap += hi - lo > kShellForeign ? 1 : 0;
+		}
+
+		return overlap >= 2;
+	}
+
+	void ShellMakeHost(const trf::remaster::Trg& trg, int h, ShellHost& out)
+	{
+		out.made = true;
+
+		ShellEachTri(trg.groups[(size_t)h], [&](unsigned int first)
+		{
+			float v[3][3];
+			ShellHostTri t;
+
+			if (!ShellCorners(trg, first, g_shell_rooms[h], v))
+				return;
+
+			out.corners.push_back(ShellKey(v));
+
+			if (!ShellNormal(v, t.n))
+				return;
+
+			for (int a = 0; a < 3; a++)
+			{
+				const float lo = v[0][a] < v[1][a] ? v[0][a] : v[1][a];
+				const float hi = v[0][a] > v[1][a] ? v[0][a] : v[1][a];
+
+				t.v0[a] = v[0][a];
+				t.lo[a] = (lo < v[2][a] ? lo : v[2][a]) - kShellPlane;
+				t.hi[a] = (hi > v[2][a] ? hi : v[2][a]) + kShellPlane;
+			}
+
+			const int at = (int)out.tris.size();
+
+			out.tris.push_back(t);
+
+			for (int x = ShellCellOf(t.lo[0]); x <= ShellCellOf(t.hi[0]); x++)
+				for (int y = ShellCellOf(t.lo[1]); y <= ShellCellOf(t.hi[1]);
+					y++)
+					for (int z = ShellCellOf(t.lo[2]);
+						z <= ShellCellOf(t.hi[2]); z++)
+						out.cells[ShellCellKey(x, y, z)].push_back(at);
+		});
+
+		std::sort(out.corners.begin(), out.corners.end());
+	}
+
+	bool ShellCovered(const ShellHost& h, const float* c, const float* n)
+	{
+		const auto it = h.cells.find(ShellCellKey(ShellCellOf(c[0]),
+			ShellCellOf(c[1]), ShellCellOf(c[2])));
+
+		if (it == h.cells.end())
+			return false;
+
+		for (int k : it->second)
+		{
+			const ShellHostTri& t = h.tris[(size_t)k];
+
+			if (c[0] < t.lo[0] || c[0] > t.hi[0] || c[1] < t.lo[1] ||
+				c[1] > t.hi[1] || c[2] < t.lo[2] || c[2] > t.hi[2])
+				continue;
+
+			const float dot = n[0] * t.n[0] + n[1] * t.n[1] + n[2] * t.n[2];
+
+			if (fabsf(dot) < kShellDot)
+				continue;
+
+			const float d = (c[0] - t.v0[0]) * t.n[0] +
+				(c[1] - t.v0[1]) * t.n[1] + (c[2] - t.v0[2]) * t.n[2];
+
+			if (fabsf(d) <= kShellPlane)
+				return true;
+		}
+
+		return false;
+	}
+
+	// Whether a point stands in a room's open air: on a square with air,
+	// more than kShellAirGap below its ceiling and above its floor.
+	bool ShellOpen(const HDShellRoom& r, const float* c)
+	{
+		if (!r.air || r.nx <= 0 || r.nz <= 0)
+			return false;
+
+		const float lx = c[0] - r.originX, lz = c[2] - r.originZ;
+
+		if (lx < 0.0f || lz < 0.0f)
+			return false;
+
+		const int i = (int)(lx / 1024.0f), j = (int)(lz / 1024.0f);
+
+		if (i >= r.nx || j >= r.nz)
+			return false;
+
+		const float* s = r.air + ((size_t)i * r.nz + j) * 2;
+
+		return s[0] < HD_AIR_NONE && c[1] > s[0] + kShellAirGap &&
+			c[1] < s[1] - kShellAirGap;
+	}
+
+	/* Whether a pair stands behind a mirror of the group's room, as
+	 * FindMirrors finds one before the reflection is asked (that needs the
+	 * built groups): a wall of the room's inside, one sector in from the
+	 * grid's edge, with a pane - a glass triangle of the group, additive or
+	 * a decal's alpha, its corners within 2 units of the plane -, at least
+	 * 100 of the group's triangles behind it reaching 1,024 units or more
+	 * past it, and nine in ten of the pair's triangles behind it too. */
+	bool ShellMirrored(const trf::remaster::Trg& trg, int g,
+		const HDShellRoom& own, const std::vector<const float*>& pair)
+	{
+		if (pair.empty() || own.nx < 3 || own.nz < 3)
+			return false;
+
+		const float plane[4] = { own.originX + 1024.0f,
+			own.originX + (float)((own.nx - 1) * 1024), own.originZ + 1024.0f,
+			own.originZ + (float)((own.nz - 1) * 1024) };
+		int pane[4] = { 0, 0, 0, 0 }, behind[4] = { 0, 0, 0, 0 };
+		float depth[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+
+		for (const trf::remaster::TrgPart& part : trg.groups[(size_t)g].parts)
+			for (int pass = 0; pass < 3; pass++)
+			{
+				const trf::remaster::TrgPart::Pass& run = part.pass[pass];
+				const bool glass = pass == 2 ||
+					(pass == 1 && (part.material & 0xFFu) == 14);
+
+				for (unsigned int at = 0; at + 2 < run.count; at += 3)
+				{
+					float v[3][3];
+
+					if (!ShellCorners(trg, run.start + at, own, v))
+						continue;
+
+					for (int w = 0; w < 4; w++)
+					{
+						const int a = w < 2 ? 0 : 2;
+						const float side = (w & 1) ? 1.0f : -1.0f;
+						const float d = ((v[0][a] + v[1][a] + v[2][a]) / 3.0f -
+							plane[w]) * side;
+
+						if (glass && fabsf(v[0][a] - plane[w]) <= 2.0f &&
+							fabsf(v[1][a] - plane[w]) <= 2.0f &&
+							fabsf(v[2][a] - plane[w]) <= 2.0f)
+							pane[w]++;
+
+						if (d <= 16.0f)
+							continue;
+
+						behind[w]++;
+
+						if (d > depth[w])
+							depth[w] = d;
+					}
+				}
+			}
+
+		for (int w = 0; w < 4; w++)
+		{
+			const int a = w < 2 ? 0 : 2;
+			const float side = (w & 1) ? 1.0f : -1.0f;
+			size_t back = 0;
+
+			if (!pane[w] || behind[w] < 100 || depth[w] < 1024.0f)
+				continue;
+
+			for (const float* c : pair)
+				back += (c[a] - plane[w]) * side > 16.0f ? 1 : 0;
+
+			if (back * 10 >= pair.size() * 9)
+				return true;
+		}
+
+		return false;
+	}
+
+	void ShellDrop(unsigned int first)
+	{
+		if ((size_t)first < g_shell_drop.size())
+			g_shell_drop[first] = 1;
+	}
+
+	/* The three scans, group by group (HDShellRoom in hd_render.h has the
+	 * rule): the pairs, then for a group with a second-shell pair the rest
+	 * by its hosts and the open air of the rooms in their column. A pair
+	 * of a flipmap room keeps what not every state of its host carries. */
+	void MarkSecondShells(const trf::remaster::Trg& trg)
+	{
+		g_shell_drop.clear();
+		g_shell_lines.clear();
+		g_shell_group.assign(trg.groups.size(), 0);
+
+		for (int k = 0; k < 6; k++)
+			g_shell_counts[k] = 0;
+
+		if (!g_shell_rooms || g_shell_room_count <= 0)
+			return;
+
+		const int n = g_shell_room_count;
+		const int groups = n < (int)trg.groups.size() ? n
+			: (int)trg.groups.size();
+		std::vector<int> tris((size_t)n, 0);
+		std::vector<ShellHost> hosts((size_t)n);
+
+		g_shell_drop.assign(trg.indices.size(), 0);
+
+		for (int r = 0; r < groups; r++)
+			ShellEachTri(trg.groups[(size_t)r],
+				[&](unsigned int) { tris[(size_t)r]++; });
+
+		const auto host_of = [&](int h) -> ShellHost&
+		{
+			if (!hosts[(size_t)h].made)
+				ShellMakeHost(trg, h, hosts[(size_t)h]);
+
+			return hosts[(size_t)h];
+		};
+
+		for (int g = 0; g < groups; g++)
+		{
+			const HDShellRoom& own = g_shell_rooms[g];
+
+			if (trg.groups[(size_t)g].flags & kShellFlagReach)
+			{
+				g_shell_counts[5]++;
+				continue;
+			}
+
+			if (!tris[(size_t)g])
+				continue;
+
+			std::vector<ShellTri> out;
+
+			ShellEachTri(trg.groups[(size_t)g], [&](unsigned int first)
+			{
+				float v[3][3];
+				ShellTri t;
+
+				if (!ShellCorners(trg, first, own, v))
+					return;
+
+				for (int a = 0; a < 3; a++)
+					t.c[a] = (v[0][a] + v[1][a] + v[2][a]) / 3.0f;
+
+				if (ShellIn(own, t.c, 0.0f, 0.0f, 0.0f))
+					return;
+
+				t.first = first;
+				t.good = ShellNormal(v, t.n);
+				t.out64 = !ShellIn(own, t.c, kShellOwn, kShellOwn,
+					kShellOwn);
+				t.foreign = 0;
+				t.host = -1;
+				t.covered = t.exact = false;
+				t.key = ShellKey(v);
+
+				for (int h = 0; h < n && t.out64; h++)
+					if (h != g && ShellIn(g_shell_rooms[h], t.c,
+						kShellForeign, kShellForeign, kShellForeign))
+					{
+						t.foreign++;
+						t.host = h;
+					}
+
+				if (t.foreign == 1 && t.host < groups &&
+					tris[(size_t)t.host] > 0)
+				{
+					const ShellHost& host = host_of(t.host);
+
+					t.covered = t.good && ShellCovered(host, t.c, t.n);
+					t.exact = std::binary_search(host.corners.begin(),
+						host.corners.end(), t.key);
+				}
+
+				out.push_back(t);
+			});
+
+			// The pairs, in host order: triangles, covered, exact.
+			std::map<int, std::array<int, 3> > pairs;
+
+			for (const ShellTri& t : out)
+				if (t.out64 && t.foreign == 1 && t.host < groups &&
+					tris[(size_t)t.host] > 0)
+				{
+					std::array<int, 3>& p = pairs[t.host];
+
+					p[0]++;
+					p[1] += t.covered ? 1 : 0;
+					p[2] += t.exact ? 1 : 0;
+				}
+
+			std::vector<int> taken, asked;
+			std::vector<unsigned char> gone(out.size(), 0);
+
+			for (const auto& p : pairs)
+			{
+				const int h = p.first;
+				HDShellLine line;
+
+				line.group = g;
+				line.host = h;
+				line.tris = p.second[0];
+				line.covered = p.second[1];
+				line.exact = p.second[2];
+				line.dropped = 0;
+				line.rest = line.air = -1;
+				line.refused = HD_SHELL_TAKEN;
+
+				if (line.covered < kShellCovered)
+					continue;
+
+				asked.push_back(h);
+
+				if (line.covered * 5 < line.tris)
+					line.refused = HD_SHELL_FIFTH;
+				else if (line.exact * 2 >= line.covered)
+					line.refused = HD_SHELL_EXACT;
+				else
+				{
+					std::vector<const float*> pair;
+
+					for (const ShellTri& t : out)
+						if (t.out64 && t.foreign == 1 && t.host == h)
+							pair.push_back(t.c);
+
+					if (ShellMirrored(trg, g, own, pair))
+						line.refused = HD_SHELL_MIRROR;
+					else if (ShellTouch(own, g_shell_rooms[h]))
+						line.refused = HD_SHELL_TOUCH;
+					else if (own.twin >= 0 || g_shell_rooms[h].twin >= 0)
+						line.refused = HD_SHELL_FLIP;
+				}
+
+				const int twin = g_shell_rooms[h].twin;
+
+				for (size_t k = 0; k < out.size(); k++)
+				{
+					const ShellTri& t = out[k];
+
+					if (!t.out64 || t.foreign != 1 || t.host != h)
+						continue;
+
+					/* A flipmap room's pair: only what the host carries in
+					 * each of its states - its own art and its twin's. */
+					if (line.refused == HD_SHELL_FLIP && (!t.covered ||
+						(twin >= 0 && (twin >= groups ||
+						!tris[(size_t)twin] ||
+						!ShellCovered(host_of(twin), t.c, t.n)))))
+						continue;
+
+					if (line.refused != HD_SHELL_TAKEN &&
+						line.refused != HD_SHELL_FLIP)
+						continue;
+
+					gone[k] = 1;
+					line.dropped++;
+				}
+
+				if (line.refused == HD_SHELL_TAKEN)
+					taken.push_back(h);
+
+				g_shell_counts[2] += line.dropped;
+
+				g_shell_lines.push_back(line);
+			}
+
+			if (!taken.empty())
+			{
+				HDShellLine line;
+				std::vector<int> column;
+
+				line.group = g;
+				line.host = -1;
+				line.tris = line.covered = line.exact = line.dropped = 0;
+				line.refused = HD_SHELL_TAKEN;
+				line.rest = line.air = 0;
+				g_shell_counts[0]++;
+				g_shell_counts[1] += (int)taken.size();
+
+				// The rest: in no foreign box or in several, by a host.
+				for (size_t k = 0; k < out.size(); k++)
+				{
+					const ShellTri& t = out[k];
+
+					if (gone[k] || !t.out64 || t.foreign == 1 || !t.good)
+						continue;
+
+					for (int h : taken)
+						if (ShellIn(g_shell_rooms[h], t.c, kShellRestXZ,
+							kShellRestY, kShellRestXZ) &&
+							ShellCovered(host_of(h), t.c, t.n))
+						{
+							gone[k] = 1;
+							line.rest++;
+							break;
+						}
+				}
+
+				/* The open air: the rooms standing in the hosts' column -
+				 * the box's x and z inside a host's widened by
+				 * kShellRestXZ -, no host (no room of a pair line, taken
+				 * or refused), no flipmap room. */
+				for (int r = 0; r < n; r++)
+				{
+					const HDShellRoom& room = g_shell_rooms[r];
+
+					if (r == g || room.twin >= 0 || std::find(asked.begin(),
+						asked.end(), r) != asked.end())
+						continue;
+
+					for (int h : taken)
+					{
+						const HDShellRoom& hh = g_shell_rooms[h];
+
+						if (room.mins[0] >= hh.mins[0] - kShellRestXZ &&
+							room.maxs[0] <= hh.maxs[0] + kShellRestXZ &&
+							room.mins[2] >= hh.mins[2] - kShellRestXZ &&
+							room.maxs[2] <= hh.maxs[2] + kShellRestXZ)
+						{
+							column.push_back(r);
+							break;
+						}
+					}
+				}
+
+				for (size_t k = 0; k < out.size(); k++)
+				{
+					if (gone[k])
+						continue;
+
+					for (int r : column)
+						if (ShellOpen(g_shell_rooms[r], out[k].c))
+						{
+							gone[k] = 1;
+							line.air++;
+							break;
+						}
+				}
+
+				g_shell_counts[3] += line.rest;
+				g_shell_counts[4] += line.air;
+				g_shell_lines.push_back(line);
+			}
+
+			for (size_t k = 0; k < out.size(); k++)
+				if (gone[k])
+				{
+					ShellDrop(out[k].first);
+					g_shell_group[(size_t)g]++;
+				}
+		}
+	}
+
 	/* Marks the hulls before the groups are filled: the art of every group
 	 * in world cells, then per group the triangles AirHostsOf finds that no
 	 * entry's box holds, as the fill asks a box (by the centroid, or by its
@@ -5905,6 +6535,45 @@ int HDRenderGroupHullBehind(int group)
 	return g_groups[(size_t)group].hullBehind;
 }
 
+void HDRenderSetShellRooms(const HDShellRoom* rooms, int count)
+{
+	g_shell_rooms = count > 0 ? rooms : 0;
+	g_shell_room_count = count > 0 ? count : 0;
+}
+
+int HDRenderShellLines()
+{
+	return (int)g_shell_lines.size();
+}
+
+bool HDRenderShellLine(int index, HDShellLine* out)
+{
+	if (index < 0 || index >= (int)g_shell_lines.size())
+		return false;
+
+	*out = g_shell_lines[(size_t)index];
+	return true;
+}
+
+void HDRenderShellCounts(int* groups, int* pairs, int* dropped, int* rest,
+	int* air, int* flagged)
+{
+	*groups = g_shell_counts[0];
+	*pairs = g_shell_counts[1];
+	*dropped = g_shell_counts[2];
+	*rest = g_shell_counts[3];
+	*air = g_shell_counts[4];
+	*flagged = g_shell_counts[5];
+}
+
+int HDRenderGroupShellDropped(int group)
+{
+	if (group < 0 || group >= (int)g_shell_group.size())
+		return 0;
+
+	return g_shell_group[(size_t)group];
+}
+
 bool HDRenderAirPair(int index, int* group, int* host, int* tris)
 {
 	if (index < 0 || index >= (int)g_air_pairs.size())
@@ -7691,6 +8360,9 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 							v[c][2] = (float)tv.z;
 						}
 
+						if (!g_shell_drop.empty() && g_shell_drop[first])
+							continue;
+
 						bool cut = false;
 
 						for (size_t k = 0; k < group.cutAt.size() && !cut; k++)
@@ -8082,6 +8754,10 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					// A copy under a polished floor (marble_copies).
 					if (!marbleCopies.empty() &&
 						marbleCopies[part_at * 3 + (size_t)pass][at / 3])
+						continue;
+
+					// A second shell's triangle is not there at all.
+					if (!g_shell_drop.empty() && g_shell_drop[first])
 						continue;
 
 					/* Does this triangle stand in an opening? Asked first in
@@ -9532,6 +10208,8 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 
 	PageGloss(HDPageCachePageOfSlot(-1));
 
+	// The second shells, before anything else asks the art.
+	MarkSecondShells(trg);
 	// The hulls, asked of every group before any is filled (MarkAirHulls).
 	MarkAirHulls(trg);
 	// And the pair faces a larger face of the holder covers.

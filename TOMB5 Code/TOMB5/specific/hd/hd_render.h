@@ -2166,6 +2166,102 @@ void HDRenderSetCarryHosts(const unsigned char* sky, const short* twin,
 void HDRenderSetAirHulls(int on);
 bool HDRenderGroupHull(int group, int* air, int* covered);
 int HDRenderGroupHullBehind(int group);
+/* A room for the second-shell scans, in room order, the group's own room
+ * at the group's number.
+ *
+ * Some groups carry a second copy of other rooms' art: the top room of a
+ * lift shaft can hold the whole shaft once more - every floor's walls,
+ * lamps and panels over the floors' own art, the same walls tessellated
+ * otherwise, so that the two lie in one plane and fight for the depth -,
+ * and with it art no room has there: a braced frame across the shaft
+ * three floors down, cables through a lift car, a wall in its open door.
+ * The original draws a face with its own room only, so nothing of it is
+ * ever seen twice there. The build drops such art for good, before the
+ * groups are filled (MarkSecondShells in hd_render.cpp), in three scans
+ * over the rooms' groups, the sky's not asked:
+ *
+ *   the pairs  a group's triangles outside its own box widened by 64 and
+ *              inside exactly one other room's box widened by 16, a room
+ *              with art of its own (the host). Covered are those lying in
+ *              the plane of a triangle of the host's art: the two unit
+ *              normals within 0.98 either way round, the centroid within
+ *              16 of the plane and of that triangle's box widened by 16;
+ *              exact those whose rounded corners are a triangle of the
+ *              host's. With 200 covered, a fifth of the pair or more, and
+ *              exact under half of covered the pair is a second shell, and
+ *              every triangle of it drops.
+ *   the rest   of a group with such a pair, its triangles outside its box
+ *              widened by 64 in no other box or in several, within 512 of
+ *              a host's box in x and z and 64 in y, covered by that host.
+ *   the air    of the same group, its triangles outside its box in the
+ *              open air of a room standing in the hosts' column (its x and
+ *              z box inside a host's widened by 512), no room of a pair
+ *              line (taken or refused) and no flipmap room: on a square
+ *              with air, more than 32 below its ceiling and above its
+ *              floor.
+ *
+ * A triangle stands where its centroid does. A group the .TRG flags
+ * 0x40000 is art meant to reach past its room and is never asked. A pair
+ * of a flipmap room - its group or its host has a twin - drops only what
+ * the host carries in each of its states (covered by its art and by its
+ * twin's), since the art of one state is out of the world in the other.
+ * A pair standing behind a mirror of the group's room - a wall with a pane
+ * of glass and a room's worth of the group's art behind it, 1,024 units
+ * deep or more, as FindMirrors finds one - is the room's reflection, drawn
+ * there on purpose, and stays. So does a pair whose host's box shares a
+ * face with the group's own: the group's art there is the far side of the
+ * opening between the two rooms, which the walk shows only through the
+ * opening's classic rectangle while the art's opening is wider - the
+ * group's copy is what is seen past that rectangle.
+ * The rest of every group stays as it was, the hull push and the air with
+ * it.
+ *
+ * `mins` and `maxs` are the box of the room's classic vertices in world
+ * units (x and z with the origin added, y as stored), `originX` and
+ * `originZ` the origin, `twin` the flipmap twin or -1, and `air` two floats
+ * per floor square as HDRoomAir's (HDSectorAir), square (i, k) at
+ * (i * nz + k) * 2. Handed in before HDRenderLevelBegin, the pointer kept
+ * until the next call; without it nothing is scanned or dropped. */
+struct HDShellRoom
+{
+	float mins[3];
+	float maxs[3];
+	float originX, originZ;
+	int twin;
+	int nx, nz;
+	const float* air;
+};
+
+// Why a pair was not taken whole (HDShellLine::refused).
+#define HD_SHELL_TAKEN	0
+#define HD_SHELL_FIFTH	1	// covered under a fifth of the pair
+#define HD_SHELL_EXACT	2	// half of covered or more on the host's corners
+#define HD_SHELL_FLIP	3	// a flipmap room's: what every state carries
+#define HD_SHELL_MIRROR	4	// behind a mirror: the room's reflection
+#define HD_SHELL_TOUCH	5	// the host's box shares a face with the own
+
+/* One line of what the scans found: a pair with 200 covered triangles or
+ * more (`host` the room, `dropped` what went, `refused` why not all of it),
+ * or a group with a second-shell pair (`host` -1, `rest` and `air` what
+ * those two scans dropped of it). */
+struct HDShellLine
+{
+	int group, host;
+	int tris, covered, exact, dropped;
+	int refused;
+	int rest, air;
+};
+
+void HDRenderSetShellRooms(const HDShellRoom* rooms, int count);
+/* After the build: the lines, and the level's counts - groups with a
+ * second-shell pair, such pairs, triangles the pairs dropped, the rest,
+ * the air, the groups flagged and never asked. HDRenderGroupShellDropped
+ * is what a group lost in all. */
+int HDRenderShellLines();
+bool HDRenderShellLine(int index, HDShellLine* out);
+void HDRenderShellCounts(int* groups, int* pairs, int* dropped, int* rest,
+	int* air, int* flagged);
+int HDRenderGroupShellDropped(int group);
 /* How many pair faces the build found inside a larger face of a room their
  * room intrudes in (MarkCoveredFaces in hd_render.cpp), whose art is drawn
  * pushed back; 0 with the rooms' air off. */

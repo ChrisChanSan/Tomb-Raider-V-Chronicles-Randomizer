@@ -1013,6 +1013,9 @@
 
 #include <vector>
 #include <set>
+#include <unordered_map>
+#include <map>
+#include <array>
 
 #include "zlib.h"
 
@@ -4094,6 +4097,11 @@ static std::string g_survey;
  * HD_WINDOW_INTRUDING both draw the whole room - which is also the proof
  * that a level built with no list is unchanged. */
 static std::string g_roombox;
+/* -flipindex <n>: the walk with every room of flip index n swapped with its
+ * twin, as a trigger's FLIPMAP n swaps them (FlipMap, game\control.cpp):
+ * the rooms whose FlipNumber (header byte 53) is n and that have a twin go
+ * to -flip's list, named on a `-flipindex:` line. */
+static int g_flip_index = -1;
 static std::vector<HDRoomBox> g_boxes_built;
 static std::vector<HDRoomGrid> g_grids_built;
 static std::vector<HDSectorFloor> g_sectors_built;
@@ -6943,6 +6951,32 @@ static int RunWalk(const std::string& folder, const char* stem, int seed,
 
 		walkoff::ShutDoors(shut);
 		printf("-walkshut: %d door(s) shut\n", count);
+	}
+
+	// -flipindex: the rooms of that index join -flip's list.
+	if (g_flip_index >= 0)
+	{
+		Tr5Level level;
+		std::string error;
+		std::string named;
+
+		if (level.load(std::wstring(folder.begin(), folder.end()) + L"\\" +
+			std::wstring(stem, stem + strlen(stem)) + L".TRC", error))
+			for (int r = 0; r < level.roomCount(); r++)
+			{
+				unsigned word = 0;
+
+				if (level.rooms()[(size_t)r].altRoom < 0 ||
+					!level.headerField(r, 52, word, error) ||
+					(int)((word >> 8) & 0xFF) != g_flip_index)
+					continue;
+
+				walkoff::g_flip_rooms.push_back(r);
+				named += (named.empty() ? "" : ",") + std::to_string(r);
+			}
+
+		printf("-flipindex: %d rooms %s\n", g_flip_index,
+			named.empty() ? "none" : named.c_str());
 	}
 
 	/* -flip: FlipMap's three memcpy lines, after the doors are shut as the
@@ -17652,6 +17686,776 @@ static bool VisArg(int argc, char** argv, int* at)
 	return true;
 }
 
+/* -shellscan: the second shells of a level, found as the engine's level build
+ * finds them on the visibility path (hd_render.cpp, MarkSecondShells), out
+ * of the two files, with no device and no picture - a twin of that code over
+ * the classic level of -roombox: the rooms' vertex boxes out of the room
+ * blobs (probemarks), the flipmap twins and the squares' air (HDSectorAir)
+ * out of the .TRC. One `shell:` line per pair whose covered triangles reach
+ * the count (taken, or refused with the reason; a refused pair of a flipmap
+ * room names its twin and what the twin's art covers), one per group with
+ * the rest and the air it dropped, and one for the level. -shelldump <path>
+ * writes every triangle outside its own room's box as one line: group,
+ * first index, centroid, the foreign boxes, the host, covered and exact,
+ * and what the scans made of it (0 kept, 1 pair, 2 rest, 3 air). */
+static bool g_shell_scan = false;
+/* -shell 0|1: the build with the second-shell scans of the engine's level
+ * build (BuildShellRooms in hd_level.cpp, MarkSecondShells in
+ * hd_render.cpp) or without them; needs -roombox. On by default with -vis
+ * 1, as the engine scans on the visibility path only. One `shell` line per
+ * line the engine's HDLOG shell lines give, word for word but the prefix. */
+static int g_shell_option = -1;
+static std::string g_shell_dump;
+static std::set<int> g_shell_groups;
+
+namespace probeshell
+{
+	struct Room
+	{
+		float mins[3], maxs[3];		// world, the vertices' box
+		float ox, oz;
+		bool flip;
+		int twin;		// the flipmap twin, -1 for none
+		int tris;
+		int nx, nz;
+		std::vector<float> air;		// HDSectorAir per square
+	};
+
+	struct HostTri
+	{
+		float v0[3], n[3], lo[3], hi[3];
+	};
+
+	struct Host
+	{
+		bool made = false;
+		std::vector<HostTri> tris;
+		std::unordered_map<long long, std::vector<int> > cells;
+		std::vector<std::array<int, 9> > corners;
+	};
+
+	struct Cand
+	{
+		unsigned first;
+		float c[3], n[3];
+		bool good;		// a normal: not a degenerate triangle
+		bool out64;		// outside the own box widened by 64
+		int foreign;		// foreign boxes (widened by 16) holding it
+		int host;		// the one, when foreign is 1
+		int verdict;		// 0 kept, 1 pair, 2 rest, 3 air
+		bool covered, exact;
+		float v[3][3];
+	};
+
+	const float kOwn = 64.0f, kForeign = 16.0f, kPlane = 16.0f;
+	const float kDot = 0.98f, kRestXZ = 512.0f, kRestY = 64.0f;
+	const float kAirGap = 32.0f, kCell = 256.0f;
+	const int kCovered = 200;
+	const unsigned kFlagReach = 0x40000;
+
+	long long CellKey(int x, int y, int z)
+	{
+		return ((long long)(x + 1048576) << 42) |
+			((long long)(y + 1048576) << 21) | (long long)(z + 1048576);
+	}
+
+	int CellOf(float v)
+	{
+		return (int)floorf(v / kCell);
+	}
+
+	bool Corners(const trf::remaster::Trg& trg, unsigned first,
+		const Room& r, float v[3][3])
+	{
+		if (first + 2 >= trg.indices.size())
+			return false;
+
+		for (int c = 0; c < 3; c++)
+		{
+			const unsigned i = trg.indices[first + c];
+
+			if (i >= trg.vertices.size())
+				return false;
+
+			const trf::remaster::TrgVertex& tv = trg.vertices[i];
+
+			v[c][0] = (float)tv.x + r.ox;
+			v[c][1] = (float)tv.y;
+			v[c][2] = (float)tv.z + r.oz;
+		}
+
+		return true;
+	}
+
+	bool Normal(float v[3][3], float* n)
+	{
+		const float a[3] = { v[1][0] - v[0][0], v[1][1] - v[0][1],
+			v[1][2] - v[0][2] };
+		const float b[3] = { v[2][0] - v[0][0], v[2][1] - v[0][1],
+			v[2][2] - v[0][2] };
+
+		n[0] = a[1] * b[2] - a[2] * b[1];
+		n[1] = a[2] * b[0] - a[0] * b[2];
+		n[2] = a[0] * b[1] - a[1] * b[0];
+
+		const float l = sqrtf(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
+
+		if (!(l > 1e-6f))
+			return false;
+
+		n[0] /= l;
+		n[1] /= l;
+		n[2] /= l;
+		return true;
+	}
+
+	std::array<int, 9> Key(float v[3][3])
+	{
+		std::array<int, 3> p[3];
+
+		for (int c = 0; c < 3; c++)
+			for (int a = 0; a < 3; a++)
+				p[c][a] = (int)floorf(v[c][a] + 0.5f);
+
+		std::sort(p, p + 3);
+
+		std::array<int, 9> k;
+
+		for (int c = 0; c < 3; c++)
+			for (int a = 0; a < 3; a++)
+				k[(size_t)(c * 3 + a)] = p[c][a];
+
+		return k;
+	}
+
+	template <typename F> void EachTri(const trf::remaster::TrgGroup& g, F f)
+	{
+		for (const trf::remaster::TrgPart& part : g.parts)
+			for (int pass = 0; pass < 3; pass++)
+			{
+				const trf::remaster::TrgPart::Pass& run = part.pass[pass];
+
+				for (unsigned at = 0; at + 2 < run.count; at += 3)
+					f(run.start + at);
+			}
+	}
+
+	bool In(const Room& r, const float* c, float wx, float wy, float wz)
+	{
+		return c[0] >= r.mins[0] - wx && c[0] <= r.maxs[0] + wx &&
+			c[1] >= r.mins[1] - wy && c[1] <= r.maxs[1] + wy &&
+			c[2] >= r.mins[2] - wz && c[2] <= r.maxs[2] + wz;
+	}
+
+	// Whether two boxes share a face or more (ShellTouch in hd_render.cpp).
+	bool Touch(const Room& a, const Room& b)
+	{
+		int overlap = 0;
+
+		for (int k = 0; k < 3; k++)
+		{
+			const float lo = a.mins[k] > b.mins[k] ? a.mins[k] : b.mins[k];
+			const float hi = a.maxs[k] < b.maxs[k] ? a.maxs[k] : b.maxs[k];
+
+			if (hi - lo < -kForeign)
+				return false;
+
+			overlap += hi - lo > kForeign ? 1 : 0;
+		}
+
+		return overlap >= 2;
+	}
+
+	void MakeHost(const trf::remaster::Trg& trg, const std::vector<Room>& rooms,
+		int h, Host& out)
+	{
+		out.made = true;
+
+		EachTri(trg.groups[(size_t)h], [&](unsigned first)
+		{
+			float v[3][3];
+			HostTri t;
+
+			if (!Corners(trg, first, rooms[(size_t)h], v))
+				return;
+
+			out.corners.push_back(Key(v));
+
+			if (!Normal(v, t.n))
+				return;
+
+			for (int a = 0; a < 3; a++)
+			{
+				t.v0[a] = v[0][a];
+				t.lo[a] = (std::min)(v[0][a], (std::min)(v[1][a], v[2][a])) -
+					kPlane;
+				t.hi[a] = (std::max)(v[0][a], (std::max)(v[1][a], v[2][a])) +
+					kPlane;
+			}
+
+			const int at = (int)out.tris.size();
+
+			out.tris.push_back(t);
+
+			for (int x = CellOf(t.lo[0]); x <= CellOf(t.hi[0]); x++)
+				for (int y = CellOf(t.lo[1]); y <= CellOf(t.hi[1]); y++)
+					for (int z = CellOf(t.lo[2]); z <= CellOf(t.hi[2]); z++)
+						out.cells[CellKey(x, y, z)].push_back(at);
+		});
+
+		std::sort(out.corners.begin(), out.corners.end());
+	}
+
+	bool Covered(const Host& h, const float* c, const float* n)
+	{
+		const auto it = h.cells.find(CellKey(CellOf(c[0]), CellOf(c[1]),
+			CellOf(c[2])));
+
+		if (it == h.cells.end())
+			return false;
+
+		for (int k : it->second)
+		{
+			const HostTri& t = h.tris[(size_t)k];
+
+			if (c[0] < t.lo[0] || c[0] > t.hi[0] || c[1] < t.lo[1] ||
+				c[1] > t.hi[1] || c[2] < t.lo[2] || c[2] > t.hi[2])
+				continue;
+
+			const float dot = n[0] * t.n[0] + n[1] * t.n[1] + n[2] * t.n[2];
+
+			if (fabsf(dot) < kDot)
+				continue;
+
+			const float d = (c[0] - t.v0[0]) * t.n[0] +
+				(c[1] - t.v0[1]) * t.n[1] + (c[2] - t.v0[2]) * t.n[2];
+
+			if (fabsf(d) <= kPlane)
+				return true;
+		}
+
+		return false;
+	}
+
+	/* Whether a pair stands behind a mirror of the group's room, as
+	 * FindMirrors finds one before the reflection is asked (that needs the
+	 * built groups): a wall of the room's inside, one sector in from the
+	 * grid's edge, with a pane - a glass triangle of the group, additive or
+	 * a decal's alpha, its corners within 2 units of the plane -, at least
+	 * 100 of the group's triangles behind it reaching 1,024 units or more
+	 * past it, and nine in ten of the pair's triangles behind it too. */
+	bool Mirrored(const trf::remaster::Trg& trg, int g, const Room& own,
+		const std::vector<const float*>& pair)
+	{
+		if (pair.empty() || own.nx < 3 || own.nz < 3)
+			return false;
+
+		const float plane[4] = { own.ox + 1024.0f,
+			own.ox + (float)((own.nx - 1) * 1024), own.oz + 1024.0f,
+			own.oz + (float)((own.nz - 1) * 1024) };
+		int pane[4] = { 0, 0, 0, 0 }, behind[4] = { 0, 0, 0, 0 };
+		float depth[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+
+		for (const trf::remaster::TrgPart& part : trg.groups[(size_t)g].parts)
+			for (int pass = 0; pass < 3; pass++)
+			{
+				const trf::remaster::TrgPart::Pass& run = part.pass[pass];
+				const bool glass = pass == 2 ||
+					(pass == 1 && (part.material & 0xFFu) == 14);
+
+				for (unsigned int at = 0; at + 2 < run.count; at += 3)
+				{
+					float v[3][3];
+
+					if (!Corners(trg, run.start + at, own, v))
+						continue;
+
+					for (int w = 0; w < 4; w++)
+					{
+						const int a = w < 2 ? 0 : 2;
+						const float side = (w & 1) ? 1.0f : -1.0f;
+						const float d = ((v[0][a] + v[1][a] + v[2][a]) / 3.0f -
+							plane[w]) * side;
+
+						if (glass && fabsf(v[0][a] - plane[w]) <= 2.0f &&
+							fabsf(v[1][a] - plane[w]) <= 2.0f &&
+							fabsf(v[2][a] - plane[w]) <= 2.0f)
+							pane[w]++;
+
+						if (d <= 16.0f)
+							continue;
+
+						behind[w]++;
+
+						if (d > depth[w])
+							depth[w] = d;
+					}
+				}
+			}
+
+		for (int w = 0; w < 4; w++)
+		{
+			const int a = w < 2 ? 0 : 2;
+			const float side = (w & 1) ? 1.0f : -1.0f;
+			size_t back = 0;
+
+			if (!pane[w] || behind[w] < 100 || depth[w] < 1024.0f)
+				continue;
+
+			for (const float* c : pair)
+				back += (c[a] - plane[w]) * side > 16.0f ? 1 : 0;
+
+			if (back * 10 >= pair.size() * 9)
+				return true;
+		}
+
+		return false;
+	}
+
+	bool Open(const Room& r, const float* c)
+	{
+		if (r.nx <= 0 || r.nz <= 0)
+			return false;
+
+		const float lx = c[0] - r.ox, lz = c[2] - r.oz;
+
+		if (lx < 0.0f || lz < 0.0f)
+			return false;
+
+		const int i = (int)(lx / 1024.0f), j = (int)(lz / 1024.0f);
+
+		if (i >= r.nx || j >= r.nz)
+			return false;
+
+		const float* s = &r.air[((size_t)i * r.nz + j) * 2];
+
+		return s[0] < HD_AIR_NONE && c[1] > s[0] + kAirGap &&
+			c[1] < s[1] - kAirGap;
+	}
+	/* The rooms as the engine's BuildShellRooms hands them: the classic
+	 * vertices' box in world units (probemarks reads the room blobs), the
+	 * flipmap twins both ways round, the squares' air (HDSectorAir). */
+	void ReadRooms(const Tr5Level& level, std::vector<Room>& rooms)
+	{
+		std::string error;
+
+		probemarks::Build(level);
+
+		const int n = (std::min)(level.roomCount(),
+			(int)probemarks::g_rooms.size());
+		rooms.assign((size_t)n, Room());
+
+		for (int r = 0; r < n; r++)
+		{
+			const Tr5Room& rm = level.rooms()[(size_t)r];
+			const probemarks::Room& pr = probemarks::g_rooms[(size_t)r];
+			Room& o = rooms[(size_t)r];
+
+			o.ox = (float)rm.originX;
+			o.oz = (float)rm.originZ;
+			o.flip = rm.altRoom >= 0;
+			o.twin = rm.altRoom >= 0 && rm.altRoom < n ? rm.altRoom : -1;
+			o.tris = 0;
+			o.nx = rm.numXSectors;
+			o.nz = rm.numZSectors;
+
+			for (int a = 0; a < 3; a++)
+			{
+				o.mins[a] = HD_AIR_NONE;
+				o.maxs[a] = -HD_AIR_NONE;
+			}
+
+			for (size_t k = 0; k + 2 < pr.vtx.size(); k += 7)
+			{
+				const float w[3] = { pr.vtx[k] + o.ox, pr.vtx[k + 1],
+					pr.vtx[k + 2] + o.oz };
+
+				for (int a = 0; a < 3; a++)
+				{
+					o.mins[a] = (std::min)(o.mins[a], w[a]);
+					o.maxs[a] = (std::max)(o.maxs[a], w[a]);
+				}
+			}
+
+			o.air.assign((size_t)(std::max)(o.nx, 0) *
+				(size_t)(std::max)(o.nz, 0) * 2, 0.0f);
+
+			for (size_t q = 0; q + 1 < o.air.size(); q += 2)
+			{
+				o.air[q] = HD_AIR_NONE;
+				o.air[q + 1] = -HD_AIR_NONE;
+			}
+
+			std::vector<Tr5Level::SectorInfo> sect;
+
+			if (!level.sectorInfo(r, sect, error))
+				continue;
+
+			for (const Tr5Level::SectorInfo& si : sect)
+			{
+				const size_t at = ((size_t)si.sx * o.nz + si.sz) * 2;
+				std::vector<Tr5FloorEntry> chain;
+				std::vector<unsigned short> words;
+				int door = -1;
+
+				if (at + 1 >= o.air.size() ||
+					(si.fdIndex && !level.readChain(si.fdIndex, chain)))
+					continue;
+
+				for (const Tr5FloorEntry& e : chain)
+					words.insert(words.end(), e.words.begin(), e.words.end());
+
+				HDSectorAir(si.floor, si.ceiling, words.empty() ? 0 : &words[0],
+					(int)words.size(), &o.air[at], &o.air[at + 1], &door);
+			}
+		}
+
+		for (int r = 0; r < n; r++)
+		{
+			const int alt = level.rooms()[(size_t)r].altRoom;
+
+			if (alt >= 0 && alt < n)
+			{
+				rooms[(size_t)alt].flip = true;
+				rooms[(size_t)alt].twin = r;
+			}
+		}
+	}
+}
+
+static int ProbeShellScan(const char* root, const char* stem)
+{
+	using namespace probeshell;
+
+	trf::remaster::Trg trg;
+	std::string error;
+
+	if (!trf::remaster::read_trg(std::string(root) + "\\DATA\\" + stem +
+		".TRG", trg, error))
+	{
+		printf("shellscan: no .TRG (%s)\n", error.c_str());
+		return 2;
+	}
+
+	Tr5Level level;
+
+	if (g_roombox.empty() || !level.load(std::wstring(g_roombox.begin(),
+		g_roombox.end()) + L"\\" + std::wstring(stem, stem + strlen(stem)) +
+		L".TRC", error))
+	{
+		printf("shellscan: -roombox and its .TRC needed (%s)\n", error.c_str());
+		return 2;
+	}
+
+	std::vector<Room> rooms;
+
+	ReadRooms(level, rooms);
+
+	const int n = (int)rooms.size();
+
+	for (int r = 0; r < n; r++)
+	{
+		const int alt = level.rooms()[(size_t)r].altRoom;
+
+		if (alt >= 0 && alt < n)
+			rooms[(size_t)alt].flip = true;
+
+		if (r < (int)trg.groups.size())
+			EachTri(trg.groups[(size_t)r],
+				[&](unsigned) { rooms[(size_t)r].tris++; });
+	}
+
+	FILE* dump = 0;
+
+	if (!g_shell_dump.empty())
+		fopen_s(&dump, g_shell_dump.c_str(), "w");
+
+	// The rooms as the scans read them, first in the dump.
+	for (int r = 0; dump && r < n; r++)
+		fprintf(dump, "r %d %g %g %g %g %g %g %d %d\n", r,
+			rooms[(size_t)r].mins[0], rooms[(size_t)r].mins[1],
+			rooms[(size_t)r].mins[2], rooms[(size_t)r].maxs[0],
+			rooms[(size_t)r].maxs[1], rooms[(size_t)r].maxs[2],
+			rooms[(size_t)r].flip ? 1 : 0, rooms[(size_t)r].tris);
+
+	std::vector<Host> hosts((size_t)n);
+	int flagged = 0, groupsTaken = 0, pairsTaken = 0;
+	int droppedPairs = 0, droppedRest = 0, droppedAir = 0;
+	const int groups = (std::min)(n, (int)trg.groups.size());
+
+	for (int g = 0; g < groups; g++)
+	{
+		const Room& own = rooms[(size_t)g];
+
+		if (trg.groups[(size_t)g].flags & kFlagReach)
+		{
+			printf("shell: level=%s group=%d flagged tris=%d\n", stem, g,
+				own.tris);
+			flagged++;
+			continue;
+		}
+
+		if (!own.tris)
+			continue;
+
+		std::vector<Cand> cands;
+
+		EachTri(trg.groups[(size_t)g], [&](unsigned first)
+		{
+			float v[3][3];
+			Cand c;
+
+			if (!Corners(trg, first, own, v))
+				return;
+
+			for (int a = 0; a < 3; a++)
+				c.c[a] = (v[0][a] + v[1][a] + v[2][a]) / 3.0f;
+
+			if (In(own, c.c, 0.0f, 0.0f, 0.0f))
+				return;
+
+			c.first = first;
+			memcpy(c.v, v, sizeof(v));
+			c.good = Normal(v, c.n);
+			c.out64 = !In(own, c.c, kOwn, kOwn, kOwn);
+			c.foreign = 0;
+			c.host = -1;
+			c.verdict = 0;
+			c.covered = c.exact = false;
+
+			for (int h = 0; h < n && c.out64; h++)
+				if (h != g && In(rooms[(size_t)h], c.c, kForeign, kForeign,
+					kForeign))
+				{
+					c.foreign++;
+					c.host = h;
+				}
+
+			if (c.foreign == 1 && rooms[(size_t)c.host].tris > 0)
+			{
+				Host& host = hosts[(size_t)c.host];
+
+				if (!host.made)
+					MakeHost(trg, rooms, c.host, host);
+
+				c.covered = c.good && Covered(host, c.c, c.n);
+				c.exact = std::binary_search(host.corners.begin(),
+					host.corners.end(), Key(v));
+			}
+
+			cands.push_back(c);
+		});
+
+		// The pairs.
+		std::map<int, std::array<int, 3> > pairs;
+
+		for (const Cand& c : cands)
+			if (c.out64 && c.foreign == 1 && rooms[(size_t)c.host].tris > 0)
+			{
+				std::array<int, 3>& p = pairs[c.host];
+
+				p[0]++;
+				p[1] += c.covered ? 1 : 0;
+				p[2] += c.exact ? 1 : 0;
+			}
+
+		std::vector<int> taken, asked;
+
+		for (const auto& p : pairs)
+		{
+			const int h = p.first, tris = p.second[0];
+			const int covered = p.second[1], exact = p.second[2];
+			const char* why = 0;
+
+			if (covered < kCovered)
+				continue;
+
+			asked.push_back(h);
+
+			if (covered * 5 < tris)
+				why = "fifth";
+			else if (exact * 2 >= covered)
+				why = "exact";
+			else if (Mirrored(trg, g, own, [&]()
+			{
+				std::vector<const float*> pair;
+
+				for (const Cand& c : cands)
+					if (c.out64 && c.foreign == 1 && c.host == h)
+						pair.push_back(c.c);
+
+				return pair;
+			}()))
+				why = "mirror";
+			else if (Touch(own, rooms[(size_t)h]))
+				why = "touch";
+			else if (own.flip || rooms[(size_t)h].flip)
+				why = "flip";
+
+			if (why && !strcmp(why, "flip"))
+			{
+				const int twin = rooms[(size_t)h].twin;
+				int went = 0;
+
+				for (Cand& c : cands)
+				{
+					if (!c.out64 || c.foreign != 1 || c.host != h || !c.covered)
+						continue;
+
+					if (twin >= 0 && (twin >= groups ||
+						!rooms[(size_t)twin].tris))
+						continue;
+
+					if (twin >= 0)
+					{
+						Host& t = hosts[(size_t)twin];
+
+						if (!t.made)
+							MakeHost(trg, rooms, twin, t);
+
+						if (!Covered(t, c.c, c.n))
+							continue;
+					}
+
+					c.verdict = 1;
+					went++;
+				}
+
+				droppedPairs += went;
+				printf("shell: level=%s group=%d host=%d tris=%d covered=%d "
+					"exact=%d dropped=%d refused=flip twin=%d\n", stem, g, h,
+					tris, covered, exact, went, twin);
+				continue;
+			}
+
+			if (!why)
+			{
+				taken.push_back(h);
+
+				for (Cand& c : cands)
+					if (c.out64 && c.foreign == 1 && c.host == h)
+						c.verdict = 1;
+
+				droppedPairs += tris;
+				printf("shell: level=%s group=%d host=%d tris=%d covered=%d "
+					"exact=%d dropped=%d\n", stem, g, h, tris, covered, exact,
+					tris);
+				continue;
+			}
+
+			printf("shell: level=%s group=%d host=%d tris=%d covered=%d "
+				"exact=%d dropped=0 refused=%s\n", stem, g, h, tris, covered,
+				exact, why);
+		}
+
+		int rest = 0, air = 0;
+
+		if (!taken.empty())
+		{
+			groupsTaken++;
+			pairsTaken += (int)taken.size();
+
+			// The rest: in no foreign box or in several, by a host.
+			for (Cand& c : cands)
+			{
+				if (!c.out64 || c.verdict || c.foreign == 1 || !c.good)
+					continue;
+
+				for (int h : taken)
+				{
+					if (!In(rooms[(size_t)h], c.c, kRestXZ, kRestY, kRestXZ) ||
+						!Covered(hosts[(size_t)h], c.c, c.n))
+						continue;
+
+					c.verdict = 2;
+					rest++;
+					break;
+				}
+			}
+
+			// The open air of the rooms in the hosts' column: no room of a
+			// pair line, no flipmap room.
+			std::vector<int> column;
+
+			for (int r = 0; r < n; r++)
+			{
+				const Room& rr = rooms[(size_t)r];
+
+				if (r == g || rr.flip || std::find(asked.begin(), asked.end(),
+					r) != asked.end())
+					continue;
+
+				for (int h : taken)
+				{
+					const Room& hh = rooms[(size_t)h];
+
+					if (rr.mins[0] >= hh.mins[0] - kRestXZ &&
+						rr.maxs[0] <= hh.maxs[0] + kRestXZ &&
+						rr.mins[2] >= hh.mins[2] - kRestXZ &&
+						rr.maxs[2] <= hh.maxs[2] + kRestXZ)
+					{
+						column.push_back(r);
+						break;
+					}
+				}
+			}
+
+			for (Cand& c : cands)
+			{
+				if (c.verdict)
+					continue;
+
+				for (int r : column)
+					if (Open(rooms[(size_t)r], c.c))
+					{
+						c.verdict = 3;
+						air++;
+						break;
+					}
+			}
+
+			droppedRest += rest;
+			droppedAir += air;
+			printf("shell: level=%s group=%d rest=%d air=%d column=", stem, g,
+				rest, air);
+
+			for (size_t k = 0; k < column.size(); k++)
+				printf("%s%d", k ? "," : "", column[k]);
+
+			printf("\n");
+		}
+
+		for (const Cand& c : cands)
+			if (dump)
+				fprintf(dump, "%d %u %.1f %.1f %.1f %d %d %d %d %d %d "
+					"%g %g %g %g %g %g %g %g %g\n", g,
+					c.first, c.c[0], c.c[1], c.c[2], c.out64 ? 1 : 0,
+					c.foreign, c.host, c.covered ? 1 : 0, c.exact ? 1 : 0,
+					c.verdict, c.v[0][0], c.v[0][1], c.v[0][2], c.v[1][0],
+					c.v[1][1], c.v[1][2], c.v[2][0], c.v[2][1], c.v[2][2]);
+
+		// -shellgroups: every triangle of the named groups, inside too.
+		if (dump && g_shell_groups.count(g))
+			EachTri(trg.groups[(size_t)g], [&](unsigned first)
+			{
+				float v[3][3];
+
+				if (Corners(trg, first, own, v))
+					fprintf(dump, "a %d %u %g %g %g %g %g %g %g %g %g\n", g,
+						first, v[0][0], v[0][1], v[0][2], v[1][0], v[1][1],
+						v[1][2], v[2][0], v[2][1], v[2][2]);
+			});
+	}
+
+	if (dump)
+		fclose(dump);
+
+	printf("shell: level=%s groups=%d pairs=%d dropped=%d rest=%d air=%d "
+		"flagged=%d\n", stem, groupsTaken, pairsTaken, droppedPairs,
+		droppedRest, droppedAir, flagged);
+	return 0;
+}
+
 /* -skycensus: what the sky of one level is made of, read out of the two
  * files and printed, with no device and no picture. The .TRG's groups past
  * the last room are the HD sky; per part and pass a `sky part` line gives
@@ -17741,6 +18545,24 @@ static bool SkyArg(int argc, char** argv, int* at)
 	}
 	else if (!strcmp(a, "-skygpu") && *at + 1 < argc)
 		g_sky_gpu = atoi(argv[++*at]);
+	else if (!strcmp(a, "-shellscan"))
+		g_shell_scan = true;
+	else if (!strcmp(a, "-flipindex") && *at + 1 < argc)
+		g_flip_index = atoi(argv[++*at]);
+	else if (!strcmp(a, "-shell") && *at + 1 < argc)
+		g_shell_option = atoi(argv[++*at]) != 0 ? 1 : 0;
+	else if (!strcmp(a, "-shelldump") && *at + 1 < argc)
+		g_shell_dump = argv[++*at];
+	else if (!strcmp(a, "-shellgroups") && *at + 1 < argc)
+	{
+		for (const char* q = argv[++*at]; *q; q++)
+		{
+			g_shell_groups.insert(atoi(q));
+
+			while (q[1] && *q != ',')
+				q++;
+		}
+	}
 	else
 		return false;
 
@@ -19613,6 +20435,10 @@ static int ProbeMain(int argc, char** argv)
 	if (g_sky_census)
 		return ProbeSkyCensus(root, stem, rooms);
 
+	// -shellscan needs no device either: the two files and the scans.
+	if (g_shell_scan)
+		return ProbeShellScan(root, stem);
+
 	/* -walk needs no device, no .TRG and no picture - only the classic
 	 * level - so it runs here, before the window exists. */
 
@@ -20556,6 +21382,48 @@ static int ProbeMain(int argc, char** argv)
 
 	HDRenderSkyCapSet(g_sky_cap);
 
+	// -shell: the second shells' rooms, as BuildShellRooms hands them.
+	static std::vector<probeshell::Room> shellRead;
+	static std::vector<HDShellRoom> shellRooms;
+	const bool shellOn = g_shell_option < 0 ? g_vis_option
+		: g_shell_option != 0;
+
+	shellRooms.clear();
+
+	if (shellOn && !g_roombox.empty())
+	{
+		Tr5Level level;
+		std::string error;
+
+		if (level.load(std::wstring(g_roombox.begin(), g_roombox.end()) +
+			L"\\" + std::wstring(stem, stem + strlen(stem)) + L".TRC", error))
+		{
+			probeshell::ReadRooms(level, shellRead);
+
+			for (const probeshell::Room& r : shellRead)
+			{
+				HDShellRoom one;
+
+				for (int a = 0; a < 3; a++)
+				{
+					one.mins[a] = r.mins[a];
+					one.maxs[a] = r.maxs[a];
+				}
+
+				one.originX = r.ox;
+				one.originZ = r.oz;
+				one.twin = r.twin;
+				one.nx = r.nx;
+				one.nz = r.nz;
+				one.air = r.air.empty() ? 0 : &r.air[0];
+				shellRooms.push_back(one);
+			}
+		}
+	}
+
+	HDRenderSetShellRooms(shellRooms.empty() ? 0 : &shellRooms[0],
+		(int)shellRooms.size());
+
 	if (!HDRenderLevelBegin(root, stem, rooms, managed, threads, &stats, &why))
 	{
 		printf("RoomProbe: HDRenderLevelBegin failed - %s\n", why);
@@ -20573,6 +21441,41 @@ static int ProbeMain(int argc, char** argv)
 
 	LoadTimeStep(stem, "begin_wall");
 	LoadTimeBuild(stem, stats);
+
+	// -shell: the engine's HDLOG shell lines (ReportShells), from the build.
+	if (!shellRooms.empty())
+	{
+		static const char* const why[] = { "", "fifth", "exact", "flip",
+			"mirror", "touch" };
+		int counts[6];
+
+		for (int i = 0; i < HDRenderShellLines(); i++)
+		{
+			HDShellLine line;
+
+			if (!HDRenderShellLine(i, &line))
+				break;
+
+			if (line.host < 0)
+				printf("shell level=%s group=%d rest=%d air=%d\n", stem,
+					line.group, line.rest, line.air);
+			else
+				printf("shell level=%s group=%d host=%d tris=%d covered=%d "
+					"exact=%d dropped=%d%s%s\n", stem, line.group, line.host,
+					line.tris, line.covered, line.exact, line.dropped,
+					line.refused ? " refused=" : "",
+					line.refused > 0 && line.refused < 6 ?
+					why[line.refused] : "");
+		}
+
+		HDRenderShellCounts(&counts[0], &counts[1], &counts[2], &counts[3],
+			&counts[4], &counts[5]);
+		printf("shell level=%s groups=%d pairs=%d dropped=%d rest=%d air=%d "
+			"flagged=%d\n", stem, counts[0], counts[1], counts[2], counts[3],
+			counts[4], counts[5]);
+	}
+
+	HDRenderSetShellRooms(0, 0);
 
 	{
 		const HDSkyCapCount cap = HDRenderSkyCapLast();
@@ -20838,8 +21741,8 @@ static int ProbeMain(int argc, char** argv)
 
 			if (air)
 				printf("hull: group=%d air_tris=%d host_art=%d hull=%d "
-					"behind=%d\n", g, air, covered, hull ? 1 : 0,
-					HDRenderGroupHullBehind(g));
+					"behind=%d shell=%d\n", g, air, covered, hull ? 1 : 0,
+					HDRenderGroupHullBehind(g), HDRenderGroupShellDropped(g));
 		}
 
 		// And its HDLOG covered lines (ReportRoomIntrusions), the same.

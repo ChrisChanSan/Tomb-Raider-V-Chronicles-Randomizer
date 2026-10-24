@@ -4380,6 +4380,149 @@ static void BuildRoomAir()
 		HDRenderSetRoomAir(0, 0, 0);
 }
 
+/* The rooms for the second-shell scans (HDShellRoom in hd_render.h): per
+ * room the box of its classic vertices in world units, its flipmap twin
+ * both ways round, and the air of its floor squares as BuildRoomAir reads
+ * it (HDSectorAir), whatever tomb5.hd_air says. Only on the visibility
+ * path: with tomb5.hd_vis 0 nothing is handed in, nothing is scanned and
+ * the build is the one it was. Group i is room i while this runs, as in
+ * BuildRoomIntrusions. Borrowed for the length of the build. */
+static std::vector<HDShellRoom> g_shell_rooms;
+static std::vector<float> g_shell_air;
+
+static void BuildShellRooms()
+{
+	g_shell_rooms.clear();
+	g_shell_air.clear();
+
+	if (!VisLevel() || number_rooms <= 0)
+	{
+		HDRenderSetShellRooms(0, 0);
+		return;
+	}
+
+	std::vector<size_t> first((size_t)number_rooms, 0);
+
+	g_shell_rooms.assign((size_t)number_rooms, HDShellRoom());
+
+	for (int r = 0; r < number_rooms; r++)
+	{
+		const ROOM_INFO* info = &room[r];
+		HDShellRoom& s = g_shell_rooms[(size_t)r];
+
+		s.originX = (float)info->x;
+		s.originZ = (float)info->z;
+		s.twin = -1;
+		s.nx = info->floor ? info->y_size : 0;
+		s.nz = info->floor ? info->x_size : 0;
+		s.air = 0;
+
+		for (int a = 0; a < 3; a++)
+		{
+			s.mins[a] = HD_AIR_NONE;
+			s.maxs[a] = -HD_AIR_NONE;
+		}
+
+		for (int i = 0; info->pRoomlets && i < info->nRoomlets; i++)
+		{
+			const ROOMLET* roomlet = &info->pRoomlets[i];
+			const ROOMLET_VERTEX* vtx = (const ROOMLET_VERTEX*)roomlet->pSVtx;
+
+			for (int k = 0; vtx && k < roomlet->nVtx; k++)
+			{
+				const float w[3] = { vtx[k].x + s.originX, vtx[k].y,
+					vtx[k].z + s.originZ };
+
+				for (int a = 0; a < 3; a++)
+				{
+					if (w[a] < s.mins[a]) s.mins[a] = w[a];
+					if (w[a] > s.maxs[a]) s.maxs[a] = w[a];
+				}
+			}
+		}
+
+		first[(size_t)r] = g_shell_air.size();
+
+		for (int sx = 0; sx < s.nx; sx++)
+			for (int sz = 0; sz < s.nz; sz++)
+			{
+				const FLOOR_INFO& f = info->floor[sz + info->x_size * sx];
+				float top, bottom;
+				int door;
+
+				HDSectorAir(f.floor, f.ceiling, f.index && floor_data ?
+					(const unsigned short*)&floor_data[f.index] : 0, 65536,
+					&top, &bottom, &door);
+				g_shell_air.push_back(top);
+				g_shell_air.push_back(bottom);
+			}
+	}
+
+	for (int r = 0; r < number_rooms; r++)
+	{
+		HDShellRoom& s = g_shell_rooms[(size_t)r];
+		const int twin = room[r].flipped_room;
+
+		if (s.nx > 0 && s.nz > 0)
+			s.air = &g_shell_air[first[(size_t)r]];
+
+		if (twin >= 0 && twin < number_rooms)
+		{
+			s.twin = twin;
+			g_shell_rooms[(size_t)twin].twin = r;
+		}
+	}
+
+	HDRenderSetShellRooms(&g_shell_rooms[0], number_rooms);
+}
+
+/* What the scans found, after the build: with -log one `HDLOG shell` line
+ * per pair of 200 covered triangles or more - taken, or `refused=` with
+ * why (fifth, exact, mirror, touch, or flip: a flipmap room's pair, of which
+ * only what every state of the host carries went) -, one per group with a
+ * second-shell pair with the rest and the air it lost, and one for the
+ * level on the visibility path. Then the rooms are given back. */
+static void ReportShells()
+{
+	static const char* const why[] = { "", "fifth", "exact", "flip",
+		"mirror", "touch" };
+
+	if (gLogEnabled && VisLevel())
+	{
+		for (int i = 0; i < HDRenderShellLines(); i++)
+		{
+			HDShellLine line;
+
+			if (!HDRenderShellLine(i, &line))
+				break;
+
+			if (line.host < 0)
+				Log("HDLOG shell level=%s group=%d rest=%d air=%d", g_stem,
+					line.group, line.rest, line.air);
+			else
+				Log("HDLOG shell level=%s group=%d host=%d tris=%d "
+					"covered=%d exact=%d dropped=%d%s%s", g_stem, line.group,
+					line.host, line.tris, line.covered, line.exact,
+					line.dropped, line.refused ? " refused=" : "",
+					line.refused > 0 && line.refused < 6 ?
+					why[line.refused] : "");
+		}
+
+		int groups = 0, pairs = 0, dropped = 0, rest = 0, air = 0;
+		int flagged = 0;
+
+		HDRenderShellCounts(&groups, &pairs, &dropped, &rest, &air,
+			&flagged);
+		Log("HDLOG shell level=%s groups=%d pairs=%d dropped=%d rest=%d "
+			"air=%d flagged=%d", g_stem, groups, pairs, dropped, rest, air,
+			flagged);
+	}
+
+	HDRenderSetShellRooms(0, 0);
+	g_shell_rooms.clear();
+	g_shell_air.clear();
+}
+
 /* The carried art (HDCarryBoxHolds in hd_render.h): the rooms under the sky
  * and the flipmap twins handed to the build, and after it, per room under
  * the sky, the rooms whose art the build found standing in it - what
@@ -5258,7 +5401,9 @@ static void ReportRoomIntrusions()
 	 * that is more than half, and then the art is drawn pushed back in
 	 * depth and, with hd_air 2, held to the group's own window
 	 * (MarkAirHulls in hd_render.cpp); `behind` the triangles drawn pushed
-	 * back, all three passes. Behind -log. */
+	 * back, all three passes; `shell` the triangles the second-shell scans
+	 * dropped (MarkSecondShells), which the hull's counts still hold.
+	 * Behind -log. */
 	if (gLogEnabled && g_air_on)
 		for (int g = 0; g < HDRenderGroupCount() && g < HD_MAX_ROOMS; g++)
 		{
@@ -5267,8 +5412,9 @@ static void ReportRoomIntrusions()
 
 			if (air)
 				Log("HDLOG hull level=%s group=%d air_tris=%d host_art=%d "
-					"hull=%d behind=%d", g_stem, g, air, covered,
-					hull ? 1 : 0, HDRenderGroupHullBehind(g));
+					"hull=%d behind=%d shell=%d", g_stem, g, air, covered,
+					hull ? 1 : 0, HDRenderGroupHullBehind(g),
+					HDRenderGroupShellDropped(g));
 		}
 
 	/* HDLOG covered, with the air on: one line per pair face found inside
@@ -7269,6 +7415,7 @@ static void HDLevelBuildHD()
 	lap(LOAD_INTR);
 	BuildRoomAir();			// and the rooms' air, the same contract
 	BuildRoomCarry();		// and the rooms under the sky
+	BuildShellRooms();		// and the second shells' rooms
 	lap(LOAD_AIR);
 	BuildPairFaces();		// and its faces, the same contract
 	lap(LOAD_PAIRS);
@@ -7330,6 +7477,8 @@ static void HDLevelBuildHD()
 	ReportRoomIntrusions();
 	// And the art the rooms under the sky carry (HDRoomCarries).
 	ReportRoomCarry();
+	// And the second shells the build dropped.
+	ReportShells();
 	// And the same for the openings. Before the room lines below, so the log
 	// reads in the order the build ran.
 	ReportRoomCuts();

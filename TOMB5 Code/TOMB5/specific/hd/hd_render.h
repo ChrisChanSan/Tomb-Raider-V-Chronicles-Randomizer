@@ -2174,7 +2174,7 @@ int HDRenderGroupHullBehind(int group);
  * lamps and panels over the floors' own art, the same walls tessellated
  * otherwise, so that the two lie in one plane and fight for the depth -,
  * and with it art no room has there: a braced frame across the shaft
- * three floors down, cables through a lift car, a wall in its open door.
+ * three floors down, cables through a lift car.
  * The original draws a face with its own room only, so nothing of it is
  * ever seen twice there. The build drops such art for good, before the
  * groups are filled (MarkSecondShells in hd_render.cpp), in three scans

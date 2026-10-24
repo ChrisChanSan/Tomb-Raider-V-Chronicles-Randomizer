@@ -4606,12 +4606,13 @@ carries the tables.
     (the copy of 2026-10-23, read on 2026-10-24) - the three scans' rule and every
     threshold (64, 16, 0.98, 16, 200, a fifth, half, 512, 64, 32, the 0x40000 flag),
     credited, unchanged. OWN: the code, the 256-unit cells of a host's art, a flipmap pair
-    dropping only what every state of its host carries, the open air asking no room of a
-    pair line, and two refusals the measurement asked for: a pair behind a mirror of the
-    group's room (RICH2's washroom: the reflection's far half, 1,604 pixels of the pane)
-    and a pair whose host's box shares a face with the group's own (RICH2's shaft: 15,751
-    pixels with no art at all from the lift car's roof; JOBY3: a cloth cut through). DATA:
-    the census of the fifteen levels' pairs.
+    dropping only what every state of its host carries (its art and its twin's, measured
+    on RICH3: dropping what one state carries leaves the place bare in the other), the
+    open air asking no room of a pair line, and two refusals the measurement asked for: a
+    pair behind a mirror of the group's room (RICH2's washroom: the reflection's far half,
+    1,604 pixels of the pane) and a pair whose host's box shares a face with the group's
+    own (RICH2's shaft: 15,751 pixels with no art at all from the lift car's roof; JOBY3:
+    a cloth cut through). DATA: the census of the fifteen levels' pairs.
 
 ## Credited, but not contained here
 

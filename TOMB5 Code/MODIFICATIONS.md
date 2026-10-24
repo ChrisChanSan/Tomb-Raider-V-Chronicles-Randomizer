@@ -33161,9 +33161,9 @@ the flip works. The double drawing is the shaft's main problem.
 test's eyes, as in #240 (the walk `-vis 1` at the logged eye, the picture with the walk's
 rooms in their windows, 1280 x 720): #240's fourteen views, four of the play test, the
 view from the car's roof at two logged frames in both flip states, the eye after the fall
-at the top, and the eye in the room under the lifts in both states (`-flipindex 7`, the
-crash's ten pairs). *Fight*, *ties* and *clear* as in #240; *empty* the pixels no art
-covers.
+at the top, and the eye in the room under the lifts in both states (`-flipindex 7`: the
+crash's ten pairs and 174/175, which no view lists). *Fight*, *ties* and *clear* as in
+#240; *empty* the pixels no art covers.
 
 *The frame at the bottom* is group 61's art at y -9,728 to -10,300: 14,922 triangles
 across the shaft, 14,014 of them in room 64's box (three floors below 61, no flipmap
@@ -33191,7 +33191,7 @@ all fifteen):
 | JOBY2 | 110 in 135, 5,974 | 2,738 | 0 | 4 exact |
 | JOBY3 | - | - | - | 49 in 123, 123 in 49: shared face |
 | RICH2 | 26 in 28, 864; 57 in 62, 1,812; 61 in 62, 63 and 64, 36,803, 34,870 and 47,136 | 284, 72, 6,671 | 0, 0, 321 | 61 in 35, 37 and 38: shared face; 134 in 137: mirror; 1 fifth, 1 exact |
-| RICH3 | - | - | - | 23 in 62: flip (none carried by both states) |
+| RICH3 | - | - | - | 23 in 62: flip (207 of 216 carried by room 62's state, none by 60's; kept) |
 | TITLE | - | - | - | 1 exact |
 
 ANDY2, JOBY4, JOBY5, RICH1 and RICHCUT2 have none. In all: 5 groups, 7 pairs, 127,873
@@ -33224,6 +33224,18 @@ changes its walls' light (874,569).
 2,031 units behind the washroom mirror: the far half of its reflection. Dropped, 1,604
 pixels of the pane change; refused, none.
 
+*The flipmap pair.* RICH3's group 23 has 216 triangles in the box of room 62, the
+alternate of room 60 (flip index 3): a low opening in the wall beside room 23. 207 of them
+lie in the plane of 62's art, none in 60's, which has no art at all. Dropped as the art of
+62's state (a build of this round that did so), they leave pixels with no art in both
+states: before the flip 110,648 at an eye on room 23's east edge and 38,129, 21,689, 9,328
+and 2,854 at four more from room 23, the copy being the opening's only art then (the
+classic faces close the opening seen from the east edge and leave it open onto nothing
+seen from the room's middle looking up); after the flip 9,328 at the eye whose walk does
+not list room 62, and 36, 9, 6 and 0 at the four that do. Kept, the price is the double
+after the flip: 29,241 pixels differ from the dropped picture at the east edge, 5,457 to
+1,403 at three more.
+
 *The guests.* With the shells dropped, a hull listed as a guest (without #240's rule)
 still ties: 460 pixels at the view from room 62 where 61 would come in (212 of them 61's),
 934 at another, 578 under the lifts after the fall, 502 in the lift car, against 37, 46,
@@ -33244,10 +33256,12 @@ open air*: of the same group, its triangles outside its box in the open air of a
 standing in the hosts' column (its x and z box inside a host's widened by 512), no room of
 the group's pair lines and no flipmap room - on a floor square with air, more than 32
 below its ceiling and above its floor. A group the `.TRG` flags `0x40000` is never asked.
-A flipmap room's pair drops only what its host carries in both its states. A pair behind a
-mirror of the group's room, and a pair whose host's box shares a face with the group's
-own, stay. The rule and its numbers are TROne's; the code, the two refusals and the
-flipmap reading are this project's (`THIRD-PARTY.md`, entry 480).
+For a host with a flipmap twin, covered and exact ask the host's art and the twin's; a
+flipmap room's pair drops only what every state of its host carries (covered by both, a
+twin with no art carrying nothing), and a pair with the group's own twin nothing. A pair
+behind a mirror of the group's room, and a pair whose host's box shares a face with the
+group's own, stay. The rule and its numbers are TROne's; the code, the two refusals and
+the flipmap reading are this project's (`THIRD-PARTY.md`, entry 480).
 
 **Decisions.** The drop is the fill skipping the triangles, not a degenerate triple: the
 range table, the index buffer and every count after the fill are made without them. The
@@ -33256,9 +33270,15 @@ drawn pushed back as before (61: 112,064 triangles pushed, 237,865 at the base).
 shared face and the mirror are refusals the measurement asked for (above). The open air
 asks no room of a pair line, taken or refused: asking only the taken hosts' rooms let the
 air scan take 12,251 of 61's triangles in rooms 35, 37 and 38, the copies the shared face
-keeps. #240's rule stays: a hull is never a guest; its remaining art still ties where it
-would come in, and the lower rooms would gain next to nothing. Room 39's art is not
-brought to the shaft's top room: that is a walk question, not this round's.
+keeps. The shared face and this wider exclusion depart from the rule as given, and with
+them the shaft's top room is not free of second shells: its copy of the floor directly
+beneath stays (Left). The flipmap pair departs from it as well: a state's group carrying a
+triangle is not enough to drop it while the other state's group lacks it, since dropped it
+leaves the opening with no art (above), and drawing it in one state only would need a
+range per state in the fill, which the fill does not keep. #240's rule stays: a hull is
+never a guest; its remaining art still ties where it would come in, and the lower rooms
+would gain next to nothing. Room 39's art is not brought to the shaft's top room: that is
+a walk question, not this round's.
 
 **Checked.** The engine's `HDLOG shell` lines equal the probe's twin on all fifteen
 levels. Round 236's parity sets (the six classic views, the six HD views, the census eyes
@@ -33267,12 +33287,13 @@ room-centre views at `-vis 1`: 117 identical, 14 changed - ANDREA1's two where i
 82 is listed, JOBY2's one where 110 is, RICH2's five where 26 is and six where 61 is -,
 none with a pixel of no art more than the base. #240's 28 shaft pictures: 12 identical, 16
 changed, each with 61 or 57 listed. The flip: the view under the lifts and the views from
-the top in both states. `hd_build` 0 and `hd_vis` 0 are the base's by construction (no
-rooms are handed in); `hd_marble` 0 and `hd_fog` 0 touch nothing of this round and differ
-from the base on the visibility path by the dropped art only. No classic path file
-changed; no line asking `g_level_active`, `HDEnabled()` or `HDDrawn()` was edited.
-ModernTest 16,751 checks at the base and 16,754 at the head, MenuTest 44,931, InterpTest
-754, LipsTest 299 with the `.OBJ` folder and 272 without, 0 failed. Not played.
+the top in both states; RICH3's flipmap pair at ten eyes in room 23 in both states,
+20 pictures, all the base's. `hd_build` 0 and `hd_vis` 0 are the base's by
+construction (no rooms are handed in); `hd_marble` 0 and `hd_fog` 0 touch nothing of this
+round and differ from the base on the visibility path by the dropped art only. No classic
+path file changed; no line asking `g_level_active`, `HDEnabled()` or `HDDrawn()` was
+edited. ModernTest 16,751 checks at the base and 16,754 at the head, MenuTest 44,931,
+InterpTest 754, LipsTest 299 with the `.OBJ` folder and 272 without, 0 failed. Not played.
 
 **Left.** With the eye in room 61 its copies of the floor directly beneath (rooms 35, 37
 and 38) stay and still tie with those rooms' own art: 61's ties 3,072 to 11,822 pixels at
@@ -33287,12 +33308,15 @@ plane (122 of 61's triangles at z 69,631, one unit outside the cars' boxes) stay
 stands on the cars' wall squares, where no square has air, and its pair with room 57 has
 142 covered triangles, under 200; it is not drawn from the car, where 61 is no guest. The
 counterweight and the pulleys stay unseen from the lower rooms and the ledge, as #240 left
-them. RICH3's flipmap pair (23 in 62, 216 triangles) keeps all of its art: none of it is
-carried by both states of room 62.
+them. RICH3's flipmap pair (23 in 62) keeps its 216 triangles: after the flip 207 of them
+double room 62's own art (29,241 pixels at the nearest eye); a range per state would draw
+them before the flip only.
 
 **Commits.** `86812994` (the three scans, the drop, the refusals, the log lines,
 RoomProbe's switches and ModernTest's checks), `900aabfb` (the header comment names only
-what the scans take) and this record.
+what the scans take), `31b30f93` (the flipmap pair dropping what either state carries, the
+build measured above), `20d3f3cf` (back to what every state carries, with each state's
+covered test and the probe's `twin_covered=`) and this record.
 
 ## 3. Randomizer changes since Beta 1.0
 

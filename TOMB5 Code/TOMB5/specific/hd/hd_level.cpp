@@ -4479,7 +4479,7 @@ static void BuildShellRooms()
 /* What the scans found, after the build: with -log one `HDLOG shell` line
  * per pair of 200 covered triangles or more - taken, or `refused=` with
  * why (fifth, exact, mirror, touch, or flip: a flipmap room's pair, of which
- * only what every state of the host carries went) -, one per group with a
+ * only what a state of the host carries went) -, one per group with a
  * second-shell pair with the rest and the air it lost, and one for the
  * level on the visibility path. Then the rooms are given back. */
 static void ReportShells()

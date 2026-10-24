@@ -2987,7 +2987,7 @@ namespace
 	/* The three scans, group by group (HDShellRoom in hd_render.h has the
 	 * rule): the pairs, then for a group with a second-shell pair the rest
 	 * by its hosts and the open air of the rooms in their column. A pair
-	 * of a flipmap room keeps what not every state of its host carries. */
+	 * of a flipmap room keeps what no state of its host carries. */
 	void MarkSecondShells(const trf::remaster::Trg& trg)
 	{
 		g_shell_drop.clear();
@@ -3074,6 +3074,22 @@ namespace
 					t.covered = t.good && ShellCovered(host, t.c, t.n);
 					t.exact = std::binary_search(host.corners.begin(),
 						host.corners.end(), t.key);
+
+					/* A flipmap host carries in each state the art of
+					 * that state's group: its own and its twin's. */
+					const int tw = g_shell_rooms[t.host].twin;
+
+					if (tw >= 0 && tw != g && tw < groups &&
+						tris[(size_t)tw] > 0)
+					{
+						const ShellHost& other = host_of(tw);
+
+						t.covered = t.covered || (t.good &&
+							ShellCovered(other, t.c, t.n));
+						t.exact = t.exact || std::binary_search(
+							other.corners.begin(), other.corners.end(),
+							t.key);
+					}
 				}
 
 				out.push_back(t);
@@ -3135,8 +3151,6 @@ namespace
 						line.refused = HD_SHELL_FLIP;
 				}
 
-				const int twin = g_shell_rooms[h].twin;
-
 				for (size_t k = 0; k < out.size(); k++)
 				{
 					const ShellTri& t = out[k];
@@ -3144,12 +3158,14 @@ namespace
 					if (!t.out64 || t.foreign != 1 || t.host != h)
 						continue;
 
-					/* A flipmap room's pair: only what the host carries in
-					 * each of its states - its own art and its twin's. */
-					if (line.refused == HD_SHELL_FLIP && (!t.covered ||
-						(twin >= 0 && (twin >= groups ||
-						!tris[(size_t)twin] ||
-						!ShellCovered(host_of(twin), t.c, t.n)))))
+					/* A flipmap room's pair: what a state's group carries
+					 * (covered by the host's art or its twin's) doubles
+					 * that state and haunts the other, and drops; what
+					 * no state carries is the group's own and stays. A
+					 * pair with the group's own twin drops nothing: the
+					 * two are never in the world together. */
+					if (line.refused == HD_SHELL_FLIP &&
+						(!t.covered || h == own.twin))
 						continue;
 
 					if (line.refused != HD_SHELL_TAKEN &&

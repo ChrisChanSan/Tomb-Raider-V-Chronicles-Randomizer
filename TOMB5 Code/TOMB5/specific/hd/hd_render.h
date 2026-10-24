@@ -2201,10 +2201,13 @@ int HDRenderGroupHullBehind(int group);
  *              floor.
  *
  * A triangle stands where its centroid does. A group the .TRG flags
- * 0x40000 is art meant to reach past its room and is never asked. A pair
- * of a flipmap room - its group or its host has a twin - drops only what
- * the host carries in each of its states (covered by its art and by its
- * twin's), since the art of one state is out of the world in the other.
+ * 0x40000 is art meant to reach past its room and is never asked. For a
+ * host with a flipmap twin covered and exact are asked of its art and of
+ * its twin's, each state's group. A pair of a flipmap room - its group or
+ * its host has a twin - drops only its covered triangles, what one state
+ * carries: drawn, they double that state and stand as its ghost in the
+ * other. The rest of such a pair stays, and a pair with the group's own
+ * twin drops nothing, the two never being in the world together.
  * A pair standing behind a mirror of the group's room - a wall with a pane
  * of glass and a room's worth of the group's art behind it, 1,024 units
  * deep or more, as FindMirrors finds one - is the room's reflection, drawn
@@ -2236,7 +2239,7 @@ struct HDShellRoom
 #define HD_SHELL_TAKEN	0
 #define HD_SHELL_FIFTH	1	// covered under a fifth of the pair
 #define HD_SHELL_EXACT	2	// half of covered or more on the host's corners
-#define HD_SHELL_FLIP	3	// a flipmap room's: what every state carries
+#define HD_SHELL_FLIP	3	// a flipmap room's: what a state carries
 #define HD_SHELL_MIRROR	4	// behind a mirror: the room's reflection
 #define HD_SHELL_TOUCH	5	// the host's box shares a face with the own
 

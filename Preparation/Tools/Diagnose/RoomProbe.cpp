@@ -17744,6 +17744,7 @@ namespace probeshell
 		int host;		// the one, when foreign is 1
 		int verdict;		// 0 kept, 1 pair, 2 rest, 3 air
 		bool covered, exact;
+		bool twinCovered;	// covered by the host's flipmap twin's art
 		float v[3][3];
 	};
 
@@ -18221,7 +18222,7 @@ static int ProbeShellScan(const char* root, const char* stem)
 			c.foreign = 0;
 			c.host = -1;
 			c.verdict = 0;
-			c.covered = c.exact = false;
+			c.covered = c.exact = c.twinCovered = false;
 
 			for (int h = 0; h < n && c.out64; h++)
 				if (h != g && In(rooms[(size_t)h], c.c, kForeign, kForeign,
@@ -18241,6 +18242,23 @@ static int ProbeShellScan(const char* root, const char* stem)
 				c.covered = c.good && Covered(host, c.c, c.n);
 				c.exact = std::binary_search(host.corners.begin(),
 					host.corners.end(), Key(v));
+
+				// A flipmap host: its twin's art is its other state's.
+				const int tw = rooms[(size_t)c.host].twin;
+
+				if (tw >= 0 && tw != g && tw < groups &&
+					rooms[(size_t)tw].tris > 0)
+				{
+					Host& other = hosts[(size_t)tw];
+
+					if (!other.made)
+						MakeHost(trg, rooms, tw, other);
+
+					c.twinCovered = c.good && Covered(other, c.c, c.n);
+					c.covered = c.covered || c.twinCovered;
+					c.exact = c.exact || std::binary_search(
+						other.corners.begin(), other.corners.end(), Key(v));
+				}
 			}
 
 			cands.push_back(c);
@@ -18294,28 +18312,19 @@ static int ProbeShellScan(const char* root, const char* stem)
 
 			if (why && !strcmp(why, "flip"))
 			{
+				// What a state carries drops; the group's own twin never.
 				const int twin = rooms[(size_t)h].twin;
-				int went = 0;
+				int went = 0, byTwin = 0;
 
 				for (Cand& c : cands)
 				{
-					if (!c.out64 || c.foreign != 1 || c.host != h || !c.covered)
+					if (!c.out64 || c.foreign != 1 || c.host != h)
 						continue;
 
-					if (twin >= 0 && (twin >= groups ||
-						!rooms[(size_t)twin].tris))
+					byTwin += c.twinCovered ? 1 : 0;
+
+					if (!c.covered || h == own.twin)
 						continue;
-
-					if (twin >= 0)
-					{
-						Host& t = hosts[(size_t)twin];
-
-						if (!t.made)
-							MakeHost(trg, rooms, twin, t);
-
-						if (!Covered(t, c.c, c.n))
-							continue;
-					}
 
 					c.verdict = 1;
 					went++;
@@ -18323,8 +18332,9 @@ static int ProbeShellScan(const char* root, const char* stem)
 
 				droppedPairs += went;
 				printf("shell: level=%s group=%d host=%d tris=%d covered=%d "
-					"exact=%d dropped=%d refused=flip twin=%d\n", stem, g, h,
-					tris, covered, exact, went, twin);
+					"exact=%d dropped=%d refused=flip twin=%d "
+					"twin_covered=%d\n", stem, g, h, tris, covered, exact, went,
+					twin, byTwin);
 				continue;
 			}
 

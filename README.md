@@ -277,8 +277,8 @@ stops it. The list is every outfit this machine can dress Lara in: the 22
 bodies of your **Tomb Raider IV-VI Remastered**, the 30 of **Tomb Raider
 I-III Remastered** the first has not got under the same name, and every one
 your `Mods` folder adds. Each row carries where it came from — `IV-VI`,
-`I-III`, or the mod's own folder name — and the row in force is marked with
-a `*`.
+`I-III`, or the mod's own folder name — and the row in force carries a small
+raised mark after its name, the font's `*`, which reads like an apostrophe.
 
 <table>
 <tr>

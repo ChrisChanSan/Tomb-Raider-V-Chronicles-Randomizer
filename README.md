@@ -186,7 +186,7 @@ spreads on the surface where it lands.</td>
 <td width="50%"><img src="docs/hd-water-spring.jpg" alt="A spring, from below"><br>
 <b>HD water</b> from below: a spring's small bubbles rise from a crack in the
 floor, the light the waves gather plays on the rock, and the surface overhead
-shows the room above it, bent.</td>
+shows the room above it, bent. The larger bubbles are Lara's own breath.</td>
 <td width="50%"><img src="docs/hd-water-underwater.jpg" alt="Under the sea"><br>
 <b>HD water</b> in Deepsea Dive: the sea's surface seen from below, a dark
 blue underside with its small waves and a soft glow of light through it.</td>
@@ -218,13 +218,16 @@ mirror - nothing of the room is drawn a second time.</td>
 default, offered while HD is on: Lara's own outline lies soft-edged on the
 deck beside her, in place of the round blob.</td>
 <td width="50%"><img src="docs/hd-fog.jpg" alt="Fog in a cave"><br>
-<b>Fog</b> and <b>Distance fog</b> (<i>Graphics</i>): the far side of the
-cave fades into the haze as Lara dives.</td>
+<b>Fog</b> (<i>Graphics</i>): the level's fog bulbs with a body - the haze
+fills the cave as a volume and thickens with the depth of the view as Lara
+dives.</td>
 </tr>
 <tr>
 <td width="50%"><img src="docs/hd-distance.jpg" alt="A view to the horizon at dusk"><br>
-A long view across the level at dusk: the windmill, the far hills, the trees
-and the standing stones against the evening sky.</td>
+A long view across the level at dusk: the windmill of the next room, the far
+hills, the trees and the standing stones against the evening sky. The mill
+stands beyond the twenty sectors the original draws, and this engine draws
+to forty-one.</td>
 <td width="50%"><img src="docs/first-person.jpg" alt="First person view"><br>
 The <b>first-person view</b> (<i>Controls -> View -> First person
 view</i>): the camera sits behind her eyes, her head is not drawn, and her
@@ -840,11 +843,11 @@ Remastered installation — none of it is included here.</sup>
 
 | Mod | Author | Shown in |
 | --- | --- | --- |
-| [SPAS-12 Shotgun Replacer](https://www.nexusmods.com/tombraidertrilogyremastered/mods/135) | [xKhalix](https://www.nexusmods.com/profile/xKhalix) | the shotgun picture |
-| [IMI Uzi Replacement for Mac-10](https://www.nexusmods.com/tombraidertrilogyremastered/mods/187) | [xKhalix](https://www.nexusmods.com/profile/xKhalix) | the Uzi picture |
+| [SPAS-12 Shotgun Replacer](https://www.nexusmods.com/tombraidertrilogyremastered/mods/135) | [xKhalix](https://www.nexusmods.com/profile/xKhalix) | the shotgun picture, the mirroring floor, the lamplight on metal and the dusk view (the gun on Lara's back) |
+| [IMI Uzi Replacement for Mac-10](https://www.nexusmods.com/tombraidertrilogyremastered/mods/187) | [xKhalix](https://www.nexusmods.com/profile/xKhalix) | the Uzi picture and the first-person view |
 | [Tomb Raider - Underworld - AIO](https://www.nexusmods.com/tombraidertrilogyremastered/mods/954) | [DarkLegendAoD](https://www.nexusmods.com/profile/DarkLegendAoD) | the outfit changer with mods, and the Uzi picture |
 | [OPERA DRESS (Tomb Raider 5)](https://www.nexusmods.com/tombraidertrilogyremastered/mods/281) | [Zellphie](https://www.nexusmods.com/profile/Zellphie) | the shotgun picture |
-| [Tomb Raider - Angel of Darkness - Mag Vega](https://www.nexusmods.com/tombraidertrilogy2remastered/mods/79) | [DarkLegendAoD](https://www.nexusmods.com/profile/DarkLegendAoD) | the washroom mirror picture (the MP5) |
+| [Tomb Raider - Angel of Darkness - Mag Vega](https://www.nexusmods.com/tombraidertrilogy2remastered/mods/79) | [DarkLegendAoD](https://www.nexusmods.com/profile/DarkLegendAoD) | the washroom mirror and the spring from below (the MP5 on Lara's back) |
 
 These are third-party mods by their respective authors. They are not part of
 this project and are not included; get them from the authors' pages.

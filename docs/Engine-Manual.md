@@ -510,7 +510,7 @@ one step.
 ### Camera speed and Dead zone
 
 Two sliders on the *Controls* page, both the modern control's own feel — under *Control type: Tank* nothing reads either
-number, so both rows are drawn greyed out and the cursor skips them.
+number, so both rows are drawn in dark red and the cursor skips them.
 
 | Row | Range | Default | What it does |
 |---|---|---|---|
@@ -531,7 +531,7 @@ registry is put back inside when it is read: `cam_speed` on the nearer end,
 Under *Control type: Modern* the mouse turns the camera round Lara the way the
 right stick does, and a camera you turn with the mouse takes her running
 direction with it, exactly as the stick's does. Two more rows follow *Dead
-zone*, greyed under *Tank* like the two above:
+zone*, dark red under *Tank* like the two above:
 
 | Row | Range | Default | What it does |
 |---|---|---|---|
@@ -652,7 +652,7 @@ finger:
 ### Ledge hang: an automatic turn and lowering at an edge
 
 *Ledge hang* is the fifth row on the *Modes* sub-page, **Off** by default and
-**Modern controls only** — it is greyed out under Tank controls, the same way
+**Modern controls only** — it is drawn in dark red under Tank controls, the same way
 the Controls page's camera sliders are.
 
 With it on, run or walk at an edge with the grab key held (the action key
@@ -704,7 +704,7 @@ or a later one.
 Reached from the title screen row *Options*, or from the pause screen while
 playing. The two are identical except for one row: **Special Features** can
 only be opened from the title screen. From the pause menu the row is still
-there — drawn greyed out, and the cursor steps over it — however many secrets
+there — drawn in dark red, and the cursor steps over it — however many secrets
 you have found; the nine secrets of a quarter of the campaign decide what the
 gallery **holds**, never whether the row can be reached.
 

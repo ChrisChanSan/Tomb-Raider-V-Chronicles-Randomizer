@@ -11360,6 +11360,59 @@ static void registry_old_water()
 	free(opts);
 }
 
+/* A number an engine text gives a constant, or -1: the token after
+ * `head`, read as strtod reads it (hexadecimal too). */
+static double shell_number(const char* text, const char* head)
+{
+	const char* p = text ? strstr(text, head) : 0;
+
+	return p ? strtod(p + strlen(head), 0) : -1.0;
+}
+
+/* The second shells (hd_render.cpp, MarkSecondShells): the rule's numbers
+ * as the engine's text holds them - the own box widened by 64, a foreign
+ * one by 16, covered within 16 of the plane and 0.98 between the normals,
+ * 200 covered for a pair, the rest within 512 in x and z and 64 in y, the
+ * air 32 off a square's ceiling and floor, the 0x40000 flag -, the flagged
+ * group skipped before it is asked, and the scans run on the visibility
+ * path only (hd_level.cpp, BuildShellRooms hands nothing in otherwise). */
+static void shell_rule()
+{
+	char* render = hd_switch_text("hd_render.cpp");
+	char* level = hd_switch_text("hd_level.cpp");
+	static char body[65536];
+	const double want[9] = { 64, 16, 16, 0.98, 512, 64, 32, 200, 0x40000 };
+	const char* const heads[9] = {
+		"const float kShellOwn = ", "const float kShellForeign = ",
+		"const float kShellPlane = ", "const float kShellDot = ",
+		"const float kShellRestXZ = ", "const float kShellRestY = ",
+		"const float kShellAirGap = ", "const int kShellCovered = ",
+		"const unsigned int kShellFlagReach = " };
+	int right = 0;
+
+	for (int i = 0; i < 9; i++)
+	{
+		const double got = shell_number(render, heads[i]);
+
+		right += fabs(got - want[i]) < 1e-6 ? 1 : 0;
+	}
+
+	ok(right == 9, "second shells: the rule's nine numbers", right, 9);
+
+	glass_body(render, "void MarkSecondShells(", body, sizeof(body));
+	ok(strstr(body, "if(trg.groups[(size_t)g].flags&kShellFlagReach)"
+		"g_shell_counts[5]++;continue;}") != 0,
+		"second shells: a flagged group is never asked", 0, 0);
+
+	glass_body(level, "static void BuildShellRooms(", body, sizeof(body));
+	ok(strstr(body, "if(!VisLevel()||number_rooms<=0)"
+		"HDRenderSetShellRooms(0,0);return;}") != 0,
+		"second shells: scanned on the visibility path only", 0, 0);
+
+	free(render);
+	free(level);
+}
+
 /* The split of a see-through draw call (hd_render.cpp, GlassSplits) and the
  * additive run's glass (AddGlass): their numbers and their bodies read out
  * of the engine's text, and their rules run over the census of the fifteen
@@ -29332,6 +29385,7 @@ int main()
 	registry_old_water();
 	hd_feet();
 	glass_split();
+	shell_rule();
 	glass_hue();
 	glass_look();
 	hd_build_gate();

@@ -58,6 +58,7 @@ file:
 | `TOMB5 Code/TOMB5/specific/hd/hd_render.cpp`, the water marks | `host/render/game_renderer.cpp`, `hd_load` and `hd_water_mark` (TROne-main, copy of 2026-10-05) | The **road**, not the code: the remaster's geometry carries no water flag, so the classic level's own water vertices are matched to it by room-local position through a hash of the packed int16 x/y/z, per room, once at level build - and which group owns which vertex is recovered by walking the group's index runs. In its copy of 2026-10-05 TROne marked a vertex from the classic `RoomVertexMove` flag and from the room's underwater bit, one bit; in 75c4c843 it classes water, shore and underwater-dark from the engine's own split, keeps the hash for shore corners and matches water surfaces as horizontal planes. Ours marks it from `ROOMLET::nWVtx` and from the engine's own shimmer predicate, and carries three bits rather than one. |
 | `TOMB5 Code/TOMB5/specific/hd/hd_shader/hd_glow.hlsl` | TROne's rules for its glow material | The fade near the eye and the `|N.V|` term, translated to HLSL for Direct3D 9; not a line of the original is copied. The edge fade and the end fade are this project's own, and so is the per-part choice between the file's normal and the face's normal, re-derived on this project's own measurement. Origin ledger, entries 31 and 475. |
 | `TOMB5 Code/TOMB5/specific/hd/hd_vis.cpp/.h` | `host/render/hd_visibility_tr2.inc`, its TR2 visibility prototype (the copy handed over on 2026-10-14) | The **approach**, not the code: the portal walk as the room list, every listed room's art drawn whole, a group listed by its art in a listed room's box, and the count of eight triangles that makes a guest. The walk, the tables and their other rules are this project's own. Origin ledger, entries 209 and 210. |
+| `TOMB5 Code/TOMB5/specific/hd/hd_level.cpp`, `hd_render.cpp/.h`: the second shells (`BuildShellRooms`, `MarkSecondShells`) | `host/render/dupshell.h` and the `schacht` and `rich2lift` blocks of `hd_load` (the copy of 2026-10-23, read on 2026-10-24) | The **rule and its thresholds**, not the code: a group's art standing outside its own box (widened by 64) in exactly one other room's box (widened by 16) is a second shell of that room when 200 of its triangles, a fifth of the pair or more, lie in the plane of the room's own art (normals within 0.98, 16 units) and fewer than half of those are the room's very triangles, and then the whole pair goes; the rest of such a group by those rooms (within 512 in x and z, 64 in y) and its art in the open air of the rooms in their column (32 units off a square's floor and ceiling); the 0x40000 group flag as art meant to reach past its room; a flipmap room's pair not taken whole. The scans, the plane cells, the mirror and the shared-face refusals, the log lines and the probe are this project's own. Origin ledger, entry 480. |
 | `TOMB5 Code/TOMB5/game/spotcam_math.h` and its use in `game/spotcam.cpp` | `games/tr5/src/game/spotcam.cpp` (`CalculateSpotCams`, its SNAPBACK branch) and `games/tr5/glue/hostglue_input5.cpp` (the copy handed over on 2026-10-14) | The **cause and the rules**, re-derived, no code: a skipped flyby ends a SNAPBACK sequence while the frame still stands at the camera before the last, so the last camera's own place and room are tested; and the census rule for the sequences that end short. The form and the words are this project's own. Origin ledger, entry 227. |
 | `TOMB5 Code/TOMB5/specific/hd/hd_trl.cpp/.h` | its porting notes for TR4 and its measurement of the faces | The **layout** of a face's `.TRL` track file and the deform of a face by the joints such a file moves (a frame's matrix times the inverse of the bind's), both found by TROne on the data files and measured again here on the installation's own files (`LipsTest`); which column drives which joint is read out of the face's own `.TRM`. Origin ledger, entries 10 and 34. |
 | `TOMB5 Code/TOMB5/game/interpolate_math.h`, `InterpRootFlip` | its frame blend in `games/tr5/src/game/draw.cpp`, read for comparison | The **approach**, re-derived, no code: the previous frame expressed in the current one before the blend. TROne blends whole node matrices; this engine blends Euler angles and a separate offset, so that step is done by hand, two signs for half a turn. Not on the HD path, so not in the origin ledger: `MODIFICATIONS.md`, "Lara facing the wrong way for one tick in the jump twists: the early half turn". |
@@ -4593,6 +4594,25 @@ carries the tables.
     thing (ammunition, level, options), read on the player's
     files and never copied, and the census of where each key is drawn with its widths on
     the font's own glyph table.
+480. **The second shells** (`specific/hd/hd_level.cpp`, `BuildShellRooms`, `ReportShells`;
+    `specific/hd/hd_render.cpp`, `MarkSecondShells` and its helpers,
+    `HDRenderSetShellRooms`, `HDRenderShellLine`, `HDRenderShellCounts`,
+    `HDRenderGroupShellDropped`; `hd_render.h`, `HDShellRoom`, `HDShellLine`; RoomProbe's
+    `-shellscan`, `-shelldump`, `-shellgroups`, `-shell`, `-flipindex`; ModernTest's
+    `shell_rule`) - the level build on the visibility path leaves out for good the art of
+    a group that copies other rooms' art: the pairs, the rest by their rooms and the open
+    air of the rooms in their column. THIRD: TROne (Copyright 2026 Todesengel, GPLv3),
+    `host/render/dupshell.h` and the `schacht` and `rich2lift` blocks of its `hd_load`
+    (the copy of 2026-10-23, read on 2026-10-24) - the three scans' rule and every
+    threshold (64, 16, 0.98, 16, 200, a fifth, half, 512, 64, 32, the 0x40000 flag),
+    credited, unchanged. OWN: the code, the 256-unit cells of a host's art, a flipmap pair
+    dropping only what every state of its host carries (its art and its twin's, measured
+    on RICH3: dropping what one state carries leaves the place bare in the other), the
+    open air asking no room of a pair line, and two refusals the measurement asked for: a
+    pair behind a mirror of the group's room (RICH2's washroom: the reflection's far half,
+    1,604 pixels of the pane) and a pair whose host's box shares a face with the group's
+    own (RICH2's shaft: 15,751 pixels with no art at all from the lift car's roof; JOBY3:
+    a cloth cut through). DATA: the census of the fifteen levels' pairs.
 
 ## Credited, but not contained here
 

@@ -17745,6 +17745,7 @@ namespace probeshell
 		int verdict;		// 0 kept, 1 pair, 2 rest, 3 air
 		bool covered, exact;
 		bool twinCovered;	// covered by the host's flipmap twin's art
+		bool every;		// covered by every state's group of the host
 		float v[3][3];
 	};
 
@@ -18222,7 +18223,7 @@ static int ProbeShellScan(const char* root, const char* stem)
 			c.foreign = 0;
 			c.host = -1;
 			c.verdict = 0;
-			c.covered = c.exact = c.twinCovered = false;
+			c.covered = c.exact = c.twinCovered = c.every = false;
 
 			for (int h = 0; h < n && c.out64; h++)
 				if (h != g && In(rooms[(size_t)h], c.c, kForeign, kForeign,
@@ -18255,10 +18256,13 @@ static int ProbeShellScan(const char* root, const char* stem)
 						MakeHost(trg, rooms, tw, other);
 
 					c.twinCovered = c.good && Covered(other, c.c, c.n);
-					c.covered = c.covered || c.twinCovered;
 					c.exact = c.exact || std::binary_search(
 						other.corners.begin(), other.corners.end(), Key(v));
 				}
+
+				// Every state carries it; a twin with no art carries none.
+				c.every = c.covered && (tw < 0 || tw == g || c.twinCovered);
+				c.covered = c.covered || c.twinCovered;
 			}
 
 			cands.push_back(c);
@@ -18312,7 +18316,7 @@ static int ProbeShellScan(const char* root, const char* stem)
 
 			if (why && !strcmp(why, "flip"))
 			{
-				// What a state carries drops; the group's own twin never.
+				// What every state carries drops; the own twin's nothing.
 				const int twin = rooms[(size_t)h].twin;
 				int went = 0, byTwin = 0;
 
@@ -18323,7 +18327,7 @@ static int ProbeShellScan(const char* root, const char* stem)
 
 					byTwin += c.twinCovered ? 1 : 0;
 
-					if (!c.covered || h == own.twin)
+					if (!c.every || h == own.twin)
 						continue;
 
 					c.verdict = 1;

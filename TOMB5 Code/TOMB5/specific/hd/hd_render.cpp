@@ -2686,6 +2686,7 @@ namespace
 		int foreign;		// foreign boxes, widened, holding the centroid
 		int host;		// the one, when foreign is 1
 		bool covered, exact;
+		bool every;		// covered by every state's group of a flipmap host
 		std::array<int, 9> key;
 	};
 
@@ -2987,7 +2988,7 @@ namespace
 	/* The three scans, group by group (HDShellRoom in hd_render.h has the
 	 * rule): the pairs, then for a group with a second-shell pair the rest
 	 * by its hosts and the open air of the rooms in their column. A pair
-	 * of a flipmap room keeps what no state of its host carries. */
+	 * of a flipmap room keeps what not every state of its host carries. */
 	void MarkSecondShells(const trf::remaster::Trg& trg)
 	{
 		g_shell_drop.clear();
@@ -3055,7 +3056,7 @@ namespace
 					kShellOwn);
 				t.foreign = 0;
 				t.host = -1;
-				t.covered = t.exact = false;
+				t.covered = t.exact = t.every = false;
 				t.key = ShellKey(v);
 
 				for (int h = 0; h < n && t.out64; h++)
@@ -3076,19 +3077,28 @@ namespace
 						host.corners.end(), t.key);
 
 					/* A flipmap host carries in each state the art of
-					 * that state's group: its own and its twin's. */
+					 * that state's group: its own and its twin's. A twin
+					 * with no art carries nothing. */
 					const int tw = g_shell_rooms[t.host].twin;
 
-					if (tw >= 0 && tw != g && tw < groups &&
-						tris[(size_t)tw] > 0)
-					{
-						const ShellHost& other = host_of(tw);
+					t.every = t.covered;
 
-						t.covered = t.covered || (t.good &&
-							ShellCovered(other, t.c, t.n));
-						t.exact = t.exact || std::binary_search(
-							other.corners.begin(), other.corners.end(),
-							t.key);
+					if (tw >= 0 && tw != g)
+					{
+						bool other = false;
+
+						if (tw < groups && tris[(size_t)tw] > 0)
+						{
+							const ShellHost& art = host_of(tw);
+
+							other = t.good && ShellCovered(art, t.c, t.n);
+							t.exact = t.exact || std::binary_search(
+								art.corners.begin(), art.corners.end(),
+								t.key);
+						}
+
+						t.every = t.every && other;
+						t.covered = t.covered || other;
 					}
 				}
 
@@ -3158,14 +3168,14 @@ namespace
 					if (!t.out64 || t.foreign != 1 || t.host != h)
 						continue;
 
-					/* A flipmap room's pair: what a state's group carries
-					 * (covered by the host's art or its twin's) doubles
-					 * that state and haunts the other, and drops; what
-					 * no state carries is the group's own and stays. A
-					 * pair with the group's own twin drops nothing: the
-					 * two are never in the world together. */
+					/* A flipmap room's pair: only what every state's
+					 * group carries drops. A triangle one state's group
+					 * lacks is the only art there in that state, and the
+					 * fill has no range per state. A pair with the
+					 * group's own twin drops nothing: the two are never
+					 * in the world together. */
 					if (line.refused == HD_SHELL_FLIP &&
-						(!t.covered || h == own.twin))
+						(!t.every || h == own.twin))
 						continue;
 
 					if (line.refused != HD_SHELL_TAKEN &&

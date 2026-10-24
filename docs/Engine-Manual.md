@@ -4445,7 +4445,7 @@ Level*, and the tiers *Standard*, *gemessen*, *Tabelle*, *outfit.txt*,
 
 | row | says |
 |---|---|
-| *Footsteps* | **Boots** or **Bare** for this outfit — left and right change it. On *Level facts* there is nothing to hang the choice on, so it reads *as the outfit says* and the keys do nothing. If the level has no room for a second set of recordings, or nothing to take one from, the row is greyed and says so. |
+| *Footsteps* | **Boots** or **Bare** for this outfit — left and right change it. On *Level facts* there is nothing to hang the choice on, so it reads *as the outfit says* and the keys do nothing. If the level has no room for a second set of recordings, or nothing to take one from, the row is dark red and says so. |
 | *Head* | whose head this body wears — *own*, *TR5* or *TR5 hair*. A body drawn for Tomb Raider I-III carries headgear and no hair, so it is given TR5's instead; the row says so before you pick it. |
 | *Shine* | the body's own specular strength and its exponent. |
 | *Skin glow* | the same two numbers for Lara's **skin** — her face, her neck, her bare hands. |

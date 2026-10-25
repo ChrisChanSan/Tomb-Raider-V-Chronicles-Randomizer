@@ -533,7 +533,15 @@
  *     -hollowdraw     with -vis 1: every hollow group drawn whole inside its
  *                     -roomwin window and nowhere else, as the engine draws
  *                     a hollow group's art beside its classic room.
- *     -opensky        with -vis 1 and -walk: `outside` (FARCULL's outside=)
+ *     -hollowwin      with -hollowdraw and -roomwin: per hollow group
+ *                     drawn, its window, the screen box of its art (the
+ *                     corners of its bounds projected), the windows
+ *                     -roomwin gives the rooms whose grids hold its
+ *                     triangles (`hosts`), and after the picture the
+ *                     background pixels in the whole picture, in the
+ *                     art's box (`hole`) and in the box outside the
+ *                     window: a `hollowwin:` line each.
+ *     -opensky       with -vis 1 and -walk: `outside` (FARCULL's outside=)
  *                     also turns on for a listed room the visibility path
  *                     leaves out that is not under the sky, as the walk of
  *                     game\draw.cpp turns it on (HDVisRoomOpensSky); the
@@ -2567,6 +2575,8 @@ static void CallTraceInstall()
 	VirtualProtect(&table[82], sizeof(void*), old, &old);
 }
 
+static void HollowWinCount(const unsigned long* pixels, long w, long h);
+
 static bool ShotWrite(Shot& shot, const char* path)
 {
 	D3DLOCKED_RECT rect;
@@ -2639,6 +2649,7 @@ static bool ShotWrite(Shot& shot, const char* path)
 	WetStepLine(pixels, shot.w, shot.h);
 	WetCutLine(pixels, shot.w, shot.h);
 	LumaAtLines(pixels, shot.w, shot.h);
+	HollowWinCount(pixels, shot.w, shot.h);
 
 	const double texels = (double)shot.w * (double)shot.h;
 	const bool ok = WritePng(path, pixels, shot.w, shot.h);
@@ -4291,6 +4302,12 @@ static int g_no_front = 0;
  * (HDVisTables::enclosedBy) and the stand rule's state. Needs -roombox
  * and -vis 1; -nodraw keeps it to the lines. */
 static bool g_hollow_list = false;
+/* -hollowwin: per hollow group -hollowdraw draws under -roomwin, the window
+ * it is drawn in against the screen box of its art and the background
+ * pixels left in that box (HollowWinNote, HollowWinCount): where a window
+ * cuts the art of a room seen through it, and what of the box stays the
+ * clear colour. */
+static bool g_hollow_win = false;
 // The boxes of the items of DUMMY slots, with their item and slot.
 static std::vector<HDStandBox> g_baked_boxes;
 static std::vector<int> g_baked_items;
@@ -4324,6 +4341,8 @@ static bool TieArg(int argc, char** argv, int* at)
 		g_stand_list = true;
 	else if (!strcmp(a, "-hollowlist"))
 		g_hollow_list = true;
+	else if (!strcmp(a, "-hollowwin"))
+		g_hollow_win = true;
 	else if (!strcmp(a, "-nofront"))
 	{
 		g_no_front = 1;
@@ -8121,6 +8140,7 @@ static void ClipFor(int group)
 }
 
 static bool DecideGroup(int group, int* rect, bool* full, bool* empty);
+static void HollowWinNote(int group, const int* rect, bool full, bool empty);
 
 /* One group, drawn as the engine would draw it. Ordinarily one call with
  * whatever -window asked for; with -tround naming this group, the two calls
@@ -8187,6 +8207,9 @@ static bool DrawOneGroup(int group, const D3DMATRIX* world,
 		const int tris = HDRenderGroupTriangles(group, -1);
 		const bool hollow = g_hollow_draw && tris > 0 &&
 			HDRenderGroupOverhangTriangles(group) >= tris;
+
+		if (hollow && g_hollow_win)
+			HollowWinNote(group, rect, full, empty);
 
 		if (g_vis_option && (g_vis_win == 5 || hollow) && !full)
 		{
@@ -8650,6 +8673,217 @@ static bool DecideGroup(int group, int* rect, bool* full, bool* empty)
 	}
 
 	return true;
+}
+
+/* -hollowwin: a -roomwin window as DecideGroup widens it into a scissor
+ * rectangle (left, top, right, bottom, the last two not drawn), false for
+ * a group -roomwin does not name; `empty` for one of no width or height. */
+static bool RoomWinRect(int group, int* rect, bool* empty)
+{
+	int at = -1;
+
+	for (int i = 0; i < g_roomwin_count; i++)
+		if (g_roomwin_group[i] == group)
+			at = i;
+
+	if (at < 0)
+		return false;
+
+	const long* win = g_roomwin_box[at];
+
+	*empty = win[2] <= win[0] || win[3] <= win[1];
+	rect[0] = *empty ? 0 : (int)win[0] - 1;
+	rect[1] = *empty ? 0 : (int)win[1] - 1;
+	rect[2] = *empty ? 0 : (int)win[2] + 2;
+	rect[3] = *empty ? 0 : (int)win[3] + 2;
+
+	if (rect[0] < 0) rect[0] = 0;
+	if (rect[1] < 0) rect[1] = 0;
+	if (rect[2] > (int)g_decide_width) rect[2] = (int)g_decide_width;
+	if (rect[3] > (int)g_decide_height) rect[3] = (int)g_decide_height;
+
+	return true;
+}
+
+/* One hollow group drawn in this picture (-hollowwin): its window, the
+ * screen box of its art and the windows of the rooms whose grids hold its
+ * triangles. */
+struct HollowWinProbe
+{
+	int group;
+	int win[4];
+	bool full, empty;
+	int art[4];		// the art's screen box, half open
+	bool behind;	// a corner of its bounds behind the eye
+	bool seen;		// the box has an area on the screen
+	int hosts;
+	int host[HD_HOLLOW_ROOMS];
+	int hostWin[HD_HOLLOW_ROOMS][4];
+	int hostState[HD_HOLLOW_ROOMS];	// 0 unlisted, 1 empty, 2 a window
+};
+
+static std::vector<HollowWinProbe> g_hollow_wins;
+
+static void HollowWinNote(int group, const int* rect, bool full, bool empty)
+{
+	HollowWinProbe probe;
+
+	memset(&probe, 0, sizeof(probe));
+	probe.group = group;
+	probe.full = full;
+	probe.empty = empty;
+
+	for (int k = 0; k < 4; k++)
+		probe.win[k] = full ? (k == 2 ? (int)g_decide_width : k == 3 ?
+			(int)g_decide_height : 0) : rect[k];
+
+	// The art's bounds, at the group's -with offset, projected corner by
+	// corner as FaceSurvives projects a face's.
+	float mins[3], maxs[3], offset[3] = { 0.0f, 0.0f, 0.0f };
+
+	for (int i = 0; i < g_with_count; i++)
+		if (g_with_group[i] == group)
+			for (int c = 0; c < 3; c++)
+				offset[c] = g_with_offset[i][c];
+
+	double lo[2] = { 1e30, 1e30 }, hi[2] = { -1e30, -1e30 };
+
+	if (HDRenderGroupBounds(group, mins, maxs))
+		for (int c = 0; c < 8; c++)
+		{
+			const float* view = g_decide_view;
+			const float px = ((c & 1) ? maxs[0] : mins[0]) + offset[0];
+			const float py = ((c & 2) ? maxs[1] : mins[1]) + offset[1];
+			const float pz = ((c & 4) ? maxs[2] : mins[2]) + offset[2];
+			const float vx = px * view[0] + py * view[4] + pz * view[8] +
+				view[12];
+			const float vy = px * view[1] + py * view[5] + pz * view[9] +
+				view[13];
+			const float vz = px * view[2] + py * view[6] + pz * view[10] +
+				view[14];
+
+			if (vz < 20.0f)
+			{
+				probe.behind = true;
+				continue;
+			}
+
+			const double zv = g_decide_persp / vz;
+			const double sx = vx * zv + (double)g_decide_width * 0.5;
+			const double sy = vy * zv + (double)g_decide_height * 0.5;
+
+			lo[0] = sx < lo[0] ? sx : lo[0];
+			lo[1] = sy < lo[1] ? sy : lo[1];
+			hi[0] = sx > hi[0] ? sx : hi[0];
+			hi[1] = sy > hi[1] ? sy : hi[1];
+		}
+
+	// A corner behind the eye: the box can reach any edge of the screen.
+	if (probe.behind)
+	{
+		lo[0] = lo[1] = -1e30;
+		hi[0] = hi[1] = 1e30;
+	}
+
+	const double size[2] = { (double)g_decide_width, (double)g_decide_height };
+
+	for (int k = 0; k < 2; k++)
+	{
+		const double a = lo[k] < 0.0 ? 0.0 : lo[k] > size[k] ? size[k] : lo[k];
+		const double b = hi[k] < 0.0 ? 0.0 : hi[k] > size[k] ? size[k] : hi[k];
+
+		probe.art[k] = (int)floor(a);
+		probe.art[k + 2] = (int)ceil(b);
+	}
+
+	probe.seen = probe.art[2] > probe.art[0] && probe.art[3] > probe.art[1];
+
+	// The rooms whose grids hold its triangles, as the build counted them.
+	for (int i = 0; i < HDRenderHollowGroups(); i++)
+	{
+		HDHollowGroup h;
+
+		if (!HDRenderHollowGroup(i, &h) || h.group != group)
+			continue;
+
+		for (int k = 0; k < h.gridRooms && k < HD_HOLLOW_ROOMS; k++)
+		{
+			bool hostEmpty = false;
+
+			probe.host[probe.hosts] = h.gridRoom[k];
+
+			if (RoomWinRect(h.gridRoom[k], probe.hostWin[probe.hosts],
+				&hostEmpty))
+				probe.hostState[probe.hosts] = hostEmpty ? 1 : 2;
+
+			probe.hosts++;
+		}
+	}
+
+	for (size_t i = 0; i < g_hollow_wins.size(); i++)
+		if (g_hollow_wins[i].group == group)
+		{
+			g_hollow_wins[i] = probe;
+			return;
+		}
+
+	g_hollow_wins.push_back(probe);
+}
+
+static bool InRect(const int* r, long x, long y)
+{
+	return x >= r[0] && x < r[2] && y >= r[1] && y < r[3];
+}
+
+/* -hollowwin, after the picture: per group noted, the background pixels in
+ * the whole picture, in its art's box (`hole`) and in the box outside its
+ * window. */
+static void HollowWinCount(const unsigned long* pixels, long w, long h)
+{
+	for (size_t i = 0; i < g_hollow_wins.size(); i++)
+	{
+		const HollowWinProbe& p = g_hollow_wins[i];
+		long long clear = 0, hole = 0, outside = 0;
+
+		for (long y = 0; y < h; y++)
+			for (long x = 0; x < w; x++)
+			{
+				if ((pixels[y * w + x] & 0x00FFFFFFu) != 0x00FF00FFu)
+					continue;
+
+				clear++;
+
+				if (!p.seen || !InRect(p.art, x, y))
+					continue;
+
+				hole++;
+
+				if (p.empty || !InRect(p.win, x, y))
+					outside++;
+			}
+
+		char hosts[512] = { 0 };
+		size_t used = 0;
+
+		for (int k = 0; k < p.hosts && used + 48 < sizeof(hosts); k++)
+		{
+			const int* r = p.hostWin[k];
+
+			used += (size_t)sprintf(hosts + used, "%s%d:", k ? ";" : "",
+				p.host[k]);
+			used += (size_t)(p.hostState[k] == 2 ? sprintf(hosts + used,
+				"%d,%d..%d,%d", r[0], r[1], r[2], r[3]) :
+				sprintf(hosts + used, "%s", p.hostState[k] ? "empty" :
+				"unlisted"));
+		}
+
+		printf("hollowwin: group=%d window=%d,%d..%d,%d full=%d empty=%d "
+			"art=%d,%d..%d,%d behind=%d hosts=%s clear=%lld hole=%lld "
+			"outside_window=%lld inside_window=%lld\n", p.group, p.win[0],
+			p.win[1], p.win[2], p.win[3], p.full ? 1 : 0, p.empty ? 1 : 0,
+			p.art[0], p.art[1], p.art[2], p.art[3], p.behind ? 1 : 0,
+			hosts[0] ? hosts : "-", clear, hole, outside, hole - outside);
+	}
 }
 
 /* ------------------------------------------- the level's own fog bulbs -- */
@@ -19693,6 +19927,8 @@ static int ProbeMain(int argc, char** argv)
 			"they lie in\n");
 		printf("       -hollowlist   the hollow groups, where their art "
 			"stands, and their rooms\n");
+		printf("       -hollowwin   per hollow group drawn: its window, its "
+			"art's screen box, the clear in it\n");
 		printf("       -ties [n]   classic faces within 1/n of the art's "
 			"depth, counted\n");
 		printf("       -push classic|<g> <f>   faces or group g moved by f of "

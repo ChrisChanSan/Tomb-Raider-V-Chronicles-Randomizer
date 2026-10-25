@@ -15488,9 +15488,10 @@ static void vis_hollow_enclosed()
 
 /* The window a hollow group's art is drawn in (HDVisHollowWindow): its
  * room's window joined with its listed hosts', as measured from below
- * JOBY2's sniper window into room 19 at 1,280 x 720 - the room's window
- * ends at row 159, the hole's lowest rows reach 166, and room 146's
- * window holds them -; an empty window adds nothing, a room with no host
+ * JOBY2's sniper window into room 19 at 1,280 x 720, in the scissor form
+ * (right and bottom exclusive): the room's window 626,0 to 830,159 ends
+ * at row 158, the hole's lowest rows reach 166, and room 146's window,
+ * bottom 276, holds them -; an empty window adds nothing, a room with no host
  * keeps its own, and no window at all draws nothing. */
 static void vis_hollow_window()
 {

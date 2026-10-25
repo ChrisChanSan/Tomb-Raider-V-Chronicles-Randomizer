@@ -33868,9 +33868,10 @@ holds them at every eye (tick 53360: it ends at row 276). The invisible texture 
 test suspects is tile 2550's 96 clear texels on the faces of rooms 19 and 21, and those
 faces are not drawn: the strip is pixels at which nothing is drawn at all, the art cut off
 at its room's window. The faces would lie over 6,082 of the logged 6,131, which is where
-the same strip showed through tile 2550 before this entry's first round. Round 1's f18936,
-f19028 and pic1 held 34, 32 and 46 such pixels too (the "one-pixel seam along the frame's
-edge" above: under the window's bottom edge).
+the same strip showed through tile 2550 before this entry's first round. Round 1's eyes at
+ticks 1044390 and 1047453 and its rebuilt eye into room 21 (21,700, -6,000, 35,600) held
+34, 32 and 46 such pixels too (the "one-pixel seam along the frame's edge" above: under
+the window's bottom edge).
 
 *The rule* (`hd_vis.h`, `HDVisHollowWindow`; `hd_level.cpp`, `g_hollow_host` set at the
 level build, `HollowWindows` once per frame before the solid phase, `LogHollowWindows`): a
@@ -33895,33 +33896,34 @@ checks the union (6) and the push's wiring (4).
 
 *Checked.* At the head 0 clear pixels in the hole at all 50 eyes; nothing changes outside
 the hole, and of the pixels that change all but 0 to 43 per eye at the hole's rim were
-clear at the base (`sheets/` of the round: base, head and the marks at every eye). The eye
-from the pipe and round 1's f19468, r19win and p298 are the base's to the byte; f18936,
-f19028 and pic1 lose their 34, 32 and 46 clear pixels. Round 15's ties at round 1's six
-eyes, base / the union alone / the head: groups 19 and 21 15/80/0, 14/57/0, 1/5/0, 0/50/0,
-1/4/0 and 0/0/0 - the union alone drew a dotted line round the art's outline on the
-facade, the push takes it and round 1's new seam with it -; group 146 14/47/7, 5/8/3,
-12/17/11, 12/45/12, 2/9/2 and 2/2/2. Hosts over the fifteen levels: JOBY2's 19 and 21 four
-each, the title's 70 and 101 one (room 87), the other five none; round 1's nine eyes of
-the other seven groups and the title's 32 room views (rooms 70, 101, 103 and 87, four yaws
-at pitch 0 and -30) are the base's to the byte. The parity sets of round 1, base against
-head (md5 per picture): #236's 72, the 131 room-centre views as the tools and as the
-engines draw them (both `-hollowdraw`) and #242's 28 shaft pictures, 362 of 362 the same.
-The shell scans (`-shellscan`) over the fifteen levels: 89 lines at base and head, the
-same to the byte. The nine tools build; ModernTest 16,816 checks (10 more than the
-base's), MenuTest 44,931, InterpTest 754, LipsTest 299 and 272, 0 failed. `hd_build` 0,
-`hd_vis` 0, `hd_marble` 0 and `hd_fog` 0 are the base's by construction: no entry is
-hollow off the visibility path (`g_group_hollow`), so `HollowWindows` changes nothing and
-`HDRenderRoomBehind` is never turned on; no classic path file changed. The engine of the
-last commit touching engine source (`1c69db4f`): `PCtomb5.exe` built Oct 25 2026 20:27:32,
-md5 `0a3737bcc9fb4025d0fb02b5e3935714`.
+clear at the base. The eye from the pipe, round 1's eye at tick 1079875, room 19's window
+(17,000, -6,200, 29,500) and the rebuilt mid-jump eye (16,600, -6,300, 28,100) are the
+base's to the byte; the eyes at ticks 1044390 and 1047453 and the rebuilt eye into room 21
+lose their 34, 32 and 46 clear pixels. Round 15's ties at round 1's six eyes, base / the
+union alone / the head: groups 19 and 21 15/80/0, 14/57/0, 1/5/0, 0/50/0, 1/4/0 and 0/0/0
+- the union alone drew a dotted line round the art's outline on the facade, the push takes
+it and round 1's new seam with it -; group 146 14/47/7, 5/8/3, 12/17/11, 12/45/12, 2/9/2
+and 2/2/2. Hosts over the fifteen levels: JOBY2's 19 and 21 four each, the title's 70 and
+101 one (room 87), the other five none; round 1's nine eyes of the other seven groups and
+the title's 32 room views (rooms 70, 101, 103 and 87, four yaws at pitch 0 and -30) are
+the base's to the byte. The parity sets of round 1, base against head (md5 per picture):
+#236's 72, the 131 room-centre views as the tools and as the engines draw them (both
+`-hollowdraw`) and #242's 28 shaft pictures, 362 of 362 the same. The shell scans
+(`-shellscan`) over the fifteen levels: 89 lines at base and head, the same to the byte.
+The nine tools build; ModernTest 16,816 checks (10 more than the base's), MenuTest 44,931,
+InterpTest 754, LipsTest 299 and 272, 0 failed. `hd_build` 0, `hd_vis` 0, `hd_marble` 0
+and `hd_fog` 0 are the base's by construction: no entry is hollow off the visibility path
+(`g_group_hollow`), so `HollowWindows` changes nothing and `HDRenderRoomBehind` is never
+turned on; no classic path file changed. The engine of the last commit touching engine
+source (`1c69db4f`): `PCtomb5.exe` built Oct 25 2026 20:27:32, md5
+`0a3737bcc9fb4025d0fb02b5e3935714`.
 
 *Left.* Not seen in the game. The union is one rectangle: where it is wider than the
 hosts' windows together - at most eyes from below it covers the screen - only the depth
 test holds the art behind the hosts' walls; at the 50 eyes nothing of it shows outside the
-hole. Pushed back, the art loses to any surface within a 512th of its distance in front of
-it, in the hole too; at the 50 eyes the push changed only tie pixels. The engine's new log
-lines were not produced (the game was not run); RoomProbe's come from the same
+hole. Pushed back, the art lets a surface up to a 512th of its distance behind it show
+through, in the hole too; at the 50 eyes the push changed only tie pixels. The engine's
+new log lines were not produced (the game was not run); RoomProbe's come from the same
 `HDVisHollowWindow` and the same build.
 
 **Commits.** `b75bc30a` (the measurement: RoomProbe `-hollowwin`), `88d450b4` (the union,

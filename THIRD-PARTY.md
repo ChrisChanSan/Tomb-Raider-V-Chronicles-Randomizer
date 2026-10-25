@@ -4655,22 +4655,24 @@ carries the tables.
     `LogHollowWindows`, `DrawRoomWindowed`, `DrawRoomShadowWindowed`;
     `specific/hd/hd_vis.h`, `HDVisClassicRoomEnclosed`, `HDVisHollowWindow`;
     `specific/hd/hd_render.cpp/.h`, `NoteHollowGroups`, `HDHollowGroup`,
-    `HDRenderHollowText`; RoomProbe's `-hollowlist`, `-hollowdraw`, `-hollowwin`;
-    ModernTest's `vis_hollow_enclosed`, `vis_hollow_window`) - on the visibility path
-    the art of a room's group that stands wholly outside the room's own box is drawn
-    with the room wherever the walk lists it, inside the room's window joined with the
-    windows of its hosts, the listed rooms whose grids hold its triangles; and such a
-    room standing enclosed in a room whose art stands in it draws none of its classic
+    `HDRenderHollowText`, `g_room_behind`, `HDRenderRoomBehind`; RoomProbe's
+    `-hollowlist`, `-hollowdraw`, `-hollowwin`; ModernTest's `vis_hollow_enclosed`,
+    `vis_hollow_window`, `vis_hollow_behind`) - on the visibility path the art of a
+    room's group that stands wholly outside the room's own box is drawn with the room
+    wherever the walk lists it, inside the room's window joined with the windows of
+    its hosts, the listed rooms whose grids hold its triangles; and such a room
+    standing enclosed in a room whose art stands in it draws none of its classic
     faces. THIRD: TROne (Copyright 2026 Todesengel, GPLv3), its renderer as read by
     this project on 2026-10-24 for a comparison - the reading: a room's group drawn
     where the room is listed, no classic face of the room in front of it, and a
     triangle outside its own room's box and in another room's box passing against that
     room's screen rectangle too. OWN: the rule and its code - the hollow verdict kept,
     the enclosure that takes the faces, the union of windows as one rectangle per
-    group from the rooms whose grids hold the art, the log lines, the probe's switches
-    and the checks. DATA: the nine hollow groups of the fifteen levels and the eyes of
-    JOBY2's two sniper windows (from below, 30,802 clear pixels at 43 eyes, every one
-    outside the room's own window and inside a host's).
+    group from the rooms whose grids hold the art, the art pushed back in depth so
+    that the hosts' walls keep the edge, the log lines, the probe's switches and the
+    checks. DATA: the nine hollow groups of the fifteen levels and the clear pixels in
+    the holes of JOBY2's two sniper windows seen from below, every one outside the
+    room's own window and inside a host's.
 
 ## Credited, but not contained here
 

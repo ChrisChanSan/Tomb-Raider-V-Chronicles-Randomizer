@@ -187,11 +187,10 @@ struct HDVisTables
 	/* Per room: the group of a room linked with it whose box holds the
 	 * room's inside wholly and whose art stands in that inside, guestTris
 	 * triangles or more - the most of them -, -1 for none; and those
-	 * triangles. Noted for the HDLOG vis line and RoomProbe's -vis lines;
-	 * nothing is drawn or left out by it: a classic room standing so keeps
-	 * its faces, its own group being hollow (never drawn) and the enclosing
-	 * art covering none of its faces - JOBY2's sniper rooms 19 and 21,
-	 * whose faces are the black behind the broken facade windows. */
+	 * triangles. Noted for the HDLOG vis line and RoomProbe's -vis lines,
+	 * and asked of a room whose hollow art is drawn
+	 * (HDVisClassicRoomEnclosed): JOBY2's sniper rooms 19 and 21, whose
+	 * faces are black and clear behind the broken facade windows. */
 	std::vector<int> enclosedBy;
 	std::vector<int> enclosedTris;
 	int roomsEnclosed = 0;
@@ -682,22 +681,52 @@ inline bool HDVisFloorOnArt(const int* floorRooms, int count,
 	return true;
 }
 
+/* Whether the visibility path draws none of the faces of a classic room
+ * whose own group is hollow - every triangle outside the room's own box -
+ * and drawn beside it (`hollowDrawn`, hd_level.cpp's g_group_hollow): none
+ * of its faces covered by any group's art (the stand rule draws a covered
+ * one), faces to leave out, and the room standing enclosed: inside the
+ * whole box of a room linked with it, whose art stands in its inside
+ * (`enclosedBy`, HDVisTables::enclosedBy, -1 for none).
+ *
+ * What for: the hollow art is the room as its window shows it, deeper and
+ * wider than the classic faces, which stand inside it. JOBY2's sniper rooms
+ * 19 and 21 are such rooms behind the broken glass block windows of the
+ * courtyard facade (room 146): their faces - a black far wall, the floor,
+ * ceiling and side walls half black and half clear - stand in front of the
+ * art's dark walls and bars, and drawn, their clear texels show the sky
+ * through the hole. All of them go, the floor too, which the hole shows
+ * from outside; the art's own floor lies lower. Left out, the hole shows
+ * the art, and room 146's reveal round it is drawn with its group. A
+ * hollow room not enclosed keeps its faces: its art stands
+ * well away from it (RICHCUT2's 2 to 4, in no room's grid), or is one
+ * to four stray triangles (ANDREA2's 124, four at one point; the title's
+ * 70, 101 and 103, one each, below and beside the room; 101's shows as a
+ * small sliver where nothing stands in front of it). */
+inline bool HDVisClassicRoomEnclosed(bool hollowDrawn, bool facesCovered,
+	int classicFaces, int enclosedBy)
+{
+	return hollowDrawn && !facesCovered && classicFaces > 0 &&
+		enclosedBy >= 0;
+}
+
 /* HDVisClassicRoomHidden over the tables, as the visibility path asks it of
  * room `room` (hd_level.cpp, VisHidesClassicRoom): its guests and its floor
- * links read from `t`, `drawnHD` as HDVisFloorOnArt asks it. False for a
- * room the tables do not hold.
- *
- * The enclosure table (HDVisTables::enclosedBy) is not asked: a room that
- * stands inside another keeps its faces, its own group hollow and never
- * drawn and the enclosing art covering none of them, so nothing else
- * closes its inside - JOBY2's sniper rooms 19 and 21, whose faces are the
- * black behind the facade's broken glass block windows. */
+ * links read from `t`, `drawnHD` as HDVisFloorOnArt asks it; for a room
+ * whose hollow art is drawn (`hollowDrawn`) HDVisClassicRoomEnclosed with
+ * the enclosure table instead. False for a room the tables do not hold. */
 template <class DrawnHD>
 inline bool HDVisClassicRoomVerdict(const HDVisTables& t, int room,
-	bool groupEmpty, bool facesCovered, int classicFaces, DrawnHD drawnHD)
+	bool groupEmpty, bool facesCovered, int classicFaces, DrawnHD drawnHD,
+	bool hollowDrawn = false)
 {
 	if (room < 0 || room >= t.rooms || (size_t)room >= t.guestCount.size())
 		return false;
+
+	if (hollowDrawn)
+		return (size_t)room < t.enclosedBy.size() &&
+			HDVisClassicRoomEnclosed(true, facesCovered, classicFaces,
+				t.enclosedBy[(size_t)room]);
 
 	bool onArt = false;
 

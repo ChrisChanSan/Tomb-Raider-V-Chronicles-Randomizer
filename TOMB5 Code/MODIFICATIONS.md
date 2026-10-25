@@ -33581,6 +33581,252 @@ entry changes what a seed writes on RICH2; neither file was part of this round.
 **Commits.** `c00ac945` (the kind, the entry, `setTriggerTimer` and FixCheck) and this
 record.
 
+### A hollow group's art is drawn where its room is listed (#245)
+2026-10-25
+
+**What.** On the visibility path (`hd_vis` 1) the art of a hollow group - a room's group
+with triangles none of whose centroids stands in the room's own box widened by
+`HD_OVERHANG_SLACK` - is drawn beside its classic room wherever the walk lists the room:
+all of it inside the room's portal window and nothing outside it, with the room's
+lighting (`hd_level.cpp`: `g_group_hollow`, set at the level build beside `g_group_hd`
+for a hollow group of a room the randomizer did not mark; `HollowGroupOfRoom` through
+the flip table; `HDFrameRoom` queues the group with `FrameRoomAdd` before the classic
+rules answer for the faces; `FrameRoom::hollow` makes `DrawRoomWindowed` and
+`DrawRoomShadowWindowed` draw the whole group inside the window, or nothing when the
+window is empty). The room stays classic: its faces are decided as every classic room's
+are, and one more rule leaves them out - a room whose hollow art is drawn, none of whose
+faces any art covers, standing enclosed in a linked room whose art stands in its inside
+(`HDVisTables::enclosedBy`) draws none of its faces (`hd_vis.h`,
+`HDVisClassicRoomEnclosed`, asked by `HDVisClassicRoomVerdict` with `hollowDrawn`), and
+opens no sky (`HDVisRoomOpensSky`). The level build notes every hollow group and where
+its art stands (`hd_render.cpp`, `NoteHollowGroups`; `HDRenderHollowGroups`,
+`HDRenderHollowGroup`, `HDRenderHollowText`). With `-log` the `HDLOG room` line ends in
+`drawn=` (1 for a room drawn HD or a hollow group drawn beside its room), one `HDLOG
+hollow level= group= tris= art= own= rooms= none= in= grid_rooms= grid_none= grid=
+drawn=` line per hollow group and one `HDLOG level= hollow groups= tris= drawn=` follow
+the room lines, and the `HDLOG level= vis=1` line ends in `hollow_hidden=`, the rooms
+whose faces go. RoomProbe takes `-hollowlist` (the same lines from the build, and per
+group its room's faces, portals, enclosing room, stand state and `hidden=`) and
+`-hollowdraw` (a hollow group drawn whole inside its `-roomwin` window); ModernTest
+checks the enclosed rule and the verdict over the tables (16,806 checks).
+
+**Why.** The play test, with a picture of JOBY2's courtyard facade - Lara mid-jump
+through the broken-out hole of a glass block window, black in the hole and a strip of
+sky at its left (a reference picture supplied for this project, not in the repository) -
+put into English: JOBY2's window remains should be parked as a task; a piece of the
+skybox is still visible there; in the Remaster the room behind the window is not black
+after all, there is a texture; the TROne project draws them right. That answers the
+question round 14's Left of the stand entry above left open - whether to draw the sniper
+rooms' own art, the bars and the dark walls behind the glass, which the hollow rule never
+drew. The reading - a hollow group is art to be drawn with its room, and the classic
+faces are what has to leave the hole - is that of TROne (GPLv3) by Todesengel1931 -
+https://github.com/todesengel1931 -, as read in its renderer by this project for the
+comparison; no code of it is taken.
+TROne has no hollow verdict and draws no classic face in its HD view; this project keeps
+its stand and cover rules, draws the hollow art inside the window and leaves the faces
+out by the enclosure it measures.
+
+**Measured.** RoomProbe of `08ece3aa` (the base) and of this round, `-hollowlist` over the
+fifteen levels. "Own" is the room's box a sector in from the grid's edge, the one the
+hollow test asks; "grids" the rooms' whole grids with the wall ring; the counts are
+centroids. Eleven levels have none; ANDREA2, JOBY2, RICHCUT2 and TITLE hold the nine:
+
+| Level | Group | Tris | The art (centroids, world) | In own boxes / grids | Faces | Enclosed by | Stand | Faces |
+|---|---:|---:|---|---|---:|---|---|---|
+| ANDREA2 | 124 | 4 | one point, (58371, 1, 23554) | none / none | 46 | - | covered by 121 | stay |
+| JOBY2 | 19 | 432 | x 14336..19456, y -8192..-4972, z 25317..26483 | none / 146:129, 147:81, 161:33, 142:3 | 12 | 146 (160) | classic | go |
+| JOBY2 | 21 | 360 | x 24725..26009, y -8033..-4896, z 32768..36864 | none / 146:88, 147:56, 152:20, 153:4 | 12 | 146 (177) | classic | go |
+| RICHCUT2 | 2 | 36 | x 34933..35729, y -1478..-114, z 70861..71657 | none / none | 49 | - | part (0) | stay |
+| RICHCUT2 | 3 | 48 | x 34933..35729, y -3014..-1589, z 70862..71658 | none / none | 112 | - | part (0) | stay |
+| RICHCUT2 | 4 | 288 | the plane x 51671, y 28..995, z 73756..74723 | none / none | 29 | - | part (5) | stay |
+| TITLE | 70 | 1 | (33666, 1369, 73026) | none / 87:1 | 65 | - | classic | stay |
+| TITLE | 101 | 1 | (33666, 1369, 60738) | 87:1 / 87:1 | 96 | - | classic | stay |
+| TITLE | 103 | 1 | (49026, 1369, 73026) | none / none | 213 | - | classic | stay |
+
+Group 19 has 432 triangles, not the 360 round 14 named. JOBY2's two groups are the
+sniper rooms as their windows show them: dark walls and a grate of bars, a room deeper
+and wider than the classic one - group 21's art reaches 1,024 units past the classic
+side walls (z 33,792 and 35,840) and 409 past the far wall (x 25,600) - so the 12 classic
+faces stand inside it, in front of its walls, and no centroid of it stands in any room's
+own box. Drawn with the faces kept the art changes 0 to 56 pixels at the hole's edges:
+the faces hide it. ANDREA2's group is four triangles at one point (0 pixels drawn at two
+eyes in room 124). The title's three are one triangle each, 1,369 units below their
+rooms' floors and beside them: 0 pixels at one eye in each title room; in a sweep of
+rooms 70, 101, 103 and 87 (four yaws, pitch 0 and -30, base `-hollow` against head
+`-hollowdraw`, the classic faces of 70, 101 and 103 drawn) 31 of 32 views change 0
+pixels and one, room 101 looking along +x, 64 - group 101's triangle, a sliver of 30 x
+12 pixels where the base shows the clear colour (in the game the sky): no face stands in
+front of it there; and at the title's 55 flyby cameras (TrgProbe `-flyby`), 54 looking
+at the next camera of their sequence (the last on along its last leg; sequence 0 has one
+camera), the 15 cameras of sequences 0 and 4 also at four yaws, pitch 0 and -20 - 174
+views, 84 of them listing room 70, 101 or 103 - 0 pixels change. RICHCUT2's 2 and 3
+are one dark slab 800 units wide in the open air 8,300 units west of rooms 0 to 3;
+RICHCUT2's 4 a square 471 units behind room 4's east wall (0 pixels from inside room 4
+and from room 2).
+
+JOBY2's windows at six eyes: round 15's three logged eyes into room 21, room 19's window
+(round 13), round 14's rebuilt eye of the earlier picture into room 21, and the play
+test's new picture rebuilt from the frame, the pillar with its wooden edge to the left of
+the window and the facade below it - room 19's window, eye (16,600, -6,300, 28,100) to
+(17,000, -6,450, 26,624). Base: rooms 19 and 21 classic with `-stand -hollow`; head: their
+groups with `-hollowdraw`, their faces left out. Pixels at 1,280 x 720 of the classic
+faces seen (the probe draws them flat grey; in the game tile 2550 of page 5, 160 of its
+256 texels black and 96 at alpha 0 with the sky through them, and the far wall's tile
+2551, black), the ties of the classic faces (`-ties 20000`), of group 146 and of groups 19
+and 21 (`-push` by plus and minus 1/20,000, pixels moving by more than 8), and the pixels
+that change:
+
+| Eye | Classic faces base / head | Ties classic base / head | Ties 146 base / head | Ties 19, 21 base / head | Changed (outside the faces, of them over 8) |
+|---|---:|---:|---:|---:|---:|
+| tick 1044390 (22,936, -6,875, 35,743) | 99,064 / 0 | 10 / - | 21 / 14 | 0 / 15 | 99,164 (100, 3) |
+| tick 1047453 (23,040, -7,040, 35,540) | 100,262 / 0 | 10 / - | 16 / 5 | 0 / 14 | 100,593 (331, 5) |
+| tick 1079875 (24,146, -6,434, 36,241) | 130,536 / 0 | 6 / - | 15 / 12 | 0 / 1 | 130,608 (72, 0) |
+| room 19's window (17,000, -6,200, 29,500) | 35,953 / 0 | 24 / - | 36 / 12 | 0 / 0 | 35,965 (12, 1) |
+| round 14's picture (21,700, -6,000, 35,600) | 50,049 / 0 | 6 / - | 11 / 2 | 0 / 1 | 50,321 (272, 1) |
+| the new picture (16,600, -6,300, 28,100) | 130,566 / 0 | 22 / - | 24 / 2 | 0 / 0 | 130,789 (223, 1) |
+
+At 2,560 x 1,440, in the same order: the faces 396,316, 400,998, 522,471, 143,848, 200,107
+and 522,625 at base, 0 at the head; the classic ties 42, 50, 23, 63, 27 and 77 at base;
+group 146's 75 / 48, 59 / 14, 50 / 35, 120 / 50, 42 / 6 and 76 / 3; groups 19 and 21's 0 /
+60, 0 / 49, 0 / 3, 0 / 0, 0 / 4 and 0 / 0; changed 397,030, 403,527, 523,417, 144,294,
+201,623 and 523,811, outside the faces 714, 2,529, 946, 446, 1,516 and 1,186, of them 18,
+15, 0, 1, 7 and 1 by more than 8. The hole shows the art's dark walls and bars; the
+sniper, an item, is not in the probe's pictures (it draws no items) and stands in front of
+them on the unchanged item path. The art's floor is drawn near black, so where the eye
+looks steeply down into the hole the hole stays largely dark: at tick 1079875, of the
+faces' 130,536 pixels at the head 30,065 are pure black and 68,433 below 8 (the largest
+channel; 66,064 of them hollow art), the median 6, where the median at the other five eyes
+is 29 to 32; inside, at the far wall (21 d below), that floor is 24.6 per cent of the
+screen at 0. Room 146's reveal and sill round the hole are drawn in place with their group
+(holder 21 not listed with faces: `HDStandDrawFaces` answers with the art) where round 15
+drew them in front of the faces - the few changed pixels outside the faces are that draw's
+matrix and lighting, scaled by a five-hundredth, and its edges. The ties at the head are
+at most the base's at every eye, but one seam is new, at a new place: a dotted line of 14
+and 15 pixels (60 and 49 at 2,560) where group 21's wall meets the window's edge. The
+clear pixels (the sky in the game) are 34, 32, 0, 976, 785 and 0 at the head, the base's
+counts but for one pixel at two eyes (33 and 1 at base): a one-pixel seam of room 146's
+own art along the window frame's left edge, and the sky above the facade. Without the
+window (the art drawn over the whole screen) the frame-edge seam was filled by the art
+behind it; the window keeps it.
+
+The shell scans of #242 (`-shellscan`) over the fifteen levels: 89 lines at base and at
+the head, the same to the byte; none names a hollow group. Their art stands in no room's
+own box (but one title triangle in room 87's) and no pair reaches 200 covered triangles:
+it is no second shell, and nothing of it drops.
+
+Inside the sniper rooms, and the camera following a jump into them: twelve eyes at 1,280
+x 720, six for each room - three from the courtyard behind Lara (a to c, c in the
+window's reveal), one inside at the far wall (d), one inside looking out and down at the
+window (e), one inside along the room (f). Counted: the classic faces at base; the hollow
+art's pixels at the head (the head against the same picture without the hollow art); the
+faces' pixels at which the head draws no hollow art ("behind": what lies behind the faces
+shows there), and of those the clear ones; and what the floor alone would cover if it
+were kept (the shade of an upward face under `-classicmark`, the faces drawn):
+
+| Eye | Faces base | Hollow art head | Behind (clear) | Floor if kept |
+|---|---:|---:|---:|---:|
+| 19 a (16,896, -6,600, 28,800) to (16,896, -5,900, 26,400) | 60,871 | 49,574 | 11,298 (0) | 18,881 |
+| 19 b (16,896, -6,400, 27,900) to (16,896, -5,800, 25,900) | 164,825 | 128,419 | 36,406 (0) | 55,862 |
+| 19 c (16,896, -6,300, 27,300) to (16,896, -5,800, 25,700) | 410,043 | 304,614 | 105,429 (0) | 160,471 |
+| 19 d (16,896, -6,300, 26,500) to (16,896, -5,900, 25,600) | 921,600 | 921,600 | 0 (0) | 228,326 |
+| 19 e (16,600, -6,400, 25,900) to (16,896, -5,700, 27,600) | 123,916 | 2,485 | 121,432 (0) | 95,174 |
+| 19 f (15,800, -6,500, 26,100) to (17,400, -5,700, 26,600) | 473,393 | 423,539 | 49,854 (0) | 168,525 |
+| 21 a (22,700, -6,600, 35,328) to (24,800, -5,900, 35,328) | 80,380 | 64,150 | 16,232 (0) | 26,730 |
+| 21 b (23,500, -6,400, 35,328) to (25,200, -5,800, 35,328) | 222,745 | 171,459 | 51,288 (0) | 78,368 |
+| 21 c (24,200, -6,300, 35,328) to (25,500, -5,800, 35,328) | 613,670 | 517,951 | 95,719 (0) | 214,494 |
+| 21 d (24,800, -6,300, 35,328) to (25,600, -5,900, 35,328) | 921,600 | 921,600 | 0 (0) | 225,175 |
+| 21 e (25,300, -6,400, 34,600) to (24,400, -5,500, 34,900) | 427,088 | 206,800 | 220,288 (0) | 414,939 |
+| 21 f (25,000, -6,500, 34,000) to (25,000, -5,700, 35,800) | 547,260 | 492,411 | 54,849 (0) | 164,580 |
+
+The sky shows at none of them. From the courtyard (a to c) the faces' place shows the
+art's walls and bars and room 146's sill, which reaches in behind the floor. Inside, at
+the far wall (d), the art fills the screen. Looking out and down (e, and the near part of
+f) the floor's place shows the courtyard below. Each group is a box open on the window's
+side - group 21: the far wall at x 26,009 (144 triangles), floor and ceiling at y -4,896
+and -8,033 (72 each), side walls at z 32,768 and 36,864 (36 each); group 19 the same with
+its floor at y -4,972 - whose floor runs the full width up to the window's plane but lies
+736 (660) units below the classic floor at y -5,632. Lara stands on the classic floor,
+which is not drawn. Between the sill and the art floor's edge the facade's art is drawn
+from the front only, so an eye inside sees through its back to the courtyard; farther in
+it sees the art's dark floor. Kept, the floor alone would show in the hole at the six
+window eyes above: 37,305, 44,551, 62,814, 6,977, 5,855 and 44,978 pixels, 12 to 48 per
+cent of the faces - tile 2550, half black and half clear, the thing to leave the hole.
+
+*The rule from the data.* A hollow group is drawn with its room, as every group is, on
+the visibility path; inside the window, because its art by its definition stands outside
+its room's own box, where the walk shows the room only through that window - from room 3
+of RICHCUT2 the slab covers 3,335 pixels inside the windows and 7,316 drawn over the
+whole screen. The room keeps its classic verdict (`g_group_hd` 0): the stand, cover,
+statics, shadow and air rules answer as before, so room 124 stays drawn as group 121's
+art where 121 is not listed. Of the faces, the cover rule cannot take JOBY2's - the art
+stands 409 to 1,024 units behind them, covering none - and the enclosure the visibility
+tables measure already does: rooms 19 and 21 stand wholly in room 146's box, linked with
+it, 146's art in them with 160 and 177 triangles. Over the fifteen levels the enclosed
+rule takes those two rooms and no other (RoomProbe `-hollowlist`, `hidden=`).
+
+**Decisions.** The room is not made HD: drawing a hollow room as HD would drop the faces
+of every hollow room, ANDREA2's 124 among them, whose floor only group 121 draws - the
+black hole the hollow rule was made against. The enclosed rule of round 13 comes back only
+for a room whose hollow art is drawn: round 14's finding (nothing left in the hole but the
+sky) held because that art was not drawn. Such a room opens no sky, its art closing what
+its faces closed. All twelve faces go, the floor too: kept, it would show tile 2550 in the
+hole from every window eye, and from inside its clear texels near the window would still
+show the courtyard through the facade's back; a rule by the eye's room was not taken. Room
+146's reveal (`HDStandDrawBaked`, round 15) is now drawn in place: its holder draws no
+faces to stand in front of, and over the fifteen vanilla levels the baked rule takes no
+range any more while the faces go. `hd_build` 0 and `hd_vis` 0 are the base's by
+construction: `g_group_hollow` is set on the visibility path only, `HollowGroupOfRoom`
+answers -1 elsewhere, and the renderer's notes only count; `hd_marble` 0 and `hd_fog` 0
+are untouched, with `hd_vis` 1 differing only where a hollow group is drawn or JOBY2's two
+rooms leave their faces out.
+
+**Checked.** The engine and all nine tools build from the last code commit; ModernTest
+16,806 checks (11 more than the base's 16,795: seven on the enclosed rule, four on the
+verdict over the tables; the wiring count of the room gates asking `HDLevelActive` is
+eight), MenuTest 44,931, InterpTest 754, LipsTest 299 with the `.OBJ` folder and 272
+without (the cutseq file named by hand), 0 failed, the same counts as the base's but
+ModernTest's; the shaders and their `.inc` untouched. The parity sets of #236 and #242,
+base tool against this round's (md5 per picture): #236's 72 (the classic views, the HD
+views, the census eyes and the fifteen cameras at `hd_water` 0 and 1) 72 of 72 the same,
+by construction: none of them is drawn on the visibility path (`-vis 1`) or with a
+hollow group (`-hollowdraw`), so they cannot show the rule, and the fifteen cameras hold
+none of the title's - the title under the rule is in Measured (its room eyes, the sweep
+and the flyby cameras), not in the parity sets; the 131 room-centre views as #242 drew
+them 131 of 131; the same 131 as the two engines draw them (the base `-hollow`, the head
+`-hollowdraw`) 130 of 131 - JOBY2's room 9 looking east, 227 pixels, group 21's art in
+the far window's hole where the base left the clear colour -; #242's 28 shaft pictures
+the same way 28 of 28. The
+engine of the last commit touching engine source (`23f30b4e`, comments only; the nine
+builds exit 0 there, the suites' counts as above): `PCtomb5.exe` built Oct 25 2026
+02:56:10, md5 `d586290d5411dcd4bb1643a1c4e878ea`.
+
+**Left.** Not seen in the game. The probe draws the classic faces flat grey, so the black
+and the sky of tiles 2550 and 2551 were never in a picture; their faces' pixels stand for
+them. Inside the sniper rooms, with the eye looking out and down, a strip of the courtyard
+shows where the floor was, through the facade's back below the sill, and Lara stands 736
+(660) units above the art's floor; whether the art was made to be seen from there is not
+known. The art's floor is drawn near black, and an eye looking steeply down into the hole
+from the courtyard (tick 1079875) sees a largely dark hole; whether that floor is black in
+its texture or by the room's lighting was not separated. Group 101's triangle shows as a
+sliver in the title's room 101 looking along +x; at the flyby cameras it changes nothing.
+The engine's `HDLOG hollow`, `HDLOG level= hollow` and `hollow_hidden=` lines were not
+produced: RoomProbe does not build `hd_level.cpp` and the game was not run; RoomProbe's
+`-hollowlist` gives the same text from the same `HDRenderHollowText` and the same
+`HDVisClassicRoomVerdict`, and the shell lines of the engine's form (`-vis 1`) equal
+`-shellscan`'s. RICHCUT2's slab of groups 2 and 3 (84 triangles) is now drawn in the open
+air west of the rooms wherever the walk lists room 2 or 3 and the eye looks that way;
+whether the cutscene's camera ever does is not measured. The one-pixel seam of room 146's
+frame stays as it was. The census is over the vanilla `.TRC`s and `.TRG`s: a randomized
+level that marks a hollow room keeps it classic without its art. Of the earlier Left:
+round 14's question is answered here; #226's (draw the `DUMMY` art in front of the sniper
+rooms' faces) was round 15's and no longer applies while the faces go; RICH1's catwalk and
+the rest of round 15's Left stay.
+
+**Commits.** `6cd4ab8e` (the measurement: `NoteHollowGroups`, RoomProbe `-hollowlist`),
+`6c59108d` (the rule, the log lines, `-hollowdraw`, ModernTest), `5d9f614d` (the
+records), `d3653ad1` (`hd_vis.h`'s comments), the eyes inside the sniper rooms,
+`23f30b4e` (`hd_vis.h`: the title's triangles) and the title's sweep and flyby cameras.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -33849,3 +34095,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #242 | A room's second shell is left out at the level build (#242) |
 | #243 | A room group stored too low is drawn at its world height (#243) |
 | #244 | RICH2's HK cutscene after one second: a trigger's timer byte (#244) |
+| #245 | A hollow group's art is drawn where its room is listed (#245) |

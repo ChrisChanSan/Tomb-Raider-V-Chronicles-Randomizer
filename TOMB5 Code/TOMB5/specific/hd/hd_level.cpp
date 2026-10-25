@@ -155,6 +155,12 @@ namespace
 		 * them but the pieces DecidePairs answered whole for. Read only by
 		 * the log. */
 		int scissoredTris;
+
+		/* A hollow group drawn beside its classic room (g_group_hollow):
+		 * all of its art inside the window, none of it over the whole
+		 * screen: the art stands outside the room's own box, where the
+		 * walk shows the room only through that window. */
+		bool hollow;
 	};
 
 	char g_stem[64] = { 0 };
@@ -217,6 +223,17 @@ namespace
 	 * Per group and not per room, like g_group_hd: HDFlipRoom swaps which
 	 * group draws which room, and the property belongs to the art. */
 	unsigned char g_group_windowed[HD_MAX_ROOMS];
+	/* Which groups are hollow and drawn all the same: a group whose every
+	 * triangle stands outside its room's own box (the fourth way a room
+	 * stays classic, HDLevelBuild) keeps its room classic - its faces are
+	 * decided as every classic room's are - and on the visibility path its
+	 * art is drawn too, whole and inside the room's portal window, with the
+	 * room's lighting, wherever the walk lists the room (HDFrameRoom,
+	 * HollowGroupOfRoom). What for: such art is the room as the window
+	 * shows it - JOBY2's sniper rooms behind the broken glass blocks are a
+	 * room deeper and wider than their classic faces. Per group, like
+	 * g_group_hd. */
+	unsigned char g_group_hollow[HD_MAX_ROOMS];
 	/* The pieces that intruding art is split into and the classic faces the
 	 * pieces belong to (HDPairFace and HDPairRange in hd_render.h). Built
 	 * once per level by BuildPairFaces and ReportRoomIntrusions and kept for
@@ -1181,6 +1198,21 @@ namespace
 	 * straddles the window's rim. */
 	void DrawRoomWindowed(const FrameRoom& entry, unsigned int passes)
 	{
+		// A hollow group: its whole art inside the window, or none of it.
+		if (entry.hollow && !entry.full && HDRenderScissorAvailable())
+		{
+			HDRenderScissorOff();
+
+			if (ClipEmpty(entry))
+				return;
+
+			HDRenderScissor(entry.x0, entry.y0, entry.x1, entry.y1);
+			HDRenderRoomMask(entry.group, &entry.world, &entry.lighting,
+				passes, HD_WINDOW_ALL);
+			HDRenderScissorOff();
+			return;
+		}
+
 		if (!entry.windowed || entry.full || !HDRenderScissorAvailable())
 		{
 			HDRenderScissorOff();
@@ -3909,6 +3941,7 @@ static void BuildRoomVis()
  * drawn by that group. `group` is the room whose MESH_INFO list stands at
  * the static's room now (g_room_group), the room of the build. */
 static int GroupOfRoom(int roomIndex);
+static int HollowGroupOfRoom(int roomIndex);
 
 static bool VisStaticLeftToArt(int group, int meshIndex, const short* listed,
 	int listedCount)
@@ -3964,19 +3997,23 @@ static bool VisHidesClassicRoom(int roomIndex)
 
 	/* A floor room is drawn HD when GroupOfRoom names a group for it: the
 	 * level's verdict (g_group_hd) through the flip table, the same in
-	 * every frame. */
+	 * every frame. A room whose hollow art is drawn is asked whether it
+	 * stands enclosed (HDVisClassicRoomEnclosed). */
 	return HDVisClassicRoomVerdict(*tables, roomIndex, tris == 0, covered,
-		faces, [](int to) { return GroupOfRoom(to) >= 0; });
+		faces, [](int to) { return GroupOfRoom(to) >= 0; },
+		HollowGroupOfRoom(roomIndex) >= 0);
 }
 
 /* HDVisRoomOpensSky (hd_vis.h): asked by the walk for each room it lists,
  * once a frame, before the sky is drawn. A room a group draws has its art
- * and never opens the sky; the rest asks the rule HDFrameRoom asks, with
- * the room's own ROOM_OUTSIDE. */
+ * and never opens the sky, nor does one whose hollow art is drawn: that art
+ * closes what its faces closed. The rest asks the rule HDFrameRoom asks,
+ * with the room's own ROOM_OUTSIDE. */
 bool HDVisRoomOpensSky(int roomIndex)
 {
 	if (!g_vis_level || roomIndex < 0 || roomIndex >= g_room_count ||
-		roomIndex >= number_rooms || GroupOfRoom(roomIndex) >= 0)
+		roomIndex >= number_rooms || GroupOfRoom(roomIndex) >= 0 ||
+		HollowGroupOfRoom(roomIndex) >= 0)
 		return false;
 
 	return HDVisClassicRoomOpensSky(VisHidesClassicRoom(roomIndex),
@@ -7333,6 +7370,7 @@ static void HDLevelBuildHD()
 	g_key_built.valid = 0;
 
 	memset(g_group_hd, 0, sizeof(g_group_hd));
+	memset(g_group_hollow, 0, sizeof(g_group_hollow));
 	memset(g_group_windowed, 0, sizeof(g_group_windowed));
 	memset(g_group_stand, 0, sizeof(g_group_stand));
 	memset(g_group_stand_covered, 0, sizeof(g_group_stand_covered));
@@ -7769,7 +7807,10 @@ static void HDLevelBuildHD()
 		 * a frame draws that art in the room's place instead of the roomlets
 		 * is the stand ranges' question (BuildStandFaces, BuildStandRanges):
 		 * room 124 is covered and drawn as group 121's art, the other eight
-		 * keep their classic geometry. */
+		 * keep their classic geometry. On the visibility path the hollow
+		 * art is drawn as well, inside the room's window (g_group_hollow),
+		 * and a room it stands round leaves its faces out
+		 * (HDVisClassicRoomEnclosed): JOBY2's 19 and 21. */
 		const bool hollow = tris > 0 &&
 			HDRenderGroupOverhangTriangles(r) >= tris;
 
@@ -7806,6 +7847,11 @@ static void HDLevelBuildHD()
 		 * reshaped. A flipped room's alternate is a room of its own with a
 		 * group of its own, so both halves of a pair are decided here. */
 		g_group_hd[r] = (unsigned char)((has_group && tris && !hollow && !marked) ? 1 : 0);
+		/* A hollow group's art is drawn beside its classic room on the
+		 * visibility path (g_group_hollow); a room the randomizer marked
+		 * keeps its classic geometry and no art. */
+		g_group_hollow[r] = (unsigned char)((has_group && hollow && !marked &&
+			VisLevel()) ? 1 : 0);
 
 		if (g_group_hd[r])
 		{
@@ -7894,8 +7940,10 @@ static void HDLevelBuildHD()
 	 * area that stand art was asked about (0 for a room no art stands on),
 	 * `faces_covered` those the carrier covers - left out of the roomlets and
 	 * drawn as its art - `floors_kept` the faces Lara can stand on that stay
-	 * classic (HDCoverFaceFloor), and `shadow` 1 when the room counts as HD
-	 * for her projected shadow (HDRoomShadowHD). */
+	 * classic (HDCoverFaceFloor), `shadow` 1 when the room counts as HD
+	 * for her projected shadow (HDRoomShadowHD), and `drawn` 1 when the
+	 * room's own art is drawn where the walk lists it: a room drawn HD, or
+	 * one whose hollow art is drawn beside it (g_group_hollow). */
 	for (int r = 0; r < g_room_count; r++)
 	{
 		const int on = (size_t)r < stand_on.size() ? stand_on[(size_t)r] : 0;
@@ -7917,7 +7965,8 @@ static void HDLevelBuildHD()
 
 		Log("HDLOG room=%d group=%d tris=%d/%d/%d overhang=%d cut=%d "
 			"ranges=%d statics=%d hd=%d reason=%s stand=%d covered=%d "
-			"carrier=%d faces=%d faces_covered=%d floors_kept=%d shadow=%d",
+			"carrier=%d faces=%d faces_covered=%d floors_kept=%d shadow=%d "
+			"drawn=%d",
 			r, r, HDRenderGroupTriangles(r, 0), HDRenderGroupTriangles(r, 1),
 			HDRenderGroupTriangles(r, 2), HDRenderGroupOverhangTriangles(r),
 			cuts[(size_t)r], HDRenderGroupRanges(r, -1),
@@ -7925,7 +7974,34 @@ static void HDLevelBuildHD()
 			on, covered, carrier, here ? (int)g_group_stand_faces[r] : 0,
 			here ? (int)g_group_stand_faces_covered[r] : 0,
 			here ? (int)g_group_stand_floors_kept[r] : 0,
-			here && (g_group_hd[r] || g_group_stand_shadow[r]) ? 1 : 0);
+			here && (g_group_hd[r] || g_group_stand_shadow[r]) ? 1 : 0,
+			here && (g_group_hd[r] || g_group_hollow[r]) ? 1 : 0);
+	}
+
+	/* The hollow groups (HDRenderHollowText): where their art stands and
+	 * whether it is drawn, one line each; then the level's counts. */
+	{
+		int hollow_tris = 0, hollow_drawn = 0;
+		char line[512];
+
+		for (int i = 0; i < HDRenderHollowGroups(); i++)
+		{
+			HDHollowGroup h;
+
+			if (!HDRenderHollowGroup(i, &h) ||
+				!HDRenderHollowText(i, g_stem, line, sizeof(line)))
+				continue;
+
+			const int drawn = h.group >= 0 && h.group < HD_MAX_ROOMS ?
+				(int)g_group_hollow[h.group] : 0;
+
+			hollow_tris += h.tris;
+			hollow_drawn += drawn;
+			Log("HDLOG hollow %s drawn=%d", line, drawn);
+		}
+
+		Log("HDLOG level=%s hollow groups=%d tris=%d drawn=%d", g_stem,
+			HDRenderHollowGroups(), hollow_tris, hollow_drawn);
 	}
 
 	g_level_active = hd_rooms > 0;
@@ -8594,6 +8670,22 @@ bool HDRoomIsHD(int roomIndex)
 	return GroupOfRoom(roomIndex) >= 0;
 }
 
+/* The hollow group whose art is drawn beside room `roomIndex` right now
+ * (g_group_hollow), through the flip table as GroupOfRoom reads it, or -1:
+ * none, a room a group draws, or off the visibility path. */
+static int HollowGroupOfRoom(int roomIndex)
+{
+	if (!HDLevelActive() || roomIndex < 0 || roomIndex >= g_room_count)
+		return -1;
+
+	const int group = g_room_group[roomIndex];
+
+	if (group < 0 || group >= HD_MAX_ROOMS || !g_group_hollow[group])
+		return -1;
+
+	return group;
+}
+
 /* Read through g_room_group like every stand answer, so a flipmap that swaps
  * a room's roomlets swaps its flags with them. */
 const unsigned char* HDRoomletDropped(int roomIndex, int roomlet)
@@ -8839,14 +8931,22 @@ bool HDVisWalkOn()
 		const HDVisParams p = HDVisDefaults();
 
 		VisKeepGuests(t);
+
+		// The rooms whose hollow art is drawn and whose faces go.
+		int hollow_hidden = 0;
+
+		for (int r = 0; r < g_room_count; r++)
+			if (HollowGroupOfRoom(r) >= 0 && VisHidesClassicRoom(r))
+				hollow_hidden++;
+
 		Log("HDLOG level=%s vis=1 rooms=%d art_rooms=%d walls=%d bare=%d "
 			"void=%d guests=%d guest_tris=%lld wide=%d ms=%.0f twin=%d "
 			"wide_bare=%.2f edge=%.5f statics_held=%d statics_ms=%.0f "
-			"enclosed=%d hull_guests=%d", g_stem, t->rooms, t->artRooms,
-			t->wallFaces, t->bareFaces, t->voidFaces, t->guestPairs,
-			t->guestTris, t->widePortals, t->ms, t->openingsTwin, p.wideBare,
-			p.edge, t->staticsHeld, t->staticMs, t->roomsEnclosed,
-			g_vis_hull_guests);
+			"enclosed=%d hull_guests=%d hollow_hidden=%d", g_stem, t->rooms,
+			t->artRooms, t->wallFaces, t->bareFaces, t->voidFaces,
+			t->guestPairs, t->guestTris, t->widePortals, t->ms,
+			t->openingsTwin, p.wideBare, p.edge, t->staticsHeld, t->staticMs,
+			t->roomsEnclosed, g_vis_hull_guests, hollow_hidden);
 	}
 
 	return true;
@@ -9194,23 +9294,12 @@ static bool StandHolderRoom(int roomIndex, const float* viewWorld,
 	return g_group_stand_covered[group] != 0;
 }
 
-bool HDFrameRoom(int roomIndex, const float* viewWorld,
-	int left, int top, int right, int bottom)
+/* One listed room's art on this frame's list: the room, the group drawing
+ * it, its matrix and its window; `hollow` for a hollow group drawn beside
+ * its classic room (FrameRoom::hollow). False when the list is full. */
+static bool FrameRoomAdd(int roomIndex, int group, bool hollow,
+	const float* viewWorld, int left, int top, int right, int bottom)
 {
-	if (!viewWorld)
-		return false;
-
-	const int group = GroupOfRoom(roomIndex);
-
-	if (group < 0)
-	{
-		// A room the visibility path leaves out: none of its roomlets.
-		if (VisHidesClassicRoom(roomIndex))
-			return true;
-
-		return StandHolderRoom(roomIndex, viewWorld, left, top, right, bottom);
-	}
-
 	if (g_frame_count >= HD_MAX_FRAME)
 	{
 		// HD_MAX_FRAME is draw_rooms' own capacity (game\draw.cpp) and one
@@ -9236,9 +9325,10 @@ bool HDFrameRoom(int roomIndex, const float* viewWorld,
 	/* And whether this room has art that needs the window. Asked of the
 	 * group really drawing it and not of the room index: after a flipmap the
 	 * two are different rooms' art. */
-	entry.windowed = group >= 0 && group < HD_MAX_ROOMS &&
+	entry.windowed = !hollow && group >= 0 && group < HD_MAX_ROOMS &&
 		g_group_windowed[group] != 0;
 	entry.scissoredTris = 0;
+	entry.hollow = hollow;
 
 	/* The corner rule for the classic faces this room's intruding art
 	 * belongs to, here and now: this is InsertRoom, where the classic path
@@ -9261,6 +9351,35 @@ bool HDFrameRoom(int roomIndex, const float* viewWorld,
 	}
 
 	return true;
+}
+
+bool HDFrameRoom(int roomIndex, const float* viewWorld,
+	int left, int top, int right, int bottom)
+{
+	if (!viewWorld)
+		return false;
+
+	const int group = GroupOfRoom(roomIndex);
+
+	if (group < 0)
+	{
+		/* A hollow group's art, whole inside the room's window, beside
+		 * whatever the rules below draw of the room's classic faces. */
+		const int hollow = HollowGroupOfRoom(roomIndex);
+
+		if (hollow >= 0)
+			FrameRoomAdd(roomIndex, hollow, true, viewWorld, left, top,
+				right, bottom);
+
+		// A room the visibility path leaves out: none of its roomlets.
+		if (VisHidesClassicRoom(roomIndex))
+			return true;
+
+		return StandHolderRoom(roomIndex, viewWorld, left, top, right, bottom);
+	}
+
+	return FrameRoomAdd(roomIndex, group, false, viewWorld, left, top, right,
+		bottom);
 }
 
 /* An item is not cut by its room's window.
@@ -9592,6 +9711,21 @@ static void ShadowOthersPass()
  * scissor it wrote its depth in. */
 static void DrawRoomShadowWindowed(const FrameRoom& entry)
 {
+	// A hollow group in the window it was drawn in (DrawRoomWindowed).
+	if (entry.hollow && !entry.full && HDRenderScissorAvailable())
+	{
+		HDRenderScissorOff();
+
+		if (ClipEmpty(entry))
+			return;
+
+		HDRenderScissor(entry.x0, entry.y0, entry.x1, entry.y1);
+		HDRenderRoomShadow(entry.group, &entry.world, &entry.lighting,
+			HD_WINDOW_ALL);
+		HDRenderScissorOff();
+		return;
+	}
+
 	if (!entry.windowed || entry.full || !HDRenderScissorAvailable())
 	{
 		HDRenderScissorOff();
@@ -10364,6 +10498,7 @@ void HDFrameDraw()
 		entry.windowed = surfaceGroup < HD_MAX_ROOMS &&
 			g_group_windowed[surfaceGroup] != 0;
 		entry.scissoredTris = 0;
+		entry.hollow = false;
 	}
 
 	// A destructible piece follows its own static's Flags bit.

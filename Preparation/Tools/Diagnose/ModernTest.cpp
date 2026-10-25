@@ -11228,11 +11228,11 @@ static void hd_switch_wiring()
 	n = hd_switch_count(level, "return g_level_active && HDDrawn();");
 	ok(n == 1, "hd switch wiring: HDLevelActive asks HDDrawn", n, 1);
 
-	// GroupOfRoom, HDRoomletDropped, HDRoomShadowHD, HDRoomArtListed,
-	// HDRoomCarries, HDStaticDrawnClassic, StandHolderRoom.
+	// GroupOfRoom, HollowGroupOfRoom, HDRoomletDropped, HDRoomShadowHD,
+	// HDRoomArtListed, HDRoomCarries, HDStaticDrawnClassic, StandHolderRoom.
 	n = hd_switch_count(level,
 		"if (!HDLevelActive() || roomIndex < 0 || roomIndex >= g_room_count)");
-	ok(n == 7, "hd switch wiring: seven room gates ask HDLevelActive", n, 7);
+	ok(n == 8, "hd switch wiring: eight room gates ask HDLevelActive", n, 8);
 
 	n = hd_switch_count(level, "if (!HDLevelActive() || group < 0 ||") +
 		hd_switch_count(level, "if (!viewWorld || !HDLevelActive())");
@@ -15439,11 +15439,12 @@ static void vis_lid_rule()
 		"lid: ANDY3 88, guests and floor on art, goes as before", 1, 1);
 }
 
-/* A classic room standing inside another room's box keeps its faces: JOBY2's
- * sniper room 21, a hollow group (360 triangles, none drawn) with 12 faces
- * no art covers, inside room 146's box. Its faces are what the broken
- * facade window shows; whatever stands in it, only an empty group whose
- * guests model the place is left out. */
+/* The rule for an empty group does not take a room standing inside another
+ * room's box: JOBY2's sniper room 21, a hollow group (360 triangles) with 12
+ * faces no art covers, inside room 146's box. Whatever art stands in it,
+ * only an empty group whose guests model the place is left out by this
+ * rule; a hollow group's room is asked HDVisClassicRoomEnclosed instead
+ * (vis_hollow_enclosed). */
 static void vis_enclosed_kept()
 {
 	ok(!HDVisClassicRoomHidden(false, false, 12, 0, false),
@@ -15458,6 +15459,31 @@ static void vis_enclosed_kept()
 		"enclosed: the same faces round an empty group go", 1, 1);
 	ok(!HDVisClassicRoomHidden(true, false, 12, 0, false),
 		"enclosed: an empty group with no guest keeps them", 0, 0);
+}
+
+/* A room whose hollow art is drawn leaves its faces out when it stands
+ * enclosed (HDVisClassicRoomEnclosed), as the fifteen levels measure them:
+ * JOBY2's 19 and 21 (12 faces each, no face covered, inside room 146's
+ * box with 160 and 177 of its triangles) go; ANDREA2's 124 is covered and
+ * the stand rule draws it; RICHCUT2's 2, 3 and 4 and the title's 70, 101
+ * and 103 stand inside no room; and without the art drawn (the room-art
+ * path, a room the randomizer marked) nothing changes. */
+static void vis_hollow_enclosed()
+{
+	ok(HDVisClassicRoomEnclosed(true, false, 12, 146),
+		"hollow: JOBY2 21, its art drawn, enclosed by 146, faces go", 1, 1);
+	ok(!HDVisClassicRoomEnclosed(false, false, 12, 146),
+		"hollow: the art not drawn, the faces stay", 0, 0);
+	ok(!HDVisClassicRoomEnclosed(true, true, 46, -1),
+		"hollow: ANDREA2 124, covered, the stand rule's", 0, 0);
+	ok(!HDVisClassicRoomEnclosed(true, true, 12, 146),
+		"hollow: enclosed but covered, the stand rule's", 0, 0);
+	ok(!HDVisClassicRoomEnclosed(true, false, 29, -1),
+		"hollow: RICHCUT2 4, enclosed by none, faces stay", 0, 0);
+	ok(!HDVisClassicRoomEnclosed(true, false, 213, -1),
+		"hollow: TITLE 103, enclosed by none, faces stay", 0, 0);
+	ok(!HDVisClassicRoomEnclosed(true, false, 0, 146),
+		"hollow: no classic face, nothing to leave out", 0, 0);
 }
 
 /* Whether a room's floor links all name rooms drawn HD (HDVisFloorOnArt):
@@ -15762,11 +15788,26 @@ static void vis_enclosed_tables()
 				t.enclosedTris[1] == 12,
 				"enclosed: one room, by A's twelve triangles",
 				t.roomsEnclosed, 1);
-			// The verdict does not ask the enclosure: C, hollow, stays.
+			// Without its hollow art drawn C keeps its faces; with it not.
 			ok(!HDVisClassicRoomVerdict(t, 1, false, false, 1,
 				[](int) { return true; }),
-				"enclosed: C enclosed by A, hollow, keeps its faces", 0, 0);
+				"enclosed: C enclosed by A, art not drawn, keeps its faces",
+				0, 0);
+			ok(HDVisClassicRoomVerdict(t, 1, false, false, 1,
+				[](int) { return true; }, true),
+				"enclosed: C enclosed by A, its hollow art drawn, faces go",
+				1, 1);
+			ok(!HDVisClassicRoomVerdict(t, 1, false, true, 1,
+				[](int) { return true; }, true),
+				"enclosed: C covered, the stand rule's, faces stay", 0, 0);
+			ok(!HDVisClassicRoomVerdict(t, 0, false, false, 1,
+				[](int) { return true; }, true),
+				"enclosed: A, hollow art drawn, by none, faces stay", 0, 0);
 		}
+		else if (variant == 1)
+			ok(!HDVisClassicRoomVerdict(t, 1, false, false, 1,
+				[](int) { return true; }, true),
+				"enclosed: C not linked, hollow art drawn, faces stay", 0, 0);
 	}
 }
 
@@ -29730,6 +29771,7 @@ int main()
 	vis_wall();
 	vis_hidden_room();
 	vis_enclosed_kept();
+	vis_hollow_enclosed();
 	vis_lid_rule();
 	vis_floor_on_art();
 	vis_opens_sky();

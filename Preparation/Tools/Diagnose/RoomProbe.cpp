@@ -531,8 +531,10 @@
  *                     group with hd_vis 0, while -with draws whatever group
  *                     it is given.
  *     -hollowdraw     with -vis 1: every hollow group drawn whole inside its
- *                     -roomwin window and nowhere else, as the engine draws
- *                     a hollow group's art beside its classic room.
+ *                     -roomwin window joined with the -roomwin windows of
+ *                     the rooms whose grids hold its triangles (its hosts)
+ *                     and nowhere else, as the engine draws a hollow
+ *                     group's art beside its classic room.
  *     -hollowwin      with -hollowdraw and -roomwin: per hollow group
  *                     drawn, its window, the screen box of its art (the
  *                     corners of its bounds projected), the windows
@@ -540,7 +542,10 @@
  *                     triangles (`hosts`), and after the picture the
  *                     background pixels in the whole picture, in the
  *                     art's box (`hole`) and in the box outside the
- *                     window: a `hollowwin:` line each.
+ *                     window; then the window joined with the hosts' it
+ *                     is drawn in (`union`, `took` of the hosts) and the
+ *                     background in the box outside that: a `hollowwin:`
+ *                     line each.
  *     -opensky       with -vis 1 and -walk: `outside` (FARCULL's outside=)
  *                     also turns on for a listed room the visibility path
  *                     leaves out that is not under the sky, as the walk of
@@ -4250,8 +4255,9 @@ static bool g_coincide_mark = false;
 static bool g_stand_rule = false;
 static bool g_hollow = false;			// -hollow
 /* -hollowdraw: with -vis 1 every hollow group is drawn whole inside its
- * -roomwin window and nowhere else, as hd_level.cpp draws a hollow group's
- * art beside its classic room (g_group_hollow, DrawRoomWindowed). */
+ * -roomwin window joined with its hosts' (HollowUnion) and nowhere else, as
+ * hd_level.cpp draws a hollow group's art beside its classic room
+ * (g_group_hollow, HollowWindows, DrawRoomWindowed). */
 static bool g_hollow_draw = false;
 // StandState's lines held back while -statictable asks every room.
 static bool g_stand_quiet = false;
@@ -8141,6 +8147,8 @@ static void ClipFor(int group)
 
 static bool DecideGroup(int group, int* rect, bool* full, bool* empty);
 static void HollowWinNote(int group, const int* rect, bool full, bool empty);
+static int HollowUnion(int group, const int* rect, bool full, bool empty,
+	int* out, bool* outFull);
 
 /* One group, drawn as the engine would draw it. Ordinarily one call with
  * whatever -window asked for; with -tround naming this group, the two calls
@@ -8210,6 +8218,21 @@ static bool DrawOneGroup(int group, const D3DMATRIX* world,
 
 		if (hollow && g_hollow_win)
 			HollowWinNote(group, rect, full, empty);
+
+		/* A hollow group's window takes its hosts' as the engine's does
+		 * (hd_level.cpp, HollowWindows): covering the screen it is drawn
+		 * whole, empty not at all. */
+		if (hollow && !full)
+		{
+			int joined[4];
+
+			HollowUnion(group, rect, full, empty, joined, &full);
+
+			for (int k = 0; k < 4; k++)
+				rect[k] = joined[k];
+
+			empty = rect[2] <= rect[0] || rect[3] <= rect[1];
+		}
 
 		if (g_vis_option && (g_vis_win == 5 || hollow) && !full)
 		{
@@ -8705,6 +8728,50 @@ static bool RoomWinRect(int group, int* rect, bool* empty)
 	return true;
 }
 
+/* A hollow group's window joined with its hosts' (HDVisHollowWindow), as
+ * hd_level.cpp's HollowWindows joins them: its own window (`rect`, the
+ * screen when `full`, nothing when `empty`) and the -roomwin windows of the
+ * rooms whose grids hold its triangles. `outFull` when the union covers
+ * the screen. Returns how many hosts' windows it took. */
+static int HollowUnion(int group, const int* rect, bool full, bool empty,
+	int* out, bool* outFull)
+{
+	int own[4] = { 0, 0, 0, 0 };
+	int hosts[HD_HOLLOW_ROOMS][4];
+	int count = 0;
+
+	if (full)
+	{
+		own[2] = (int)g_decide_width;
+		own[3] = (int)g_decide_height;
+	}
+	else if (!empty)
+		for (int k = 0; k < 4; k++)
+			own[k] = rect[k];
+
+	for (int i = 0; i < HDRenderHollowGroups(); i++)
+	{
+		HDHollowGroup h;
+
+		if (!HDRenderHollowGroup(i, &h) || h.group != group)
+			continue;
+
+		for (int k = 0; k < h.gridRooms && k < HD_HOLLOW_ROOMS; k++)
+		{
+			bool hostEmpty = false;
+
+			if (RoomWinRect(h.gridRoom[k], hosts[count], &hostEmpty))
+				count++;
+		}
+	}
+
+	const int took = HDVisHollowWindow(own, hosts, count, out);
+
+	*outFull = out[0] <= 0 && out[1] <= 0 && out[2] >= (int)g_decide_width &&
+		out[3] >= (int)g_decide_height;
+	return took;
+}
+
 /* One hollow group drawn in this picture (-hollowwin): its window, the
  * screen box of its art and the windows of the rooms whose grids hold its
  * triangles. */
@@ -8720,6 +8787,9 @@ struct HollowWinProbe
 	int host[HD_HOLLOW_ROOMS];
 	int hostWin[HD_HOLLOW_ROOMS][4];
 	int hostState[HD_HOLLOW_ROOMS];	// 0 unlisted, 1 empty, 2 a window
+	int joined[4];	// the window with the hosts' (HollowUnion)
+	bool joinedFull;
+	int took;
 };
 
 static std::vector<HollowWinProbe> g_hollow_wins;
@@ -8820,6 +8890,9 @@ static void HollowWinNote(int group, const int* rect, bool full, bool empty)
 		}
 	}
 
+	probe.took = HollowUnion(group, rect, full, empty, probe.joined,
+		&probe.joinedFull);
+
 	for (size_t i = 0; i < g_hollow_wins.size(); i++)
 		if (g_hollow_wins[i].group == group)
 		{
@@ -8843,7 +8916,7 @@ static void HollowWinCount(const unsigned long* pixels, long w, long h)
 	for (size_t i = 0; i < g_hollow_wins.size(); i++)
 	{
 		const HollowWinProbe& p = g_hollow_wins[i];
-		long long clear = 0, hole = 0, outside = 0;
+		long long clear = 0, hole = 0, outside = 0, beyond = 0;
 
 		for (long y = 0; y < h; y++)
 			for (long x = 0; x < w; x++)
@@ -8860,6 +8933,9 @@ static void HollowWinCount(const unsigned long* pixels, long w, long h)
 
 				if (p.empty || !InRect(p.win, x, y))
 					outside++;
+
+				if (!InRect(p.joined, x, y))
+					beyond++;
 			}
 
 		char hosts[512] = { 0 };
@@ -8879,10 +8955,13 @@ static void HollowWinCount(const unsigned long* pixels, long w, long h)
 
 		printf("hollowwin: group=%d window=%d,%d..%d,%d full=%d empty=%d "
 			"art=%d,%d..%d,%d behind=%d hosts=%s clear=%lld hole=%lld "
-			"outside_window=%lld inside_window=%lld\n", p.group, p.win[0],
+			"outside_window=%lld inside_window=%lld union=%d,%d..%d,%d "
+			"took=%d union_full=%d outside_union=%lld\n", p.group, p.win[0],
 			p.win[1], p.win[2], p.win[3], p.full ? 1 : 0, p.empty ? 1 : 0,
 			p.art[0], p.art[1], p.art[2], p.art[3], p.behind ? 1 : 0,
-			hosts[0] ? hosts : "-", clear, hole, outside, hole - outside);
+			hosts[0] ? hosts : "-", clear, hole, outside, hole - outside,
+			p.joined[0], p.joined[1], p.joined[2], p.joined[3], p.took,
+			p.joinedFull ? 1 : 0, beyond);
 	}
 }
 
@@ -19941,6 +20020,7 @@ static int ProbeMain(int argc, char** argv)
 			"not listed\n");
 		printf("       -hollow | -hollowdraw   the hollow groups left out, or "
 			"drawn whole in their window\n");
+		printf("                and their hosts' windows\n");
 		printf("       -statictable   every static's answer, old and new, the "
 			"shares and the shatterable\n");
 		printf("                      ones, then no picture (needs -roombox)\n");

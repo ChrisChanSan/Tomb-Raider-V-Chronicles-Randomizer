@@ -710,6 +710,60 @@ inline bool HDVisClassicRoomEnclosed(bool hollowDrawn, bool facesCovered,
 		enclosedBy >= 0;
 }
 
+/* The window a hollow group's art is drawn in: the union of its room's
+ * window (`own`) and the windows of its hosts - the rooms whose grids hold
+ * its triangles - that the walk lists this frame (`hosts`, `hostCount` of
+ * them), each a scissor rectangle as the walk clipped it (left, top, then
+ * the first column and row not drawn). A window of no width or no height
+ * adds nothing; `out` is all 0 when every one is empty. Returns how many
+ * of the hosts' windows the union took.
+ *
+ * What for: the art stands outside its room's own box, in its hosts'
+ * boxes, so wherever a host is seen the art standing in it can be seen
+ * too - and the hole its room is seen through is the host's art's opening,
+ * not the room's classic portal. From below, that opening reaches lower on
+ * the screen than the portal: the art's sill lies behind the portal's
+ * plane, and the deeper an edge above the eye lies, the lower it shows.
+ * The room's own window cut the art off there and its lowest rows stayed
+ * the clear colour, the sky in the game; the host's window holds them.
+ * Where the host's walls stand in front of the art, the depth test hides
+ * it as it hides everything behind them. */
+inline int HDVisHollowWindow(const int own[4], const int (*hosts)[4],
+	int hostCount, int out[4])
+{
+	bool any = false;
+	int took = 0;
+
+	out[0] = out[1] = out[2] = out[3] = 0;
+
+	for (int i = -1; i < hostCount; i++)
+	{
+		const int* w = i < 0 ? own : hosts ? hosts[i] : 0;
+
+		if (!w || w[2] <= w[0] || w[3] <= w[1])
+			continue;
+
+		if (i >= 0)
+			took++;
+
+		if (!any)
+		{
+			for (int k = 0; k < 4; k++)
+				out[k] = w[k];
+
+			any = true;
+			continue;
+		}
+
+		out[0] = w[0] < out[0] ? w[0] : out[0];
+		out[1] = w[1] < out[1] ? w[1] : out[1];
+		out[2] = w[2] > out[2] ? w[2] : out[2];
+		out[3] = w[3] > out[3] ? w[3] : out[3];
+	}
+
+	return took;
+}
+
 /* HDVisClassicRoomHidden over the tables, as the visibility path asks it of
  * room `room` (hd_level.cpp, VisHidesClassicRoom): its guests and its floor
  * links read from `t`, `drawnHD` as HDVisFloorOnArt asks it; for a room

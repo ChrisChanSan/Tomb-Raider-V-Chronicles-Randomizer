@@ -15486,6 +15486,43 @@ static void vis_hollow_enclosed()
 		"hollow: no classic face, nothing to leave out", 0, 0);
 }
 
+/* The window a hollow group's art is drawn in (HDVisHollowWindow): its
+ * room's window joined with its listed hosts', as measured from below
+ * JOBY2's sniper window into room 19 at 1,280 x 720 - the room's window
+ * ends at row 159, the hole's lowest rows reach 166, and room 146's
+ * window holds them -; an empty window adds nothing, a room with no host
+ * keeps its own, and no window at all draws nothing. */
+static void vis_hollow_window()
+{
+	const int own[4] = { 626, 0, 830, 159 };
+	const int hosts[4][4] = { { 0, 0, 1280, 276 }, { 0, 0, 1280, 30 },
+		{ 916, 0, 1280, 720 }, { 916, 0, 1280, 316 } };
+	const int none[4] = { 0, 0, 0, 0 };
+	const int emptyHost[1][4] = { { 300, 40, 300, 90 } };
+	int out[4];
+
+	int took = HDVisHollowWindow(own, hosts, 1, out);
+	ok(took == 1 && out[0] == 0 && out[1] == 0 && out[2] == 1280 &&
+		out[3] == 276, "hollow window: room 146's takes the strip's rows",
+		out[3], 276);
+	took = HDVisHollowWindow(own, hosts, 4, out);
+	ok(took == 4 && out[2] == 1280 && out[3] == 720,
+		"hollow window: four hosts listed, the union is the screen", took, 4);
+	took = HDVisHollowWindow(own, (const int (*)[4])0, 0, out);
+	ok(took == 0 && out[0] == 626 && out[1] == 0 && out[2] == 830 &&
+		out[3] == 159, "hollow window: no host, the room's own", out[3], 159);
+	took = HDVisHollowWindow(own, emptyHost, 1, out);
+	ok(took == 0 && out[0] == 626 && out[3] == 159,
+		"hollow window: a host's empty window adds nothing", took, 0);
+	took = HDVisHollowWindow(none, hosts + 2, 1, out);
+	ok(took == 1 && out[0] == 916 && out[1] == 0 && out[2] == 1280 &&
+		out[3] == 720, "hollow window: the room's empty, a host's drawn",
+		out[0], 916);
+	took = HDVisHollowWindow(none, emptyHost, 1, out);
+	ok(took == 0 && out[0] == 0 && out[1] == 0 && out[2] == 0 &&
+		out[3] == 0, "hollow window: no window at all, nothing", took, 0);
+}
+
 /* Whether a room's floor links all name rooms drawn HD (HDVisFloorOnArt):
  * ANDY3's lid 26 over room 24 alone, a room half over classic ground, and
  * the empty and null lists. */
@@ -29772,6 +29809,7 @@ int main()
 	vis_hidden_room();
 	vis_enclosed_kept();
 	vis_hollow_enclosed();
+	vis_hollow_window();
 	vis_lid_rule();
 	vis_floor_on_art();
 	vis_opens_sky();

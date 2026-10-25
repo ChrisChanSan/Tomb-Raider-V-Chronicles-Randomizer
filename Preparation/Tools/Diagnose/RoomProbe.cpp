@@ -8234,6 +8234,11 @@ static bool DrawOneGroup(int group, const D3DMATRIX* world,
 			empty = rect[2] <= rect[0] || rect[3] <= rect[1];
 		}
 
+		/* And pushed back in depth as the engine draws it
+		 * (DrawRoomWindowed, HDRenderRoomBehind). */
+		if (hollow)
+			HDRenderRoomBehind(true);
+
 		if (g_vis_option && (g_vis_win == 5 || hollow) && !full)
 		{
 			bool drew = false;
@@ -8246,6 +8251,16 @@ static bool DrawOneGroup(int group, const D3DMATRIX* world,
 				HDRenderScissorOff();
 			}
 
+			HDRenderRoomBehind(false);
+			return drew;
+		}
+
+		if (hollow)
+		{
+			const bool drew = HDRenderRoomMask(group, world, lighting,
+				passes, HD_WINDOW_ALL);
+
+			HDRenderRoomBehind(false);
 			return drew;
 		}
 

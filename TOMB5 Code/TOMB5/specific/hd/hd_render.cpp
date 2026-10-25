@@ -3751,6 +3751,11 @@ namespace
 	int g_stand_from_intrusions = 0;
 	int g_stand_pick = -1;
 	bool g_stand_pick_behind = false;
+	/* Every range of the rooms drawn while it is set pushed back in depth as
+	 * HD_STAND_BEHIND pushes one (HDRenderRoomBehind): the draw and the
+	 * shadow's receive alike, so the receive's EQUAL test meets the depth
+	 * the art was drawn at. */
+	bool g_room_behind = false;
 
 	/* The static meshes' places (HDRenderSetStaticPlaces), borrowed until
 	 * HDRenderStaticPiecesUpload, and what the build kept of the art around
@@ -12753,15 +12758,16 @@ namespace
 			}
 
 			// Pushed back in depth where this frame's answer says so - see
-			// set_stand_matrix; a range drawn alone as HDRenderRoomStand asks.
+			// set_stand_matrix; a range drawn alone as HDRenderRoomStand asks;
+			// every range while HDRenderRoomBehind says so.
 			const bool stand_behind = range.stand &&
 				group.standWith[(size_t)range.stand - 1] == HD_STAND_BEHIND;
 			const bool piece_behind = range.intruding > 0 &&
 				(size_t)range.intruding <= group.pairRanges.size() &&
 				group.pairRanges[(size_t)range.intruding - 1].behind;
-			const bool want_behind = window == HD_WINDOW_STAND ?
-				g_stand_pick_behind
-				: range.behind || stand_behind || piece_behind;
+			const bool want_behind = g_room_behind ||
+				(window == HD_WINDOW_STAND ? g_stand_pick_behind
+				: range.behind || stand_behind || piece_behind);
 
 			if (want_behind != behind_on)
 				behind_on = set_stand_matrix(wvp, want_behind);
@@ -28482,9 +28488,9 @@ namespace
 			const bool piece_behind = range.intruding > 0 &&
 				(size_t)range.intruding <= group.pairRanges.size() &&
 				group.pairRanges[(size_t)range.intruding - 1].behind;
-			const bool want_behind = window == HD_WINDOW_STAND ?
-				g_stand_pick_behind
-				: range.behind || stand_behind || piece_behind;
+			const bool want_behind = g_room_behind ||
+				(window == HD_WINDOW_STAND ? g_stand_pick_behind
+				: range.behind || stand_behind || piece_behind);
 
 			if (want_behind != behind_on)
 				behind_on = set_stand_matrix(wvp, want_behind);
@@ -28737,6 +28743,11 @@ bool HDRenderShadowReceiveBegin(const float* constants)
 bool HDRenderShadowReceive2Begin(const float* constants, const float* others)
 {
 	return others ? receive_open(constants, others) : false;
+}
+
+void HDRenderRoomBehind(bool on)
+{
+	g_room_behind = on;
 }
 
 bool HDRenderRoomShadow(int group, const D3DMATRIX* world, const HDRoomLighting* lighting,

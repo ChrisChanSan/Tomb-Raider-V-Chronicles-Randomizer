@@ -1212,7 +1212,7 @@ namespace
 	 * BuildRoomIntrusions. Everything else, the overhang included, is drawn
 	 * whole, which is what the classic path does with a polygon that
 	 * straddles the window's rim. */
-	void DrawRoomWindowed(const FrameRoom& entry, unsigned int passes)
+	void DrawRoomWindowedIn(const FrameRoom& entry, unsigned int passes)
 	{
 		/* A hollow group: its whole art inside its window and its hosts'
 		 * (HollowWindows), or none of it. */
@@ -1255,6 +1255,22 @@ namespace
 
 		if (gLogEnabled)
 			g_clip_windowed_tris += entry.scissoredTris;
+	}
+
+	/* DrawRoomWindowedIn, a hollow group's art pushed back in depth
+	 * (HDRenderRoomBehind): drawn in its hosts' windows too, it stands
+	 * behind their walls, and where its edges meet their art in its plane
+	 * their art is what stands - without the push those edges fight it in
+	 * a dotted line round the art's outline. */
+	void DrawRoomWindowed(const FrameRoom& entry, unsigned int passes)
+	{
+		if (entry.hollow)
+			HDRenderRoomBehind(true);
+
+		DrawRoomWindowedIn(entry, passes);
+
+		if (entry.hollow)
+			HDRenderRoomBehind(false);
 	}
 
 	/* HDLOG reachart: one line per room with an empty window and holder its
@@ -9832,7 +9848,7 @@ static void ShadowOthersPass()
 /* One room's art again for the receive, in exactly the pieces and windows
  * DrawRoomWindowed drew it with, so every triangle is rasterised inside the
  * scissor it wrote its depth in. */
-static void DrawRoomShadowWindowed(const FrameRoom& entry)
+static void DrawRoomShadowWindowedIn(const FrameRoom& entry)
 {
 	// A hollow group in the window it was drawn in (DrawRoomWindowed).
 	if (entry.hollow && !entry.hollowFull && HDRenderScissorAvailable())
@@ -9866,6 +9882,19 @@ static void DrawRoomShadowWindowed(const FrameRoom& entry)
 			HD_WINDOW_INTRUDING);
 		HDRenderScissorOff();
 	}
+}
+
+/* DrawRoomShadowWindowedIn at the depth DrawRoomWindowed drew the art at:
+ * a hollow group's pushed back, so the receive's EQUAL test meets it. */
+static void DrawRoomShadowWindowed(const FrameRoom& entry)
+{
+	if (entry.hollow)
+		HDRenderRoomBehind(true);
+
+	DrawRoomShadowWindowedIn(entry);
+
+	if (entry.hollow)
+		HDRenderRoomBehind(false);
 }
 
 /* A mirror's two blocks and its plane, out of the frame's (hd_shadow.h,

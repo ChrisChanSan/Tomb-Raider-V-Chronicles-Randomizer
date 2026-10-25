@@ -15523,6 +15523,30 @@ static void vis_hollow_window()
 		out[3] == 0, "hollow window: no window at all, nothing", took, 0);
 }
 
+/* A hollow group's art is drawn pushed back in depth, and its shadow's
+ * receive at the same depth (HDRenderRoomBehind): hd_level.cpp turns the
+ * push on and off round both of its draws, and hd_render.cpp's draw and
+ * receive both ask it. Without it the art's edges fight its hosts' walls
+ * in a dotted line round its outline (RoomProbe -push 19 and 21 at six
+ * eyes at JOBY2's windows: 80, 57, 5, 50, 4 and 0 pixels; with it 0). */
+static void vis_hollow_behind()
+{
+	char* level = hd_switch_text("hd_level.cpp");
+	char* render = hd_switch_text("hd_render.cpp");
+	int n;
+
+	ok(level && render, "hollow behind: the two files are read",
+		!!level + !!render, 2);
+	n = hd_switch_count(level, "HDRenderRoomBehind(true);");
+	ok(n == 2, "hollow behind: the draw and the receive push it", n, 2);
+	n = hd_switch_count(level, "HDRenderRoomBehind(false);");
+	ok(n == 2, "hollow behind: and both turn it off again", n, 2);
+	n = hd_switch_count(render, "const bool want_behind = g_room_behind ||");
+	ok(n == 2, "hollow behind: the draw and the receive ask it", n, 2);
+	free(level);
+	free(render);
+}
+
 /* Whether a room's floor links all name rooms drawn HD (HDVisFloorOnArt):
  * ANDY3's lid 26 over room 24 alone, a room half over classic ground, and
  * the empty and null lists. */
@@ -29810,6 +29834,7 @@ int main()
 	vis_enclosed_kept();
 	vis_hollow_enclosed();
 	vis_hollow_window();
+	vis_hollow_behind();
 	vis_lid_rule();
 	vis_floor_on_art();
 	vis_opens_sky();

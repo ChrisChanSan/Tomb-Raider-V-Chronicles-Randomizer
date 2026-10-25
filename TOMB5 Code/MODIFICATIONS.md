@@ -15274,7 +15274,7 @@ TROne rule of the second shells and its thresholds stay credited; only the flag'
 reading goes. The flag is not read anywhere in the engine any more.
 
 **Commits.** `b2e14d40` (the scans ask every group), `50b751f5` (the credit lines, the two
-headers in the project), `1c813a58` (the tools' README), `<<RECORD-COMMIT>>` (the record,
+headers in the project), `1c813a58` (the tools' README), `ba2c950a` (the record,
 the ledger, the manuals and the version).
 
 ## 3. Randomizer changes since Beta 1.0

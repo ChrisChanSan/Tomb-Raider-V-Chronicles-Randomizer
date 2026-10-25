@@ -4660,13 +4660,10 @@ static void ReportShells()
 		}
 
 		int groups = 0, pairs = 0, dropped = 0, rest = 0, air = 0;
-		int flagged = 0;
 
-		HDRenderShellCounts(&groups, &pairs, &dropped, &rest, &air,
-			&flagged);
+		HDRenderShellCounts(&groups, &pairs, &dropped, &rest, &air);
 		Log("HDLOG shell level=%s groups=%d pairs=%d dropped=%d rest=%d "
-			"air=%d flagged=%d", g_stem, groups, pairs, dropped, rest, air,
-			flagged);
+			"air=%d", g_stem, groups, pairs, dropped, rest, air);
 	}
 
 	HDRenderSetShellRooms(0, 0);

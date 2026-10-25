@@ -11377,36 +11377,37 @@ static double shell_number(const char* text, const char* head)
  * as the engine's text holds them - the own box widened by 64, a foreign
  * one by 16, covered within 16 of the plane and 0.98 between the normals,
  * 200 covered for a pair, the rest within 512 in x and z and 64 in y, the
- * air 32 off a square's ceiling and floor, the 0x40000 flag -, the flagged
- * group skipped before it is asked, and the scans run on the visibility
- * path only (hd_level.cpp, BuildShellRooms hands nothing in otherwise). */
+ * air 32 off a square's ceiling and floor -, every group asked whatever
+ * its .TRG flags (the loop's first test is the group's art, no flag is
+ * read), and the scans run on the visibility path only (hd_level.cpp,
+ * BuildShellRooms hands nothing in otherwise). */
 static void shell_rule()
 {
 	char* render = hd_switch_text("hd_render.cpp");
 	char* level = hd_switch_text("hd_level.cpp");
 	static char body[65536];
-	const double want[9] = { 64, 16, 16, 0.98, 512, 64, 32, 200, 0x40000 };
-	const char* const heads[9] = {
+	const double want[8] = { 64, 16, 16, 0.98, 512, 64, 32, 200 };
+	const char* const heads[8] = {
 		"const float kShellOwn = ", "const float kShellForeign = ",
 		"const float kShellPlane = ", "const float kShellDot = ",
 		"const float kShellRestXZ = ", "const float kShellRestY = ",
-		"const float kShellAirGap = ", "const int kShellCovered = ",
-		"const unsigned int kShellFlagReach = " };
+		"const float kShellAirGap = ", "const int kShellCovered = " };
 	int right = 0;
 
-	for (int i = 0; i < 9; i++)
+	for (int i = 0; i < 8; i++)
 	{
 		const double got = shell_number(render, heads[i]);
 
 		right += fabs(got - want[i]) < 1e-6 ? 1 : 0;
 	}
 
-	ok(right == 9, "second shells: the rule's nine numbers", right, 9);
+	ok(right == 8, "second shells: the rule's eight numbers", right, 8);
 
 	glass_body(render, "void MarkSecondShells(", body, sizeof(body));
-	ok(strstr(body, "if(trg.groups[(size_t)g].flags&kShellFlagReach)"
-		"g_shell_counts[5]++;continue;}") != 0,
-		"second shells: a flagged group is never asked", 0, 0);
+	ok(strstr(body, "constHDShellRoom&own=g_shell_rooms[g];"
+		"if(!tris[(size_t)g])continue;") != 0 &&
+		strstr(body, ".flags") == 0,
+		"second shells: every group is asked, no flag is read", 0, 0);
 
 	glass_body(level, "static void BuildShellRooms(", body, sizeof(body));
 	ok(strstr(body, "if(!VisLevel()||number_rooms<=0)"

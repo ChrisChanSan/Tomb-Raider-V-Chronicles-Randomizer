@@ -2200,10 +2200,10 @@ int HDRenderGroupHullBehind(int group);
  *              with air, more than 32 below its ceiling and above its
  *              floor.
  *
- * A triangle stands where its centroid does. A group the .TRG flags
- * 0x40000 is art meant to reach past its room and is never asked. For a
- * host with a flipmap twin covered and exact are asked of its art and of
- * its twin's, each state's group. A pair of a flipmap room - its group or
+ * A triangle stands where its centroid does. Every group of the level is
+ * asked, whatever its .TRG flags say. For a host with a flipmap twin
+ * covered and exact are asked of its art and of its twin's, each state's
+ * group. A pair of a flipmap room - its group or
  * its host has a twin - drops only what every state's group carries
  * (covered by the host's art and by its twin's; a twin with no art
  * carries nothing): what one state's group lacks is the only art there in
@@ -2281,12 +2281,11 @@ bool HDRenderYShiftOf(int group, HDYShiftGroup* out);
 int HDRenderGroupYShift(int group);
 /* After the build: the lines, and the level's counts - groups with a
  * second-shell pair, such pairs, triangles the pairs dropped, the rest,
- * the air, the groups flagged and never asked. HDRenderGroupShellDropped
- * is what a group lost in all. */
+ * the air. HDRenderGroupShellDropped is what a group lost in all. */
 int HDRenderShellLines();
 bool HDRenderShellLine(int index, HDShellLine* out);
 void HDRenderShellCounts(int* groups, int* pairs, int* dropped, int* rest,
-	int* air, int* flagged);
+	int* air);
 int HDRenderGroupShellDropped(int group);
 
 /* The hollow groups of the level built last: a room's group with

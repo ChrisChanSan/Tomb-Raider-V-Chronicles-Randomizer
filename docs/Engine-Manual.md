@@ -4,7 +4,7 @@
 
 # The engine — the manual
 
-**PCTomb5.exe, Beta_3.0**
+**PCTomb5.exe, Beta_4.0**
 
 A native Windows 11 build of Tomb Raider Chronicles: Direct3D 9 and XAudio2,
 no wrappers, one self-contained executable. This page covers everything it
@@ -74,7 +74,7 @@ graphics card**). Without that installation, or with a card that falls short,
 the game runs classic.
 
 **What it took on the test machine.** One machine, at 2560 x 1440 and 165 Hz
-with VSync on and HD on, eight levels and the title in one play test of about
+with VSync on and HD on, eight levels and the title played in one run of about
 twenty minutes, as the engine's own `-log` lines count it:
 
 - **Video memory**: the HD art's texture pages took 232 MiB (JOBY4) to
@@ -1717,11 +1717,10 @@ see *Lara in HD* below for which of her stays classic and why.
   art; the time a page stands, a
   fortieth to a tenth of a second, doubles as their strength, which is how
   faint they have always been drawn - the fires, the candle flames and the
-  X-ray figure look as they did while they stood still. One strength per
-  picture sheet, measured against the church mist the glows are held to, was
-  tried and left out: the fires set it for the candles, the smoke and the
-  X-ray figure too, and those all but vanished. A truer strength waits for a
-  reference picture to measure against. They stop with `hd_motion`.
+  X-ray figure look as they did while they stood still. They take no single
+  strength per picture sheet measured against the church mist the glows are
+  held to: the fires would set it for the candles, the smoke and the X-ray
+  figure too, and those would all but vanish. They stop with `hd_motion`.
 - **Metal, marble and ice shine.** A crate, a duct, a steel wall, a
   forklift, a marble hall and an ice floor catch the light of the level's
   lamps where they hang, and reflect their own light a little more strongly
@@ -1830,16 +1829,16 @@ see *Lara in HD* below for which of her stays classic and why.
   metres so that no crest runs straight or repeats, lighter where a shaft of
   light leaves it, in place of the bright turquoise pattern; the sun is a
   broad soft glow through it rather than a bright spot - as wide under the
-  water as in a photograph of the sea from below, allowing for the way the
-  surface bends the light - and the lit underside and the shafts are
-  stronger there and carry the picture. Looking up toward the sun the shafts
-  stay a soft glow: however much light passes the surface over the camera,
-  they are held to what the brightest part of a photograph of the sea from
-  below reaches over its open water, so no part of the picture burns out to
-  white. The sheet reaches
-  well past the level on every side, with a ragged edge, and fades into the
-  water's colour toward the horizon, so it has no visible edge. Higher up,
-  outside the dive, the surface fades out exactly as before.
+  water as a reference picture supplied for this project shows the sun from
+  below the sea, allowing for the way the surface bends the light - and the
+  lit underside and the shafts are stronger there and carry the picture.
+  Looking up toward the sun the shafts stay a soft glow: however much light
+  passes the surface over the camera, they are held to what the brightest part
+  of that picture reaches over its open water, so no part of the picture burns
+  out to white. The sheet reaches well past the level on every side, with a
+  ragged edge, and fades into the water's colour toward the horizon, so it has
+  no visible edge. Higher up, outside the dive, the surface fades out exactly
+  as before.
 
 **The people.**
 
@@ -2378,7 +2377,7 @@ it.
   to 4, where 1 changes nothing. `#` starts a comment; a line that cannot be
   read is counted and skipped. The engine's own pinned rows give JOBY2's
   three seas - the rain basin, the open sea and the sea by the ship - half
-  the foam (`foam 0.5`, a project decision of 2026-10-12). The rows apply
+  the foam (`foam 0.5`). The rows apply
   after the engine's own pinned rows, so a row of the file wins, and a later
   row wins over an earlier one -
   for example
@@ -4605,7 +4604,7 @@ Lara's that took a set of its own ends its `SFXLOG` line in `feet=bare` or
 > All three orders end up the same, which is why it is safe: with no file
 > the engine writes a complete one; with the randomizer's three-line stub it
 > applies those three and completes the rest (`if (missing)
-> BalanceWriteFile(0)`, balance.cpp:334); and with a full file the
+> BalanceWriteFile(0)` in balance.cpp); and with a full file the
 > randomizer edits only its three percentage lines and leaves every hand
 > tuned value alone (BalanceFile.h).
 

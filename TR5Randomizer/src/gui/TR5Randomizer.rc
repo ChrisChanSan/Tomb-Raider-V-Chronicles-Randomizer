@@ -44,12 +44,12 @@ BEGIN
         BLOCK "040904b0"
         BEGIN
             VALUE "FileDescription", "TR5 Randomizer"
-            VALUE "FileVersion", "Beta_3.0"
+            VALUE "FileVersion", "Beta_4.0"
             VALUE "InternalName", "TR5Randomizer.exe"
             VALUE "LegalCopyright", "GPLv3. Modified 2026 by ChrisChanSan."
             VALUE "OriginalFilename", "TR5Randomizer.exe"
             VALUE "ProductName", "TR5 Randomizer"
-            VALUE "ProductVersion", "Beta_3.0"
+            VALUE "ProductVersion", "Beta_4.0"
         END
     END
     BLOCK "VarFileInfo"

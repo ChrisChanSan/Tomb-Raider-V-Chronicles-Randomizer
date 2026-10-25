@@ -4471,32 +4471,33 @@ carries the tables.
     thing (ammunition, level, options), read on the player's
     files and never copied, and the census of where each key is drawn with its widths on
     the font's own glyph table.
-480. **The second shells** (`specific/hd/hd_level.cpp`, `BuildShellRooms`, `ReportShells`;
-    `specific/hd/hd_render.cpp`, `MarkSecondShells` and its helpers,
+480. **The second shells** (`specific/hd/hd_level.cpp`, `BuildShellRooms`,
+    `ReportShells`; `specific/hd/hd_render.cpp`, `MarkSecondShells` and its helpers,
     `HDRenderSetShellRooms`, `HDRenderShellLine`, `HDRenderShellCounts`,
-    `HDRenderGroupShellDropped`; `hd_render.h`, `HDShellRoom`, `HDShellLine`; RoomProbe's
-    `-shellscan`, `-shelldump`, `-shellgroups`, `-shell`, `-flipindex`; ModernTest's
-    `shell_rule`) - the level build on the visibility path leaves out for good the art of
-    a group that copies other rooms' art: the pairs, the rest by their rooms and the open
-    air of the rooms in their column. THIRD: TROne (Copyright 2026 Todesengel, GPLv3),
-    `host/render/dupshell.h` and the `schacht` and `rich2lift` blocks of its `hd_load`
-    (the copy of 2026-10-23, read on 2026-10-24) - the three scans' rule and every
-    threshold (64, 16, 0.98, 16, 200, a fifth, half, 512, 64, 32), credited. OWN: the
-    code, the 256-unit cells of a host's art, a flipmap pair dropping only what every
-    state of its host carries (its art and its twin's, measured on RICH3: dropping what
-    one state carries leaves the place bare in the other), the open air asking no room
-    of a pair line, and two refusals the measurement asked for: a pair behind a mirror
-    of the group's room (RICH2's washroom: the reflection's far half, 1,604 pixels of
-    the pane) and a pair whose host's box shares a face with the group's own (RICH2's
-    shaft: 15,751 pixels with no art at all from the lift car's roof; JOBY3: a cloth cut
-    through). DATA: the census of the fifteen levels' pairs.
+    `HDRenderGroupShellDropped`; `hd_render.h`, `HDShellRoom`, `HDShellLine`;
+    RoomProbe's `-shellscan`, `-shelldump`, `-shellgroups`, `-shell`, `-flipindex`;
+    ModernTest's `shell_rule`) - the level build on the visibility path leaves out for
+    good the art of a group that copies other rooms' art: the pairs, the rest by their
+    rooms and the open air of the rooms in their column. THIRD: TROne (Copyright 2026
+    Todesengel, GPLv3), `host/render/dupshell.h` and the `schacht` and `rich2lift`
+    blocks of its `hd_load` (the copy of 2026-10-23, read on 2026-10-24) - the three
+    scans' rule and every threshold (64, 16, 0.98, 16, 200, a fifth, half, 512, 64, 32),
+    credited. OWN: the code, the 256-unit cells of a host's art, a flipmap pair dropping
+    only what every state of its host carries (its art and its twin's, measured on
+    RICH3: dropping what one state carries leaves the place bare in the other), the open
+    air asking no room of a pair line, and two refusals the measurement asked for: a
+    pair behind a mirror of the group's room (RICH2's washroom: the reflection's far
+    half, 1,604 pixels of the pane) and a pair whose host's box shares a face with the
+    group's own (RICH2's shaft: 15,751 pixels with no art at all from the lift car's
+    roof; JOBY3: a cloth cut through). DATA: the census of the fifteen levels' pairs.
     DATA: the scans examine every group of a level; over the fifteen levels they take 4
     pairs and 12,158 triangles (9,064 pair triangles, 3,094 of the rest), none of them
     in the 37 groups whose flag word carries the bit 0x40000, which are examined like
     every other group and reach at most 54 covered triangles in one host against the
-    pair's 200. 481. **A room group stored off its height** (`specific/hd/hd_scan.h`,
-    `HDYShiftCount`, `HDYShiftScan`, `HDYShiftPick`, `HDYShiftClamp16`,
-    `HDYShiftDropClamped`, `HDYShiftApply`, `HDYShiftGroupLine`, `HDYShiftLevelLine`;
+    pair's 200.
+481. **A room group stored off its height** (`specific/hd/hd_scan.h`, `HDYShiftCount`,
+    `HDYShiftScan`, `HDYShiftPick`, `HDYShiftClamp16`, `HDYShiftDropClamped`,
+    `HDYShiftApply`, `HDYShiftGroupLine`, `HDYShiftLevelLine`;
     `specific/hd/hd_level.cpp`, `BuildYShiftRooms`, `ReportYShift`;
     `specific/hd/hd_render.cpp`, `GroupYShift`, `GroupRow`, `CellAxisOf`,
     `HDRenderSetYShiftRooms`, `HDRenderYShiftOf`, `HDRenderGroupYShift` and every reader
@@ -4520,16 +4521,17 @@ carries the tables.
     because they are art above the storable range collapsed onto the int16 floor, not
     art of its own, and the HD shaft has no such top - it goes on higher: OWN, as seen
     in play (PICTURE). DATA: the census of the fifteen levels (one group shifted, one
-    near miss). 482. **A lift door's delay kept while its pad is held**
-    (`game/lift_door_rule.h`, `LiftDoorKeepsTimer`; `game/control.cpp`, `_TestTriggers`;
-    ModernTest's `lift_door_rule`) - a trigger's timer is not written into a lift door
-    that holds all its code bits when the timer is negative, the hit is not heavy and
-    the trigger is no switch, heavy switch, antipad, antitrigger or heavy antitrigger.
-    THIRD: TROne (Copyright 2026 Todesengel, GPLv3), its round K159, the lift doors'
-    code and notes (the handover of 2026-10-24) - the condition, credited, unchanged.
-    OWN: the pure function, the check that its copy of the trigger types agrees with the
-    engine's, and the 14 checks. Not on the HD path: it is the trigger code's, in both
-    looks. 483. **A hollow group's art and its window** (`specific/hd/hd_level.cpp`,
+    near miss).
+482. **A lift door's delay kept while its pad is held** (`game/lift_door_rule.h`,
+    `LiftDoorKeepsTimer`; `game/control.cpp`, `_TestTriggers`; ModernTest's
+    `lift_door_rule`) - a trigger's timer is not written into a lift door that holds all
+    its code bits when the timer is negative, the hit is not heavy and the trigger is no
+    switch, heavy switch, antipad, antitrigger or heavy antitrigger. THIRD: TROne
+    (Copyright 2026 Todesengel, GPLv3), its round K159, the lift doors' code and notes
+    (the handover of 2026-10-24) - the condition, credited, unchanged. OWN: the pure
+    function, the check that its copy of the trigger types agrees with the engine's, and
+    the 14 checks. Not on the HD path: it is the trigger code's, in both looks.
+483. **A hollow group's art and its window** (`specific/hd/hd_level.cpp`,
     `g_group_hollow`, `HollowGroupOfRoom`, `g_hollow_host`, `HollowWindows`,
     `LogHollowWindows`, `DrawRoomWindowed`, `DrawRoomShadowWindowed`;
     `specific/hd/hd_vis.h`, `HDVisClassicRoomEnclosed`, `HDVisHollowWindow`;

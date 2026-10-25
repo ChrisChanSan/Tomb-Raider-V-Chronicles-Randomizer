@@ -33619,8 +33619,9 @@ after all, there is a texture; the TROne project draws them right. That answers 
 question round 14's Left of the stand entry above left open - whether to draw the sniper
 rooms' own art, the bars and the dark walls behind the glass, which the hollow rule never
 drew. The reading - a hollow group is art to be drawn with its room, and the classic
-faces are what has to leave the hole - is TROne's (GPLv3, Copyright 2026 Todesengel),
-as read in its renderer by this project for the comparison; no code of it is taken.
+faces are what has to leave the hole - is that of TROne (GPLv3) by Todesengel1931 -
+https://github.com/todesengel1931 -, as read in its renderer by this project for the
+comparison; no code of it is taken.
 TROne has no hollow verdict and draws no classic face in its HD view; this project keeps
 its stand and cover rules, draws the hollow art inside the window and leaves the faces
 out by the enclosure it measures.
@@ -33648,11 +33649,20 @@ and wider than the classic one - group 21's art reaches 1,024 units past the cla
 side walls (z 33,792 and 35,840) and 409 past the far wall (x 25,600) - so the 12 classic
 faces stand inside it, in front of its walls, and no centroid of it stands in any room's
 own box. Drawn with the faces kept the art changes 0 to 56 pixels at the hole's edges:
-the faces hide it. ANDREA2's and the title's groups are a few triangles of no size (0
-pixels drawn at two eyes in room 124 and one in each title room); RICHCUT2's 2 and 3 are
-one dark slab 800 units wide in the open air 8,300 units west of rooms 0 to 3; RICHCUT2's
-4 a square 471 units behind room 4's east wall (0 pixels from inside room 4 and from
-room 2).
+the faces hide it. ANDREA2's group is four triangles at one point (0 pixels drawn at two
+eyes in room 124). The title's three are one triangle each, 1,369 units below their
+rooms' floors and beside them: 0 pixels at one eye in each title room; in a sweep of
+rooms 70, 101, 103 and 87 (four yaws, pitch 0 and -30, base `-hollow` against head
+`-hollowdraw`, the classic faces of 70, 101 and 103 drawn) 31 of 32 views change 0
+pixels and one, room 101 looking along +x, 64 - group 101's triangle, a sliver of 30 x
+12 pixels where the base shows the clear colour (in the game the sky): no face stands in
+front of it there; and at the title's 55 flyby cameras (TrgProbe `-flyby`), 54 looking
+at the next camera of their sequence (the last on along its last leg; sequence 0 has one
+camera), the 15 cameras of sequences 0 and 4 also at four yaws, pitch 0 and -20 - 174
+views, 84 of them listing room 70, 101 or 103 - 0 pixels change. RICHCUT2's 2 and 3
+are one dark slab 800 units wide in the open air 8,300 units west of rooms 0 to 3;
+RICHCUT2's 4 a square 471 units behind room 4's east wall (0 pixels from inside room 4
+and from room 2).
 
 JOBY2's windows at six eyes: round 15's three logged eyes into room 21, room 19's window
 (round 13), round 14's rebuilt eye of the earlier picture into room 21, and the play
@@ -33681,10 +33691,15 @@ group 146's 75 / 48, 59 / 14, 50 / 35, 120 / 50, 42 / 6 and 76 / 3; groups 19 an
 60, 0 / 49, 0 / 3, 0 / 0, 0 / 4 and 0 / 0; changed 397,030, 403,527, 523,417, 144,294,
 201,623 and 523,811, outside the faces 714, 2,529, 946, 446, 1,516 and 1,186, of them 18,
 15, 0, 1, 7 and 1 by more than 8. The hole shows the art's dark walls and bars and the
-sniper; room 146's reveal and sill round it are drawn in place with their group (holder 21
-not listed with faces: `HDStandDrawFaces` answers with the art) where round 15 drew them
-in front of the faces - the few changed pixels outside the faces are that draw's matrix
-and lighting, scaled by a five-hundredth, and its edges. The ties at the head are at most
+sniper. Its floor is drawn near black, so where the eye looks steeply down into the hole
+the hole stays largely dark: at tick 1079875, of the faces' 130,536 pixels at the head
+30,065 are pure black and 68,433 below 8 (the largest channel; 66,064 of them hollow
+art), the median 6, where the median at the other five eyes is 29 to 32; inside, at the
+far wall (21 d below), that floor is 24.6 per cent of the screen at 0. Room 146's reveal
+and sill round the hole are drawn in place with their group (holder 21 not listed with
+faces: `HDStandDrawFaces` answers with the art) where round 15 drew them in front of the
+faces - the few changed pixels outside the faces are that draw's matrix and lighting,
+scaled by a five-hundredth, and its edges. The ties at the head are at most
 the base's at every eye, but one seam is new, at a new place: a dotted line of 14 and 15
 pixels (60 and 49 at 2,560) where group 21's wall meets the window's edge. The clear
 pixels (the sky in the game) stay as at base, 34, 32, 0, 976, 785 and 0: a one-pixel seam
@@ -33770,22 +33785,30 @@ eight), MenuTest 44,931, InterpTest 754, LipsTest 299 with the `.OBJ` folder and
 without (the cutseq file named by hand), 0 failed, the same counts as the base's but
 ModernTest's; the shaders and their `.inc` untouched. The parity sets of #236 and #242,
 base tool against this round's (md5 per picture): #236's 72 (the classic views, the HD
-views, the census eyes and the fifteen cameras at `hd_water` 0 and 1, the title's among
-them) 72 of 72 the same; the 131 room-centre views as #242 drew them 131 of 131; the same
-131 as the two engines draw them (the base `-hollow`, the head `-hollowdraw`) 130 of 131
-- JOBY2's room 9 looking east, 227 pixels, group 21's art in the far window's hole where
-the base left the clear colour -; #242's 28 shaft pictures the same way 28 of 28. The
-engine of the last code commit (`d3653ad1`, comments only; the nine builds exit 0 there,
-the suites' counts as above): `PCtomb5.exe` built Oct 25 2026 02:13:25, md5
-`d568738980b0afc8a9adcfa672fdfca6`.
+views, the census eyes and the fifteen cameras at `hd_water` 0 and 1) 72 of 72 the same,
+by construction: none of them is drawn on the visibility path (`-vis 1`) or with a
+hollow group (`-hollowdraw`), so they cannot show the rule, and the fifteen cameras hold
+none of the title's - the title under the rule is in Measured (its room eyes, the sweep
+and the flyby cameras), not in the parity sets; the 131 room-centre views as #242 drew
+them 131 of 131; the same 131 as the two engines draw them (the base `-hollow`, the head
+`-hollowdraw`) 130 of 131 - JOBY2's room 9 looking east, 227 pixels, group 21's art in
+the far window's hole where the base left the clear colour -; #242's 28 shaft pictures
+the same way 28 of 28. The
+engine of the last commit touching engine source (`23f30b4e`, comments only; the nine
+builds exit 0 there, the suites' counts as above): `PCtomb5.exe` built Oct 25 2026
+02:56:10, md5 `d586290d5411dcd4bb1643a1c4e878ea`.
 
 **Left.** Not seen in the game. The probe draws the classic faces flat grey, so the black
 and the sky of tiles 2550 and 2551 were never in a picture; their faces' pixels stand for
 them. Inside the sniper rooms, with the eye looking out and down, a strip of the courtyard
 shows where the floor was, through the facade's back below the sill, and Lara stands 736
 (660) units above the art's floor; whether the art was made to be seen from there is not
-known. The engine's `HDLOG hollow`, `HDLOG level= hollow` and `hollow_hidden=` lines were
-not produced: RoomProbe does not build `hd_level.cpp` and the game was not run;
+known. The art's floor is drawn near black, and an eye looking steeply down into the hole
+from the courtyard (tick 1079875) sees a largely dark hole; whether that floor is black
+in its texture or by the room's lighting was not separated. Group 101's triangle shows
+as a sliver in the title's room 101 looking along +x; at the flyby cameras it changes
+nothing. The engine's `HDLOG hollow`, `HDLOG level= hollow` and `hollow_hidden=` lines
+were not produced: RoomProbe does not build `hd_level.cpp` and the game was not run;
 RoomProbe's `-hollowlist` gives the same text from the same `HDRenderHollowText` and the
 same `HDVisClassicRoomVerdict`, and the shell lines of the engine's form (`-vis 1 -log`)
 equal `-shellscan`'s. RICHCUT2's slab of groups 2 and 3 (84 triangles) is now drawn in the
@@ -33799,7 +33822,8 @@ the rest of round 15's Left stay.
 
 **Commits.** `6cd4ab8e` (the measurement: `NoteHollowGroups`, RoomProbe `-hollowlist`),
 `6c59108d` (the rule, the log lines, `-hollowdraw`, ModernTest), `5d9f614d` (the
-records), `d3653ad1` (`hd_vis.h`'s comments) and the eyes inside the sniper rooms.
+records), `d3653ad1` (`hd_vis.h`'s comments), the eyes inside the sniper rooms,
+`23f30b4e` (`hd_vis.h`: the title's triangles) and the title's sweep and flyby cameras.
 
 ## 3. Randomizer changes since Beta 1.0
 

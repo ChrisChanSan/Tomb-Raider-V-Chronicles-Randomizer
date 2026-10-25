@@ -699,8 +699,10 @@ inline bool HDVisFloorOnArt(const int* floorRooms, int count,
  * from outside; the art's own floor lies lower. Left out, the hole shows
  * the art, and room 146's reveal round it is drawn with its group. A
  * hollow room not enclosed keeps its faces: its art stands
- * well away from it (RICHCUT2's 2 to 4, in no room's grid), or is a few
- * triangles of no size (ANDREA2's 124, the title's 70, 101 and 103). */
+ * well away from it (RICHCUT2's 2 to 4, in no room's grid), or is one
+ * to four stray triangles (ANDREA2's 124, four at one point; the title's
+ * 70, 101 and 103, one each, below and beside the room; 101's shows as a
+ * small sliver where nothing stands in front of it). */
 inline bool HDVisClassicRoomEnclosed(bool hollowDrawn, bool facesCovered,
 	int classicFaces, int enclosedBy)
 {

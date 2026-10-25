@@ -4,7 +4,7 @@
 
 # TR5 Randomizer
 
-**Beta_3.0**
+**Beta_4.0**
 
 A randomizer for **Tomb Raider Chronicles** (PC) — including a build of the
 game engine that runs natively on Windows 11 (D3D9 + XAudio2, no wrappers).
@@ -225,19 +225,11 @@ dives.</td>
 <tr>
 <td width="50%"><img src="docs/hd-distance.jpg" alt="A view to the horizon at dusk"><br>
 A long view across the level at dusk: the windmill of the next room, the far
-hills, the trees and the standing stones against the evening sky. The mill
-stands beyond the twenty sectors the original draws, and this engine draws
-to forty-one.</td>
+hills, the trees and the standing stones against the evening sky.</td>
 <td width="50%"><img src="docs/first-person.jpg" alt="First person view"><br>
 The <b>first-person view</b> (<i>Controls -> View -> First person
 view</i>): the camera sits behind her eyes, her head is not drawn, and her
 arms aim the Uzis down the street.</td>
-</tr>
-<tr>
-<td colspan="2" align="center">
-<img src="docs/hd-loading-screen.jpg" alt="An HD loading screen" width="640"><br>
-An HD loading screen with <b>Loading text</b> on (<i>HUD</i>): the level's
-name at the top centre, the TR5 bar along the bottom.</td>
 </tr>
 </table>
 

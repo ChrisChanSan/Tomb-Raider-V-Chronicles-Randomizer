@@ -42,4 +42,4 @@
 // program they downloaded. Both belong in a bug report, so both are shown.
 // The engine carries the same string in its version resource (tomb5.rc);
 // the two source trees build separately, so they are kept in step by hand.
-#define RANDO_VERSION_STRING "Beta_3.0"
+#define RANDO_VERSION_STRING "Beta_4.0"

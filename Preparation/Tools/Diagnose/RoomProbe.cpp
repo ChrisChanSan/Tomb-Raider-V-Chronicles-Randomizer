@@ -18225,7 +18225,6 @@ namespace probeshell
 	const float kDot = 0.98f, kRestXZ = 512.0f, kRestY = 64.0f;
 	const float kAirGap = 32.0f, kCell = 256.0f;
 	const int kCovered = 200;
-	const unsigned kFlagReach = 0x40000;
 
 	long long CellKey(int x, int y, int z)
 	{
@@ -18662,21 +18661,13 @@ static int ProbeShellScan(const char* root, const char* stem)
 			rooms[(size_t)r].flip ? 1 : 0, rooms[(size_t)r].tris);
 
 	std::vector<Host> hosts((size_t)n);
-	int flagged = 0, groupsTaken = 0, pairsTaken = 0;
+	int groupsTaken = 0, pairsTaken = 0;
 	int droppedPairs = 0, droppedRest = 0, droppedAir = 0;
 	const int groups = (std::min)(n, (int)trg.groups.size());
 
 	for (int g = 0; g < groups; g++)
 	{
 		const Room& own = rooms[(size_t)g];
-
-		if (trg.groups[(size_t)g].flags & kFlagReach)
-		{
-			printf("shell: level=%s group=%d flagged tris=%d\n", stem, g,
-				own.tris);
-			flagged++;
-			continue;
-		}
 
 		if (!own.tris)
 			continue;
@@ -18945,9 +18936,8 @@ static int ProbeShellScan(const char* root, const char* stem)
 	if (dump)
 		fclose(dump);
 
-	printf("shell: level=%s groups=%d pairs=%d dropped=%d rest=%d air=%d "
-		"flagged=%d\n", stem, groupsTaken, pairsTaken, droppedPairs,
-		droppedRest, droppedAir, flagged);
+	printf("shell: level=%s groups=%d pairs=%d dropped=%d rest=%d air=%d\n",
+		stem, groupsTaken, pairsTaken, droppedPairs, droppedRest, droppedAir);
 	return 0;
 }
 
@@ -22180,7 +22170,7 @@ static int ProbeMain(int argc, char** argv)
 	{
 		static const char* const why[] = { "", "fifth", "exact", "flip",
 			"mirror", "touch" };
-		int counts[6];
+		int counts[5];
 
 		for (int i = 0; i < HDRenderShellLines(); i++)
 		{
@@ -22202,10 +22192,9 @@ static int ProbeMain(int argc, char** argv)
 		}
 
 		HDRenderShellCounts(&counts[0], &counts[1], &counts[2], &counts[3],
-			&counts[4], &counts[5]);
-		printf("shell level=%s groups=%d pairs=%d dropped=%d rest=%d air=%d "
-			"flagged=%d\n", stem, counts[0], counts[1], counts[2], counts[3],
-			counts[4], counts[5]);
+			&counts[4]);
+		printf("shell level=%s groups=%d pairs=%d dropped=%d rest=%d air=%d\n",
+			stem, counts[0], counts[1], counts[2], counts[3], counts[4]);
 	}
 
 	HDRenderSetShellRooms(0, 0);

@@ -177,8 +177,9 @@ int HDScanKeptPage(int at);
  * the group lies within 4 units of (x, y - shift, z) on every axis, x and z
  * room local on both sides. The best shift is taken when it is not 0, has
  * 16 hits or more and at least twice the hits of shift 0; otherwise the
- * group's shift is 0. The rule and its thresholds are TROne's
- * (THIRD-PARTY.md).
+ * group's shift is 0. The finding, the rule and its thresholds are taken
+ * from TROne (GPLv3) by Todesengel1931 - https://github.com/todesengel1931
+ * (THIRD-PARTY.md); the code is this engine's own.
  *
  * The shift is per group: a corner another group names as well keeps its
  * stored y for that group. The file's y stays int16; a world y may lie

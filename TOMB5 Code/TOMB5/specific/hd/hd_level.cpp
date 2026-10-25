@@ -1370,7 +1370,11 @@ namespace
 	 * holds with the same camera, joined by HDVisHollowWindow, each one
 	 * clipped as ClipWindow clips every window. Run once per frame when
 	 * the list is complete, before the solid phase draws; the glow phase
-	 * and the shadow's receive read the same numbers. */
+	 * and the shadow's receive read the same numbers. The reading behind
+	 * it - art outside its own room's box and in another room's box passes
+	 * against that room's screen rectangle as well as its own - follows
+	 * TROne (GPLv3) by Todesengel1931 - https://github.com/todesengel1931;
+	 * the one rectangle per group is this engine's own. */
 	void HollowWindows()
 	{
 		const int w = (int)phd_winwidth;
@@ -4660,13 +4664,10 @@ static void ReportShells()
 		}
 
 		int groups = 0, pairs = 0, dropped = 0, rest = 0, air = 0;
-		int flagged = 0;
 
-		HDRenderShellCounts(&groups, &pairs, &dropped, &rest, &air,
-			&flagged);
+		HDRenderShellCounts(&groups, &pairs, &dropped, &rest, &air);
 		Log("HDLOG shell level=%s groups=%d pairs=%d dropped=%d rest=%d "
-			"air=%d flagged=%d", g_stem, groups, pairs, dropped, rest, air,
-			flagged);
+			"air=%d", g_stem, groups, pairs, dropped, rest, air);
 	}
 
 	HDRenderSetShellRooms(0, 0);

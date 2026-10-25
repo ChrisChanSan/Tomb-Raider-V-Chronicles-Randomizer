@@ -2674,7 +2674,7 @@ namespace
 	std::vector<unsigned char> g_shell_drop;
 	std::vector<HDShellLine> g_shell_lines;
 	std::vector<int> g_shell_group;
-	int g_shell_counts[6] = { 0, 0, 0, 0, 0, 0 };
+	int g_shell_counts[5] = { 0, 0, 0, 0, 0 };
 	// The hollow groups of the level built last (HDHollowGroup).
 	std::vector<HDHollowGroup> g_hollow;
 
@@ -2687,8 +2687,8 @@ namespace
 	 * a fifth of the pair or more, and fewer than half of them the host's
 	 * very corners (those draw the same depth and never tie). The rest
 	 * is asked within 512 of a host's box in x and z and 64 in y, the open
-	 * air 32 off a square's ceiling and floor. A group flagged 0x40000 in
-	 * the .TRG is art meant to reach past its room and is never asked. */
+	 * air 32 off a square's ceiling and floor. Every group of the level is
+	 * asked, whatever its .TRG flags say. */
 	const float kShellOwn = 64.0f;
 	const float kShellForeign = 16.0f;
 	const float kShellPlane = 16.0f;
@@ -2698,7 +2698,6 @@ namespace
 	const float kShellAirGap = 32.0f;
 	const float kShellCell = 256.0f;
 	const int kShellCovered = 200;
-	const unsigned int kShellFlagReach = 0x40000;
 
 	struct ShellHostTri
 	{
@@ -3174,14 +3173,17 @@ namespace
 	/* The three scans, group by group (HDShellRoom in hd_render.h has the
 	 * rule): the pairs, then for a group with a second-shell pair the rest
 	 * by its hosts and the open air of the rooms in their column. A pair
-	 * of a flipmap room keeps what not every state of its host carries. */
+	 * of a flipmap room keeps what not every state of its host carries.
+	 * The three scans' rule and its thresholds are taken from TROne (GPLv3)
+	 * by Todesengel1931 - https://github.com/todesengel1931; the code, the
+	 * cells and the mirror and shared-face refusals are this engine's own. */
 	void MarkSecondShells(const trf::remaster::Trg& trg)
 	{
 		g_shell_drop.clear();
 		g_shell_lines.clear();
 		g_shell_group.assign(trg.groups.size(), 0);
 
-		for (int k = 0; k < 6; k++)
+		for (int k = 0; k < 5; k++)
 			g_shell_counts[k] = 0;
 
 		if (!g_shell_rooms || g_shell_room_count <= 0)
@@ -3210,12 +3212,6 @@ namespace
 		for (int g = 0; g < groups; g++)
 		{
 			const HDShellRoom& own = g_shell_rooms[g];
-
-			if (trg.groups[(size_t)g].flags & kShellFlagReach)
-			{
-				g_shell_counts[5]++;
-				continue;
-			}
 
 			if (!tris[(size_t)g])
 				continue;
@@ -6882,14 +6878,13 @@ bool HDRenderShellLine(int index, HDShellLine* out)
 }
 
 void HDRenderShellCounts(int* groups, int* pairs, int* dropped, int* rest,
-	int* air, int* flagged)
+	int* air)
 {
 	*groups = g_shell_counts[0];
 	*pairs = g_shell_counts[1];
 	*dropped = g_shell_counts[2];
 	*rest = g_shell_counts[3];
 	*air = g_shell_counts[4];
-	*flagged = g_shell_counts[5];
 }
 
 int HDRenderGroupShellDropped(int group)

@@ -33815,17 +33815,117 @@ produced: RoomProbe does not build `hd_level.cpp` and the game was not run; Room
 `HDVisClassicRoomVerdict`, and the shell lines of the engine's form (`-vis 1`) equal
 `-shellscan`'s. RICHCUT2's slab of groups 2 and 3 (84 triangles) is now drawn in the open
 air west of the rooms wherever the walk lists room 2 or 3 and the eye looks that way;
-whether the cutscene's camera ever does is not measured. The one-pixel seam of room 146's
-frame stays as it was. The census is over the vanilla `.TRC`s and `.TRG`s: a randomized
-level that marks a hollow room keeps it classic without its art. Of the earlier Left:
-round 14's question is answered here; #226's (draw the `DUMMY` art in front of the sniper
-rooms' faces) was round 15's and no longer applies while the faces go; RICH1's catwalk and
-the rest of round 15's Left stay.
+whether the cutscene's camera ever does is not measured, and the play test of the merged
+round judged RICHCUT2 all fine: it is no longer open. The one-pixel seam of room 146's
+frame was the window's cut and went with round 2's rule. The strip of the courtyard seen
+from inside and the near-black floor were not judged by that play test and stay open. The
+census is over the vanilla `.TRC`s and `.TRG`s: a randomized level that marks a hollow
+room keeps it classic without its art. Of the earlier Left: round 14's question is
+answered here; #226's (draw the `DUMMY` art in front of the sniper rooms' faces) was round
+15's and no longer applies while the faces go; RICH1's catwalk and the rest of round 15's
+Left stay.
 
 **Commits.** `6cd4ab8e` (the measurement: `NoteHollowGroups`, RoomProbe `-hollowlist`),
 `6c59108d` (the rule, the log lines, `-hollowdraw`, ModernTest), `5d9f614d` (the
 records), `d3653ad1` (`hd_vis.h`'s comments), the eyes inside the sniper rooms,
 `23f30b4e` (`hd_vis.h`: the title's triangles) and the title's sweep and flyby cameras.
+
+**Round 2: the sky under the grate from below (2026-10-25).** The play test of the merged
+round, put into English: almost perfect - from below, at one texture, the sky can still be
+made to appear and disappear by moving the camera; only from below, at both windows, at
+the same spot, something is left out so that the sky shows, as if a view window were
+missing; at the window's height it is gone - with the guess that the invisible texture of
+the classic geometry covers the window wrongly from below; RICHCUT2 is all fine. The eyes:
+the play test's `CAMLOG` lines of JOBY2 whose eye stands below the sills (y above -5,632)
+with a window's centre in view - 13 of them: six at room 19's window with Lara standing in
+the courtyard (eye y -1,535; the walk's windows of the picture of the strip and of the
+clip's frames matched to the windows in them within a few pixels), six of the climb along
+the facade to room 21's, and the mid-jump picture's, which no logged eye matched, rebuilt
+from its frame -; a sweep of 30, per window at the standing eye's height 1, 1.5, 2, 3 and
+4 sectors from the facade, centred and a sector to either side, looking at the hole's
+centre; the picture from the pipe at the window's height (logged); and round 1's six
+(reference pictures supplied for this project, not in the repository).
+
+*Measured* (RoomProbe of `7f64f6d5` with the new `-hollowwin`, which prints per hollow
+group drawn its window, the screen box of its art, its hosts' windows and the background
+pixels in that box; 1,280 x 720 in the game's form). The hole: the hull of what the hollow
+art covers when drawn over the whole screen. At the base the 43 eyes from below hold
+30,802 clear pixels in the hole - the 13 logged 6,131 (515, 511, 549, 1, 437 and 938 at
+room 19's window; 29, 1, 82, 219, 400, 673 and 1,776 at room 21's), the sweep 24,671 at 29
+of its 30 -, every one outside the room's own window and none inside it. Drawn without its
+window the art covers every one of them (the window: 30,802), drawn two-sided none more
+(one-sided art: 0), and nothing else leaves one: the faces of rooms 19 and 21 are drawn at
+no eye (`-hollowlist`: `hidden=1`), room 146 is drawn HD, and the reveal and sill are its
+art in front of nothing. From straight below the pixels lie under the window's bottom edge
+- the strip, 8 to 35 rows (tick 53360: the window ends at row 158, the strip covers 158 to
+166) -, from a sector to the side beside its side edge. The hole is the opening of room
+146's art, whose edge seen from below is the hollow art's near face, 141 (group 19) and
+149 (group 21) units behind the classic portal's plane: an edge above the eye shows the
+lower the deeper it lies - at tick 53360 the portal's lower edge projects to row 150 and
+an edge 141 units behind it to 159, 9 rows for the strip's 9 -, the two coincide at the
+window's height, and from above the deeper one shows inside the window. Room 146's window
+holds them at every eye (tick 53360: it ends at row 276). The invisible texture the play
+test suspects is tile 2550's 96 clear texels on the faces of rooms 19 and 21, and those
+faces are not drawn: the strip is pixels at which nothing is drawn at all, the art cut off
+at its room's window. The faces would lie over 6,082 of the logged 6,131, which is where
+the same strip showed through tile 2550 before this entry's first round. Round 1's f18936,
+f19028 and pic1 held 34, 32 and 46 such pixels too (the "one-pixel seam along the frame's
+edge" above: under the window's bottom edge).
+
+*The rule* (`hd_vis.h`, `HDVisHollowWindow`; `hd_level.cpp`, `g_hollow_host` set at the
+level build, `HollowWindows` once per frame before the solid phase, `LogHollowWindows`): a
+hollow group's art is drawn inside the union of its room's window and the windows of its
+hosts - the rooms whose grids hold its triangles (`HDHollowGroup`'s `gridRoom`, the
+`grid=` of its `HDLOG hollow` line) - that the frame's list holds with the same camera,
+each clipped as every window is; a window of no width or height adds nothing; covering the
+backbuffer, the art is drawn whole. One rectangle per group, as the walk joins a room's
+windows itself. And the art is drawn pushed back in depth by `HD_STAND_PUSH`
+(`hd_render.cpp/.h`, `HDRenderRoomBehind`, asked by the draw and by the shadow's receive;
+`DrawRoomWindowed`, `DrawRoomShadowWindowed`): drawn in its hosts' windows its walls meet
+the facade in its plane round the hole, and there the host's art is what stands. The
+reading - a triangle in another room's box passes the clip against that room's rectangle
+too - is that of TROne (GPLv3) by Todesengel1931 - https://github.com/todesengel1931 -, as
+read in its renderer by this project for the comparison; no code of it is taken, and TROne
+tests it per triangle where this project joins the windows per group. With `-log` the
+`HDLOG hollow` line ends in `hosts=`, and with the clip line and on a ROOMLIST frame one
+`HDLOG hollowwin level= room= group= own= drawn= took= hosts= full=` line is written per
+hollow group drawn. RoomProbe's `-hollowdraw` draws as the engine does, and the
+`-hollowwin` line gains `union=`, `took=`, `union_full=` and `outside_union=`; ModernTest
+checks the union (6) and the push's wiring (4).
+
+*Checked.* At the head 0 clear pixels in the hole at all 50 eyes; nothing changes outside
+the hole, and of the pixels that change all but 0 to 43 per eye at the hole's rim were
+clear at the base (`sheets/` of the round: base, head and the marks at every eye). The eye
+from the pipe and round 1's f19468, r19win and p298 are the base's to the byte; f18936,
+f19028 and pic1 lose their 34, 32 and 46 clear pixels. Round 15's ties at round 1's six
+eyes, base / the union alone / the head: groups 19 and 21 15/80/0, 14/57/0, 1/5/0, 0/50/0,
+1/4/0 and 0/0/0 - the union alone drew a dotted line round the art's outline on the
+facade, the push takes it and round 1's new seam with it -; group 146 14/47/7, 5/8/3,
+12/17/11, 12/45/12, 2/9/2 and 2/2/2. Hosts over the fifteen levels: JOBY2's 19 and 21 four
+each, the title's 70 and 101 one (room 87), the other five none; round 1's nine eyes of
+the other seven groups and the title's 32 room views (rooms 70, 101, 103 and 87, four yaws
+at pitch 0 and -30) are the base's to the byte. The parity sets of round 1, base against
+head (md5 per picture): #236's 72, the 131 room-centre views as the tools and as the
+engines draw them (both `-hollowdraw`) and #242's 28 shaft pictures, 362 of 362 the same.
+The shell scans (`-shellscan`) over the fifteen levels: 89 lines at base and head, the
+same to the byte. The nine tools build; ModernTest 16,816 checks (10 more than the
+base's), MenuTest 44,931, InterpTest 754, LipsTest 299 and 272, 0 failed. `hd_build` 0,
+`hd_vis` 0, `hd_marble` 0 and `hd_fog` 0 are the base's by construction: no entry is
+hollow off the visibility path (`g_group_hollow`), so `HollowWindows` changes nothing and
+`HDRenderRoomBehind` is never turned on; no classic path file changed. The engine of the
+last commit touching engine source (`1c69db4f`): `PCtomb5.exe` built Oct 25 2026 20:27:32,
+md5 `0a3737bcc9fb4025d0fb02b5e3935714`.
+
+*Left.* Not seen in the game. The union is one rectangle: where it is wider than the
+hosts' windows together - at most eyes from below it covers the screen - only the depth
+test holds the art behind the hosts' walls; at the 50 eyes nothing of it shows outside the
+hole. Pushed back, the art loses to any surface within a 512th of its distance in front of
+it, in the hole too; at the 50 eyes the push changed only tie pixels. The engine's new log
+lines were not produced (the game was not run); RoomProbe's come from the same
+`HDVisHollowWindow` and the same build.
+
+**Commits.** `b75bc30a` (the measurement: RoomProbe `-hollowwin`), `88d450b4` (the union,
+the log lines, ModernTest), `1c69db4f` (the push), and the records.
 
 ## 3. Randomizer changes since Beta 1.0
 

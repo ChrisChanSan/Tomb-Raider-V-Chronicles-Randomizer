@@ -161,6 +161,15 @@ namespace
 		 * screen: the art stands outside the room's own box, where the
 		 * walk shows the room only through that window. */
 		bool hollow;
+
+		/* The window a hollow group is drawn in, as the scissor wants it:
+		 * the room's own window (x0..y1) and the windows of its hosts
+		 * listed this frame (HollowWindows), `hollowFull` when that
+		 * covers the backbuffer, `hollowTook` how many hosts' windows it
+		 * took. Read for a hollow entry only. */
+		int hx0, hy0, hx1, hy1;
+		bool hollowFull;
+		int hollowTook;
 	};
 
 	char g_stem[64] = { 0 };
@@ -234,6 +243,13 @@ namespace
 	 * room deeper and wider than their classic faces. Per group, like
 	 * g_group_hd. */
 	unsigned char g_group_hollow[HD_MAX_ROOMS];
+	/* The hosts of a hollow group: the rooms whose grids hold its
+	 * triangles (HDHollowGroup's gridRoom, at most HD_HOLLOW_ROOMS),
+	 * through whose windows its art is seen as well as through its own
+	 * room's (HollowWindows, HDVisHollowWindow). Per group, set at the
+	 * level build beside g_group_hollow. */
+	int g_hollow_host[HD_MAX_ROOMS][HD_HOLLOW_ROOMS];
+	unsigned char g_hollow_hosts[HD_MAX_ROOMS];
 	/* The pieces that intruding art is split into and the classic faces the
 	 * pieces belong to (HDPairFace and HDPairRange in hd_render.h). Built
 	 * once per level by BuildPairFaces and ReportRoomIntrusions and kept for
@@ -1196,17 +1212,18 @@ namespace
 	 * BuildRoomIntrusions. Everything else, the overhang included, is drawn
 	 * whole, which is what the classic path does with a polygon that
 	 * straddles the window's rim. */
-	void DrawRoomWindowed(const FrameRoom& entry, unsigned int passes)
+	void DrawRoomWindowedIn(const FrameRoom& entry, unsigned int passes)
 	{
-		// A hollow group: its whole art inside the window, or none of it.
-		if (entry.hollow && !entry.full && HDRenderScissorAvailable())
+		/* A hollow group: its whole art inside its window and its hosts'
+		 * (HollowWindows), or none of it. */
+		if (entry.hollow && !entry.hollowFull && HDRenderScissorAvailable())
 		{
 			HDRenderScissorOff();
 
-			if (ClipEmpty(entry))
+			if (entry.hx1 <= entry.hx0 || entry.hy1 <= entry.hy0)
 				return;
 
-			HDRenderScissor(entry.x0, entry.y0, entry.x1, entry.y1);
+			HDRenderScissor(entry.hx0, entry.hy0, entry.hx1, entry.hy1);
 			HDRenderRoomMask(entry.group, &entry.world, &entry.lighting,
 				passes, HD_WINDOW_ALL);
 			HDRenderScissorOff();
@@ -1238,6 +1255,22 @@ namespace
 
 		if (gLogEnabled)
 			g_clip_windowed_tris += entry.scissoredTris;
+	}
+
+	/* DrawRoomWindowedIn, a hollow group's art pushed back in depth
+	 * (HDRenderRoomBehind): drawn in its hosts' windows too, it stands
+	 * behind their walls, and where its edges meet their art in its plane
+	 * their art is what stands - without the push those edges fight it in
+	 * a dotted line round the art's outline. */
+	void DrawRoomWindowed(const FrameRoom& entry, unsigned int passes)
+	{
+		if (entry.hollow)
+			HDRenderRoomBehind(true);
+
+		DrawRoomWindowedIn(entry, passes);
+
+		if (entry.hollow)
+			HDRenderRoomBehind(false);
 	}
 
 	/* HDLOG reachart: one line per room with an empty window and holder its
@@ -1329,6 +1362,87 @@ namespace
 					listed ? 1 : 0, pieces, tris, anyWhole ? "whole" : "hidden",
 					band);
 			}
+		}
+	}
+
+	/* The window each hollow group of this frame is drawn in: its room's
+	 * own and those of its hosts (g_hollow_host) that this frame's list
+	 * holds with the same camera, joined by HDVisHollowWindow, each one
+	 * clipped as ClipWindow clips every window. Run once per frame when
+	 * the list is complete, before the solid phase draws; the glow phase
+	 * and the shadow's receive read the same numbers. */
+	void HollowWindows()
+	{
+		const int w = (int)phd_winwidth;
+		const int h = (int)phd_winheight;
+
+		for (int i = 0; i < g_frame_count; i++)
+		{
+			FrameRoom& entry = g_frame[i];
+
+			if (!entry.hollow || entry.group < 0 ||
+				entry.group >= HD_MAX_ROOMS)
+				continue;
+
+			int hosts[HD_HOLLOW_ROOMS][4];
+			int count = 0;
+
+			for (int k = 0; k < (int)g_hollow_hosts[entry.group]; k++)
+				for (int f = 0; f < g_frame_count; f++)
+				{
+					const FrameRoom& host = g_frame[f];
+
+					if (f == i || host.view != entry.view ||
+						host.room != g_hollow_host[entry.group][k])
+						continue;
+
+					hosts[count][0] = host.x0;
+					hosts[count][1] = host.y0;
+					hosts[count][2] = host.x1;
+					hosts[count][3] = host.y1;
+					count++;
+					break;
+				}
+
+			const int own[4] = { entry.x0, entry.y0, entry.x1, entry.y1 };
+			int out[4];
+
+			entry.hollowTook = HDVisHollowWindow(own, hosts, count, out);
+			entry.hx0 = out[0];
+			entry.hy0 = out[1];
+			entry.hx1 = out[2];
+			entry.hy1 = out[3];
+			entry.hollowFull = out[0] <= 0 && out[1] <= 0 && out[2] >= w &&
+				out[3] >= h;
+		}
+	}
+
+	/* HDLOG hollowwin: one line per hollow group drawn this frame, written
+	 * with the clip line and on the frame of a window event's ROOMLIST
+	 * dump. Behind -log.
+	 *
+	 *   room    the listed room, group the hollow group drawing it
+	 *   own     the room's own window as the scissor takes it, x0,y0..x1,y1
+	 *           (the last column and row not drawn; 0,0..0,0 when empty)
+	 *   drawn   the window the art was drawn in (HollowWindows)
+	 *   took    how many of its hosts' windows that took, of hosts
+	 *   full    1 when that window covers the backbuffer: drawn whole */
+	void LogHollowWindows()
+	{
+		for (int i = 0; i < g_frame_count; i++)
+		{
+			const FrameRoom& entry = g_frame[i];
+
+			if (!entry.hollow || entry.group < 0 ||
+				entry.group >= HD_MAX_ROOMS)
+				continue;
+
+			Log("HDLOG hollowwin level=%s room=%d group=%d "
+				"own=%d,%d..%d,%d drawn=%d,%d..%d,%d took=%d hosts=%d "
+				"full=%d", g_stem, entry.room, entry.group, entry.x0,
+				entry.y0, entry.x1, entry.y1, entry.hx0, entry.hy0,
+				entry.hx1, entry.hy1, entry.hollowTook,
+				(int)g_hollow_hosts[entry.group], entry.hollowFull ? 1 : 0);
 		}
 	}
 
@@ -7371,6 +7485,7 @@ static void HDLevelBuildHD()
 
 	memset(g_group_hd, 0, sizeof(g_group_hd));
 	memset(g_group_hollow, 0, sizeof(g_group_hollow));
+	memset(g_hollow_hosts, 0, sizeof(g_hollow_hosts));
 	memset(g_group_windowed, 0, sizeof(g_group_windowed));
 	memset(g_group_stand, 0, sizeof(g_group_stand));
 	memset(g_group_stand_covered, 0, sizeof(g_group_stand_covered));
@@ -7868,6 +7983,21 @@ static void HDLevelBuildHD()
 		cuts[(size_t)r] = cut_tris;
 	}
 
+	/* The hosts of each hollow group drawn: the rooms whose grids hold its
+	 * triangles, as the renderer counted them at the fill. */
+	for (int i = 0; i < HDRenderHollowGroups(); i++)
+	{
+		HDHollowGroup h;
+
+		if (!HDRenderHollowGroup(i, &h) || h.group < 0 ||
+			h.group >= HD_MAX_ROOMS || !g_group_hollow[h.group])
+			continue;
+
+		for (int k = 0; k < h.gridRooms && k < HD_HOLLOW_ROOMS; k++)
+			g_hollow_host[h.group][g_hollow_hosts[h.group]++] =
+				h.gridRoom[k];
+	}
+
 	/* Which classic rooms another group's art covers - it needs every
 	 * group's g_group_hd, so it runs once all of them are decided. */
 	std::vector<int> stand_on;
@@ -7997,7 +8127,9 @@ static void HDLevelBuildHD()
 
 			hollow_tris += h.tris;
 			hollow_drawn += drawn;
-			Log("HDLOG hollow %s drawn=%d", line, drawn);
+			Log("HDLOG hollow %s drawn=%d hosts=%d", line, drawn,
+				h.group >= 0 && h.group < HD_MAX_ROOMS ?
+				(int)g_hollow_hosts[h.group] : 0);
 		}
 
 		Log("HDLOG level=%s hollow groups=%d tris=%d drawn=%d", g_stem,
@@ -9329,6 +9461,13 @@ static bool FrameRoomAdd(int roomIndex, int group, bool hollow,
 		g_group_windowed[group] != 0;
 	entry.scissoredTris = 0;
 	entry.hollow = hollow;
+	// The room's own window until HollowWindows adds its hosts'.
+	entry.hx0 = entry.x0;
+	entry.hy0 = entry.y0;
+	entry.hx1 = entry.x1;
+	entry.hy1 = entry.y1;
+	entry.hollowFull = entry.full;
+	entry.hollowTook = 0;
 
 	/* The corner rule for the classic faces this room's intruding art
 	 * belongs to, here and now: this is InsertRoom, where the classic path
@@ -9709,17 +9848,17 @@ static void ShadowOthersPass()
 /* One room's art again for the receive, in exactly the pieces and windows
  * DrawRoomWindowed drew it with, so every triangle is rasterised inside the
  * scissor it wrote its depth in. */
-static void DrawRoomShadowWindowed(const FrameRoom& entry)
+static void DrawRoomShadowWindowedIn(const FrameRoom& entry)
 {
 	// A hollow group in the window it was drawn in (DrawRoomWindowed).
-	if (entry.hollow && !entry.full && HDRenderScissorAvailable())
+	if (entry.hollow && !entry.hollowFull && HDRenderScissorAvailable())
 	{
 		HDRenderScissorOff();
 
-		if (ClipEmpty(entry))
+		if (entry.hx1 <= entry.hx0 || entry.hy1 <= entry.hy0)
 			return;
 
-		HDRenderScissor(entry.x0, entry.y0, entry.x1, entry.y1);
+		HDRenderScissor(entry.hx0, entry.hy0, entry.hx1, entry.hy1);
 		HDRenderRoomShadow(entry.group, &entry.world, &entry.lighting,
 			HD_WINDOW_ALL);
 		HDRenderScissorOff();
@@ -9743,6 +9882,19 @@ static void DrawRoomShadowWindowed(const FrameRoom& entry)
 			HD_WINDOW_INTRUDING);
 		HDRenderScissorOff();
 	}
+}
+
+/* DrawRoomShadowWindowedIn at the depth DrawRoomWindowed drew the art at:
+ * a hollow group's pushed back, so the receive's EQUAL test meets it. */
+static void DrawRoomShadowWindowed(const FrameRoom& entry)
+{
+	if (entry.hollow)
+		HDRenderRoomBehind(true);
+
+	DrawRoomShadowWindowedIn(entry);
+
+	if (entry.hollow)
+		HDRenderRoomBehind(false);
 }
 
 /* A mirror's two blocks and its plane, out of the frame's (hd_shadow.h,
@@ -10523,6 +10675,9 @@ void HDFrameDraw()
 	g_clip_unlinked_hidden = 0;
 	g_clip_items_spared = 0;	// counted by HDFrameScissorForRoom
 
+	// The hollow groups' windows, with their hosts', for both phases.
+	HollowWindows();
+
 	// The stand ranges' answers, for this phase and the glow one.
 	DecideStand();
 
@@ -11052,12 +11207,14 @@ void HDFrameDrawGlow()
 				g_clip_unlinked_pieces, g_clip_unlinked_drawn,
 				g_clip_unlinked_hidden);
 			LogReachArt();
+			LogHollowWindows();
 			g_reachart_due = false;
 		}
 		else if (g_reachart_due)
 		{
 			// The frame a window event's ROOMLIST dump was written on.
 			LogReachArt();
+			LogHollowWindows();
 			g_reachart_due = false;
 		}
 	}

@@ -2778,6 +2778,15 @@ bool HDRenderRoomMask(int group, const D3DMATRIX* world,
 	const HDRoomLighting* lighting, unsigned int passes,
 	int window = HD_WINDOW_ALL);
 
+/* While `on`, every range HDRenderRoomMask and HDRenderRoomShadow draw is
+ * pushed back in depth by HD_STAND_PUSH of its distance, as a stand range
+ * answered HD_STAND_BEHIND is: it keeps its pixels and loses the depth test
+ * to a surface it lies within that distance in front of. For a hollow
+ * group's art (hd_level.cpp, DrawRoomWindowed): it stands behind its hosts'
+ * walls, its edges meet their art in its plane, and there the host's art is
+ * what stands. The caller turns it off again. */
+void HDRenderRoomBehind(bool on);
+
 // All three passes - HDRenderRoomMask with HD_PASS_ALL.
 bool HDRenderRoom(int group, const D3DMATRIX* world, const HDRoomLighting* lighting = 0);
 

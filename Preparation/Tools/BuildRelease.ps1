@@ -230,6 +230,11 @@ Copy-Item "$RandoRoot\README.txt" "$OutDir\README.txt" -Force
 # screens folders -
 # it has no business in a player's folder.
 Copy-Item "$RandoRoot\package\*" $OutDir -Recurse -Force
+# The engine's own words in the other languages: read at start from the game
+# folder beside the EXE (game/gameflow.cpp, LoadExtraStrings), so the file
+# travels with the package.
+Copy-Item "$Root\Preparation\extrastrings.txt" $OutDir -Force
+Say "Strings       : extrastrings.txt (the engine's words in four languages)"
 Get-ChildItem $OutDir -Recurse -Force -Filter ".gitkeep" | Remove-Item -Force
 $skel = (Get-ChildItem "$RandoRoot\package" -Recurse -File |
          Where-Object { $_.Name -ne ".gitkeep" }).Count

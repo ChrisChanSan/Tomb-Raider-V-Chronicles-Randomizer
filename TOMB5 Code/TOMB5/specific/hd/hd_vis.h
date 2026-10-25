@@ -190,7 +190,7 @@ struct HDVisTables
 	 * triangles. Noted for the HDLOG vis line and RoomProbe's -vis lines,
 	 * and asked of a room whose hollow art is drawn
 	 * (HDVisClassicRoomEnclosed): JOBY2's sniper rooms 19 and 21, whose
-	 * faces stood black and clear behind the broken facade windows. */
+	 * faces are black and clear behind the broken facade windows. */
 	std::vector<int> enclosedBy;
 	std::vector<int> enclosedTris;
 	int roomsEnclosed = 0;
@@ -692,11 +692,13 @@ inline bool HDVisFloorOnArt(const int* floorRooms, int count,
  * What for: the hollow art is the room as its window shows it, deeper and
  * wider than the classic faces, which stand inside it. JOBY2's sniper rooms
  * 19 and 21 are such rooms behind the broken glass block windows of the
- * courtyard facade (room 146): their faces - a black far wall, side walls
- * half black and half clear - stood in front of the art's dark walls and
- * bars, and the clear texels showed the sky through the hole. Left out,
- * the hole shows the art, and room 146's reveal round it is drawn with its
- * group. A hollow room not enclosed keeps its faces: its art stands
+ * courtyard facade (room 146): their faces - a black far wall, the floor,
+ * ceiling and side walls half black and half clear - stand in front of the
+ * art's dark walls and bars, and drawn, their clear texels show the sky
+ * through the hole. All of them go, the floor too, which the hole shows
+ * from outside; the art's own floor lies lower. Left out, the hole shows
+ * the art, and room 146's reveal round it is drawn with its group. A
+ * hollow room not enclosed keeps its faces: its art stands
  * well away from it (RICHCUT2's 2 to 4, in no room's grid), or is a few
  * triangles of no size (ANDREA2's 124, the title's 70, 101 and 103). */
 inline bool HDVisClassicRoomEnclosed(bool hollowDrawn, bool facesCovered,

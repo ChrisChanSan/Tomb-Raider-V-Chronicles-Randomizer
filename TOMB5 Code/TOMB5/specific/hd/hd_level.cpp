@@ -1370,7 +1370,11 @@ namespace
 	 * holds with the same camera, joined by HDVisHollowWindow, each one
 	 * clipped as ClipWindow clips every window. Run once per frame when
 	 * the list is complete, before the solid phase draws; the glow phase
-	 * and the shadow's receive read the same numbers. */
+	 * and the shadow's receive read the same numbers. The reading behind
+	 * it - art outside its own room's box and in another room's box passes
+	 * against that room's screen rectangle as well as its own - follows
+	 * TROne (GPLv3) by Todesengel1931 - https://github.com/todesengel1931;
+	 * the one rectangle per group is this engine's own. */
 	void HollowWindows()
 	{
 		const int w = (int)phd_winwidth;

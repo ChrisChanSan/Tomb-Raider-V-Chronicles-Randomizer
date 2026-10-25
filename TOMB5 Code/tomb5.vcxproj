@@ -526,6 +526,7 @@
     <ClInclude Include="TOMB5\game\lara_states.h" />
     <ClInclude Include="TOMB5\game\lasers.h" />
     <ClInclude Include="TOMB5\game\lifts.h" />
+    <ClInclude Include="TOMB5\game\lift_door_rule.h" />
     <ClInclude Include="TOMB5\game\lion.h" />
     <ClInclude Include="TOMB5\game\lot.h" />
     <ClInclude Include="TOMB5\game\mafia2.h" />
@@ -589,6 +590,7 @@
     <ClInclude Include="TOMB5\specific\hd\hd_classic.h" />
     <ClInclude Include="TOMB5\specific\hd\hd_cover.h" />
     <ClInclude Include="TOMB5\specific\hd\hd_install.h" />
+    <ClInclude Include="TOMB5\specific\hd\hd_install_names.h" />
     <ClInclude Include="TOMB5\specific\hd\hd_dxt5.h" />
     <ClInclude Include="TOMB5\specific\hd\hd_light.h" />
     <ClInclude Include="TOMB5\specific\hd\hd_level.h" />

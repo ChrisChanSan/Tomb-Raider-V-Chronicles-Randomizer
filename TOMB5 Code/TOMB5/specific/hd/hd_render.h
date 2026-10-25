@@ -2220,6 +2220,9 @@ int HDRenderGroupHullBehind(int group);
  * group's copy is what is seen past that rectangle.
  * The rest of every group stays as it was, the hull push and the air with
  * it.
+ * The three scans' rule and its thresholds are taken from TROne (GPLv3) by
+ * Todesengel1931 - https://github.com/todesengel1931; the code, the cells
+ * and the mirror and shared-face refusals are this engine's own.
  *
  * `mins` and `maxs` are the box of the room's classic vertices in world
  * units (x and z with the origin added, y as stored), `originX` and

@@ -799,6 +799,9 @@
     <ClInclude Include="TOMB5\game\lifts.h">
       <Filter>TOMB5\game</Filter>
     </ClInclude>
+    <ClInclude Include="TOMB5\game\lift_door_rule.h">
+      <Filter>TOMB5\game</Filter>
+    </ClInclude>
     <ClInclude Include="TOMB5\game\lasers.h">
       <Filter>TOMB5\game</Filter>
     </ClInclude>
@@ -908,6 +911,9 @@
       <Filter>TOMB5\specific\hd</Filter>
     </ClInclude>
     <ClInclude Include="TOMB5\specific\hd\hd_install.h">
+      <Filter>TOMB5\specific\hd</Filter>
+    </ClInclude>
+    <ClInclude Include="TOMB5\specific\hd\hd_install_names.h">
       <Filter>TOMB5\specific\hd</Filter>
     </ClInclude>
     <ClInclude Include="TOMB5\specific\hd\hd_dxt5.h">

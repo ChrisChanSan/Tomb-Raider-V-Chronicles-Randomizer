@@ -727,7 +727,11 @@ inline bool HDVisClassicRoomEnclosed(bool hollowDrawn, bool facesCovered,
  * The room's own window cut the art off there and its lowest rows stayed
  * the clear colour, the sky in the game; the host's window holds them.
  * Where the host's walls stand in front of the art, the depth test hides
- * it as it hides everything behind them. */
+ * it as it hides everything behind them.
+ * The reading - art outside its own room's box and in another room's box
+ * passes against that room's screen rectangle as well as its own - follows
+ * TROne (GPLv3) by Todesengel1931 - https://github.com/todesengel1931; the
+ * union by group is this engine's own. */
 inline int HDVisHollowWindow(const int own[4], const int (*hosts)[4],
 	int hostCount, int out[4])
 {

@@ -26,8 +26,10 @@
  * The rule: the timer is not written when it is negative, the trigger is
  * not a heavy one, its type is no switch, heavy switch or antitrigger of
  * any kind, the item is a lift door and it already holds all five code
- * bits. Every other hit writes the timer as before. The rule is TROne's
- * (THIRD-PARTY.md). No engine header here: ModernTest asserts on it. */
+ * bits. Every other hit writes the timer as before. The condition is taken
+ * from TROne (GPLv3) by Todesengel1931 - https://github.com/todesengel1931
+ * (THIRD-PARTY.md); the function and its checks are this engine's own. No
+ * engine header here: ModernTest asserts on it. */
 
 // The trigger types the rule names (global\types.h, trigger_types) and the
 // code bits (IFL_CODEBITS); control.cpp checks that they agree.

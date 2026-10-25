@@ -3173,7 +3173,10 @@ namespace
 	/* The three scans, group by group (HDShellRoom in hd_render.h has the
 	 * rule): the pairs, then for a group with a second-shell pair the rest
 	 * by its hosts and the open air of the rooms in their column. A pair
-	 * of a flipmap room keeps what not every state of its host carries. */
+	 * of a flipmap room keeps what not every state of its host carries.
+	 * The three scans' rule and its thresholds are taken from TROne (GPLv3)
+	 * by Todesengel1931 - https://github.com/todesengel1931; the code, the
+	 * cells and the mirror and shared-face refusals are this engine's own. */
 	void MarkSecondShells(const trf::remaster::Trg& trg)
 	{
 		g_shell_drop.clear();

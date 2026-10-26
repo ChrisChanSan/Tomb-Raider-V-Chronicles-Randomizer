@@ -15312,8 +15312,12 @@ work areas and the frame to that arithmetic and puts the window round a client.
 `specific/dxshell.cpp`: `DXCreate` places the windowed state (`DXPlaceWindow`, from
 `DXWindowPlace`) and sizes the back buffer from the client; `DXResizeToClient` makes the
 device anew the way Alt+Enter does, so the HD level is released with the old device and
-built again on the new one (`MoveTexturesToDevice`); `DXWindowBusy` marks the window's
-own placements. `specific/winmain.cpp`: `WM_SIZE` outside a drag and `WM_EXITSIZEMOVE`
+built again on the new one (`MoveTexturesToDevice`), and when a device of the new size
+is refused it tries the old size; a recreate that released the old device and could not
+make the next leaves the classic pages to be moved by the attempt after it
+(`dx_pages_waiting`); `DXWindowBusy` marks the window's own placements;
+`DXChangeVideoMode`, which no key calls any more, is gone. `specific/winmain.cpp`:
+`WM_SIZE` outside a drag and `WM_EXITSIZEMOVE`
 take a new size with the game thread held at the start of its scene, followed by
 `InitWindow` with the field of view kept, `InitFont` and the matrices; a size that cannot
 be taken at once (the thread parked while the window is inactive, a film, a level load)
@@ -15342,8 +15346,10 @@ the cost either way, would have to be added there. A resolution chosen anew in t
 dialog is the window's size at the next start, so it drops the remembered place.
 
 **Commits.** `3d7fb558` (the arithmetic and its tests), `af000500` (the window, the keys
-and the remembered place), `ea1fe965` (the dialog), and the manual, the tools' README and
-this entry.
+and the remembered place), `ea1fe965` (the dialog), `e1f46127` (the manual, the tools'
+README and this entry), `703c58f3` (the pages after a refused device), `aa279277` and
+`02252971` (`DXChangeVideoMode` removed; the second commit removes a stray line the first
+left, which kept `dxshell.cpp` from compiling at `aa279277`), and the commit list.
 
 ## 3. Randomizer changes since Beta 1.0
 

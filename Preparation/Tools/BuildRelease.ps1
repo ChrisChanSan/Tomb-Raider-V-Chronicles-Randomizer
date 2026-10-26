@@ -249,5 +249,24 @@ if (Test-Path (Split-Path $RandoExe -Parent)) {
     Say "Build folder  : data\ mirrored, the EXE also runs from there"
 }
 
+# --- 8. Checksums ------------------------------------------------------------
+# SHA256SUMS.txt in the package root: the SHA-256 of every EXE in the package,
+# so a player can check that a downloaded file is the one built here, by eye
+# or with "sha256sum -c SHA256SUMS.txt" in the unpacked folder. The lines have
+# the form "<hash> *<name>" (the star marks binary mode), lower-case hex,
+# forward slashes and LF line ends, exactly as sha256sum writes them itself.
+# Last of all, so that no later step can change a file after it was measured.
+$pkg  = (Resolve-Path $OutDir).Path.TrimEnd('\')
+$exes = Get-ChildItem $pkg -Recurse -File -Filter "*.exe" |
+        Where-Object { $_.Extension -eq ".exe" } | Sort-Object FullName
+$sums = foreach ($x in $exes) {
+    $rel = $x.FullName.Substring($pkg.Length + 1).Replace('\', '/')
+    "{0} *{1}" -f (Get-FileHash $x.FullName -Algorithm SHA256).Hash.ToLower(), $rel
+}
+$sumText = (@($sums) -join "`n") + "`n"
+[IO.File]::WriteAllText("$pkg\SHA256SUMS.txt", $sumText, [Text.Encoding]::ASCII)
+Say ("Checksums     : SHA256SUMS.txt ({0} EXE: {1})" -f @($exes).Count,
+     ((@($exes) | ForEach-Object { $_.Name }) -join ", "))
+
 Say ""
 Say "Done: $OutDir"

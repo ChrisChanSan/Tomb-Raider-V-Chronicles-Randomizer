@@ -15283,7 +15283,7 @@ The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
 `TR5Randomizer.exe` - is this project's own work from the first line, so it owes
 nobody a GPLv3 section 5(a) notice and has no record of the kind above. What
 changed in it since the public Beta 1.0 is listed here by task number.
-Forty-one files under `TR5Randomizer/src` changed in that span, three of them
+Forty-three files under `TR5Randomizer/src` changed in that span, five of them
 new.
 
 - **#123 - the HD markers.** `Tr5Level.cpp` / `.h`, `ApplyPatch.cpp` / `.h`,
@@ -15381,6 +15381,19 @@ new.
   bullet for this kind. The same seed 380 through the build of `2bc4de2a` and the new one,
   plain and with `mix cross allsanity 8 weapons`: every `.trc` and `.hdm` byte-identical
   but RICH2's `.trc`, which differs in that one byte (`c00ac945`, `526dbf1f`, `6601746d`).
+- **#248 - the executables declare what they are: manifest, version block, Control Flow
+  Guard; the release lists their SHA-256.** `Program.manifest` is new, the application
+  manifest that `TR5Randomizer.exe`, `Randomize.exe` and `FixCheck.exe` embed as resource
+  1: `asInvoker`, the `supportedOS` GUIDs of Windows 7 to 11, `longPathAware`, no DPI
+  awareness. `Tools.rc` is new, the manifest and the version block of the two
+  command-line programs, which had no resources at all. `gui/TR5Randomizer.rc` embeds the
+  manifest, and its version block reads `FILEVERSION` 4,0,0,0 in step with `Beta_4.0`
+  and names `CompanyName` ChrisChanSan. `b1.bat`, `b2.bat` and `bfc.bat` compile and link
+  with `/guard:cf` and link with `/CETCOMPAT`; `Preparation/Tools/BuildRelease.ps1` writes
+  `SHA256SUMS.txt` into the package root. The same seed 380 through the build of
+  `eb62fbc5` and the new one, over the thirteen campaign levels, once with no switches and
+  once with `mix cross allsanity 8 weapons items20 weather`: all 78 `.trc`, `.hdm` and log
+  files byte-identical.
 
 ## 4. Building this yourself
 
@@ -15511,3 +15524,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #243 | A room group stored too low is drawn at its world height |
 | #244 | section 3 (the randomizer) |
 | #245 | A hollow group's art is drawn where its room is listed |
+| #248 | section 3 (the randomizer) |

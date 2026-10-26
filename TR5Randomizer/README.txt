@@ -23,6 +23,7 @@ What is in here
                       engine, TR5Randomizer\ the tool.
   Licenses\           The licenses.
   trview\             Slot names for the trview level viewer (optional).
+  SHA256SUMS.txt      The SHA-256 of every program in here.
 
 You additionally need your own installation of Tomb Raider
 Chronicles. Game data is deliberately NOT included here - the game
@@ -45,6 +46,14 @@ Getting started
      saves your original levels there. After that, randomization
      writes directly into data - so you start the game as usual.
   3. Enter a seed or roll one, randomize, play.
+
+If your antivirus flags the randomizer
+--------------------------------------
+The programs are built from the source code in Source\ and are not
+signed; some scanners' machine-learning heuristics flag new unsigned
+programs. If a file's SHA-256 matches SHA256SUMS.txt of the release,
+it is the one built from that source: please report it to the
+scanner's maker as a false positive.
 
 The seed
 --------

@@ -84,6 +84,15 @@ weapon’s damage, and what each level awards for all its secrets.</td>
 Nothing else is required. Every option is optional; **Restore original**
 puts the levels back. The two manuals above cover the rest.
 
+## If your antivirus flags the randomizer
+
+The programs are built from the source in this repository and are not signed,
+and some scanners' machine-learning heuristics flag new unsigned programs.
+Compare the file's SHA-256 with `SHA256SUMS.txt` of the release
+(`certutil -hashfile TR5Randomizer.exe SHA256` in a command prompt prints it).
+If it matches, the file is the one built here: please report it to the
+scanner's maker as a false positive.
+
 ## What this is
 
 Two programs working together:

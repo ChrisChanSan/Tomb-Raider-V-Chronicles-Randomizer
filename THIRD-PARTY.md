@@ -1338,7 +1338,7 @@ carries the tables.
     push. OWN, the same design with a non-periodic field (value noise: a hash at a
     grid's corners blended smoothly, a common graphics idiom); the scale, push and drift
     are free choices, set by eye on RoomProbe pictures. DATA: with every push out (a
-    probe build of `aed63ba`) a swimming view shows the pieces standing in rows of
+    probe build of `f9529ec`) a swimming view shows the pieces standing in rows of
     dashes - the periodic pushes were the swirls and squeezes, and their periods brought
     them back.
 142. **The crests placed by a hash** - each of a sheet's eight rows is
@@ -2036,12 +2036,12 @@ carries the tables.
     from 16 to 6 pixels of half-width. OWN, a design of this project from
     general graphics knowledge (refraction through the frame's copy, value
     noise); the numbers free choices set by eye on RoomProbe pictures, the spread from
-    the textbook round jet. Since `996e85a6` the noise's lattice values are a 64 x 64
+    the textbook round jet. Since `c4069084` the noise's lattice values are a 64 x 64
     table filled with the life's mixer (`HDSpringNoiseTexel`) and read with wrap and a
     linear filter - the column's first version took them from a published third-party
     shader hash without crediting it - that hash was 'Hash without Sine' by David
     Hoskins (2014), published under the MIT licence according to its own header, and it
-    stands only in the commits de4cce39 to 58b3e8fb of the branch history - and no line
+    stands only in the commits 9bb16995 to 07e1a99f of the branch history - and no line
     of that hash is left; rgb and alpha are the share a, whole from half the weight up,
     the bend at most 96 units on cells 24 across and 96 along the line: OWN, set by eye
     on RoomProbe pictures from under the water. With a crack (entry 206) the column
@@ -2573,7 +2573,7 @@ carries the tables.
     numbers is read (entry 22). OWN: the rule, the fifth and the 0.35, free choices set on
     RoomProbe pictures of JOBY4's sea. DATA: 22 of the 28 parts lie over a body (RoomProbe
     `-hdwater 0 -nodraw`, the `WATERLOG ... art` lines). PICTURE (RoomProbe at 1280x720
-    and 2560x1440, `-time 3`, against the tool of `5df75640`): under JOBY4's sea 11 to 37
+    and 2560x1440, `-time 3`, against the tool of `8a599fd9`): under JOBY4's sea 11 to 37
     per cent of the pixels change, by 1.3 to 1.4 of 255 on average; JOBY5's sea 85 per
     cent by 5.5; JOBY3's kitchen pots 2.8 per cent by 24; ANDREA1's fountain 1.0 per cent
     by 11; with the sheets on, the views of ANDREA2's basin, JOBY5's room 49, RICH2's pool
@@ -2853,7 +2853,7 @@ carries the tables.
     `SetupZRange` calls and ModernTest `far_plane` checks bit for bit
     against the expression on 20480. OWN, the scale kept; the 24-bit step
     2.71 units at 30,000, 5.30 at the plane, a curve on 41,984 0.05 %
-    finer. RoomProbe's pictures (83, byte for byte those of `b35b3b96`'s
+    finer. RoomProbe's pictures (83, byte for byte those of `838748f2`'s
     tool) take neither the plane nor `SetupZRange`: they are the tool's
     own regression check, not evidence for the engine's curve.
 278. **The corner count under the shipped plane** (`output.cpp`,
@@ -2933,7 +2933,7 @@ carries the tables.
     at the middle no object is made and no pass runs; each present compares
     the row with the value the -log line last named, and the first present
     writes that line (`pass=off`, with `-log` only). OWN. PICTURE:
-    RoomProbe at b35b3b96 and with the change, the fifteen comparison cameras 15 of 15
+    RoomProbe at 838748f2 and with the change, the fifteen comparison cameras 15 of 15
     (and 15 of 15 with `-gamma 50` given), the six HD
     views 6 of 6, the six classic views 6 of 6 identical.
 285. **The cost** - the copy and the draw 0.0312, 0.0312 and 0.0313 ms, the

@@ -17867,7 +17867,7 @@ static bool ProbeReload(const char* root, const char* stem, int rooms,
 	/* -ahead: what the engine holds at a level change before the release
 	 * (hd_level.cpp, HDLevelKeyNext at the top of LoadLevel; the build
 	 * before is released at the next build): this build, then beside it
-	 * the other level's parse - all the scan held beside it at afbb6f6b -
+	 * the other level's parse - all the scan held beside it at 39047e97 -
 	 * and then its pages decoded ahead, every one of them (the most they
 	 * hold; the engine's build stops the decode where it starts). The
 	 * other level's run takes both, as the engine's build does. */

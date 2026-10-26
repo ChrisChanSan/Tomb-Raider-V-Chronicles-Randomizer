@@ -15277,6 +15277,74 @@ reading goes. The flag is not read anywhere in the engine any more.
 headers in the project), `1c813a58` (the tools' README), `ba2c950a` (the record,
 the ledger, the manuals and the version).
 
+### The window and the resolution (#247)
+2026-10-26
+
+**What.** In the windowed state the game window is an ordinary overlapped window: caption,
+system menu, minimize, maximize and close buttons and a sizing frame. It moves, sizes at
+every edge and corner, maximizes, snaps, minimizes and restores, and the back buffer takes
+the client's size when a drag of the frame ends and at once on maximize, restore and snap;
+the smallest client is 640x480. The window opens where it was last left when that place
+still lies on a connected monitor's work area, maximized again when it was; otherwise at
+the setup dialog's resolution, made small enough that the whole window fits the work area
+of the adapter's monitor, and centred on it. In the window Alt+Plus and Alt+Minus step the
+client from its own size to the next larger or smaller entry of the mode list that fits
+the monitor's work area, the window keeping its centre; in full screen they change
+nothing and log one line. The place is stored in the registry under `System` as
+`WindowLeft`, `WindowTop`, `WindowWidth`, `WindowHeight` and `WindowMaximized`. The setup
+dialog opens with the stored choices of every control, its defaults only where nothing is
+stored. Full screen is unchanged: a border-less window over the adapter's monitor at the
+desktop's size.
+
+**Why.** The windowed state sized its client to the desktop and grew a frame without
+sizing border, maximize box or system menu round it at 0,0, so that the window was taller
+than the screen and Windows pulled it back to the bottom edge whenever it was dragged.
+Alt+Plus and Alt+Minus made a new device of the same size, because a border-less full
+screen window renders at the desktop's size whatever the mode list says.
+
+**How.** `specific/windowplace.h` holds the arithmetic free of Windows calls:
+`WinPlaceFit`, `WinPlaceMinWindow`, `WinPlaceCentre`, `WinPlaceAround`, `WinPlaceUsable`
+(a remembered client rectangle whose window, less the sizing border, lies inside one work
+area) and `WinPlaceStep` (the mode list judged by area against the client, one colour
+depth, the work area as the upper limit). `specific/devicewindow.h` gives the windowed
+state the whole `WS_OVERLAPPEDWINDOW` style with `SWP_FRAMECHANGED`, hands the monitors'
+work areas and the frame to that arithmetic and puts the window round a client.
+`specific/dxshell.cpp`: `DXCreate` places the windowed state (`DXPlaceWindow`, from
+`DXWindowPlace`) and sizes the back buffer from the client; `DXResizeToClient` makes the
+device anew the way Alt+Enter does, so the HD level is released with the old device and
+built again on the new one (`MoveTexturesToDevice`); `DXWindowBusy` marks the window's
+own placements. `specific/winmain.cpp`: `WM_SIZE` outside a drag and `WM_EXITSIZEMOVE`
+take a new size with the game thread held at the start of its scene, followed by
+`InitWindow` with the field of view kept, `InitFont` and the matrices; a size that cannot
+be taken at once (the thread parked while the window is inactive, a film, a level load)
+waits for a timer; `SIZE_MINIMIZED` resizes nothing; `WM_GETMINMAXINFO` holds the
+smallest client; `SC_KEYMENU` is swallowed, so that a tap of Alt does not enter the system
+menu; `WM_CLOSE` stores the place and takes the close path as before; Alt+Enter, the
+keys and a new size end in the same `WinRenderSize`. `specific/registry.cpp`:
+`REG_ReadWindowPlace` and `REG_WriteWindowPlace` use a key of their own, and `SaveSetup`
+drops the place when the dialog's resolution changes. `specific/setupdlg.cpp`:
+`LoadStoredChoices` reads `DD`,
+`VMode`, `Window`, `Filter`, `TextLow`, `NoFMV` and `DisableSound` through
+`REG_PeekLong`, which creates nothing. New `-log` lines: `DXLOG window place`, `stored`,
+`resize` (with the whole recreate's milliseconds) and `keys`. ModernTest's group
+`window_place` checks the arithmetic with made-up monitors, work areas, mode lists and
+remembered rectangles (25 checks). No file of the drawing code changed (`game/` and
+`specific/hd/` are untouched), so the pictures of `hd_build` 0 and 1, `hd_vis`,
+`hd_marble` and `hd_fog` are the previous ones by construction.
+
+**Decisions.** Full screen stays at the desktop's size: a real mode switch is what the
+border-less window replaced, and its keys do nothing there. The picture takes the new size
+at the end of a drag, not during it, since every new size is a new device with the HD
+level built again; during the drag the last picture stretches. The recreate path is taken
+over a `Reset`: a reset needs every `D3DPOOL_DEFAULT` object released as well and the
+reset path leaves the HD level away until the next level load, so the HD build, which is
+the cost either way, would have to be added there. A resolution chosen anew in the setup
+dialog is the window's size at the next start, so it drops the remembered place.
+
+**Commits.** `3d7fb558` (the arithmetic and its tests), `af000500` (the window, the keys
+and the remembered place), `ea1fe965` (the dialog), and the manual, the tools' README and
+this entry.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI

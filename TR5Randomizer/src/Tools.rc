@@ -1,0 +1,61 @@
+// The resources of the two command-line programs, Randomize.exe (b1.bat) and
+// FixCheck.exe (Preparation\Tools\Diagnose\bfc.bat): the program icon, the
+// application manifest and the version block, so each EXE says what it is and
+// who made it, as gui\TR5Randomizer.rc does for TR5Randomizer.exe.
+//
+// One script for both: the build script picks the program with a define,
+// rc /D RANDOMIZE or rc /D FIXCHECK, and only the names and the description
+// differ. Keep the numbers and the version strings in step with
+// RANDO_VERSION_STRING in core\BuildId.h and with gui\TR5Randomizer.rc.
+
+// VS_VERSION_INFO, RT_MANIFEST and CREATEPROCESS_MANIFEST_RESOURCE_ID come
+// from here; without it rc stores the blocks under names instead of ids.
+#include <winres.h>
+
+#if defined(RANDOMIZE)
+#define TOOL_DESCRIPTION "Randomizer for Tomb Raider Chronicles, command line"
+#define TOOL_FILE        "Randomize.exe"
+#elif defined(FIXCHECK)
+#define TOOL_DESCRIPTION "Level fix checker for the TR5 Randomizer"
+#define TOOL_FILE        "FixCheck.exe"
+#else
+#error "Tools.rc: define RANDOMIZE or FIXCHECK (rc /D RANDOMIZE)"
+#endif
+
+// The GUI's icon, so the tools look like part of the same package.
+#define IDI_APPICON 101
+IDI_APPICON ICON "gui\\TR5Randomizer.ico"
+
+// What the program declares to Windows (rights, supported versions, long
+// paths); Program.manifest says why each line is there.
+CREATEPROCESS_MANIFEST_RESOURCE_ID RT_MANIFEST "Program.manifest"
+
+// What Windows shows in the file properties.
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION 4,0,0,0
+ PRODUCTVERSION 4,0,0,0
+ FILEFLAGSMASK 0x3fL
+ FILEFLAGS 0x0L
+ FILEOS 0x40004L
+ FILETYPE 0x1L
+ FILESUBTYPE 0x0L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904b0"
+        BEGIN
+            VALUE "CompanyName", "ChrisChanSan"
+            VALUE "FileDescription", TOOL_DESCRIPTION
+            VALUE "FileVersion", "Beta_4.0"
+            VALUE "InternalName", TOOL_FILE
+            VALUE "LegalCopyright", "GPLv3. Copyright 2026 ChrisChanSan."
+            VALUE "OriginalFilename", TOOL_FILE
+            VALUE "ProductName", "TR5 Randomizer"
+            VALUE "ProductVersion", "Beta_4.0"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200
+    END
+END

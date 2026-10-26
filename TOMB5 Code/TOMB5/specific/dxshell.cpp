@@ -30,6 +30,14 @@ LPDIRECT3D9 G_d3d;
 HWND G_hwnd;
 char keymap[256];
 ulong DXTextureMemoryAtStart = 0;	// see dxshell.h
+DXWINDOWPLACE DXWindowPlace;		// see dxshell.h
+volatile long DXWindowBusy;		// see dxshell.h
+
+/* DXResizeToClient's two words to DXCreate: keep the window where it is and
+ * take its client as the back buffer's size, and - only when a device of
+ * that size was refused - the size to take instead. */
+static long dx_keep_window;
+static ulong dx_force_w, dx_force_h;
 
 /* VSync state and the display's refresh rate.
  *
@@ -648,16 +656,86 @@ void DXClose()
 		Log("%s Attempt To Release NULL Ptr", "Direct3DDevice");
 }
 
+/* The windowed state's place, at the start and on Alt+Enter: the windowed
+ * style, then the window where it was last left when that place still lies
+ * on a connected monitor's work area (WinPlaceUsable), maximized again when
+ * it was; else a client of the mode chosen in the setup dialog, fitted to
+ * the work area of the adapter's monitor and centred on it. The place taken
+ * becomes DXWindowPlace, so that the next Alt+Enter brings the window back
+ * to it.
+ *   DXLOG window place source=<remembered|centre> client=<l,t,r,b in screen
+ *   coordinates> maximized=<0|1> monitors=<work areas seen> */
+static void DXPlaceWindow(HWND hWnd, UINT adapter, const DXDISPLAYMODE* dm)
+{
+	const WPRect frame = DeviceWindowFrame(DeviceWindowStyle(hWnd, false));
+	DeviceWindowWorks works;
+	WPRect client;
+	long maximize = 0;
+	const char* source = "centre";
+
+	DeviceWindowAllWorks(&works);
+
+	if (DXWindowPlace.have && WinPlaceUsable(DXWindowPlace.client, frame,
+		works.area, works.count))
+	{
+		client = DXWindowPlace.client;
+		maximize = DXWindowPlace.maximized;
+		source = "remembered";
+	}
+	else
+	{
+		const WPRect work = DeviceWindowAdapterWork(G_d3d, adapter);
+		long w, h;
+
+		WinPlaceFit(dm->w, dm->h, frame, work, &w, &h);
+		client = WinPlaceCentre(w, h, frame, work);
+	}
+
+	DeviceWindowPlaceClient(hWnd, client, &G_dxptr->rViewport,
+		&G_dxptr->rScreen);
+	DXWindowPlace.client = client;
+	DXWindowPlace.maximized = maximize;
+	DXWindowPlace.have = 1;
+
+	if (maximize)
+	{
+		ShowWindow(hWnd, SW_SHOWMAXIMIZED);
+
+		const WPRect now = DeviceWindowClient(hWnd);
+
+		SetRect(&G_dxptr->rViewport, 0, 0, WPWidth(now), WPHeight(now));
+		SetRect(&G_dxptr->rScreen, now.left, now.top, now.right, now.bottom);
+	}
+
+	Log("DXLOG window place source=%s client=%ld,%ld,%ld,%ld maximized=%ld "
+		"monitors=%ld", source, client.left, client.top, client.right,
+		client.bottom, maximize, works.count);
+}
+
 // D3D9 owns/manages the swap chain (back buffer + depth/stencil) internally via
 // D3DPRESENT_PARAMETERS - no separate DirectDraw primary/back/z surfaces or a
 // viewport object are needed anymore, unlike the original DirectDraw4/Direct3D3 path.
+static long DXCreateIn(long w, long h, long bpp, long Flags, DXPTR* dxptr,
+	HWND hWnd, long WindowStyle);
+
 long DXCreate(long w, long h, long bpp, long Flags, DXPTR* dxptr, HWND hWnd, long WindowStyle)
+{
+	Log(__FUNCTION__);
+
+	// Every WM_SIZE this function causes is its own (DXWindowBusy).
+	InterlockedIncrement(&DXWindowBusy);
+	const long made = DXCreateIn(w, h, bpp, Flags, dxptr, hWnd, WindowStyle);
+	InterlockedDecrement(&DXWindowBusy);
+	return made;
+}
+
+static long DXCreateIn(long w, long h, long bpp, long Flags, DXPTR* dxptr,
+	HWND hWnd, long WindowStyle)
 {
 	DXDISPLAYMODE* dm;
 	RECT r;
 	UINT adapter;
 
-	Log(__FUNCTION__);
 	G_dxptr = dxptr;
 	G_dxptr->Flags = Flags;
 	G_dxptr->hWnd = hWnd;
@@ -680,14 +758,24 @@ long DXCreate(long w, long h, long bpp, long Flags, DXPTR* dxptr, HWND hWnd, lon
 	{
 		Log("DXCreate: Windowed Mode");
 
-		// The enumerated exclusive-fullscreen mode list (dm->w/h) can be considerably
-		// shorter than what a monitor actually supports (seen on multi-monitor systems
-		// where the driver reports a much smaller max mode for one output than another,
-		// identical, monitor) - a window doesn't need a real exclusive-fullscreen-capable
-		// mode to exist, so size it off the adapter's actual current desktop resolution
-		// instead, sidestepping that limitation entirely (devicewindow.h).
-		DeviceWindowPlaceWindowed(hWnd, G_d3d, adapter, dm->w, dm->h,
-			WindowStyle, &G_dxptr->rViewport, &G_dxptr->rScreen);
+		/* The back buffer is the client's size, whatever size the window
+		 * has. A resize (DXResizeToClient) leaves the window where it is and
+		 * reads the client; the start and Alt+Enter place the window first
+		 * (DXPlaceWindow). */
+		if (dx_keep_window)
+		{
+			const WPRect now = DeviceWindowClient(hWnd);
+
+			SetRect(&G_dxptr->rViewport, 0, 0, WPWidth(now), WPHeight(now));
+			SetRect(&G_dxptr->rScreen, now.left, now.top, now.right,
+				now.bottom);
+		}
+		else
+			DXPlaceWindow(hWnd, adapter, dm);
+
+		if (dx_force_w && dx_force_h)
+			SetRect(&G_dxptr->rViewport, 0, 0, dx_force_w, dx_force_h);
+
 		G_dxptr->dwRenderWidth = G_dxptr->rViewport.right;
 		G_dxptr->dwRenderHeight = G_dxptr->rViewport.bottom;
 		Log("w %d h %d", G_dxptr->dwRenderWidth, G_dxptr->dwRenderHeight);
@@ -716,6 +804,13 @@ long DXCreate(long w, long h, long bpp, long Flags, DXPTR* dxptr, HWND hWnd, lon
 
 		long w, h;
 
+		// From a maximized window the maximized state goes first, and the
+		// popup style is set before the window covers the monitor, so that
+		// no frame of the windowed state is left round the client.
+		if (IsZoomed(hWnd))
+			ShowWindow(hWnd, SW_RESTORE);
+
+		DeviceWindowStyle(hWnd, true);
 		DeviceWindowFullRect(G_d3d, adapter, dm->w, dm->h, &r, &w, &h);
 		G_dxptr->dwRenderWidth = w;
 		G_dxptr->dwRenderHeight = h;
@@ -799,6 +894,59 @@ long DXDisplayHz()
 	return g_displayHz;
 }
 
+/* The back buffer made the client's size: a drag of the frame has ended,
+ * the window was maximized, restored or snapped, or a resolution key gave
+ * it a new size. The window stays as it is.
+ *
+ * The device is made anew, as Alt+Enter makes it: DXCreate releases the HD
+ * level with the old device (DXClose, HDLevelDeviceLost) and builds it again
+ * on the new one after the classic pages have moved (MoveTexturesToDevice,
+ * HDLevelDeviceRecreated), whose DXLOG device recreated line gives the
+ * build's cost. A Reset of the same device would also need every
+ * D3DPOOL_DEFAULT object released first, and the reset path of DXShowFrame
+ * leaves the HD level away until the next level load; the rebuild, which is
+ * the cost either way, would have to be added there. The device is the
+ * engine's own, so the caller holds the game thread (winmain.cpp).
+ *
+ * A device of the new size that cannot be made leaves the old size, the
+ * picture stretched into the client as it is during a drag.
+ *   DXLOG window resize <why> back=<WxH before>-><WxH after> ok=<0|1>
+ *   path=recreate ms=<the whole recreate, in milliseconds> */
+long DXResizeToClient(const char* why)
+{
+	const ulong oldW = G_dxptr->dwRenderWidth;
+	const ulong oldH = G_dxptr->dwRenderHeight;
+	LARGE_INTEGER start, end, rate;
+	long val;
+
+	Log(__FUNCTION__);
+	QueryPerformanceFrequency(&rate);
+	QueryPerformanceCounter(&start);
+	dx_keep_window = 1;
+	G_dxptr->Flags |= DXF_NOFREE;
+	val = DXCreate(0, 0, 0, G_dxptr->Flags, G_dxptr, G_dxptr->hWnd,
+		G_dxptr->WindowStyle);
+
+	if (!val)
+	{
+		dx_force_w = oldW;
+		dx_force_h = oldH;
+		val = DXCreate(0, 0, 0, G_dxptr->Flags, G_dxptr, G_dxptr->hWnd,
+			G_dxptr->WindowStyle);
+		dx_force_w = 0;
+		dx_force_h = 0;
+	}
+
+	G_dxptr->Flags ^= DXF_NOFREE;
+	dx_keep_window = 0;
+	QueryPerformanceCounter(&end);
+	Log("DXLOG window resize %s back=%lux%lu->%lux%lu ok=%ld path=recreate "
+		"ms=%ld", why, oldW, oldH, G_dxptr->dwRenderWidth,
+		G_dxptr->dwRenderHeight, val,
+		(long)((end.QuadPart - start.QuadPart) * 1000 / rate.QuadPart));
+	return val;
+}
+
 long DXChangeVideoMode()
 {
 	long val;
@@ -832,8 +980,10 @@ long DXToggleFullScreen()
 	}
 
 	dm = &G_dxinfo->DDInfo[G_dxinfo->nDD].D3DDevices[G_dxinfo->nD3D].DisplayModes[G_dxinfo->nDisplayMode];
+	InterlockedIncrement(&DXWindowBusy);
 	DXCreate(dm->w, dm->h, dm->bpp, G_dxptr->Flags, G_dxptr, G_dxptr->hWnd, G_dxptr->WindowStyle);
 	WinSetStyle(G_dxptr->Flags & DXF_FULLSCREEN, G_dxptr->WindowStyle);
+	InterlockedDecrement(&DXWindowBusy);
 	G_dxptr->Flags ^= DXF_NOFREE;
 	DXLogWindow("toggle");
 	return 1;

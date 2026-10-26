@@ -12,6 +12,7 @@
  */
 #pragma once
 #include "../global/types.h"
+#include "windowplace.h"
 
 /* The texture memory the device offered the moment it was made, in bytes.
  * Zero when the device did not answer. The HD texture budget is worked out
@@ -46,6 +47,29 @@ long DXCreate(long w, long h, long bpp, long Flags, DXPTR* dxptr, HWND hWnd, lon
 long DXVSyncActive();
 long DXDisplayHz();
 
+/* The windowed state's place: the client rectangle in screen coordinates
+ * the window had when it was last neither maximized nor minimized, and
+ * whether it is maximized. Read from the registry at the start
+ * (REG_ReadWindowPlace), set by every placement DXCreate makes and by the
+ * window procedure when a drag or a resize ends, and taken again by the
+ * next Alt+Enter into the windowed state and the next start. */
+struct DXWINDOWPLACE
+{
+	WPRect client;
+	long maximized;
+	long have;
+};
+
+extern DXWINDOWPLACE DXWindowPlace;
+
+/* Above zero while DXCreate or Alt+Enter places the window: the WM_SIZE
+ * messages of that placement are the engine's own, and the window
+ * procedure leaves them alone. */
+extern volatile long DXWindowBusy;
+
+/* The back buffer made the client's size, the window left as it is; `why`
+ * names the cause in the -log line. The caller holds the game thread. */
+long DXResizeToClient(const char* why);
 long DXChangeVideoMode();
 long DXToggleFullScreen();
 void DXLogWindow(const char* when);

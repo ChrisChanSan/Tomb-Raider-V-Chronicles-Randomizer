@@ -115,8 +115,9 @@ bool REG_KeyWasCreated()
  *
  * This reader opens read-only, creates nothing, touches neither phkResult
  * nor dwDisposition, and answers false when the key or the value is not
- * there. One caller: the VSync option, which the device needs before the
- * options are read (specific/winmain.cpp, DXCreate). */
+ * there. Callers: the VSync option, which the device needs before the
+ * options are read (specific/winmain.cpp, DXCreate), and the window's
+ * remembered place (REG_ReadWindowPlace). */
 bool REG_PeekLong(LPCSTR SubKeyName, LPCSTR ValueName, ulong& value)
 {
 	char buffer[256];
@@ -284,6 +285,51 @@ bool REG_ReadString(char* SubKeyName, char* value, ulong size, const char* defau
 void REG_DeleteValue(char* SubKeyName)
 {
 	RegDeleteValue(phkResult, SubKeyName);
+}
+
+// The five values of the window's place, in the order of the arguments.
+static const char* const WindowPlaceNames[5] = { "WindowLeft", "WindowTop",
+	"WindowWidth", "WindowHeight", "WindowMaximized" };
+
+bool REG_ReadWindowPlace(long* left, long* top, long* w, long* h,
+	long* maximized)
+{
+	ulong v[5];
+
+	for (int i = 0; i < 5; i++)
+	{
+		if (!REG_PeekLong("System", WindowPlaceNames[i], v[i]))
+			return false;
+	}
+
+	*left = (long)v[0];
+	*top = (long)v[1];
+	*w = (long)v[2];
+	*h = (long)v[3];
+	*maximized = v[4] ? 1 : 0;
+	return true;
+}
+
+void REG_WriteWindowPlace(long left, long top, long w, long h,
+	long maximized)
+{
+	const ulong v[5] = { (ulong)left, (ulong)top, (ulong)w, (ulong)h,
+		(ulong)(maximized ? 1 : 0) };
+	char buffer[256];
+	HKEY key;
+
+	sprintf(buffer, "%s\\%s", "Software\\Core Design\\Tomb Raider Chronicles",
+		"System");
+
+	if (RegCreateKeyEx(HKEY_CURRENT_USER, buffer, 0, 0,
+		REG_OPTION_NON_VOLATILE, KEY_SET_VALUE, 0, &key, 0) != ERROR_SUCCESS)
+		return;
+
+	for (int i = 0; i < 5; i++)
+		RegSetValueEx(key, WindowPlaceNames[i], 0, REG_DWORD,
+			(CONST BYTE*)&v[i], sizeof(ulong));
+
+	RegCloseKey(key);
 }
 
 bool LoadSettings()
@@ -793,7 +839,23 @@ void SaveSettings()
 
 bool SaveSetup(HWND hDlg)
 {
+	const ulong mode = (ulong)SendMessage(GetDlgItem(hDlg, IDC_RESOLUTION),
+		CB_GETITEMDATA, SendMessage(GetDlgItem(hDlg, IDC_RESOLUTION),
+		CB_GETCURSEL, 0, 0), 0);
+	ulong was;
+
+	/* A resolution chosen anew in the dialog is the window's size at the
+	 * next start: the remembered place goes, and the window opens at the
+	 * new size, centred. The same resolution keeps it. */
+	const bool forget = !REG_PeekLong("System", "VMode", was) || was != mode;
+
 	OpenRegistry("System");
+
+	if (forget)
+	{
+		for (int i = 0; i < 5; i++)
+			REG_DeleteValue((char*)WindowPlaceNames[i]);
+	}
 
 	REG_WriteLong((char*)"DD", SendMessage(GetDlgItem(hDlg, IDC_GRAPHICS_ADAPTER), CB_GETCURSEL, 0, 0));
 	// D3D, DS and TFormat no longer have a control behind them - one device
@@ -802,7 +864,7 @@ bool SaveSetup(HWND hDlg)
 	// build is actively cleared instead of sitting in the registry waiting to
 	// index past an array (the read side clamps them too, see LoadSettings).
 	REG_WriteLong((char*)"D3D", 0);
-	REG_WriteLong((char*)"VMode", SendMessage(GetDlgItem(hDlg, IDC_RESOLUTION), CB_GETITEMDATA, SendMessage(GetDlgItem(hDlg, IDC_RESOLUTION), CB_GETCURSEL, 0, 0), 0));
+	REG_WriteLong((char*)"VMode", mode);
 	REG_WriteLong((char*)"DS", 0);
 	REG_WriteLong((char*)"TFormat", 0);
 

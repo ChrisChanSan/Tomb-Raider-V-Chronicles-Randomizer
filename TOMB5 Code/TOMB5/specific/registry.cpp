@@ -116,8 +116,9 @@ bool REG_KeyWasCreated()
  * This reader opens read-only, creates nothing, touches neither phkResult
  * nor dwDisposition, and answers false when the key or the value is not
  * there. Callers: the VSync option, which the device needs before the
- * options are read (specific/winmain.cpp, DXCreate), and the window's
- * remembered place (REG_ReadWindowPlace). */
+ * options are read (specific/winmain.cpp, DXCreate), the window's
+ * remembered place (REG_ReadWindowPlace) and the setup dialog's stored
+ * choices (setupdlg.cpp, LoadStoredChoices). */
 bool REG_PeekLong(LPCSTR SubKeyName, LPCSTR ValueName, ulong& value)
 {
 	char buffer[256];

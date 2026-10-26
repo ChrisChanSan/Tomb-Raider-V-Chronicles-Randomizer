@@ -957,8 +957,6 @@ long DXResizeToClient(const char* why)
 	return val;
 }
 
->>>
-
 long DXToggleFullScreen()
 {
 	DXDISPLAYMODE* dm;

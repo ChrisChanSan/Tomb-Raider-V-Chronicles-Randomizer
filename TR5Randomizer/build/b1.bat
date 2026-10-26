@@ -2,7 +2,7 @@
 set R=%~dp0..\..
 call "C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvars64.bat" >nul
 cd /d "%~dp0"
-REM The icon, the manifest and the version block (src\Tools.rc). rc writes
+REM The manifest and the version block (src\Tools.rc). rc writes
 REM Randomize.res into the current directory, hence after the cd above.
 rc /nologo /D RANDOMIZE /fo "Randomize.res" "%R%\TR5Randomizer\src\Tools.rc"
 REM /guard:cf (compiler and linker): Control Flow Guard, the check Windows makes

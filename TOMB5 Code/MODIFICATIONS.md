@@ -15385,7 +15385,7 @@ new.
   Guard; the release lists their SHA-256.** `Program.manifest` is new, the application
   manifest that `TR5Randomizer.exe`, `Randomize.exe` and `FixCheck.exe` embed as resource
   1: `asInvoker`, the `supportedOS` GUIDs of Windows 7 to 11, `longPathAware`, no DPI
-  awareness. `Tools.rc` is new, the icon, the manifest and the version block of the two
+  awareness. `Tools.rc` is new, the manifest and the version block of the two
   command-line programs, which had no resources at all. `gui/TR5Randomizer.rc` embeds the
   manifest, and its version block reads `FILEVERSION` 4,0,0,0 in step with `Beta_4.0`
   and names `CompanyName` ChrisChanSan. `b1.bat`, `b2.bat` and `bfc.bat` compile and link

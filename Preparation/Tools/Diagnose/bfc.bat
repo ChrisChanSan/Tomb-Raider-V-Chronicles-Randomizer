@@ -1,7 +1,7 @@
 @echo off
 call "C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvars64.bat" >nul
 cd /d "%~dp0"
-REM The icon, the manifest and the version block, from the randomizer's
+REM The manifest and the version block, from the randomizer's
 REM src\Tools.rc. rc writes FixCheck.res into the current directory, hence
 REM after the cd above.
 rc /nologo /D FIXCHECK /fo "FixCheck.res" "%~dp0..\..\..\TR5Randomizer\src\Tools.rc"

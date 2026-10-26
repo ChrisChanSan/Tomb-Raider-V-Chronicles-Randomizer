@@ -39,6 +39,11 @@ volatile long DXWindowBusy;		// see dxshell.h
 static long dx_keep_window;
 static ulong dx_force_w, dx_force_h;
 
+/* The classic pages still live on a released device: a recreate released
+ * the old one and could not make the new one, and the next DXCreate has to
+ * move them although no device is there to tell it so. */
+static bool dx_pages_waiting;
+
 /* VSync state and the display's refresh rate.
  *
  * Both are written by DXCreate and read by the present policy in
@@ -742,8 +747,10 @@ static long DXCreateIn(long w, long h, long bpp, long Flags, DXPTR* dxptr,
 	G_dxptr->WindowStyle = WindowStyle;
 
 	// A device here already is Alt+Enter or a resolution change: the classic
-	// pages made on it move to the new one below.
-	const bool recreate = G_dxptr->lpD3DDevice != 0;
+	// pages made on it move to the new one below. So do the pages of a
+	// device released by an attempt that could not make the next one
+	// (dx_pages_waiting), for the attempt after it.
+	const bool recreate = G_dxptr->lpD3DDevice != 0 || dx_pages_waiting;
 
 	DXClose();
 
@@ -871,8 +878,11 @@ static long DXCreateIn(long w, long h, long bpp, long Flags, DXPTR* dxptr,
 	if (!DXCreateD3DDevice(G_dxptr->lpD3D, adapter, hWnd, &G_dxptr->PresentParams, &G_dxptr->lpD3DDevice))
 	{
 		DXClose();
+		dx_pages_waiting = recreate;
 		return 0;
 	}
+
+	dx_pages_waiting = 0;
 
 	if (recreate)
 		MoveTexturesToDevice();

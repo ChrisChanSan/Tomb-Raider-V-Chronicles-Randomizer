@@ -642,7 +642,7 @@ void DXClose()
 	{
 		// Every HD object - both buffers, the page textures, the two
 		// shaders, the vertex declaration - was made on this device, and a
-		// resolution change or Alt+Enter comes through here (DXChangeVideoMode
+		// new window size or Alt+Enter comes through here (DXResizeToClient
 		// / DXToggleFullScreen call DXCreate, which calls DXClose first).
 		// Letting them outlive the device would leave the HD path drawing
 		// through released interfaces on the next frame. They go now;
@@ -843,8 +843,8 @@ static long DXCreateIn(long w, long h, long bpp, long Flags, DXPTR* dxptr,
 	 *
 	 * Where this takes effect, and where it does not: PresentationInterval is
 	 * a device-creation parameter, read here, and this function runs at
-	 * startup, on Alt+Enter and on a resolution change (DXToggleFullScreen
-	 * and DXChangeVideoMode both call DXCreate). The device-lost path in
+	 * startup, on Alt+Enter and on a new window size (DXToggleFullScreen
+	 * and DXResizeToClient both call DXCreate). The device-lost path in
 	 * DXShowFrame resets with this same G_dxptr->PresentParams, so it follows
 	 * too. Switching the menu row over does not change a running device -
 	 * the row says so, and the setting is picked up the next time the game
@@ -957,18 +957,7 @@ long DXResizeToClient(const char* why)
 	return val;
 }
 
-long DXChangeVideoMode()
-{
-	long val;
-
-	Log(__FUNCTION__);
-	G_dxptr->Flags |= DXF_NOFREE;
-	val = DXCreate(0, 0, 0, G_dxptr->Flags, G_dxptr, G_dxptr->hWnd, G_dxptr->WindowStyle);
-	G_dxptr->Flags ^= DXF_NOFREE;
-	Log("Exited DXChangeVideoMode %d", val);
-	DXLogWindow("mode");
-	return val;
-}
+>>>
 
 long DXToggleFullScreen()
 {

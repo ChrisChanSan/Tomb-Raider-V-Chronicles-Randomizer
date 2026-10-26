@@ -70,7 +70,6 @@ extern volatile long DXWindowBusy;
 /* The back buffer made the client's size, the window left as it is; `why`
  * names the cause in the -log line. The caller holds the game thread. */
 long DXResizeToClient(const char* why);
-long DXChangeVideoMode();
 long DXToggleFullScreen();
 void DXLogWindow(const char* when);
 long DXGetInfo(DXINFO* dxinfo, HWND hwnd);

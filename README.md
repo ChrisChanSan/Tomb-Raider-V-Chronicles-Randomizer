@@ -4,7 +4,7 @@
 
 # TR5 Randomizer
 
-**Beta_4.0**
+**Beta_4.1**
 
 A randomizer for **Tomb Raider Chronicles** (PC) — including a build of the
 game engine that runs natively on Windows 11 (D3D9 + XAudio2, no wrappers).

@@ -4,7 +4,7 @@
 
 # The engine — the manual
 
-**PCTomb5.exe, Beta_4.0**
+**PCTomb5.exe, Beta_4.1**
 
 A native Windows 11 build of Tomb Raider Chronicles: Direct3D 9 and XAudio2,
 no wrappers, one self-contained executable. This page covers everything it

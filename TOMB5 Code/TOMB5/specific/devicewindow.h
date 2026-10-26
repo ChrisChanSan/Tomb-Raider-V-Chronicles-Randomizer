@@ -12,73 +12,170 @@
  */
 #pragma once
 
-/* The game window and its swap chain at startup, on Alt+Enter and on a
- * resolution change.
+/* The game window and its swap chain at startup, on Alt+Enter, on a
+ * resolution step and when the window is sized.
  *
  * DXCreate places the window and fills the present parameters, WinSetStyle
  * gives the window the style of the display state, DXShowFrame and
  * CreateMonoScreen read the back buffer back. Header only, like
  * devicemove.h, so that the engine and RoomProbe -windowcycle take the very
  * same code: the probe drives it on a real window through the start state
- * and two toggles and says what each state is. */
+ * and two toggles and says what each state is. The arithmetic of the
+ * windowed state's place is windowplace.h's; the calls that hand it the
+ * monitors and the frame, and that put the window where it says, are
+ * here. */
 #include <windows.h>
 #include <d3d9.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "windowplace.h"
 
-// The style of the two display states; the rest of the window's own bits
-// (visible, clip siblings) stay as they are.
+/* The style of the two display states; the rest of the window's own bits
+ * (visible, clip siblings, maximized) stay as they are. Windowed is the
+ * whole overlapped window - caption, system menu, minimize and maximize
+ * boxes, sizing frame - so that it moves, sizes, maximizes and snaps like
+ * any other window. Full screen is a border-less popup without any of
+ * them. */
 inline DWORD DeviceWindowStyleFor(DWORD style, bool fullscreen)
 {
-	if (fullscreen)
-		style = (style & ~WS_OVERLAPPEDWINDOW) | WS_POPUP;
-	else
-		style = (style & ~WS_POPUP) | WS_OVERLAPPEDWINDOW;
+	if (!fullscreen)
+		return (style & ~WS_POPUP) | WS_OVERLAPPEDWINDOW;
 
+	style = (style & ~WS_OVERLAPPEDWINDOW) | WS_POPUP;
 	return style & ~(WS_THICKFRAME | WS_MAXIMIZEBOX | WS_SYSMENU);
 }
 
+/* The style set, and the frame worked out again at once (SWP_FRAMECHANGED):
+ * without it Windows keeps the old frame until something else makes it
+ * look, and a client measured in between is the old state's. */
 inline DWORD DeviceWindowStyle(HWND hWnd, bool fullscreen)
 {
 	const DWORD style = DeviceWindowStyleFor(
 		(DWORD)GetWindowLong(hWnd, GWL_STYLE), fullscreen);
 
 	SetWindowLong(hWnd, GWL_STYLE, (LONG)style);
+	SetWindowPos(hWnd, 0, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOMOVE |
+		SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
 	return style;
 }
 
-/* The windowed state: the client area as large as the adapter's desktop
- * mode (or the enumerated mode when the adapter does not answer), the window
- * grown round it by `style`. The client rectangle comes back in `viewport`
- * and in screen coordinates in `screen`. */
+inline WPRect DeviceWindowRect(const RECT& r)
+{
+	return WPMake(r.left, r.top, r.right - r.left, r.bottom - r.top);
+}
+
+// What the frame of `style` adds round a client (windowplace.h, `frame`).
+inline WPRect DeviceWindowFrame(DWORD style)
+{
+	RECT r = { 0, 0, 0, 0 };
+
+	AdjustWindowRect(&r, style & ~WS_MAXIMIZE, 0);
+	return DeviceWindowRect(r);
+}
+
+// The work area of a monitor: the screen less the taskbar and the bars
+// docked to it.
+inline bool DeviceWindowWorkOf(HMONITOR monitor, WPRect* work)
+{
+	MONITORINFO mi;
+
+	mi.cbSize = sizeof(mi);
+
+	if (!monitor || !GetMonitorInfo(monitor, &mi))
+		return false;
+
+	*work = DeviceWindowRect(mi.rcWork);
+	return true;
+}
+
+/* The work area of the adapter's monitor; the primary one's when the
+ * adapter does not name a monitor. */
+inline WPRect DeviceWindowAdapterWork(IDirect3D9* d3d, UINT adapter)
+{
+	WPRect work;
+	RECT r;
+	const POINT origin = { 0, 0 };
+
+	if (d3d && DeviceWindowWorkOf(d3d->GetAdapterMonitor(adapter), &work))
+		return work;
+
+	if (DeviceWindowWorkOf(MonitorFromPoint(origin,
+		MONITOR_DEFAULTTOPRIMARY), &work))
+		return work;
+
+	SystemParametersInfo(SPI_GETWORKAREA, 0, &r, 0);
+	return DeviceWindowRect(r);
+}
+
+struct DeviceWindowWorks
+{
+	WPRect area[16];
+	long count;
+};
+
+inline BOOL CALLBACK DeviceWindowWorkEach(HMONITOR monitor, HDC, LPRECT,
+	LPARAM data)
+{
+	DeviceWindowWorks* works = (DeviceWindowWorks*)data;
+
+	if (works->count < 16 &&
+		DeviceWindowWorkOf(monitor, &works->area[works->count]))
+		works->count++;
+
+	return TRUE;
+}
+
+// The work areas of every connected monitor, at most sixteen.
+inline void DeviceWindowAllWorks(DeviceWindowWorks* works)
+{
+	works->count = 0;
+	EnumDisplayMonitors(0, 0, DeviceWindowWorkEach, (LPARAM)works);
+}
+
+// The client rectangle in screen coordinates.
+inline WPRect DeviceWindowClient(HWND hWnd)
+{
+	RECT r;
+
+	GetClientRect(hWnd, &r);
+	MapWindowPoints(hWnd, 0, (POINT*)&r, 2);
+	return DeviceWindowRect(r);
+}
+
+/* The window put round `client` (screen coordinates) with the frame of its
+ * present style; the client rectangle comes back in `viewport` and in
+ * screen coordinates in `screen`. */
+inline void DeviceWindowPlaceClient(HWND hWnd, const WPRect& client,
+	RECT* viewport, RECT* screen)
+{
+	const WPRect frame = DeviceWindowFrame(
+		(DWORD)GetWindowLong(hWnd, GWL_STYLE));
+	const WPRect win = WinPlaceWindowOf(client, frame);
+
+	SetWindowPos(hWnd, 0, win.left, win.top, WPWidth(win), WPHeight(win),
+		SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+	GetClientRect(hWnd, viewport);
+	GetClientRect(hWnd, screen);
+	MapWindowPoints(hWnd, 0, (POINT*)screen, 2);
+}
+
+/* The windowed state's first place: the windowed style, and a client of
+ * the mode's size made to fit the work area of the adapter's monitor and
+ * centred on it. Where a remembered place is usable the engine takes that
+ * instead (DXCreate); RoomProbe -windowcycle takes this. */
 inline void DeviceWindowPlaceWindowed(HWND hWnd, IDirect3D9* d3d, UINT adapter,
 	long modeW, long modeH, DWORD style, RECT* viewport, RECT* screen)
 {
-	D3DDISPLAYMODE mode;
-	RECT r;
+	const WPRect frame = DeviceWindowFrame(
+		DeviceWindowStyleFor(style, false));
+	const WPRect work = DeviceWindowAdapterWork(d3d, adapter);
+	long w, h;
 
-	r.left = 0;
-	r.top = 0;
-
-	if (d3d && SUCCEEDED(d3d->GetAdapterDisplayMode(adapter, &mode)))
-	{
-		r.right = mode.Width;
-		r.bottom = mode.Height;
-	}
-	else
-	{
-		r.right = modeW;
-		r.bottom = modeH;
-	}
-
-	AdjustWindowRect(&r, style, 0);
-	SetWindowPos(hWnd, 0, 0, 0, r.right - r.left, r.bottom - r.top,
-		SWP_NOMOVE | SWP_NOZORDER);
-	GetClientRect(hWnd, viewport);
-	GetClientRect(hWnd, screen);
-	ClientToScreen(hWnd, (LPPOINT)&screen->left);
-	ClientToScreen(hWnd, (LPPOINT)&screen->right);
+	WinPlaceFit(modeW, modeH, frame, work, &w, &h);
+	DeviceWindowStyle(hWnd, false);
+	DeviceWindowPlaceClient(hWnd, WinPlaceCentre(w, h, frame, work),
+		viewport, screen);
 }
 
 /* The full screen state: a window over the whole monitor of the adapter, at

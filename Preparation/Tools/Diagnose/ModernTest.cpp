@@ -122,6 +122,9 @@
 #include "../../../TOMB5 Code/TOMB5/specific/loadbar_math.h"
 // The far plane and the depth curve: the numbers (far_plane).
 #include "../../../TOMB5 Code/TOMB5/specific/zrange_math.h"
+// The game window's place: fit, centre, step, the remembered rectangle
+// (window_place).
+#include "../../../TOMB5 Code/TOMB5/specific/windowplace.h"
 // The skeleton fit and the pocket: the object path's rules (object_rules).
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_object_rules.h"
 // The glow's normal: the per-part choice and its two settings (glow_normal).
@@ -29750,6 +29753,113 @@ static void glow_normal()
 		HDGlowFaceNormal(HD_GLOW_NORMAL_PART, 3, 7), 0);
 }
 
+/* ------------------------------------------------- the window's place --- */
+
+/* The game window in the windowed state (windowplace.h): the client fitted
+ * to a work area, centred, kept round its centre on a step, a remembered
+ * rectangle judged against the monitors, and the Alt+Plus / Alt+Minus step
+ * through a mode list. The monitors are made up: a primary 2560x1440 with
+ * a 40 pixel taskbar at the bottom, and a 1920x1080 one to its left, whose
+ * coordinates are negative. The frame is an overlapped window's at 100 %:
+ * 8 pixel borders and a 23 pixel caption. */
+static bool same_rect(const WPRect& a, long l, long t, long r, long b)
+{
+	return a.left == l && a.top == t && a.right == r && a.bottom == b;
+}
+
+static void window_place()
+{
+	const WPRect frame = { -8, -31, 8, 8 };
+	const WPRect works[2] = { { 0, 0, 2560, 1400 }, { -1920, 0, 0, 1040 } };
+	const WPMode modes[7] = { { 800, 600, 32 }, { 1920, 1080, 32 },
+		{ 640, 480, 32 }, { 1280, 720, 32 }, { 2560, 1440, 32 },
+		{ 1024, 768, 16 }, { 1600, 900, 32 } };
+	long w, h;
+	WPRect r;
+
+	WinPlaceFit(2560, 1440, frame, works[0], &w, &h);
+	ok(w == 2544 && h == 1361,
+		"window place: the desktop's size shrinks to the work area", h, 1361);
+	WinPlaceFit(1280, 720, frame, works[0], &w, &h);
+	ok(w == 1280 && h == 720,
+		"window place: a size that fits is kept", w, 1280);
+	WinPlaceFit(320, 200, frame, works[0], &w, &h);
+	ok(w == 640 && h == 480,
+		"window place: never below the smallest client 640x480", w, 640);
+	WinPlaceMinWindow(frame, &w, &h);
+	ok(w == 656 && h == 519,
+		"window place: the smallest window is that client and the frame",
+		h, 519);
+
+	r = WinPlaceCentre(1280, 720, frame, works[0]);
+	ok(same_rect(r, 640, 351, 1920, 1071),
+		"window place: centred on the primary work area", r.top, 351);
+	r = WinPlaceCentre(1280, 720, frame, works[1]);
+	ok(same_rect(r, -1600, 171, -320, 891),
+		"window place: centred on a monitor at negative x", r.left, -1600);
+	WinPlaceFit(2560, 1440, frame, works[0], &w, &h);
+	r = WinPlaceWindowOf(WinPlaceCentre(w, h, frame, works[0]), frame);
+	ok(same_rect(r, 0, 0, 2560, 1400),
+		"window place: the fitted desktop size fills the work area whole",
+		r.bottom, 1400);
+
+	r = WinPlaceAround(WPMake(640, 351, 1280, 720), 1600, 900, frame,
+		works[0]);
+	ok(same_rect(r, 480, 261, 2080, 1161),
+		"window place: a larger step keeps the window's centre", r.left, 480);
+	r = WinPlaceAround(WPMake(1800, 600, 640, 480), 1280, 720, frame,
+		works[0]);
+	ok(same_rect(r, 1272, 480, 2552, 1200),
+		"window place: a step at the right edge is moved back inside",
+		r.left, 1272);
+	r = WinPlaceAround(WPMake(-1600, 171, 1280, 720), 640, 480, frame,
+		works[1]);
+	ok(same_rect(r, -1280, 291, -640, 771),
+		"window place: a smaller step on the negative monitor", r.left, -1280);
+
+	ok(WinPlaceUsable(WPMake(640, 351, 1280, 720), frame, works, 2),
+		"window place: a rectangle on the primary monitor is used", 0, 1);
+	ok(WinPlaceUsable(WPMake(-1600, 171, 1280, 720), frame, works, 2),
+		"window place: a rectangle on the negative monitor is used", 0, 1);
+	ok(WinPlaceUsable(WPMake(0, 31, 1280, 1369), frame, works, 2),
+		"window place: a window snapped to the left half is used", 0, 1);
+	ok(!WinPlaceUsable(WPMake(-400, 100, 1280, 720), frame, works, 2),
+		"window place: a rectangle across two monitors is not used", 1, 0);
+	ok(!WinPlaceUsable(WPMake(3000, 100, 1280, 720), frame, works, 2),
+		"window place: a monitor that is gone is not used", 1, 0);
+	ok(!WinPlaceUsable(WPMake(640, 351, 1280, 720), frame, works + 1, 1),
+		"window place: the primary rectangle with only the other monitor",
+		1, 0);
+	ok(!WinPlaceUsable(WPMake(100, 100, 600, 400), frame, works, 2),
+		"window place: a rectangle below the smallest client is not used",
+		1, 0);
+
+	ok(WinPlaceStep(modes, 7, 3, 1280, 720, 2544, 1361, 1) == 6,
+		"window place: Alt+Plus from 1280x720 is 1600x900",
+		WinPlaceStep(modes, 7, 3, 1280, 720, 2544, 1361, 1), 6);
+	ok(WinPlaceStep(modes, 7, 3, 1280, 720, 2544, 1361, -1) == 0,
+		"window place: Alt+Minus from 1280x720 is 800x600, not 16 bit",
+		WinPlaceStep(modes, 7, 3, 1280, 720, 2544, 1361, -1), 0);
+	ok(WinPlaceStep(modes, 7, 1, 1920, 1080, 2544, 1361, 1) == -1,
+		"window place: no step up to a size the work area cannot hold",
+		WinPlaceStep(modes, 7, 1, 1920, 1080, 2544, 1361, 1), -1);
+	ok(WinPlaceStep(modes, 7, 3, 1000, 700, 2544, 1361, 1) == 3,
+		"window place: a client sized by hand steps up to its neighbour",
+		WinPlaceStep(modes, 7, 3, 1000, 700, 2544, 1361, 1), 3);
+	ok(WinPlaceStep(modes, 7, 3, 1000, 700, 2544, 1361, -1) == 0,
+		"window place: and down to its neighbour",
+		WinPlaceStep(modes, 7, 3, 1000, 700, 2544, 1361, -1), 0);
+	ok(WinPlaceStep(modes, 7, 2, 640, 480, 2544, 1361, -1) == -1,
+		"window place: nothing below the smallest entry",
+		WinPlaceStep(modes, 7, 2, 640, 480, 2544, 1361, -1), -1);
+	ok(WinPlaceStep(modes, 7, 5, 1024, 768, 2544, 1361, 1) == -1,
+		"window place: only entries of the same colour depth",
+		WinPlaceStep(modes, 7, 5, 1024, 768, 2544, 1361, 1), -1);
+	ok(WinPlaceStep(modes, 7, 9, 1280, 720, 2544, 1361, 1) == -1,
+		"window place: an entry outside the list steps nowhere",
+		WinPlaceStep(modes, 7, 9, 1280, 720, 2544, 1361, 1), -1);
+}
+
 int main()
 {
 	printf("ModernTest - the arithmetic of the modern control\n");
@@ -29969,6 +30079,7 @@ int main()
 	glow_normal();
 	yshift_rule();
 	lift_door_rule();
+	window_place();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

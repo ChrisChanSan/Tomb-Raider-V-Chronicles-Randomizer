@@ -645,6 +645,7 @@
     <ClInclude Include="TOMB5\specific\crashseam.h" />
     <ClInclude Include="TOMB5\specific\devicemove.h" />
     <ClInclude Include="TOMB5\specific\devicewindow.h" />
+    <ClInclude Include="TOMB5\specific\windowplace.h" />
     <ClInclude Include="TOMB5\specific\loadbar_math.h" />
     <ClInclude Include="TOMB5\specific\zrange_math.h" />
     <ClInclude Include="TOMB5\specific\hd\hd_folderlist.h" />

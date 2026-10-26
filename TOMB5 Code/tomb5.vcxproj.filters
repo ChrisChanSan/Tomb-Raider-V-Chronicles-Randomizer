@@ -1039,6 +1039,9 @@
     <ClInclude Include="TOMB5\specific\devicewindow.h">
       <Filter>TOMB5\specific</Filter>
     </ClInclude>
+    <ClInclude Include="TOMB5\specific\windowplace.h">
+      <Filter>TOMB5\specific</Filter>
+    </ClInclude>
     <ClInclude Include="TOMB5\specific\loadbar_math.h">
       <Filter>TOMB5\specific</Filter>
     </ClInclude>

@@ -119,18 +119,58 @@ named underneath, *Resolution*, and *Fullscreen* / *Windowed*.
 The bottom left corner reads `PCtomb5 build <date>`. **Quote that line in a bug
 report.**
 
-> **The dialog does not load your previous choices.** It opens at its defaults
-> every time: Windowed, Bilinear on, FMVs on, sound on, 640×480. If you open
-> it again just to change the resolution and press OK, you have also just
-> reset all of those. Set everything you want in one pass.
+The dialog opens with what you chose last time: every control shows the stored
+value, and only a choice that was never stored shows its default (the primary
+monitor, 640×480, Windowed, Bilinear on, the other three boxes off). A stored
+adapter or resolution that is no longer there — a monitor unplugged — opens at
+the default too. Choosing a different *Resolution* and pressing OK also forgets
+where the window was (see below), so that the next start opens it at the new
+size.
 
-Three keys work while the game runs, with no menu: **Alt+Enter** switches
-fullscreen and windowed, **Alt+Plus** and **Alt+Minus** step the resolution.
+**Fullscreen is a borderless window** over the adapter's monitor at the
+monitor's own desktop size, not an exclusive mode, so Alt-Tab is instant and
+overlays behave. The *Resolution* list does not change it: fullscreen is always
+the desktop's size.
+
+**Windowed is an ordinary Windows window**, with a caption, the system menu, the
+minimize, maximize and close buttons and a frame to drag. Move it anywhere, on
+any monitor; size it at every edge and corner; maximize it (the button, a
+double-click on the caption, Win+Up); snap it (Win+Left, Win+Right, or a drag
+to a screen edge); minimize and restore it. The picture always fills the inside
+of the window at its own size, wide or tall, and is never squashed: while you
+drag the frame the last picture stretches, and when you let go — at once for a
+maximize, restore or snap — the game makes the picture the new size. That takes
+as long as an Alt+Enter (see **Alt+Enter, the resolution keys and a new window
+size**), and the game stands still meanwhile. The inside of the window is
+640×480 at the smallest.
+
+The window opens where you left it: its place, its size and whether it was
+maximized are stored (see **Where your settings live**) and used again at the
+next start and after Alt+Enter, as long as that place still lies on a connected
+monitor. Otherwise — the first time, after a new *Resolution* in the dialog, or
+with that monitor gone — it opens at the dialog's *Resolution*, made smaller
+where needed so that the whole window fits the screen above the taskbar, and
+centred on the adapter's monitor.
+
+Under *Modern* control the cursor is held inside the window while you play (see
+**The mouse**): Alt+Tab away, or use the Windows keys, to move or size the
+window then. A tap of Alt does not open the window's system menu, because Alt
+is one of the game's keys; Alt+Space does, and so does a right-click on the
+caption.
+
+Three keys work while the game runs, with no menu:
+
+- **Alt+Enter** switches between fullscreen and the window.
+- **Alt+Plus** and **Alt+Minus** (the number pad's + and −) step the window's
+  size to the next larger or smaller *Resolution* of the dialog's list that fits
+  the screen, from the size the window has now, the window keeping its centre;
+  a maximized window is restored first. The size shows in the bottom left
+  corner for four seconds, and the step taken becomes the dialog's
+  *Resolution*. In fullscreen the two keys change nothing — fullscreen is always
+  the desktop's size — and only show that size.
+
 They are ignored during FMVs and level loading — that looks like a dead key
 and is not.
-
-"Fullscreen" is a borderless window rather than an exclusive mode, so
-Alt-Tab is instant and overlays behave.
 
 ### Where your settings live
 
@@ -159,6 +199,23 @@ worth knowing by name:
 | `loadbar` | DWORD | The *Loadbar style* row: `0` the TR5 bar, `1` the TR4 bar, `2` off - no loading screen for a short load (see **tomb5 options**). Short is a load that builds no HD art: a savegame loaded inside the level being played, whose HD art is kept, and with `hd_build` 0, no installation or a level without its `.TRG` every load (the classic level's own read takes well under half a second). A load that builds the HD art - another level, the title, the first load after the start, the same level after the device was made anew or a file of it changed - takes one to five seconds and shows the loading screen as `0` does: the level's picture, the TR5 bar and the brake, so that the screen is never black that long. Written by the row. A registry from before this value reads the older `tr4LB` once: `1` (its default) gives the TR4 bar, `0` the TR5 one, so nobody's bar style changes; `tr4LB` follows `loadbar` from then on. What a load shows did change: the TR4 level view that Beta 2.0 drew while loading (its *TR4 loadscreens* row, `tr4LS`, on by default) is gone, and every load that shows a screen shows the level's picture out of `SCREENS.STR` (or your HD one with HD textures on), with the level's name over it while *Loading text* is on. |
 | `loadbar_min_ms` | DWORD | The **brake**, `500` by default: with the TR5 or the TR4 bar the loading screen stands at least this many milliseconds from its first frame, the bar running smoothly to its end in that time; a load that takes longer ends when its work does. `0` is no brake: the bar follows the work alone and the level starts the moment the load is done. No options row. |
 | `loadfade_ms` | DWORD | With *Loadbar style* off, on a load without a screen: how long the last frame of the game takes to fade to black where the screen was not black already (a level's end, after a movie), `150` by default. `0` is a cut - one black frame. The fade runs while the loading thread works; what is left of it when the thread is done is cut to black in one frame. No options row. |
+
+The setup dialog and the window keep theirs under `HKEY_CURRENT_USER\Software\Core
+Design\Tomb Raider Chronicles\System`. The dialog writes `DD`, `VMode`, `Window`,
+`Filter`, `TextLow`, `NoFMV` and `DisableSound` when you press OK, and the game
+writes `VMode` and `Window` again with its other settings, at the latest when it
+exits, so that a resolution key or an Alt+Enter is kept. The window's place is
+written whenever you finish moving or sizing the window, maximize or restore it,
+press Alt+Enter in it or close it:
+
+| Value | Type | Meaning |
+|---|---|---|
+| `WindowLeft`, `WindowTop` | DWORD | Where the inside of the window begins, in screen pixels. Signed: a monitor left of or above the main one gives negative numbers. |
+| `WindowWidth`, `WindowHeight` | DWORD | The size of the inside of the window in pixels, which is the picture's size. For a maximized window, the size it goes back to when restored. |
+| `WindowMaximized` | DWORD | `1` when the window was maximized, `0` when not. |
+
+Delete the five to have the window open at the dialog's *Resolution* again,
+centred; choosing a new *Resolution* in the dialog does the same.
 
 ---
 
@@ -3896,8 +3953,9 @@ data back, that `.TRG` and those pages (about 115 to 155 MiB) are held beside
 them. The `LOADLOG` lines (*When something looks wrong*) time every step of a
 load on your machine.
 
-**Alt+Enter and the resolution keys.** Changing the resolution or toggling full
-screen throws the graphics device away and makes a new one. Everything the HD
+**Alt+Enter, the resolution keys and a new window size.** Toggling full screen,
+a resolution key and a new size of the window throw the graphics device away
+and make a new one. Everything the HD
 path owns lived on the old one, so it is released at that moment; the classic
 texture pages and the inventory's or load screen's picture are made again on the
 new device, and then the HD level is built again for the level you are in - the
@@ -3908,7 +3966,9 @@ the run changes: no level is loaded again and no item is reset. A level that was
 drawn classic stays classic. With `-log` the line `DXLOG device recreated` says
 how many pages moved and ends in `hd=rebuilt` or `hd=classic` and the build's
 milliseconds, and `DXLOG window` lines give the window and its swap chain after
-the start and after every toggle, so the states can be held against each other.
+the start and after every toggle, so the states can be held against each other;
+`DXLOG window resize` gives the size before and after and the whole new device's
+milliseconds.
 
 **Nothing is copied out of the remaster and nothing of it ships here**, the
 same rule as everywhere else in this project: the art is read where it lies, in
@@ -4876,7 +4936,7 @@ wrote it, and each seam answers a different question:
 | Lara has the round blob where the projected shadow was expected, or neither | `HDLOG shadow mode` — on her first frame of a level and whenever the answer changes: `stored=` the option as the registry holds it, `effective=` what her frame draws (`projected`, `original`, `circle`, `faded` or `psx`) and `reason=` `ok` or why the projected shadow does not run: `option` (the option is not 5), `hd_off` (the level is not drawn HD), `classic_lara` (she is drawn classic), `classic_room` (her room is drawn classic and keeps a classic face she can stand on - the line `HDLOG room=` says `shadow=0`), `target` (the shadow's map, its depth surface or its shaders do not exist on this card). `HDLOG shadow target` — on her first frame of a level and whenever the map changes: `state=` `none` (never asked for), `made`, `refused` or `released` (a lost device, a resolution change, the end), `reason=` `ok` or what refused it (`no_device`, `format` - no R32F render target, `depth` - neither D24X8 nor D16, `match`, `create`, `surface`, `depth_create`), `format=` and `size=` the map (R32F, 512), `depth=` its depth surface and `events=` a counter of the changes. `HDLOG shadow others` — the same fields for the creatures' map (G32R32F, 2048; `format` - no G32R32F render target), written in the frame it changes; it is made beside her map in the first frame her shadow runs, and a card that refuses it leaves her shadow running and the creatures their blobs |
 | the projected shadow lies on the wrong side, jumps, is too dark or too faint, or is missing on a floor | `HDLOG shadow second` — once a second of game time while it runs: `dir=` the direction it is drawn with and `target=` the one the key light gives this frame (world axes, y down; the fixed slant while `HD_SHADOW_PULL` is 0, and the two differ only while a change of the lights glides in), `strength=` the darkness drawn / the target's (0.34 with the fixed light, 0.45 the darkest the lights can give), `lights=` the lights of her list that counted and `weight=` their summed brightness times nearness, both before the pull, `slant=` degrees off straight down, `snaps=` how often it started in place that second, `cast=` frames whose map was drawn / frames it ran, `parts=` her models drawn into the map a frame, `rooms=` and `calls=` the room groups drawn again and their draw calls a frame, `ms=` the processor time of the two passes a frame, `stencil=` 1 when the depth buffer's stencil keeps any pixel from being darkened twice, `lag=` the largest angle in degrees that second between the drawn direction and the frame's target - 0 with the fixed light; with a pull above 0, near 0 while only she moves, up when the lights change and back down over about a second and a half; then the creatures' map: `others=` the creatures and items drawn into it a frame (over the frames it was drawn in; 0.0 when none was near her), `omap=` frames it was drawn / frames the shadow ran, `orooms=` the room groups drawn again a frame while it was read - hers and those only its wider reach, four sectors round her, brings in - and `oms=` the processor time of its cast pass a frame (its share of the receive is in `ms=`); then the models: `models=` Lara, the creatures, the items and the reflections drawn again to take the shadow, a frame (the mean over the frames the shadow ran), `mcalls=` their draw calls a frame, `castonly=` the creatures out of view drawn into the creatures' map a frame, `mirror=` frames in which a mirror's copy or a reflection took the shadow through the mirror / frames the shadow ran (0 outside RICH2's washrooms), `mms=` the processor time of the models' pass a frame, and `arrive=` frames in which the shadow was still coming in and the blobs going out / frames the shadow ran (8 of 30 at 30 frames a second in the second it starts, 0 afterwards) |
 | in HD a marble floor shows no reflection, or a washroom mirror shows no Lara and no doors | `HDLOG` — per level: the motion line's `clear_pages=` and `clear_parts=` (the see-through floor pages and the parts on them; RICH2, RICHCUT2 and TITLE have some) and `mirrors=`, before its last two fields `gloss_pages=` and `gloss_draws=`, one `mirrorwall` line per mirror found (`room=`, `axis=`, `plane=`, `side=`, `pane=`, `behind=`, `mirrored=`, `box=`); the level's first frame line's `clear_calls=` (after it come `sheen_calls=`, `fog_taken=` and `fog_drawn=`); and once a second while a mirror draws, `HDLOG mirror items= plane= room= axis= lara= hd= win=` — how many items it reflected, which glass, whether Lara was in it, how many of the items went through the HD models, and `win=` the copy's rectangle on the screen as left, top, right, bottom (right and bottom exclusive), which a reflection drawn the classic way is cut to |
-| after Alt+Enter or a resolution key the picture is wrong, untextured or gone | `DXLOG device recreated` — one line each time the graphics device is made again: `pages=` the entries of the texture page table, `moved=` those made again on the new device, `dropped=` those that could not be and are drawn untextured until the next level, `kept=` those already there, `picture=` 1 when the inventory's or load screen's picture was moved too, and `old_device_refs=` what the old device still holds afterwards - 0 is nothing; `hd=rebuilt` when the HD level was built again on the new device, `hd=classic` when it was not or there was none, and `ms=` what that build took. Beside it `HDLOG device recreated - level= rebuilt= flipped_pairs=` (the flipped room pairs set back for the build), `DXLOG window` (after `start`, a `toggle` or a resolution `mode`) with the window's styles, its and its client's rectangle, the monitor's, and the present parameters and creation flags the device reports - the line after two toggles should read as the start's - and `DXLOG screenshot hr= file= bytes=` for every file of the apostrophe key (`hr=0x00000000` is a picture read back; `DXLOG mono picture hr=` appears only when the inventory's picture could not be) |
+| after Alt+Enter or a resolution key the picture is wrong, untextured or gone | `DXLOG device recreated` — one line each time the graphics device is made again: `pages=` the entries of the texture page table, `moved=` those made again on the new device, `dropped=` those that could not be and are drawn untextured until the next level, `kept=` those already there, `picture=` 1 when the inventory's or load screen's picture was moved too, and `old_device_refs=` what the old device still holds afterwards - 0 is nothing; `hd=rebuilt` when the HD level was built again on the new device, `hd=classic` when it was not or there was none, and `ms=` what that build took. Beside it `HDLOG device recreated - level= rebuilt= flipped_pairs=` (the flipped room pairs set back for the build), `DXLOG window` (after `start`, a `toggle` or a resolution `mode`) with the window's styles, its and its client's rectangle, the monitor's, and the present parameters and creation flags the device reports - the line after two toggles should read as the start's - and `DXLOG screenshot hr= file= bytes=` for every file of the apostrophe key (`hr=0x00000000` is a picture read back; `DXLOG mono picture hr=` appears only when the inventory's picture could not be). The window's own lines: `DXLOG window place source=<remembered|centre> client=<l,t,r,b> maximized= monitors=` where the windowed state was put at the start or on Alt+Enter; `DXLOG window stored client= maximized=` each time its place is written; `DXLOG window resize <drag|size|keys|later> back=<before>-><after> ok= path=recreate ms=` for every new picture size (`waits fmv= loading= parked= ready=` when the size has to wait for a film, a load or the window's focus); `DXLOG window keys <plus|minus> mode=<entry> <size> client=<size>`, `mode=none` when the list has nothing that way, and `fullscreen kept=<size>` for a key in fullscreen |
 | the picture is lighter or darker than the *Gamma* bar says, or the bar does nothing | `DXLOG gamma` — at the first frame and at every change of the row: `row=` the bar, `gamma=` and `power=` the curve, `pass=off` at the middle and `on` elsewhere; a step the graphics card refused adds `refused=` (`copy texture`, `shader`, `copy` or `draw`) and `hr=` once, and the picture is then shown without the curve |
 | it felt like it stuttered, or dropped under 30 | `FPSLOG` — one line per second: frames presented, and the longest gap between two of them |
 | …and *why* it stuttered | `PROFLOG` — the same second split into the phases of a frame, plus one line for every frame that missed its slot |
@@ -5226,8 +5286,6 @@ turns into a confusing one.
 
 ### Working as intended
 
-- **The setup dialog forgot my settings.** It always opens at its defaults —
-  see above.
 - **The Language row does nothing.** Only one usable language file is present.
 - **A dinosaur or a guest outfit is missing.** The Tomb Raider III paths are
   not set in the randomizer, or the vulture is missing its second game.

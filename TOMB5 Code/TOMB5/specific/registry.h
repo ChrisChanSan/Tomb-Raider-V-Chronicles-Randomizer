@@ -45,6 +45,19 @@ bool REG_ReadString(char* SubKeyName, char* value, ulong size, const char* defau
 // (ERROR_FILE_NOT_FOUND) is the usual case and no error. For a value an
 // older build wrote and this one no longer reads.
 void REG_DeleteValue(char* SubKeyName);
+/* The windowed state's place (DXWINDOWPLACE, dxshell.h), under System:
+ * WindowLeft and WindowTop, the client's top left corner in screen
+ * coordinates (signed - a monitor left of or above the primary one is
+ * negative), WindowWidth and WindowHeight, the client's size, and
+ * WindowMaximized. Both open a key of their own and leave the one
+ * OpenRegistry holds alone: the window procedure writes them, and the game
+ * thread may be between an OpenRegistry and its CloseRegistry at that
+ * moment. The read creates nothing and answers false unless all five are
+ * there. */
+bool REG_ReadWindowPlace(long* left, long* top, long* w, long* h,
+	long* maximized);
+void REG_WriteWindowPlace(long left, long top, long w, long h,
+	long maximized);
 bool LoadSettings();
 void SaveSettings();
 bool SaveSetup(HWND hDlg);

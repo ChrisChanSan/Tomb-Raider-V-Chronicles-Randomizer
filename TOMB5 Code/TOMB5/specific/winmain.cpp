@@ -35,6 +35,7 @@
 #include "hd/hd_mods.h"		// the mods folder's log sink
 #include "hd/hd_wardrobe.h"	// and the wardrobe scan's
 #include "zrange_math.h"		// ZFAR_UNITS - the far plane
+#include "../game/spotcam.h"	// CurrentFov - kept over a new window size
 
 WINAPP App;
 long resChangeCounter;
@@ -175,17 +176,22 @@ void WinProcMsg()
 	while (!MainThread.ended && msg.message != WM_QUIT);
 }
 
+// The windowed state's helpers, below beside the window procedure.
+static void WinRenderSize();
+static void WinStorePlace();
+static void WinStepWindow(int dir, const char* key);
+
 void WinProcessCommands(long cmd)
 {
-	DXDISPLAYMODE* dm;
-	long odm;
-
 	if (cmd == KA_ALTENTER)
 	{
 		if (App.fmv || !G_dxinfo->DDInfo[G_dxinfo->nDD].bCanRenderWindowed || LevelLoadingThread.active)
 			return;
 
 		Log("KA_ALTENTER");
+
+		// The window's place as it is now, for the way back.
+		WinStorePlace();
 
 		Log("HangGameThread");
 		while (App.dx.InScene) {};
@@ -195,9 +201,7 @@ void WinProcessCommands(long cmd)
 		Log("Game Thread Suspended");
 
 		DXToggleFullScreen();
-		HWInitialise();
-		S_InitD3DMatrix();
-		aSetViewMatrix();
+		WinRenderSize();
 		ResumeThread((HANDLE)MainThread.handle);
 		App.dx.WaitAtBeginScene = 0;
 		Log("Game Thread Resumed");
@@ -215,81 +219,23 @@ void WinProcessCommands(long cmd)
 	}
 	else if (cmd == KA_ALTP || cmd == KA_ALTM)
 	{
+		const char* key = (cmd == KA_ALTP) ? "plus" : "minus";
+
 		if (LevelLoadingThread.active || App.fmv)
 			return;
 
 		Log("Change Video Mode");
 
-		Log("HangGameThread");
-		while (App.dx.InScene) {};
-		App.dx.WaitAtBeginScene = 1;
-		while (!App.dx.InScene) {};
-		SuspendThread((HANDLE)MainThread.handle);
-		Log("Game Thread Suspended");
-
-		odm = App.DXInfo.nDisplayMode;
-
-		if (cmd == KA_ALTP)
-		{
-			App.DXInfo.nDisplayMode++;
-
-			if (App.DXInfo.nDisplayMode >= G_dxinfo->DDInfo[G_dxinfo->nDD].D3DDevices[G_dxinfo->nD3D].nDisplayModes)
-				App.DXInfo.nDisplayMode = G_dxinfo->DDInfo[G_dxinfo->nDD].D3DDevices[G_dxinfo->nD3D].nDisplayModes - 1;
-
-			dm = G_dxinfo->DDInfo[App.DXInfo.nDD].D3DDevices[App.DXInfo.nD3D].DisplayModes;
-
-			while (dm[odm].bpp != dm[App.DXInfo.nDisplayMode].bpp)
-			{
-				App.DXInfo.nDisplayMode++;
-
-				if (App.DXInfo.nDisplayMode >= G_dxinfo->DDInfo[G_dxinfo->nDD].D3DDevices[G_dxinfo->nD3D].nDisplayModes)
-				{
-					App.DXInfo.nDisplayMode = odm;
-					break;
-				}
-			}
-		}
+		/* Full screen is the monitor at its desktop's size (DXCreate), so
+		 * a step has nothing to change there and changes nothing: no new
+		 * device, only the size caption, which shows the size it is.
+		 *   DXLOG window keys <plus|minus> fullscreen kept=<WxH> */
+		if (App.dx.Flags & DXF_FULLSCREEN)
+			Log("DXLOG window keys %s fullscreen kept=%lux%lu", key,
+				App.dx.dwRenderWidth, App.dx.dwRenderHeight);
 		else
-		{
-			App.DXInfo.nDisplayMode--;
+			WinStepWindow(cmd == KA_ALTP ? 1 : -1, key);
 
-			if (App.DXInfo.nDisplayMode < 0)
-				App.DXInfo.nDisplayMode = 0;
-
-			dm = G_dxinfo->DDInfo[App.DXInfo.nDD].D3DDevices[App.DXInfo.nD3D].DisplayModes;
-
-			while (dm[odm].bpp != dm[App.DXInfo.nDisplayMode].bpp)
-			{
-				App.DXInfo.nDisplayMode--;
-
-				if (App.DXInfo.nDisplayMode < 0)
-				{
-					App.DXInfo.nDisplayMode = odm;
-					break;
-				}
-			}
-		}
-
-		if (odm != App.DXInfo.nDisplayMode)
-		{
-			if (!DXChangeVideoMode())
-			{
-				App.DXInfo.nDisplayMode = odm;
-				DXChangeVideoMode();
-			}
-
-			HWInitialise();
-			InitWindow(0, 0, App.dx.dwRenderWidth, App.dx.dwRenderHeight,
-				ZNEAR_UNITS, ZFAR_UNITS, 80, App.dx.dwRenderWidth,
-				App.dx.dwRenderHeight);
-			InitFont();
-			S_InitD3DMatrix();
-			aSetViewMatrix();
-		}
-
-		ResumeThread((HANDLE)MainThread.handle);
-		App.dx.WaitAtBeginScene = 0;
-		Log("Game Thread Resumed");
 		/* Four seconds of the resolution caption, counted in logic ticks,
 		 * which are thirty a second at every frame rate, so this is
 		 * vanilla's own 120 again and needs no rate baked into it - see the
@@ -612,6 +558,237 @@ static void WinMouseRelease()
 	WinMouseCapture();
 }
 
+/* The windowed state's messages (WinMainWndProc).
+ *
+ * The window is an ordinary overlapped window (devicewindow.h); the
+ * engine's part is the back buffer, which takes the client's size when a
+ * drag of the frame ends (WM_EXITSIZEMOVE) and at once on a WM_SIZE outside
+ * a drag - maximize, restore, snap. During a drag the last picture
+ * stretches into the client; a minimized window resizes nothing. A new
+ * size needs the game thread held at the start of its scene, as Alt+Enter
+ * holds it. Where it cannot be held - the game thread not set up yet, or
+ * parked while the window is inactive, a film or a level load running, or
+ * no start of a scene within two seconds - the size waits, and a timer
+ * tries again four times a second. */
+#define WIN_RESIZE_TIMER	1
+
+static long size_moving;		// between WM_ENTERSIZEMOVE and WM_EXITSIZEMOVE
+static long game_parked;		// WM_ACTIVATE has the game thread suspended
+static long resize_waiting;		// a new size waits for WIN_RESIZE_TIMER
+
+// The game thread held at the start of its scene, two seconds at most.
+static bool WinHoldGame()
+{
+	DWORD start = GetTickCount();
+
+	Log("HangGameThread");
+
+	while (App.dx.InScene)
+	{
+		if (GetTickCount() - start > 2000)
+			return false;
+	}
+
+	App.dx.WaitAtBeginScene = 1;
+	start = GetTickCount();
+
+	while (!App.dx.InScene)
+	{
+		if (GetTickCount() - start > 2000)
+		{
+			App.dx.WaitAtBeginScene = 0;
+			return false;
+		}
+	}
+
+	SuspendThread((HANDLE)MainThread.handle);
+	Log("Game Thread Suspended");
+	return true;
+}
+
+static void WinFreeGame()
+{
+	ResumeThread((HANDLE)MainThread.handle);
+	App.dx.WaitAtBeginScene = 0;
+	Log("Game Thread Resumed");
+}
+
+/* The projection and the 2D layout for the back buffer's size, after every
+ * new device of Alt+Enter, a key or a resize: the render states, the
+ * projection's window (InitWindow), whose field of view is worked out from
+ * the client's height, with the field of view that was set kept, the font's
+ * scale and the matrices. The game thread is held. */
+static void WinRenderSize()
+{
+	const short fov = CurrentFov;
+
+	HWInitialise();
+	InitWindow(0, 0, App.dx.dwRenderWidth, App.dx.dwRenderHeight,
+		ZNEAR_UNITS, ZFAR_UNITS, 80, App.dx.dwRenderWidth,
+		App.dx.dwRenderHeight);
+
+	if (fov)
+		AlterFOV(fov);
+
+	InitFont();
+	S_InitD3DMatrix();
+	aSetViewMatrix();
+}
+
+/* The window's place remembered (DXWindowPlace) and written to the registry
+ * (REG_WriteWindowPlace): when a drag or a resize ends, on maximize and
+ * restore, before Alt+Enter leaves the windowed state and when the window
+ * is closed. A maximized window keeps the client it had before, which is
+ * where a restore puts it back.
+ *   DXLOG window stored client=<l,t,r,b in screen coordinates>
+ *   maximized=<0|1> */
+static void WinStorePlace()
+{
+	if (!App.dx.lpD3DDevice || DXWindowBusy ||
+		(App.dx.Flags & DXF_FULLSCREEN) || IsIconic(App.hWnd))
+		return;
+
+	const long zoomed = IsZoomed(App.hWnd) ? 1 : 0;
+
+	if (!zoomed)
+		DXWindowPlace.client = DeviceWindowClient(App.hWnd);
+
+	DXWindowPlace.maximized = zoomed;
+	DXWindowPlace.have = 1;
+	REG_WriteWindowPlace(DXWindowPlace.client.left, DXWindowPlace.client.top,
+		WPWidth(DXWindowPlace.client), WPHeight(DXWindowPlace.client), zoomed);
+	Log("DXLOG window stored client=%ld,%ld,%ld,%ld maximized=%ld",
+		DXWindowPlace.client.left, DXWindowPlace.client.top,
+		DXWindowPlace.client.right, DXWindowPlace.client.bottom, zoomed);
+}
+
+/* A new size that has to wait (see above).
+ *   DXLOG window resize <why> waits fmv=<0|1> loading=<0|1> parked=<0|1>
+ *   ready=<0|1> - once, when the waiting starts */
+static void WinResizeLater(const char* why)
+{
+	if (!resize_waiting)
+		Log("DXLOG window resize %s waits fmv=%ld loading=%ld parked=%ld "
+			"ready=%ld", why, (long)(App.fmv != 0),
+			(long)(LevelLoadingThread.active != 0), game_parked,
+			(long)(App.SetupComplete != 0));
+
+	resize_waiting = 1;
+	SetTimer(App.hWnd, WIN_RESIZE_TIMER, 250, 0);
+}
+
+/* The back buffer to the client's size when the two differ (rule above):
+ * the game thread held, the device made anew (DXResizeToClient), the
+ * projection and the layout for the new size, the mouse's clip on the new
+ * client. A key's step logs the window line of a resolution step after
+ * it. */
+static void WinClientChanged(const char* why)
+{
+	if (!App.dx.lpD3DDevice || DXWindowBusy ||
+		(App.dx.Flags & DXF_FULLSCREEN) || IsIconic(App.hWnd))
+		return;
+
+	const WPRect now = DeviceWindowClient(App.hWnd);
+
+	if (WPWidth(now) <= 0 || WPHeight(now) <= 0)
+		return;
+
+	if ((ulong)WPWidth(now) == App.dx.dwRenderWidth &&
+		(ulong)WPHeight(now) == App.dx.dwRenderHeight)
+	{
+		if (resize_waiting)
+			KillTimer(App.hWnd, WIN_RESIZE_TIMER);
+
+		resize_waiting = 0;
+		return;
+	}
+
+	if (!App.SetupComplete || game_parked || App.fmv ||
+		LevelLoadingThread.active || !WinHoldGame())
+	{
+		WinResizeLater(why);
+		return;
+	}
+
+	if (resize_waiting)
+		KillTimer(App.hWnd, WIN_RESIZE_TIMER);
+
+	resize_waiting = 0;
+	DXResizeToClient(why);
+	WinRenderSize();
+	WinFreeGame();
+	WinMouseCapture();
+
+	if (!strcmp(why, "keys"))
+		DXLogWindow("mode");
+}
+
+/* Alt+Plus and Alt+Minus in the windowed state: the client steps from its
+ * own size to the next larger or smaller entry of the mode list
+ * (WinPlaceStep), the largest it may take being what the work area of the
+ * window's monitor holds; the window, restored first when maximized, keeps
+ * its centre and stays inside that work area (WinPlaceAround). The entry
+ * becomes the resolution the setup stores.
+ *   DXLOG window keys <plus|minus> mode=<entry> <WxH> client=<WxH>, or
+ *   mode=none client=<WxH> when the list has no entry that way */
+static void WinStepWindow(int dir, const char* key)
+{
+	DXD3DDEVICE* device =
+		&G_dxinfo->DDInfo[G_dxinfo->nDD].D3DDevices[G_dxinfo->nD3D];
+	const long count = device->nDisplayModes;
+	WPRect work;
+	RECT viewport, screen;
+	long w, h;
+
+	if (IsIconic(App.hWnd) || count <= 0 ||
+		!DeviceWindowWorkOf(MonitorFromWindow(App.hWnd,
+		MONITOR_DEFAULTTONEAREST), &work))
+		return;
+
+	const WPRect frame = DeviceWindowFrame(
+		(DWORD)GetWindowLong(App.hWnd, GWL_STYLE));
+	const WPRect now = DeviceWindowClient(App.hWnd);
+	WPMode* modes = (WPMode*)malloc(count * sizeof(WPMode));
+
+	if (!modes)
+		return;
+
+	for (long i = 0; i < count; i++)
+	{
+		modes[i].w = device->DisplayModes[i].w;
+		modes[i].h = device->DisplayModes[i].h;
+		modes[i].bpp = device->DisplayModes[i].bpp;
+	}
+
+	const long next = WinPlaceStep(modes, count, App.DXInfo.nDisplayMode,
+		WPWidth(now), WPHeight(now), WPWidth(work) - WPWidth(frame),
+		WPHeight(work) - WPHeight(frame), dir);
+
+	if (next < 0)
+	{
+		Log("DXLOG window keys %s mode=none client=%ldx%ld", key,
+			WPWidth(now), WPHeight(now));
+		free(modes);
+		return;
+	}
+
+	WinPlaceFit(modes[next].w, modes[next].h, frame, work, &w, &h);
+	App.DXInfo.nDisplayMode = next;
+	InterlockedIncrement(&DXWindowBusy);
+
+	if (IsZoomed(App.hWnd))
+		ShowWindow(App.hWnd, SW_RESTORE);
+
+	DeviceWindowPlaceClient(App.hWnd, WinPlaceAround(now, w, h, frame, work),
+		&viewport, &screen);
+	InterlockedDecrement(&DXWindowBusy);
+	Log("DXLOG window keys %s mode=%ld %ldx%ld client=%ldx%ld", key, next,
+		modes[next].w, modes[next].h, w, h);
+	free(modes);
+	WinClientChanged("keys");
+	WinStorePlace();
+}
+
 LRESULT CALLBACK WinMainWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
 	static bool closing;
@@ -636,6 +813,73 @@ LRESULT CALLBACK WinMainWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 		 * which says inactive, and a later WM_SETFOCUS is not certain, so the
 		 * restore itself is what says it is the active window again. */
 		WinMouseActive((GetForegroundWindow() == hwnd && !IsIconic(hwnd)) ? 1 : 0);
+
+		// Maximize, restore and snap take the new size at once; a drag
+		// waits for its end, a minimize changes nothing.
+		if (wParam != SIZE_MINIMIZED && !size_moving && !DXWindowBusy)
+		{
+			WinClientChanged("size");
+			WinStorePlace();
+		}
+
+		break;
+
+	case WM_ENTERSIZEMOVE:
+		size_moving = 1;
+		break;
+
+	case WM_EXITSIZEMOVE:
+		size_moving = 0;
+		WinClientChanged("drag");
+		WinStorePlace();
+		break;
+
+	case WM_TIMER:
+
+		if (wParam == WIN_RESIZE_TIMER)
+		{
+			KillTimer(hwnd, WIN_RESIZE_TIMER);
+
+			/* The wait stays marked across the retry: WinResizeLater logs its
+			 * line once per wait, and WinClientChanged clears the mark when the
+			 * size is taken or no longer differs. */
+			if (!size_moving)
+				WinClientChanged("later");
+
+			return 0;
+		}
+
+		break;
+
+	case WM_GETMINMAXINFO:
+
+		// The windowed state's smallest client (windowplace.h); full
+		// screen has no frame to drag.
+		if (!(App.dx.Flags & DXF_FULLSCREEN))
+		{
+			MINMAXINFO* mmi = (MINMAXINFO*)lParam;
+			long w, h;
+
+			WinPlaceMinWindow(DeviceWindowFrame(
+				(DWORD)GetWindowLong(hwnd, GWL_STYLE)), &w, &h);
+			mmi->ptMinTrackSize.x = w;
+			mmi->ptMinTrackSize.y = h;
+			return 0;
+		}
+
+		break;
+
+	case WM_SYSCOMMAND:
+
+		/* SC_KEYMENU is the keyboard's way into the system menu: Alt alone,
+		 * F10, Alt+Space. Alt is one of the game's keys, and with a system
+		 * menu on the window a tap of it would put the window into menu
+		 * mode and hand the next keys to that menu; so Alt alone and F10
+		 * (lParam 0) are swallowed. Alt+Space (lParam ' ') opens the menu,
+		 * as the mouse does at the caption; Alt+F4 is SC_CLOSE. */
+		if ((wParam & 0xFFF0) == SC_KEYMENU && lParam != ' ')
+			return 0;
+
 		break;
 
 	case WM_INPUT:
@@ -720,6 +964,7 @@ LRESULT CALLBACK WinMainWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 					if (safeToSuspend)
 					{
 						SuspendThread((HANDLE)MainThread.handle);
+						game_parked = 1;
 						Log("Game Thread Suspended");
 					}
 					else
@@ -743,6 +988,7 @@ LRESULT CALLBACK WinMainWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 				{
 					ResumeThread((HANDLE)MainThread.handle);
 					App.dx.WaitAtBeginScene = 0;
+					game_parked = 0;
 					Log("Game Thread Resumed");
 				}
 
@@ -754,6 +1000,7 @@ LRESULT CALLBACK WinMainWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 
 	case WM_CLOSE:
 		closing = 1;
+		WinStorePlace();
 		WinMouseRelease();
 		PostQuitMessage(0);
 		break;
@@ -961,6 +1208,18 @@ int __stdcall WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 	if (LanguageChoice >= 0 && LanguageChoice != (long)Gameflow->Language)
 		SwitchLanguage(LanguageChoice);
 
+	// Where the window was left, for the windowed state (DXCreate).
+	{
+		long left, top, w, h, maximized;
+
+		if (REG_ReadWindowPlace(&left, &top, &w, &h, &maximized))
+		{
+			DXWindowPlace.client = WPMake(left, top, w, h);
+			DXWindowPlace.maximized = maximized;
+			DXWindowPlace.have = 1;
+		}
+	}
+
 	if (!fmvs_disabled)
 	{
 		if (!LoadBinkStuff())
@@ -994,8 +1253,13 @@ int __stdcall WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 
 	WinSetStyle(G_dxptr->Flags & DXF_FULLSCREEN, G_dxptr->WindowStyle);
 
+	/* Shown as DXCreate left it, maximized when the remembered place was:
+	 * the size is the back buffer's, so a shortcut's "run maximized" or
+	 * "minimized" (nShowCmd) may not change it behind the device. */
 	UpdateWindow(App.hWnd);
-	ShowWindow(App.hWnd, nShowCmd);
+	InterlockedIncrement(&DXWindowBusy);
+	ShowWindow(App.hWnd, SW_SHOW);
+	InterlockedDecrement(&DXWindowBusy);
 	DXLogWindow("start");
 
 	if (App.dx.Flags & DXF_FULLSCREEN)

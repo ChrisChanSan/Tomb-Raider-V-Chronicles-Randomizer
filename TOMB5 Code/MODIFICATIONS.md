@@ -15312,29 +15312,28 @@ work areas and the frame to that arithmetic and puts the window round a client.
 `specific/dxshell.cpp`: `DXCreate` places the windowed state (`DXPlaceWindow`, from
 `DXWindowPlace`) and sizes the back buffer from the client; `DXResizeToClient` makes the
 device anew the way Alt+Enter does, so the HD level is released with the old device and
-built again on the new one (`MoveTexturesToDevice`), and when a device of the new size
-is refused it tries the old size; a recreate that released the old device and could not
-make the next leaves the classic pages to be moved by the attempt after it
+built again on the new one (`MoveTexturesToDevice`), and when a device of the new size is
+refused it tries the old size; a recreate that released the old device and could not make
+the next leaves the classic pages to be moved by the attempt after it
 (`dx_pages_waiting`); `DXWindowBusy` marks the window's own placements;
 `DXChangeVideoMode`, which no key calls any more, is gone. `specific/winmain.cpp`:
-`WM_SIZE` outside a drag and `WM_EXITSIZEMOVE`
-take a new size with the game thread held at the start of its scene, followed by
-`InitWindow` with the field of view kept, `InitFont` and the matrices; a size that cannot
-be taken at once (the thread parked while the window is inactive, a film, a level load)
-waits for a timer; `SIZE_MINIMIZED` resizes nothing; `WM_GETMINMAXINFO` holds the
-smallest client; `SC_KEYMENU` is swallowed, so that a tap of Alt does not enter the system
-menu; `WM_CLOSE` stores the place and takes the close path as before; Alt+Enter, the
-keys and a new size end in the same `WinRenderSize`. `specific/registry.cpp`:
-`REG_ReadWindowPlace` and `REG_WriteWindowPlace` use a key of their own, and `SaveSetup`
-drops the place when the dialog's resolution changes. `specific/setupdlg.cpp`:
-`LoadStoredChoices` reads `DD`,
-`VMode`, `Window`, `Filter`, `TextLow`, `NoFMV` and `DisableSound` through
-`REG_PeekLong`, which creates nothing. New `-log` lines: `DXLOG window place`, `stored`,
-`resize` (with the whole recreate's milliseconds) and `keys`. ModernTest's group
-`window_place` checks the arithmetic with made-up monitors, work areas, mode lists and
-remembered rectangles (25 checks). No file of the drawing code changed (`game/` and
-`specific/hd/` are untouched), so the pictures of `hd_build` 0 and 1, `hd_vis`,
-`hd_marble` and `hd_fog` are the previous ones by construction.
+`WM_SIZE` outside a drag and `WM_EXITSIZEMOVE` take a new size with the game thread held
+at the start of its scene, followed by `InitWindow` with the field of view kept,
+`InitFont` and the matrices; a size that cannot be taken at once (the thread parked while
+the window is inactive, a film, a level load) waits for a timer; `SIZE_MINIMIZED` resizes
+nothing; `WM_GETMINMAXINFO` holds the smallest client; `SC_KEYMENU` is swallowed, so that
+a tap of Alt does not enter the system menu (Alt+Space still opens it); `WM_CLOSE` stores
+the place and takes the close path as before; Alt+Enter, the keys and a new size end in
+the same `WinRenderSize`. `specific/registry.cpp`: `REG_ReadWindowPlace` and
+`REG_WriteWindowPlace` use a key of their own, and `SaveSetup` drops the place when the
+dialog's resolution changes. `specific/setupdlg.cpp`: `LoadStoredChoices` reads `DD`,
+`VMode`, `Window`, `Filter`, `TextLow`, `NoFMV` and `DisableSound` through `REG_PeekLong`,
+which creates nothing. New `-log` lines: `DXLOG window place`, `stored`, `resize` (with
+the whole recreate's milliseconds) and `keys`. ModernTest's group `window_place` checks
+the arithmetic with made-up monitors, work areas, mode lists and remembered rectangles (25
+checks). No file of the drawing code changed (`game/` and `specific/hd/` are untouched),
+so the pictures of `hd_build` 0 and 1, `hd_vis`, `hd_marble` and `hd_fog` are the previous
+ones by construction.
 
 **Decisions.** Full screen stays at the desktop's size: a real mode switch is what the
 border-less window replaced, and its keys do nothing there. The picture takes the new size
@@ -15349,7 +15348,9 @@ dialog is the window's size at the next start, so it drops the remembered place.
 and the remembered place), `ea1fe965` (the dialog), `e1f46127` (the manual, the tools'
 README and this entry), `703c58f3` (the pages after a refused device), `aa279277` and
 `02252971` (`DXChangeVideoMode` removed; the second commit removes a stray line the first
-left, which kept `dxshell.cpp` from compiling at `aa279277`), and the commit list.
+left, which kept `dxshell.cpp` from compiling at `aa279277`), `e6b8038b` (this list) and
+`11223e4c` (the manual's stale line on the dialog's defaults removed, the resize log line
+once per wait, Alt+Space opens the system menu).
 
 ## 3. Randomizer changes since Beta 1.0
 

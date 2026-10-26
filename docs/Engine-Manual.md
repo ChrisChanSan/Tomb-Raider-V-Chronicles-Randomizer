@@ -155,7 +155,8 @@ centred on the adapter's monitor.
 Under *Modern* control the cursor is held inside the window while you play (see
 **The mouse**): Alt+Tab away, or use the Windows keys, to move or size the
 window then. A tap of Alt does not open the window's system menu, because Alt
-is one of the game's keys; a right-click on the caption opens it.
+is one of the game's keys; Alt+Space does, and so does a right-click on the
+caption.
 
 Three keys work while the game runs, with no menu:
 
@@ -5285,8 +5286,6 @@ turns into a confusing one.
 
 ### Working as intended
 
-- **The setup dialog forgot my settings.** It always opens at its defaults —
-  see above.
 - **The Language row does nothing.** Only one usable language file is present.
 - **A dinosaur or a guest outfit is missing.** The Tomb Raider III paths are
   not set in the randomizer, or the vulture is missing its second game.

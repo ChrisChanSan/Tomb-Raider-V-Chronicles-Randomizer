@@ -839,8 +839,10 @@ LRESULT CALLBACK WinMainWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 		if (wParam == WIN_RESIZE_TIMER)
 		{
 			KillTimer(hwnd, WIN_RESIZE_TIMER);
-			resize_waiting = 0;
 
+			/* The wait stays marked across the retry: WinResizeLater logs its
+			 * line once per wait, and WinClientChanged clears the mark when the
+			 * size is taken or no longer differs. */
 			if (!size_moving)
 				WinClientChanged("later");
 
@@ -872,9 +874,10 @@ LRESULT CALLBACK WinMainWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 		/* SC_KEYMENU is the keyboard's way into the system menu: Alt alone,
 		 * F10, Alt+Space. Alt is one of the game's keys, and with a system
 		 * menu on the window a tap of it would put the window into menu
-		 * mode and hand the next keys to that menu. The mouse still opens
-		 * the menu at the caption, and Alt+F4 is SC_CLOSE. */
-		if ((wParam & 0xFFF0) == SC_KEYMENU)
+		 * mode and hand the next keys to that menu; so Alt alone and F10
+		 * (lParam 0) are swallowed. Alt+Space (lParam ' ') opens the menu,
+		 * as the mouse does at the caption; Alt+F4 is SC_CLOSE. */
+		if ((wParam & 0xFFF0) == SC_KEYMENU && lParam != ' ')
 			return 0;
 
 		break;

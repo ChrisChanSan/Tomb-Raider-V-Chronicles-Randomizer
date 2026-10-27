@@ -15352,6 +15352,10 @@ left, which kept `dxshell.cpp` from compiling at `ce96392b`), `6e29d3f6` (this l
 `9c501b5d` (the manual's stale line on the dialog's defaults removed, the resize log line
 once per wait, Alt+Space opens the system menu).
 
+**The last step up (#254).** Past the last entry of the mode list that fits the work area,
+Alt+Plus takes the largest client the work area holds, the size Maximize gives; the
+dialog's entry stays, and the `DXLOG window keys` line says `mode=-1`. Commit `23b54aab`.
+
 ### The cursor lets go while the window is moved or sized (#252)
 
 2026-10-27.
@@ -15649,3 +15653,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #251 | no entry: the version strings of Beta 4.1 |
 | #252 | The cursor lets go while the window is moved or sized |
 | #253 | A click in the picture takes the mouse back |
+| #254 | The window and the resolution |

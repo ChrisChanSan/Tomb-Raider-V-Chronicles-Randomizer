@@ -4919,6 +4919,16 @@ goes out (`dump=none` in `crash.txt`). Send the line and
 the dump with `log.txt`: the offset and the dump name the source line of the
 very build that crashed. Windows' own crash report follows as before.
 
+**When the game freezes.** A freeze is not a crash: no exception, so no `CRASH`
+line, and `log.txt` simply stops at the last seam written while the window no
+longer answers. Alt+Tab out, and the log gets `Game Thread appeared stuck`.
+What the game thread is doing can be read from a dump of the process: Task
+Manager, Details, right-click `PCTomb5.exe`, Create dump file; the path is
+shown. Send that file with `log.txt`: the thread's call stack in it names the
+function, resolved against the build's own `.pdb`. A `ROOMWALK runaway=` line
+in the log says the room walk's backstop cut a frame's walk, which must never
+happen.
+
 The log is not one stream — each line begins with the name of the seam that
 wrote it, and each seam answers a different question:
 

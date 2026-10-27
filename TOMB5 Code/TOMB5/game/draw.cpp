@@ -1448,6 +1448,7 @@ namespace
 	int g_walkCorrections = 0;
 	int g_walkFlashes = 0;
 	int g_walkPops = 0;
+	int g_walkRunaway = 0;	// walks the backstop of GetRoomBounds cut
 	unsigned short g_walkLineAt = 0;
 	bool g_walkLineEver = false;
 
@@ -2496,12 +2497,17 @@ static void NoteRoomWalk(short logicRoom, short walkRoom)
 				g_reach_trimmed_second, g_reach_noart_second, g_reach_capped,
 				(int)g_walkCarriedSum);
 
+		// The backstop of GetRoomBounds; this line must never appear.
+		if (g_walkLineEver && g_walkRunaway)
+			Log("ROOMWALK runaway=%d walks cut by the backstop", g_walkRunaway);
+
 		g_walkLineAt = GlobalCounter;
 		g_walkLineEver = true;
 		g_walkTweens = 0;
 		g_walkCorrections = 0;
 		g_walkFlashes = 0;
 		g_walkPops = 0;
+		g_walkRunaway = 0;
 		g_listLines = 0;
 		g_walkRoomsSum = 0;
 		g_walkReachSum = 0;
@@ -4537,25 +4543,40 @@ static void VisQueue(long rn, ROOM_INFO* actualRoom, float tL, float tT,
 	if (tB > b)
 		tB = b;
 
-	if (tL >= tR || tT >= tB)
+	/* The window is kept in whole pixels (test_* and left..bottom are
+	 * shorts), so the test of what the room already holds is made on
+	 * the whole pixels this rectangle is stored as. Made on the floats,
+	 * a right or bottom edge with a fraction - 1326.3, stored as 1326 -
+	 * was never held: the room was queued again with the same window
+	 * at every visit, and where the path's sources form a ring of rooms
+	 * the walk never ended (ANDY1 room 121: six rooms circling, 25.7
+	 * million dequeues of one frame in the dump of the hung process).
+	 * A rectangle narrower than a pixel lists nothing and is not
+	 * queued. */
+	const short sL = (short)tL;
+	const short sT = (short)tT;
+	const short sR = (short)tR;
+	const short sB = (short)tB;
+
+	if (sL >= sR || sT >= sB)
 		return;
 
-	if (r->left <= tL && r->right >= tR && r->top <= tT && r->bottom >= tB)
+	if (r->left <= sL && r->right >= sR && r->top <= sT && r->bottom >= sB)
 		return;
 
 	if (r->bound_active & 2)
 	{
-		if (tL < r->test_left)
-			r->test_left = (short)tL;
+		if (sL < r->test_left)
+			r->test_left = sL;
 
-		if (tT < r->test_top)
-			r->test_top = (short)tT;
+		if (sT < r->test_top)
+			r->test_top = sT;
 
-		if (tR > r->test_right)
-			r->test_right = (short)tR;
+		if (sR > r->test_right)
+			r->test_right = sR;
 
-		if (tB > r->test_bottom)
-			r->test_bottom = (short)tB;
+		if (sB > r->test_bottom)
+			r->test_bottom = sB;
 
 		return;
 	}
@@ -4570,10 +4591,10 @@ static void VisQueue(long rn, ROOM_INFO* actualRoom, float tL, float tT,
 	draw_room_list[room_list_end & (kRoomListRing - 1)] = rn;
 	room_list_end++;
 	r->bound_active |= 2;
-	r->test_left = (short)tL;
-	r->test_right = (short)tR;
-	r->test_top = (short)tT;
-	r->test_bottom = (short)tB;
+	r->test_left = sL;
+	r->test_right = sR;
+	r->test_top = sT;
+	r->test_bottom = sB;
 }
 
 /* A guest of the room being walked (`r`, whose matrix is on the stack): the
@@ -4917,8 +4938,33 @@ void GetRoomBounds()
 	short* door;
 	long rn, drn, x, y, z;
 
+	/* The backstop: a walk that dequeues more than 32 rooms per room
+	 * of the level (4,096 at the least) is cut. A ring of rooms each
+	 * queuing the next can only come from a flaw in the window tests
+	 * - VisQueue had one until #256 - and a frame that never ends is
+	 * worse than a frame short of rooms. The rooms still queued are
+	 * released as a dequeue releases them, so that the next frame's
+	 * walk can queue them again; the rooms listed so far are drawn.
+	 * Counted on the ROOMWALK runaway= line. */
+	const long walkLimit = number_rooms * 32 > 4096 ?
+		number_rooms * 32 : 4096;
+	long dequeued = 0;
+
 	while (room_list_start != room_list_end)
 	{
+		if (++dequeued > walkLimit)
+		{
+			while (room_list_start != room_list_end)
+			{
+				rn = draw_room_list[room_list_start & (kRoomListRing - 1)];
+				room[rn].bound_active &= ~2;
+				room_list_start++;
+			}
+
+			g_walkRunaway++;
+			break;
+		}
+
 		rn = draw_room_list[room_list_start & (kRoomListRing - 1)];
 		room_list_start++;
 		r = &room[rn];

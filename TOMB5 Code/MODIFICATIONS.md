@@ -15399,6 +15399,25 @@ line ends with `free=`. `docs/Engine-Manual.md` says so.
 **Commits.** `1d96c038` and `41c9e7b8` (the second makes the first build: the term was
 declared after the Alt+Enter handler that clears it, which now goes through a function).
 
+### The game ends when its window is closed from the taskbar (#255)
+
+2026-10-27.
+
+**What.** Closing the window while it is in the background - from the taskbar's thumbnail,
+or by any other way that reaches an inactive window - ends the game like the close button
+of an active one.
+
+**Why.** An inactive window has the game thread parked (`WM_ACTIVATE` suspends it). The
+close path asked that thread to leave and waited for it; a parked thread never leaves, so
+the wait at the end of `WinMain` spun for ever, the window was gone, the music played on,
+and only the task manager could end the process.
+
+**How.** `specific/winmain.cpp`: `WM_CLOSE` wakes a parked game thread before it posts the
+quit; the wait at the end of `WinMain` sleeps instead of spinning and gives up after five
+seconds with `ExitProcess`, so a thread stuck anywhere cannot hold the process either.
+
+**Commits.** `7b77e0ea`.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -15654,3 +15673,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #252 | The cursor lets go while the window is moved or sized |
 | #253 | A click in the picture takes the mouse back |
 | #254 | The window and the resolution |
+| #255 | The game ends when its window is closed from the taskbar |

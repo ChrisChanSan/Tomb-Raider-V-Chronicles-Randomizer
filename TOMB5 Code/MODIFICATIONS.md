@@ -15596,6 +15596,17 @@ new.
   once with `mix cross allsanity 8 weapons items20 weather`: all 78 `.trc`, `.hdm` and log
   files byte-identical.
 
+- **#258 - no pickup under a carrier.** `core/Randomizer.cpp`: the roll bars the
+  sector of every enemy and every searchable crate that stands there at level
+  start, since the engine hands a pickup within half a sector to that carrier at
+  the first frame and a dormant enemy never gives it back - a key under one was
+  a lost playthrough. The burning roots of Gallows Tree go invisible when the
+  heart has left them, because the engine finds the heart by its kind and would
+  lift it to the roots' height wherever it lies. `core/Randomizer.h`: the list
+  of carriers is the engine's own now - it lacked SWAT_PLUS, Mafia, Sailor, Crane
+  Guy, Scientist and the two slots past the file boundary.
+  `docs/Randomizer-Manual.md` says both.
+
 ## 4. Building this yourself
 
 The published binary need not be trusted. Either:
@@ -15736,3 +15747,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #255 | The game ends when its window is closed from the taskbar |
 | #256 | The visibility path's room walk ends |
 | #257 | A frozen game names where its thread stands |
+| #258 | No pickup under a carrier; the roots let the heart go |

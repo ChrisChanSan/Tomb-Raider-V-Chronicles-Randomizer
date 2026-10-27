@@ -899,6 +899,38 @@ bool Rando::run(const RandoInput& in,
                                    it.room, it.sectorX, it.sectorZ, it.index, it.typeId, it.ocb));
     }
 
+    // --- Bar the sector of every carrier that stands there at level start ---
+    //
+    // The reasoning above - every other enemy lays its cargo down when it
+    // dies - has a hole: an enemy that never wakes never dies. A key item
+    // under a dormant enemy whose own trigger needs that key (andy1: the
+    // heart under the swapped Imp of room 203, a Hydra, woken by the
+    // heart's puzzle hole) is swallowed at the first frame and never
+    // comes back - the playthrough is lost. The same reach as the engine's,
+    // 512 in x and z, 256 in height; a pickup set down at a sector's
+    // centre is inside it only from the carrier's own sector, so the
+    // sector is what is barred. isCarrierType (Randomizer.h) names the
+    // slots GetCarriedItems serves: the intelligent enemies and the
+    // searchable crates. The swap keeps every enemy where it stands, so
+    // the vanilla sectors are the right ones; the extra enemies keep off
+    // the pickups themselves (further down).
+    //
+    // The burning roots (125) are barred the same way: a heart laid down
+    // in their reach hangs in them again, and the burn lifts it to the
+    // roots' height (see the roots' edit at the end of the run).
+    {
+        int carriers = 0;
+        for (const LevelItem& it : in.items)
+        {
+            if (!isCarrierType(it.typeId) && it.typeId != 125) continue;
+            if (used.insert(secKey(it.room, it.sectorX, it.sectorZ)).second) ++carriers;
+        }
+        if (carriers)
+            report.notes.push_back(fmt("%d carrier sector(s) barred for pickups: an enemy or "
+                                       "a crate stands there at level start and would "
+                                       "swallow what is laid down.", carriers));
+    }
+
     // Which items are candidates at all?
     std::vector<LevelItem> movableKey, movableOther;
     for (const LevelItem& it : in.items)
@@ -3647,6 +3679,42 @@ bool Rando::run(const RandoInput& in,
         report.notes.push_back("weather: cutscene file - stays vanilla.");
     else if (opt.randomWeather)
         report.notes.push_back("weather: level has no room that could show rain or snow - stays vanilla.");
+
+    // --- The burning roots let go of a heart that has left them -----------
+    //
+    // InitialiseBurningRoots (game/init.cpp) hands the roots the first item
+    // of the heart's kind in the level, wherever it lies, and when they burn
+    // ControlBurningRoots (game/andy.cpp) sets that item's height to the
+    // roots' own. A heart the roll has carried elsewhere is then raised by
+    // the height of a room, out of reach. What the engine looks for cannot
+    // be changed from here, so where no heart hangs in the roots any more
+    // they are set invisible (IFL_INVISIBLE, 0x100): an invisible item gets
+    // no collision (LaraBaddieCollision, game/collide.cpp), the torch cannot
+    // light it, and the burn never runs. The reach is the engine's own half
+    // sector. With the heart left where it hangs - keys not shuffled, or
+    // the item pinned - nothing changes.
+    for (const LevelItem& it : in.items)
+    {
+        if (it.typeId != 125) continue;                        // BURNING_ROOTS
+        bool heartHere = false;
+        for (const auto& kv : finalOf)
+        {
+            const LevelItem& f = kv.second;
+            if (f.typeId == 172 && std::abs(f.x - it.x) < 512 && std::abs(f.z - it.z) < 512)
+            {
+                heartHere = true;                           // PUZZLE_ITEM1
+                break;
+            }
+        }
+        if (heartHere) continue;
+        JsonValue e = JsonValue::makeObject();
+        e.set("index", JsonValue::makeInt(it.index));
+        e.set("flags", JsonValue::makeInt(0x100));
+        edits.push(e);
+        report.notes.push_back(fmt("item %d (burning roots) set invisible: no heart hangs in "
+                                   "them any more, and their burn would lift the heart to "
+                                   "the roots' height wherever it lies.", it.index));
+    }
 
     patchOut = JsonValue::makeObject();
     patchOut.set("itemEdits", edits);

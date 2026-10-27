@@ -107,21 +107,27 @@ inline bool isDespawningSwarm(int typeId)
 // enemy dies or the crate is searched.
 //
 // The engine queries objects[...].intelligent. That is a property setup.cpp
-// assigns slot by slot, not a contiguous number range - hence exactly the
-// 24 slots that receive it there are listed here. Added to that is the
-// range SEARCH_OBJECT1..SEARCH_OBJECT3, which GetCarriedItems explicitly
-// also checks: the searchable crates and lockers. Across the sixteen levels
-// they make up the majority of all carriers.
+// assigns slot by slot, not a contiguous number range - hence the slots that
+// receive it there are listed here: the 31 read out of game/setup.cpp (every
+// `obj->intelligent = 1`), less the Cyborg (469), which GetCarriedItems
+// itself leaves out. Added to that is the range
+// SEARCH_OBJECT1..SEARCH_OBJECT3, which GetCarriedItems explicitly also
+// checks: the searchable crates and lockers. Across the sixteen levels they
+// make up the majority of all carriers.
 //
-// Explicitly NOT included, though one would suspect them: Scientist (69)
-// and Guardian (65) get no intelligent flag and carry nothing.
+// The Guardian (65) gets no intelligent flag and carries nothing. An
+// earlier list here had 24 slots and missed SWAT_PLUS (35), Mafia (49),
+// Sailor (53, the Compy's slot), Crane Guy (55), Scientist (69) and the
+// two slots past the file boundary (460, 461): a medipack landed under a
+// SWAT_PLUS of RICH3 before the list was read out of the engine.
 inline bool isCarrierType(int typeId)
 {
     switch (typeId)
     {
-    case 31: case 33: case 37: case 39: case 41: case 43: case 45: case 47:
-    case 51: case 57: case 59: case 61: case 63: case 67: case 71: case 73:
-    case 75: case 77: case 79: case 81: case 83: case 85: case 87: case 89:
+    case 31: case 33: case 35: case 37: case 39: case 41: case 43: case 45:
+    case 47: case 49: case 51: case 53: case 55: case 57: case 59: case 61:
+    case 63: case 67: case 69: case 71: case 73: case 75: case 77: case 79:
+    case 81: case 83: case 85: case 87: case 89: case 460: case 461:
         return true;                              // intelligent = 1
     default:
         return typeId >= 164 && typeId <= 168;    // SEARCH_OBJECT1..3 incl. MIPs

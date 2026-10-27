@@ -188,9 +188,13 @@ items by number.
 **"Keys & puzzles"** — *on by default.* Shuffles key items and puzzle pieces
 among the spots curated as safe for them. This is the switch that changes the
 route through a level rather than just the loot. Where picking a key up does
-more than fill an inventory slot, its trigger travels to the new spot with
-it — and where that room has a flipmap twin, into both variants, so the key
-still works after the level has flipped that room.
+more than fill an inventory slot, its trigger travels to the new spot with it —
+and where that room has a flipmap twin, into both variants, so the key still
+works after the level has flipped that room. No pickup is laid down on the
+square of an enemy or a searchable crate that stands there at level start: the
+engine hands such a pickup to that carrier, and a dormant enemy never gives it
+back. In Gallows Tree the heart may leave its roots; the roots then stay unlit
+and unseen, because burning them would lift the heart wherever it lies.
 
 **"All weapons everywhere is standard and always included."** This grey line
 is not a control. Every level gets the full weapon set on every run —

@@ -189,6 +189,7 @@ void WinProcessCommands(long cmd)
 			return;
 
 		Log("KA_ALTENTER");
+		mouse_free = 0;
 
 		// The window's place as it is now, for the way back.
 		WinStorePlace();
@@ -356,7 +357,9 @@ void WinProcessCommandLine(LPSTR cmd)
  * The cursor: captured - hidden and confined to the client area - only while
  * the window is active, the control type is Modern and no FMV plays. The game
  * thread reports the last two (WinMouseWant); the window's own messages report
- * the first. ShowCursor and ClipCursor are only ever called on this thread,
+ * the first; a window held by its caption or frame, or activated by a click
+ * outside the picture, lets the cursor go until a click inside takes it back.
+ * ShowCursor and ClipCursor are only ever called on this thread,
  * because ShowCursor's counter belongs to the thread that owns the window.
  * While the cursor is not captured, the moves are dropped where they arrive;
  * the buttons still count, as a keyboard key does. */
@@ -378,6 +381,7 @@ static long mouse_hidden;		// how many ShowCursor(FALSE) calls the capture made
 static long mouse_abs_seeded;		// an absolute device has given a first position
 static long mouse_abs_x, mouse_abs_y;
 static long size_moving;		// between WM_ENTERSIZEMOVE and WM_EXITSIZEMOVE
+static long mouse_free;		// let go at the frame; a click inside takes it
 
 /* Seats or frees the cursor to match the rule, on this thread. Called on every
  * message that can change a term, and on the game thread's WM_APP_MOUSE.
@@ -396,7 +400,7 @@ static void WinMouseCapture()
 	const long modern = (want & MOUSE_WANT_MODERN) ? 1 : 0;
 	const long fmv = (want & MOUSE_WANT_FMV) ? 1 : 0;
 	const long on = (mouse_active && modern && !fmv && !mouse_closing &&
-		!size_moving && App.hWnd) ? 1 : 0;
+		!size_moving && !mouse_free && App.hWnd) ? 1 : 0;
 
 	if (on)
 	{
@@ -435,7 +439,7 @@ static void WinMouseCapture()
 	mouse_abs_seeded = 0;
 
 	if (gLogEnabled)
-		Log("MOUSELOG capture=%s active=%ld modern=%ld fmv=%ld", on ? "on" : "off", mouse_active, modern, fmv);
+		Log("MOUSELOG capture=%s active=%ld modern=%ld fmv=%ld free=%ld", on ? "on" : "off", mouse_active, modern, fmv, mouse_free);
 }
 
 // The window's own term. Losing it also lets go of every button: their up
@@ -472,6 +476,11 @@ static void WinMouseInput(HRAWINPUT handle)
 		return;
 
 	if (raw.header.dwType != RIM_TYPEMOUSE)
+		return;
+
+	// Let go: neither a button nor a move counts until a click in the
+	// picture takes the mouse back (the click itself is not a shot).
+	if (mouse_free)
 		return;
 
 	held = mouse_held;
@@ -837,7 +846,8 @@ LRESULT CALLBACK WinMainWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 		size_moving = 0;
 		WinClientChanged("drag");
 		WinStorePlace();
-		WinMouseCapture();	// seats it again
+		mouse_free = 1;		// the player has the window; a click inside takes it back
+		WinMouseCapture();
 		break;
 
 	case WM_TIMER:
@@ -888,6 +898,20 @@ LRESULT CALLBACK WinMainWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 
 		break;
 
+	case WM_LBUTTONDOWN:
+	case WM_RBUTTONDOWN:
+	case WM_MBUTTONDOWN:
+
+		// A click in the picture takes the mouse back after it was let go.
+		if (mouse_free)
+		{
+			mouse_free = 0;
+			WinMouseCapture();
+			return 0;
+		}
+
+		break;
+
 	case WM_INPUT:
 		WinMouseInput((HRAWINPUT)lParam);
 		break;			// DefWindowProc still has to see it, to free the input
@@ -909,6 +933,20 @@ LRESULT CALLBACK WinMainWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 		/* Before everything else in this case: the FMV guard below returns
 		 * early, and a window that goes inactive during a video must still
 		 * give up its buttons. */
+		/* A click that activates the window outside the picture - the
+		 * caption, the frame, a button - lets the cursor go; a click inside,
+		 * or a return by the keyboard, takes it. */
+		if ((wParam & 0xFFFF) == WA_CLICKACTIVE)
+		{
+			POINT pt;
+
+			GetCursorPos(&pt);
+			mouse_free = (SendMessage(hwnd, WM_NCHITTEST, 0,
+				MAKELPARAM(pt.x, pt.y)) != HTCLIENT) ? 1 : 0;
+		}
+		else if ((wParam & 0xFFFF) == WA_ACTIVE)
+			mouse_free = 0;
+
 		WinMouseActive((wParam & 0xFFFF) != WA_INACTIVE && !HIWORD(wParam));
 
 		if (!closing)

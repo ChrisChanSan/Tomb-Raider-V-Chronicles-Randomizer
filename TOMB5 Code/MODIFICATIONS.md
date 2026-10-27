@@ -15392,7 +15392,8 @@ stands, `WinMouseCapture` keeps the clip off and `WinMouseInput` counts neither 
 nor moves, so the click that takes the mouse back is not a shot. The `MOUSELOG capture`
 line ends with `free=`. `docs/Engine-Manual.md` says so.
 
-**Commits.** `1d96c038`.
+**Commits.** `1d96c038` and `41c9e7b8` (the second makes the first build: the term was
+declared after the Alt+Enter handler that clears it, which now goes through a function).
 
 ## 3. Randomizer changes since Beta 1.0
 

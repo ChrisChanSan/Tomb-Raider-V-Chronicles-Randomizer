@@ -15444,6 +15444,40 @@ the count goes out on a `ROOMWALK runaway=` line that must never appear.
 
 **Commits.** `67e2445b`.
 
+### A frozen game names where its thread stands (#257)
+
+2026-10-27.
+
+**What.** When the game thread stops answering - the picture frozen, the window alive -
+the engine writes where that thread stands and a minidump, the way it does for a crash:
+`HANG at=0x... module=PCtomb5.exe+0x... thread=game id=0x... when=focus|close`, then `HANG
+dump=<file>` with `PCtomb5_hang_<date>_<time>.dmp` beside the log, or into `crash.txt`
+without `-log`. `when=focus`: the window lost the focus, the game thread never reached its
+frame wait, and thirty seconds passed without a frame. `when=close`: the window was closed
+and the thread did not end in five seconds.
+
+**Why.** A freeze leaves no trace a crash leaves: no exception, so the crash seam never
+runs, and the log stops at the last seam written, which says where the game was, not where
+it stays. The hang of #256 was found only through a dump taken by hand from the task
+manager; a report from another machine has no such dump.
+
+**How.** `specific/crashseam.h`: the crash seam's tail - the line, the dump, `crash.txt` -
+becomes `CrashSeamReport`, shared with the new `CrashSeamHang`, which suspends the named
+thread for the read of its instruction pointer, resumes it before anything that takes a
+lock, and reports; the crash's own line and file name are unchanged.
+`specific/winmain.cpp`: a watch thread starts where the focus loss finds the game thread
+stuck (`Game Thread appeared stuck`) and asks once a second whether a frame was presented
+since, the thread parked after all, the window closing, or a level loading; thirty seconds
+without any of that (sixty while loading) capture, once per process. The close path
+captures after its five seconds unless a level is loading. `specific/hd/hd_level.cpp`:
+`HDFramesPresented`, the frame count the watch reads, moving with or without `-log`.
+`specific/file.cpp`: `g_level_loading`, 1 while `S_LoadLevelFile` runs. `RoomProbe -hang
+<folder>` is the seam's own test, beside `-crash`: the tool runs itself with a circling
+thread, reads the `HANG` line back and checks the dump. `docs/Engine-Manual.md` says what
+to send.
+
+**Commits.** `7b23e79e`.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -15701,3 +15735,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #254 | The window and the resolution |
 | #255 | The game ends when its window is closed from the taskbar |
 | #256 | The visibility path's room walk ends |
+| #257 | A frozen game names where its thread stands |

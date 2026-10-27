@@ -179,6 +179,7 @@ void WinProcMsg()
 // The windowed state's helpers, below beside the window procedure.
 static void WinRenderSize();
 static void WinStorePlace();
+static void WinMouseTake();		// the mouse is the game's again (see the mouse block)
 static void WinStepWindow(int dir, const char* key);
 
 void WinProcessCommands(long cmd)
@@ -189,7 +190,7 @@ void WinProcessCommands(long cmd)
 			return;
 
 		Log("KA_ALTENTER");
-		mouse_free = 0;
+		WinMouseTake();
 
 		// The window's place as it is now, for the way back.
 		WinStorePlace();
@@ -383,6 +384,12 @@ static long mouse_abs_x, mouse_abs_y;
 static long size_moving;		// between WM_ENTERSIZEMOVE and WM_EXITSIZEMOVE
 static long mouse_free;		// let go at the frame; a click inside takes it
 
+// Alt+Enter is play: the cursor is the game's again.
+static void WinMouseTake()
+{
+	mouse_free = 0;
+}
+
 /* Seats or frees the cursor to match the rule, on this thread. Called on every
  * message that can change a term, and on the game thread's WM_APP_MOUSE.
  *
@@ -439,7 +446,8 @@ static void WinMouseCapture()
 	mouse_abs_seeded = 0;
 
 	if (gLogEnabled)
-		Log("MOUSELOG capture=%s active=%ld modern=%ld fmv=%ld free=%ld", on ? "on" : "off", mouse_active, modern, fmv, mouse_free);
+		Log("MOUSELOG capture=%s active=%ld modern=%ld fmv=%ld free=%ld",
+			on ? "on" : "off", mouse_active, modern, fmv, mouse_free);
 }
 
 // The window's own term. Losing it also lets go of every button: their up
@@ -846,7 +854,7 @@ LRESULT CALLBACK WinMainWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 		size_moving = 0;
 		WinClientChanged("drag");
 		WinStorePlace();
-		mouse_free = 1;		// the player has the window; a click inside takes it back
+		mouse_free = 1;		// the player has the window; a click inside takes it
 		WinMouseCapture();
 		break;
 

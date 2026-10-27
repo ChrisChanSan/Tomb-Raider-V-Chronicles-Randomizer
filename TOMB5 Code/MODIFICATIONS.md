@@ -15418,6 +15418,32 @@ seconds with `ExitProcess`, so a thread stuck anywhere cannot hold the process e
 
 **Commits.** `7b77e0ea`.
 
+### The visibility path's room walk ends (#256)
+
+2026-10-27.
+
+**What.** A camera position from which the visibility path's room walk never ended - the
+game thread spinning in `GetRoomBounds`, the window frozen, the music playing on - ends
+like any other: the walk lists its rooms and the frame is drawn. Seen with `hd_vis 1` at
+ANDY1 rooms 121 and 113 and ANDREA2 room 69, independent of the seed.
+
+**Why.** `VisQueue` keeps a room's window in whole pixels but tested what the room already
+held on the float rectangle. A right or bottom edge with a fraction - 1326.3, stored as
+1326 - was never held, so the room was queued again with the same window at every visit;
+and where the path's sources - guests, openings, near portals, wide and edge portals -
+form a ring of rooms, every dequeue queued the next, for ever. The dump of a hung process
+showed 25.7 million dequeues of one frame and six rooms circling, one of them with a
+window narrower than a pixel. The classic walk is not affected: `SetRoomBounds` tests the
+parent's window, whole pixels against whole pixels.
+
+**How.** `game/draw.cpp`: `VisQueue` makes its test on the whole pixels it stores and
+refuses a rectangle that is empty in whole pixels; `GetRoomBounds` cuts a walk past 32
+dequeues per room of the level (4,096 at the least), releasing the rooms still queued, and
+the count goes out on a `ROOMWALK runaway=` line that must never appear.
+`docs/Engine-Manual.md` says how a freeze is reported. `hd_vis 0` is untouched.
+
+**Commits.** `67e2445b`.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -15674,3 +15700,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #253 | A click in the picture takes the mouse back |
 | #254 | The window and the resolution |
 | #255 | The game ends when its window is closed from the taskbar |
+| #256 | The visibility path's room walk ends |

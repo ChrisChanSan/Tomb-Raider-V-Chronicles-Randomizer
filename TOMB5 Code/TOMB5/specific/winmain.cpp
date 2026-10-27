@@ -1373,7 +1373,8 @@ int __stdcall WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 		{
 			if (GetTickCount() - since > 5000)
 			{
-				Log("Game thread did not end in five seconds: the process ends");
+				Log("Game thread did not end in five seconds: "
+					"the process ends");
 				ExitProcess(0);
 			}
 

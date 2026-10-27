@@ -179,7 +179,7 @@ void WinProcMsg()
 // The windowed state's helpers, below beside the window procedure.
 static void WinRenderSize();
 static void WinStorePlace();
-static void WinMouseTake();		// the mouse is the game's again (see the mouse block)
+static void WinMouseTake();		// the mouse is the game's again
 static void WinStepWindow(int dir, const char* key);
 
 void WinProcessCommands(long cmd)

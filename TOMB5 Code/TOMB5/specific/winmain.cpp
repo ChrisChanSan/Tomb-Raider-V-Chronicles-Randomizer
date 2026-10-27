@@ -34,6 +34,7 @@
 #include "devicewindow.h"	// the style of the two display states
 #include "hd/hd_mods.h"		// the mods folder's log sink
 #include "hd/hd_wardrobe.h"	// and the wardrobe scan's
+#include "hd/hd_level.h"		// HDFramesPresented - the hang watch's pulse
 #include "zrange_math.h"		// ZFAR_UNITS - the far plane
 #include "../game/spotcam.h"	// CurrentFov - kept over a new window size
 
@@ -180,6 +181,8 @@ void WinProcMsg()
 static void WinRenderSize();
 static void WinStorePlace();
 static void WinMouseTake();		// the mouse is the game's again
+static void WinHangWatchStart();	// the hang seam's watch (the hang block)
+static void WinHangCapture(const char* when);
 static void WinStepWindow(int dir, const char* key);
 
 void WinProcessCommands(long cmd)
@@ -595,6 +598,72 @@ static void WinMouseRelease()
 #define WIN_RESIZE_TIMER	1
 
 static long game_parked;		// WM_ACTIVATE has the game thread suspended
+
+/* The hang seam's watch. HangGameThread found the game thread away from
+ * its frame wait for two seconds. A slow machine's HD build keeps it away
+ * for longer, so the watch, a thread of its own, gives it thirty seconds
+ * more and asks once a second: a frame presented since, the thread parked
+ * after all, the window closing, or a level loading (sixty seconds then)
+ * end the watch; a thread that shows none of that is stuck, and the seam
+ * (crashseam.h) reads where it stands and writes the dump. Once per
+ * process: a second Alt+Tab adds nothing, and the close path captures
+ * only what the watch did not. */
+static volatile long hang_watching;
+static volatile long hang_captured;
+
+static void WinHangCapture(const char* when)
+{
+	if (InterlockedExchange(&hang_captured, 1))
+		return;
+
+	CrashSeamHang((HANDLE)MainThread.handle, (DWORD)MainThread.address, when);
+}
+
+static unsigned int __stdcall WinHangWatch(void*)
+{
+	const long frames = HDFramesPresented();
+	const DWORD since = GetTickCount();
+
+	for (;;)
+	{
+		Sleep(1000);
+
+		const DWORD waited = GetTickCount() - since;
+
+		if (hang_captured || game_parked || MainThread.ended ||
+			!MainThread.active)
+			break;
+
+		if (HDFramesPresented() != frames)
+		{
+			Log("HANG watch: the game thread went on after %lu ms",
+				(unsigned long)waited);
+			break;
+		}
+
+		if (waited >= (g_level_loading ? 60000UL : 30000UL))
+		{
+			WinHangCapture("focus");
+			break;
+		}
+	}
+
+	hang_watching = 0;
+	return 0;
+}
+
+static void WinHangWatchStart()
+{
+	if (InterlockedExchange(&hang_watching, 1))
+		return;
+
+	const uintptr_t h = _beginthreadex(0, 0, WinHangWatch, 0, 0, 0);
+
+	if (h)
+		CloseHandle((HANDLE)h);
+	else
+		hang_watching = 0;
+}
 static long resize_waiting;		// a new size waits for WIN_RESIZE_TIMER
 
 // The game thread held at the start of its scene, two seconds at most.
@@ -1034,6 +1103,7 @@ LRESULT CALLBACK WinMainWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 					{
 						App.dx.WaitAtBeginScene = 0;
 						Log("Game Thread appeared stuck, skipping suspend to avoid a deadlock");
+						WinHangWatchStart();
 					}
 				}
 
@@ -1375,6 +1445,15 @@ int __stdcall WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 			{
 				Log("Game thread did not end in five seconds: "
 					"the process ends");
+
+				/* Where it stands, before the process goes: the hang seam's
+				 * line and dump - unless a level is loading, which keeps the
+				 * thread from its end for longer than that on purpose. */
+				if (g_level_loading)
+					Log("HANG watch: a level is loading, no dump");
+				else
+					WinHangCapture("close");
+
 				ExitProcess(0);
 			}
 

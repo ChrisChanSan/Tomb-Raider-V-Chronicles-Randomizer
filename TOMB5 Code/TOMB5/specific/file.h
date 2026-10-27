@@ -38,6 +38,7 @@ bool LoadSamples();
 long S_LoadLevelFile(long num);
 
 extern long LoadEntryBlack;
+extern volatile long g_level_loading;	// 1 while a level loads
 
 extern TEXTURESTRUCT* textinfo;
 extern SPRITESTRUCT* spriteinfo;

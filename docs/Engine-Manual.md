@@ -4921,13 +4921,18 @@ very build that crashed. Windows' own crash report follows as before.
 
 **When the game freezes.** A freeze is not a crash: no exception, so no `CRASH`
 line, and `log.txt` simply stops at the last seam written while the window no
-longer answers. Alt+Tab out, and the log gets `Game Thread appeared stuck`.
-What the game thread is doing can be read from a dump of the process: Task
-Manager, Details, right-click `PCTomb5.exe`, Create dump file; the path is
-shown. Send that file with `log.txt`: the thread's call stack in it names the
-function, resolved against the build's own `.pdb`. A `ROOMWALK runaway=` line
-in the log says the room walk's backstop cut a frame's walk, which must never
-happen.
+longer answers. Alt+Tab out, and the log gets `Game Thread appeared stuck`;
+thirty seconds later, if no frame came in between, the engine writes `HANG
+at=0x... module=PCtomb5.exe+0x... thread=game id=0x... when=focus` - where the
+game thread stands - followed by `HANG dump=<file>`, with
+`PCtomb5_hang_<date>_<time>.dmp` beside the log. Closing the frozen window does
+the same at once, after the five seconds the game thread is given to end
+(`when=close`). Without `-log` the line goes into `crash.txt`. Send the line
+and the dump: the dump holds the thread's call stack, resolved against the
+build's own `.pdb`. Should even that fail, Task Manager, Details, right-click
+`PCTomb5.exe`, Create dump file, gives a dump of the whole process. A `ROOMWALK
+runaway=` line in the log says the room walk's backstop cut a frame's walk,
+which must never happen.
 
 The log is not one stream — each line begins with the name of the seam that
 wrote it, and each seam answers a different question:

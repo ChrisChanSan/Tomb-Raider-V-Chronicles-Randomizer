@@ -36,8 +36,12 @@
  * The filter returns EXCEPTION_CONTINUE_SEARCH, so Windows' own report
  * follows as before.
  *
- * Header only, so the engine and the diagnostic tool (RoomProbe -crash)
- * take the very same code without a build file to change. */
+ * The hang seam shares the tail: CrashSeamHang, for a thread that stopped
+ * answering, writes HANG at=... module=...+0x... thread=... id=... when=...
+ * the same way, with the dump named <prefix>_hang_<date>_<time>.dmp.
+ *
+ * Header only, so the engine and the diagnostic tool (RoomProbe -crash,
+ * -hang) take the very same code without a build file to change. */
 #include <windows.h>
 #include <stdio.h>
 #include <string.h>
@@ -72,16 +76,14 @@ struct CrashSeamDumpInfo
 	BOOL clientPointers;
 };
 
-inline LONG WINAPI CrashSeamFilter(PEXCEPTION_POINTERS info)
+// The module an address lies in, by file name, and the offset into it.
+inline void CrashSeamWhere(void* at, char* module, size_t size,
+	unsigned long long* offset)
 {
-	CrashSeamState& state = CrashSeam();
-	const DWORD code = info && info->ExceptionRecord ?
-		info->ExceptionRecord->ExceptionCode : 0;
-	void* at = info && info->ExceptionRecord ?
-		info->ExceptionRecord->ExceptionAddress : 0;
-	char module[MAX_PATH] = "?";
-	unsigned long long offset = 0;
 	HMODULE owner = 0;
+
+	strncpy_s(module, size, "?", _TRUNCATE);
+	*offset = 0;
 
 	if (at && GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
 		GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, (LPCSTR)at, &owner) &&
@@ -94,32 +96,41 @@ inline LONG WINAPI CrashSeamFilter(PEXCEPTION_POINTERS info)
 		{
 			const char* base = strrchr(path, '\\');
 
-			strncpy_s(module, sizeof(module), base ? base + 1 : path,
-				_TRUNCATE);
+			strncpy_s(module, size, base ? base + 1 : path, _TRUNCATE);
 		}
 
-		offset = (unsigned long long)((const char*)at - (const char*)owner);
+		*offset = (unsigned long long)((const char*)at - (const char*)owner);
 	}
+}
 
-	const DWORD self = GetCurrentThreadId();
-	const char* thread = self == state.mainThread ? "main" :
-		(state.gameThread && self == state.gameThread) ? "game" : "other";
-	char line[512];
+// What a thread of this process is called on the line.
+inline const char* CrashSeamThreadName(DWORD id)
+{
+	const CrashSeamState& state = CrashSeam();
 
-	_snprintf_s(line, sizeof(line), _TRUNCATE,
-		"CRASH code=0x%08lX at=0x%p module=%s+0x%llX thread=%s",
-		(unsigned long)code, at, module, offset, thread);
+	return id == state.mainThread ? "main" :
+		(state.gameThread && id == state.gameThread) ? "game" : "other";
+}
+
+/* The tail both seams share: the line through the writer, the dump
+ * (<prefix>_<infix><date>_<time>.dmp, MiniDumpNormal), the line with dump=
+ * into crash.txt, and the dump= note through the writer. `info` is the
+ * crash's exception, 0 for a hang. */
+inline void CrashSeamReport(const char* kind, const char* infix,
+	const char* line, PEXCEPTION_POINTERS info, DWORD threadId)
+{
+	CrashSeamState& state = CrashSeam();
 
 	if (state.writer)
 		state.writer(line);
 
-	// The dump's name: the prefix and the local time to the second.
+	// The dump's name: the prefix, the kind and the local time to the second.
 	SYSTEMTIME now;
 	char dumpName[96];
 
 	GetLocalTime(&now);
 	_snprintf_s(dumpName, sizeof(dumpName), _TRUNCATE,
-		"%s_%04u%02u%02u_%02u%02u%02u.dmp", state.prefix, now.wYear,
+		"%s_%s%04u%02u%02u_%02u%02u%02u.dmp", state.prefix, infix, now.wYear,
 		now.wMonth, now.wDay, now.wHour, now.wMinute, now.wSecond);
 
 	bool dumped = false;
@@ -134,7 +145,7 @@ inline LONG WINAPI CrashSeamFilter(PEXCEPTION_POINTERS info)
 
 		if (file != INVALID_HANDLE_VALUE)
 		{
-			CrashSeamDumpInfo ex = { self, info, FALSE };
+			CrashSeamDumpInfo ex = { threadId, info, FALSE };
 
 			// 0 is MiniDumpNormal.
 			dumped = dump(GetCurrentProcess(), GetCurrentProcessId(), file,
@@ -161,11 +172,75 @@ inline LONG WINAPI CrashSeamFilter(PEXCEPTION_POINTERS info)
 	{
 		char note[160];
 
-		_snprintf_s(note, sizeof(note), _TRUNCATE, "CRASH dump=%s", dumpName);
+		_snprintf_s(note, sizeof(note), _TRUNCATE, "%s dump=%s", kind,
+			dumpName);
 		state.writer(note);
 	}
+}
+
+inline LONG WINAPI CrashSeamFilter(PEXCEPTION_POINTERS info)
+{
+	const DWORD code = info && info->ExceptionRecord ?
+		info->ExceptionRecord->ExceptionCode : 0;
+	void* at = info && info->ExceptionRecord ?
+		info->ExceptionRecord->ExceptionAddress : 0;
+	char module[MAX_PATH];
+	unsigned long long offset;
+	char line[512];
+
+	CrashSeamWhere(at, module, sizeof(module), &offset);
+	_snprintf_s(line, sizeof(line), _TRUNCATE,
+		"CRASH code=0x%08lX at=0x%p module=%s+0x%llX thread=%s",
+		(unsigned long)code, at, module, offset,
+		CrashSeamThreadName(GetCurrentThreadId()));
+	CrashSeamReport("CRASH", "", line, info, GetCurrentThreadId());
 
 	return EXCEPTION_CONTINUE_SEARCH;
+}
+
+/* The hang seam: where a thread that stopped answering stands. The caller
+ * names the thread and the moment - `when` is "focus" when the window lost
+ * the focus and the game thread never reached its frame wait, "close" when
+ * the window closed and it never ended. The thread is suspended for the
+ * read of its registers and resumed at once, before anything here that
+ * takes a lock - the log's stream, the heap, the loader - since the
+ * suspended thread may hold one. Then the line
+ *
+ *   HANG at=0x<address> module=<file>+0x<offset> thread=game id=0x<id>
+ *        when=<moment>
+ *
+ * and the dump as a crash's, named <prefix>_hang_<date>_<time>.dmp:
+ * MiniDumpWriteDump suspends the threads itself for the write, so the dump
+ * holds the thread where it circles. */
+inline void CrashSeamHang(HANDLE thread, DWORD threadId, const char* when)
+{
+	CONTEXT ctx;
+	void* at = 0;
+
+	memset(&ctx, 0, sizeof(ctx));
+	ctx.ContextFlags = CONTEXT_CONTROL;
+
+	if (SuspendThread(thread) != (DWORD)-1)
+	{
+		if (GetThreadContext(thread, &ctx))
+#ifdef _WIN64
+			at = (void*)ctx.Rip;
+#else
+			at = (void*)ctx.Eip;
+#endif
+
+		ResumeThread(thread);
+	}
+
+	char module[MAX_PATH];
+	unsigned long long offset;
+	char line[512];
+
+	CrashSeamWhere(at, module, sizeof(module), &offset);
+	_snprintf_s(line, sizeof(line), _TRUNCATE,
+		"HANG at=0x%p module=%s+0x%llX thread=%s id=0x%lX when=%s", at, module,
+		offset, CrashSeamThreadName(threadId), (unsigned long)threadId, when);
+	CrashSeamReport("HANG", "hang_", line, 0, threadId);
 }
 
 /* Installed once, as early as the caller can: the installing thread is

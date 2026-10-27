@@ -1012,6 +1012,11 @@
  *                     itself in <folder> with the seam installed and a null
  *                     pointer read, then reads the CRASH line of crash.txt
  *                     back and checks the minidump beside it (MDMP header).
+ *     -hang <folder>  the hang seam (CrashSeamHang in the same header): the
+ *                     tool runs itself in <folder> with a thread named the
+ *                     game thread circling in a loop, reads it from the
+ *                     main thread as the engine's watch does, then reads
+ *                     the HANG line of crash.txt back and checks the dump.
  *     -hddrawn 0|1    the HD level built, drawn HD (1, the default) or
  *                     classic (0), as the tool's HDDrawn() answers after the
  *                     switch's own press rule (hd_switch.h): while it answers
@@ -19989,6 +19994,7 @@ static int ProbeMain(int argc, char** argv)
 		printf("       -scissor <l,t,r,b>\n");
 		printf("       -devicecycle   the run on three devices, Alt+Enter's "
 			"way; -crash <folder>   the crash seam's own test\n");
+		printf("       -hang <folder>   the hang seam's own test\n");
 		printf("       -cycleclassic <pages> [-nomove]   the classic pages "
 			"across three devices\n");
 		printf("       -windowcycle [-leak]   the game window and its swap "
@@ -24461,6 +24467,122 @@ static int CrashTest(const char* self, const char* folder)
 	return lineOk && dumpOk ? 0 : 1;
 }
 
+/* -hang <folder>: this tool once more, in <folder>, with -hangchild - the
+ * seam installed as WinMain installs it, a thread named the game thread that
+ * circles in a loop of its own, and after a moment the hang seam read from
+ * the main thread, as the engine's watch reads it. Then the line in crash.txt
+ * and the dump beside it are read back: the line must begin with HANG at=0x,
+ * name this tool as the module, say thread=game and when=test, and the dump
+ * must exist and begin with MDMP. */
+static DWORD WINAPI HangChildSpin(void*)
+{
+	volatile long turns = 0;
+
+	for (;;)
+		turns++;
+}
+
+static int HangChild(const char* folder)
+{
+	DWORD id = 0;
+
+	SetCurrentDirectoryA(folder);
+	CrashSeamInstall(CrashPrint, true, "PCtomb5");
+
+	HANDLE thread = CreateThread(0, 0, HangChildSpin, 0, 0, &id);
+
+	if (!thread)
+		return 2;
+
+	Sleep(200);
+	CrashSeamGameThread(id);
+	CrashSeamHang(thread, id, "test");
+	return 0;
+}
+
+static int HangTest(const char* self, const char* folder)
+{
+	char cmd[1024];
+	char path[MAX_PATH];
+	char want[MAX_PATH];
+	STARTUPINFOA si = {};
+	PROCESS_INFORMATION pi = {};
+	const char* base = strrchr(self, '\\');
+
+	CreateDirectoryA(folder, 0);
+	_snprintf_s(path, sizeof(path), _TRUNCATE, "%s\\crash.txt", folder);
+	DeleteFileA(path);
+	_snprintf_s(want, sizeof(want), _TRUNCATE, " module=%s+",
+		base ? base + 1 : self);
+	si.cb = sizeof(si);
+	_snprintf_s(cmd, sizeof(cmd), _TRUNCATE, "\"%s\" -hangchild \"%s\"",
+		self, folder);
+
+	if (!CreateProcessA(0, cmd, 0, 0, FALSE, 0, 0, 0, &si, &pi))
+	{
+		printf("-hang: the child did not start\n");
+		return 1;
+	}
+
+	WaitForSingleObject(pi.hProcess, 60000);
+
+	DWORD code = 0;
+
+	GetExitCodeProcess(pi.hProcess, &code);
+	CloseHandle(pi.hThread);
+	CloseHandle(pi.hProcess);
+	printf("-hang: the child ended with 0x%08lX\n", (unsigned long)code);
+
+	FILE* in = 0;
+	char line[512] = "";
+
+	if (fopen_s(&in, path, "r") || !in || !fgets(line, sizeof(line), in))
+	{
+		if (in)
+			fclose(in);
+
+		printf("-hang: no crash.txt in %s - FAIL\n", folder);
+		return 1;
+	}
+
+	fclose(in);
+	printf("-hang: crash.txt says: %s", line);
+
+	const bool lineOk = !strncmp(line, "HANG at=0x", 10) &&
+		strstr(line, want) && strstr(line, " thread=game ") &&
+		strstr(line, " when=test ");
+	const char* dump = strstr(line, " dump=");
+	bool dumpOk = false;
+
+	if (dump && strncmp(dump + 6, "none", 4))
+	{
+		char name[MAX_PATH];
+		char full[MAX_PATH];
+		size_t n = strcspn(dump + 6, "\r\n");
+
+		_snprintf_s(name, sizeof(name), _TRUNCATE, "%.*s", (int)n, dump + 6);
+		_snprintf_s(full, sizeof(full), _TRUNCATE, "%s\\%s", folder, name);
+
+		if (!fopen_s(&in, full, "rb") && in)
+		{
+			char head[4] = { 0, 0, 0, 0 };
+
+			fseek(in, 0, SEEK_END);
+			const long size = ftell(in);
+
+			fseek(in, 0, SEEK_SET);
+			dumpOk = fread(head, 1, 4, in) == 4 && !memcmp(head, "MDMP", 4);
+			fclose(in);
+			printf("-hang: %s, %ld bytes, header %s\n", name, size,
+				dumpOk ? "MDMP" : "wrong");
+		}
+	}
+
+	printf("-hang: line %s, dump %s\n", lineOk ? "ok" : "FAIL",
+		dumpOk ? "ok" : "FAIL");
+	return lineOk && dumpOk ? 0 : 1;
+}
+
 /* -cycleclassic <pages>: see the usage at the top. One window and one
  * IDirect3D9 for all three devices, as DXCreate keeps both across Alt+Enter;
  * each device made with the engine's flags (DXCreateD3DDevice: hardware
@@ -26068,6 +26190,12 @@ int main(int argc, char** argv)
 
 		if (!strcmp(argv[i], "-crash"))
 			return CrashTest(argv[0], argv[i + 1]);
+
+		if (!strcmp(argv[i], "-hangchild"))
+			return HangChild(argv[i + 1]);
+
+		if (!strcmp(argv[i], "-hang"))
+			return HangTest(argv[0], argv[i + 1]);
 
 		if (!strcmp(argv[i], "-cycleclassic"))
 		{

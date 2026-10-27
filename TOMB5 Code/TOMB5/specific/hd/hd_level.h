@@ -527,6 +527,7 @@ void HDFrameShadowCastStats(HDShadowCastStats* out, bool clear);
 // This is not behind hd_enable: the frame rate is a property of the whole
 // engine, and a report about it has to be possible with the HD path off.
 void HDFramePresented();
+long HDFramesPresented();	// frames since the start - the hang watch's pulse
 
 // Takes this frame's field of view the first time anything HD turns up in
 // it - a room in InsertRoom or an item in DrawAnimatingItem. Called by both,

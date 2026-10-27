@@ -11266,13 +11266,26 @@ void HDFrameDrawGlow()
 	g_frame_count = 0;
 }
 
+// Every frame presented since the start, never reset: the hang watch's
+// pulse (specific\winmain.cpp). Read from another thread, so volatile.
+static volatile long g_frames_presented;
+
+long HDFramesPresented()
+{
+	return g_frames_presented;
+}
+
 /* One presented frame. Called from DXShowFrame (specific\dxshell.cpp) straight
  * after Present returns - the note beside the frame clock's counters says why
  * that call site and no other. */
 void HDFramePresented()
 {
+	// The frame count the hang watch reads (specific\winmain.cpp): the one
+	// counter that moves without -log, an increment and nothing else.
+	g_frames_presented++;
+
 	// The guard. Without -log this is a single bool test and a return: no
-	// clock is read, no counter moves, nothing is written.
+	// clock is read, no other counter moves, nothing is written.
 	if (!gLogEnabled)
 		return;
 

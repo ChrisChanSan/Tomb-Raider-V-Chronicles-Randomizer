@@ -2222,8 +2222,19 @@ static void WarmUpLevel()
  * is set: the load without a loading screen then draws nothing at all. */
 long LoadEntryBlack;
 
+/* 1 while S_LoadLevelFile runs: a level loading keeps the game thread from
+ * its frames for seconds on purpose, and the hang watch of
+ * specific\winmain.cpp waits for it. Cleared on every way out. */
+volatile long g_level_loading;
+
 long S_LoadLevelFile(long num)
 {
+	struct LoadingMark
+	{
+		LoadingMark() { g_level_loading = 1; }
+		~LoadingMark() { g_level_loading = 0; }
+	} loadingMark;
+
 	static long lscreen = 0;
 	static long flag = 0;
 	const char* hd_name;

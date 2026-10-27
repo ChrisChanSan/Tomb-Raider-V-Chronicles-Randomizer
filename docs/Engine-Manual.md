@@ -3528,7 +3528,7 @@ worth keeping, so those rooms are drawn the classic way, whose geometry is by
 definition the geometry the run really built.
 
 An opening costing its whole room would be far worse: ANDY3 with the
-glitchless secret list opens two doorways, and whole-room treatment turns four
+glitchless secret list opens three doorways, and whole-room treatment turns six
 of its 211 rooms classic — among them the whole village courtyard — with the
 seam between the HD and the classic half showing the void. The box costs two
 sectors' worth of art instead.

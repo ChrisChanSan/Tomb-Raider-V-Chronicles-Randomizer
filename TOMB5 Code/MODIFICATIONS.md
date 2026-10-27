@@ -15754,3 +15754,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #256 | The visibility path's room walk ends |
 | #257 | A frozen game names where its thread stands |
 | #258 | No pickup under a carrier; the roots let the heart go |
+| #259 | Old Mill's secret list opens a third passage |

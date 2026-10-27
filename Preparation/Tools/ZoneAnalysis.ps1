@@ -975,7 +975,14 @@ $KEEP_OCB = @{
     # and a matching angle -, and the model could not guarantee that. Since
     # ZoneAnalysis delivers wallAngles per sector and the placement picks
     # wall edge and angle, exactly that is satisfied.
-    'Andrea2' = @(172,174)
+    # ... and puzzle 4 (175, OCB 5, hidden under the guardian). The guardian
+    # sets that item's height to its own when it explodes, by item number,
+    # wherever the roll has put it (GuardianControl, game/guardian.cpp), and
+    # its heavy trigger then wakes it. With the OCB kept the puzzle waits
+    # hidden at its new place and lands on its floor from whatever height
+    # the guardian set; with OCB 0 it lay visible and sank when the
+    # guardian fell. See LevelFix.h, Andrea2.
+    'Andrea2' = @(172,174,175)
     # andy3 the same: chalk (OCB 2) and fence crowbar (OCB 9).
     'andy3'   = @(172,174)
 }
@@ -1173,10 +1180,12 @@ if ($COUPLED_TRIGGERS.ContainsKey($LevelName)) {
 # the beginning and may travel.
 #
 # Per entry: item index -> @{ flags = <value>; reason = <reasoning> }.
-# 31 is 11111 in binary, i.e. all five codebits.
+# 31 is 11111 in binary, i.e. all five codebits - written raw into the item's
+# flags word, where the engine's code bits are 0x3E00, so the value marks
+# nothing there: it is the entry's presence that lifts the OCB-5 pin.
 $PRESET_FLAGS = @{
     'Andrea2' = @{
-        62 = @{ flags = 31; reason = 'Puzzle Item4 - the HeavyTrigger hangs on the death of the Guardian (item 51); codebits preset so it may travel' }
+        62 = @{ flags = 0; reason = 'Puzzle Item4 - OCB 5 would pin it; the entry lifts the pin, the flags stay 0, and KEEP_OCB keeps the OCB: the item waits hidden at its new place for the Guardian (item 51), whose trigger wakes it there' }
     }
     'andy1' = @{
         8 = @{ flags = 31; reason = 'the heart - OCB 5 makes it invisible and unpickable (InitialisePickup, PickUpCollision:783); with the preset and a zeroed OCB it lies there visible, so its finished KeyItemRange can finally be used' }

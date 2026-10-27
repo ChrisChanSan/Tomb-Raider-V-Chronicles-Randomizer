@@ -15603,9 +15603,15 @@ new.
   a lost playthrough. The burning roots of Gallows Tree go invisible when the
   heart has left them, because the engine finds the heart by its kind and would
   lift it to the roots' height wherever it lies. `core/Randomizer.h`: the list
-  of carriers is the engine's own now - it lacked SWAT_PLUS, Mafia, Sailor, Crane
-  Guy, Scientist and the two slots past the file boundary.
-  `docs/Randomizer-Manual.md` says both.
+  of carriers is the engine's own now - it lacked SWAT_PLUS, Mafia, Sailor,
+  Crane Guy, Scientist and the two slots past the file boundary. Trajan's
+  Markets' puzzle 4 keeps its OCB 5 when it travels and the guardian's trigger
+  stays as Core wrote it: the guardian sets the puzzle's height by item number
+  when it explodes, and a puzzle moved with OCB 0 sank into its new floor;
+  hidden until the guardian falls, it now lands where the roll put it. The
+  earlier void of that trigger is gone (`core/LevelFix.h`,
+  `Preparation/Tools/ZoneAnalysis.ps1`). `docs/Randomizer-Manual.md` says all
+  three.
 
 ## 4. Building this yourself
 

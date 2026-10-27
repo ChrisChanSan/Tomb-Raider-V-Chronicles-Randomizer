@@ -164,50 +164,21 @@ namespace LevelFix
           "door 129 stays open - the sword-statue corridor must not be one-way" },
     };
 
-    // One object command REPLACED by another. Same shape as the removal,
-    // but for triggers where the object command is the only one.
-    struct TriggerObjectReplace
-    {
-        const char* level;                  // file name without extension
-        int room, sx, sz;
-        int item;                           // the object command to replace
-        int newType, newParam;              // what goes in its place
-        const char* reason;
-    };
-
     //------------------------------------------------------------------------
-    // Andrea2: nothing may activate puzzle 4 from a distance.
+    // Andrea2: puzzle 4 keeps its trigger.
     //
-    // The heavy trigger on room 69 (4,3), under the guardian, has exactly one
-    // command - and it points at item 62, which IS puzzle 4 (type 175, OCB 5).
-    // A trigger names an item NUMBER, not a place, so it reaches the puzzle
-    // wherever a rolled run has put it.
-    //
-    // When the puzzle has moved to a room behind the guardian and the
-    // trigger fires first, the item either sinks halfway into the floor and
-    // is barely pickable, or it goes invisible - and then the level is a
-    // softlock.
-    //
-    // Two ways out exist: move the trigger somewhere unreachable, or take
-    // the pointer out and leave the trigger otherwise intact. The second is
-    // the one that actually removes the hazard - after it, no trigger in
-    // the level names item 62 any more. Moving would only hide the pointer
-    // somewhere quieter and bring the bug back the day anything reaches
-    // that sector.
-    //
-    // Dropping the command outright is not possible: it is the trigger's
-    // only one. So it becomes a void flipeffect (type 9, effect_routines
-    // index 44 in game/effects.cpp) - the trigger stays a valid trigger and
-    // does nothing, the same idea as a music command without the sound.
-    //
-    // Puzzle 4 needs no trigger at all: its item flags are 0, so it lies
-    // there visible and can be picked up.
+    // The heavy trigger on room 69 (4,3), under the guardian, names item 62
+    // - puzzle 4 - as its only command, and the guardian's own code sets
+    // that item's height to its own when it explodes (GuardianControl,
+    // game/guardian.cpp): both by item number, wherever a rolled run has
+    // put the puzzle. An earlier entry here voided the command; the height
+    // was set all the same, and the puzzle, moved with OCB 0, sank into its
+    // new floor. Now the puzzle keeps its OCB 5 when it travels (KEEP_OCB in
+    // ZoneAnalysis.ps1): it lies hidden until the guardian falls, the
+    // trigger wakes it, and as a falling pickup it lands on the floor of
+    // its new place from whatever height the guardian set. The trigger
+    // stays as Core wrote it, and nothing here touches it.
     //------------------------------------------------------------------------
-    static const TriggerObjectReplace kTriggerObjectReplaces[] =
-    {
-        { "Andrea2", 69, 4, 3, 62, 9, 44,
-          "puzzle 4 must not be activated from afar - it sinks or vanishes" },
-    };
 
     // A trigger rewritten from scratch: kind, one-shot, mask, one command.
     struct TriggerRewrite

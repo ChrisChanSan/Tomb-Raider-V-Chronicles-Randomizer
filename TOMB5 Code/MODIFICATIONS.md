@@ -15352,6 +15352,26 @@ left, which kept `dxshell.cpp` from compiling at `ce96392b`), `6e29d3f6` (this l
 `9c501b5d` (the manual's stale line on the dialog's defaults removed, the resize log line
 once per wait, Alt+Space opens the system menu).
 
+### The cursor lets go while the window is moved or sized (#252)
+
+2026-10-27.
+
+**What.** While the player drags the window by its caption or sizes it by its frame, the
+cursor is free; the clip that holds it inside the client under *Modern* control returns
+when the drag ends.
+
+**Why.** The clip followed the client on every move. During a drag by the caption it
+pushed the cursor into the client, Windows moved the window after the cursor, and the
+window ran to the bottom edge of the screen; during a drag by the frame the edge followed
+the cursor inward until the window stood at its smallest size.
+
+**How.** `specific/winmain.cpp`: `WinMouseCapture` reads the time between
+`WM_ENTERSIZEMOVE` and `WM_EXITSIZEMOVE` as a term that turns the clip off, and both
+messages call it, so the cursor is released when the drag starts and seated again when it
+ends. `docs/Engine-Manual.md` says so.
+
+**Commits.** `328d7bc5`.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -15604,3 +15624,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #248 | section 3 (the randomizer) |
 | #249 | no entry: the commit hashes the record cites follow the rewritten history |
 | #251 | no entry: the version strings of Beta 4.1 |
+| #252 | The cursor lets go while the window is moved or sized |

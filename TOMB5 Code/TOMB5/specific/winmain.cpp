@@ -1065,6 +1065,20 @@ LRESULT CALLBACK WinMainWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 		closing = 1;
 		WinStorePlace();
 		WinMouseRelease();
+
+		/* A window closed from the taskbar is inactive, and an inactive
+		 * window has the game thread parked (WM_ACTIVATE). It is woken here
+		 * so that it sees the end and leaves; otherwise the wait at the end
+		 * of WinMain never ends, and the music plays on in a process that
+		 * only the task manager can close. */
+		if (game_parked)
+		{
+			ResumeThread((HANDLE)MainThread.handle);
+			App.dx.WaitAtBeginScene = 0;
+			game_parked = 0;
+			Log("Game Thread Resumed for the close");
+		}
+
 		PostQuitMessage(0);
 		break;
 
@@ -1346,7 +1360,26 @@ int __stdcall WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 	CrashSeamGameThread((DWORD)MainThread.address);
 	WinProcMsg();
 	MainThread.ended = 1;
-	while (MainThread.active) {};
+
+	/* The game thread leaves its loop within a frame or two. One that
+	 * does not - stuck in a driver call, or never woken - must not hold
+	 * the process: after five seconds the process ends without the
+	 * teardown, and Windows frees what is left. A spin here would burn a
+	 * core while it waits. */
+	{
+		const DWORD since = GetTickCount();
+
+		while (MainThread.active)
+		{
+			if (GetTickCount() - since > 5000)
+			{
+				Log("Game thread did not end in five seconds: the process ends");
+				ExitProcess(0);
+			}
+
+			Sleep(1);
+		}
+	}
 
 	WinClose();
 	desktop = GetDesktopWindow();

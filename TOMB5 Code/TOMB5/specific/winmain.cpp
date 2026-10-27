@@ -750,8 +750,9 @@ static void WinClientChanged(const char* why)
  * window's monitor holds; the window, restored first when maximized, keeps
  * its centre and stays inside that work area (WinPlaceAround). The entry
  * becomes the resolution the setup stores.
- *   DXLOG window keys <plus|minus> mode=<entry> <WxH> client=<WxH>, or
- *   mode=none client=<WxH> when the list has no entry that way */
+ *   DXLOG window keys <plus|minus> mode=<entry> <WxH> client=<WxH>;
+ *   mode=-1 <WxH> for the largest client the work area holds, past the
+ *   last entry that fits; mode=none client=<WxH> when there is no step */
 static void WinStepWindow(int dir, const char* key)
 {
 	DXD3DDEVICE* device =
@@ -781,20 +782,30 @@ static void WinStepWindow(int dir, const char* key)
 		modes[i].bpp = device->DisplayModes[i].bpp;
 	}
 
+	const long maxW = WPWidth(work) - WPWidth(frame);
+	const long maxH = WPHeight(work) - WPHeight(frame);
 	const long next = WinPlaceStep(modes, count, App.DXInfo.nDisplayMode,
-		WPWidth(now), WPHeight(now), WPWidth(work) - WPWidth(frame),
-		WPHeight(work) - WPHeight(frame), dir);
+		WPWidth(now), WPHeight(now), maxW, maxH, dir);
 
-	if (next < 0)
+	if (next >= 0)
+	{
+		WinPlaceFit(modes[next].w, modes[next].h, frame, work, &w, &h);
+		App.DXInfo.nDisplayMode = next;
+	}
+	else if (dir > 0 && (WPWidth(now) < maxW || WPHeight(now) < maxH))
+	{
+		// Past the last entry that fits lies the largest client the work
+		// area holds, as Maximize gives it; the list's entry stays.
+		w = maxW;
+		h = maxH;
+	}
+	else
 	{
 		Log("DXLOG window keys %s mode=none client=%ldx%ld", key,
 			WPWidth(now), WPHeight(now));
 		free(modes);
 		return;
 	}
-
-	WinPlaceFit(modes[next].w, modes[next].h, frame, work, &w, &h);
-	App.DXInfo.nDisplayMode = next;
 	InterlockedIncrement(&DXWindowBusy);
 
 	if (IsZoomed(App.hWnd))
@@ -804,7 +815,7 @@ static void WinStepWindow(int dir, const char* key)
 		&viewport, &screen);
 	InterlockedDecrement(&DXWindowBusy);
 	Log("DXLOG window keys %s mode=%ld %ldx%ld client=%ldx%ld", key, next,
-		modes[next].w, modes[next].h, w, h);
+		next >= 0 ? modes[next].w : w, next >= 0 ? modes[next].h : h, w, h);
 	free(modes);
 	WinClientChanged("keys");
 	WinStorePlace();

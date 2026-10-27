@@ -164,12 +164,14 @@ Three keys work while the game runs, with no menu:
 
 - **Alt+Enter** switches between fullscreen and the window.
 - **Alt+Plus** and **Alt+Minus** (the number pad's + and −) step the window's
-  size to the next larger or smaller *Resolution* of the dialog's list that fits
-  the screen, from the size the window has now, the window keeping its centre;
-  a maximized window is restored first. The size shows in the bottom left
-  corner for four seconds, and the step taken becomes the dialog's
-  *Resolution*. In fullscreen the two keys change nothing — fullscreen is always
-  the desktop's size — and only show that size.
+  size to the next larger or smaller *Resolution* of the dialog's list that
+  fits the screen, from the size the window has now, the window keeping its
+  centre; past the last entry that fits, Alt+Plus takes the largest size the
+  screen holds, as maximizing does, and the dialog's entry stays. A maximized
+  window is restored first. The size shows in the bottom left corner for four
+  seconds, and a step taken from the list becomes the dialog's *Resolution*. In
+  fullscreen the two keys change nothing — fullscreen is always the desktop's
+  size — and only show that size.
 
 They are ignored during FMVs and level loading — that looks like a dead key
 and is not.

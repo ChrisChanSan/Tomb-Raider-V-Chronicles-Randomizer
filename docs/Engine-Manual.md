@@ -154,8 +154,9 @@ centred on the adapter's monitor.
 
 Under *Modern* control the cursor is held inside the window while you play (see
 **The mouse**): Alt+Tab away, or use the Windows keys, to move or size the
-window then. A tap of Alt does not open the window's system menu, because Alt
-is one of the game's keys; Alt+Space does, and so does a right-click on the
+window then; once you hold the caption or the frame, the cursor is free until
+you let go. A tap of Alt does not open the window's system menu, because Alt is
+one of the game's keys; Alt+Space does, and so does a right-click on the
 caption.
 
 Three keys work while the game runs, with no menu:

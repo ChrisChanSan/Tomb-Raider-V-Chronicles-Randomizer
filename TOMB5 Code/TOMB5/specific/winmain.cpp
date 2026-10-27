@@ -377,6 +377,7 @@ static long mouse_closing;		// WM_CLOSE or WinClose: nothing captures any more
 static long mouse_hidden;		// how many ShowCursor(FALSE) calls the capture made
 static long mouse_abs_seeded;		// an absolute device has given a first position
 static long mouse_abs_x, mouse_abs_y;
+static long size_moving;		// between WM_ENTERSIZEMOVE and WM_EXITSIZEMOVE
 
 /* Seats or frees the cursor to match the rule, on this thread. Called on every
  * message that can change a term, and on the game thread's WM_APP_MOUSE.
@@ -385,13 +386,17 @@ static long mouse_abs_x, mouse_abs_y;
  * capture lowers it until it is below 0 and counts how many calls that took;
  * the release raises it by exactly that many, so it ends where it was found -
  * a full screen that had it at -1 stays hidden. The clip is set again on every
- * call while captured, because a move or a resize changes the client area. */
+ * call while captured, because a move or a resize changes the client area.
+ * While the player moves or sizes the window by its caption or frame the clip
+ * is off: one that followed the client would push the cursor into it, and
+ * Windows would move the window after the cursor. */
 static void WinMouseCapture()
 {
 	const LONG want = mouse_want;
 	const long modern = (want & MOUSE_WANT_MODERN) ? 1 : 0;
 	const long fmv = (want & MOUSE_WANT_FMV) ? 1 : 0;
-	const long on = (mouse_active && modern && !fmv && !mouse_closing && App.hWnd) ? 1 : 0;
+	const long on = (mouse_active && modern && !fmv && !mouse_closing &&
+		!size_moving && App.hWnd) ? 1 : 0;
 
 	if (on)
 	{
@@ -572,7 +577,6 @@ static void WinMouseRelease()
  * tries again four times a second. */
 #define WIN_RESIZE_TIMER	1
 
-static long size_moving;		// between WM_ENTERSIZEMOVE and WM_EXITSIZEMOVE
 static long game_parked;		// WM_ACTIVATE has the game thread suspended
 static long resize_waiting;		// a new size waits for WIN_RESIZE_TIMER
 
@@ -826,12 +830,14 @@ LRESULT CALLBACK WinMainWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 
 	case WM_ENTERSIZEMOVE:
 		size_moving = 1;
+		WinMouseCapture();	// lets the cursor go for the drag
 		break;
 
 	case WM_EXITSIZEMOVE:
 		size_moving = 0;
 		WinClientChanged("drag");
 		WinStorePlace();
+		WinMouseCapture();	// seats it again
 		break;
 
 	case WM_TIMER:

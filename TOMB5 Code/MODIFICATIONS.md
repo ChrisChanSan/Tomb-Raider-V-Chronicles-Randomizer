@@ -15372,6 +15372,28 @@ ends. `docs/Engine-Manual.md` says so.
 
 **Commits.** `328d7bc5`.
 
+### A click in the picture takes the mouse back (#253)
+
+2026-10-27.
+
+**What.** From the moment the player clicks the window's caption, frame or a button, the
+cursor stays free: a second adjustment and the close button work without leaving the
+window first. A click into the picture, or a return by the keyboard, seats the cursor
+again; so does Alt+Enter.
+
+**Why.** The clip returned the instant a drag ended or the window became active, so the
+close button and a second adjustment were out of reach until the window had been left and
+re-entered by the keyboard.
+
+**How.** `specific/winmain.cpp`: a term `mouse_free`, set at the end of a drag and when a
+click activates the window outside the client (`WM_NCHITTEST` on the cursor at
+`WA_CLICKACTIVE`), cleared by a client click, by `WA_ACTIVE` and by Alt+Enter; while it
+stands, `WinMouseCapture` keeps the clip off and `WinMouseInput` counts neither buttons
+nor moves, so the click that takes the mouse back is not a shot. The `MOUSELOG capture`
+line ends with `free=`. `docs/Engine-Manual.md` says so.
+
+**Commits.** `1d96c038`.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -15625,3 +15647,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #249 | no entry: the commit hashes the record cites follow the rewritten history |
 | #251 | no entry: the version strings of Beta 4.1 |
 | #252 | The cursor lets go while the window is moved or sized |
+| #253 | A click in the picture takes the mouse back |

@@ -708,6 +708,16 @@ namespace
 		 * the same uniform on the same pages 9097..9100, carries that face in
 		 * his own body, on DEMON_HEAD's own pages 9113 and 9114. */
 		{ "SWAT_MIP_ANDY3", "DEMON_HEAD", -1, false },
+		/* Lara in the whole diving suit, actor 1 of JOBY3's cutscene 5 and
+		 * of JOBY4's 40 (the hand table, hd_bind.cpp). The classic mesh of
+		 * node 14 is her face inside the helmet, and JOBY4's cutscene puts
+		 * her speech heads on that node (game\deltapak.cpp,
+		 * handle_actor_chatting(LARA_SPEECH_HEAD1, 14, ...)); FULL's own
+		 * node 14 is the empty helmet. Her face rides on it as on her own
+		 * body: the actor's tree is hers, node 14 at the same bind
+		 * (ModelProbe -slot -nodes), and LARA_HEAD_<track>.TRL exists for
+		 * both cutscenes' tracks, 110 and 103. */
+		{ "EXTRA5_SUBSUIT_FULL", "LARA_HEAD", 14, false },
 	};
 
 	bool same_name(const std::string& a, const char* b)

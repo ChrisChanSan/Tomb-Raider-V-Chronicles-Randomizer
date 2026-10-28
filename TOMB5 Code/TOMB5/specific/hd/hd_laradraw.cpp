@@ -579,6 +579,88 @@ namespace
 		return -1;
 	}
 
+	/* The swaps of her nodes, for the log (SWAPLOG).
+	 *
+	 * A cutscene can write a mesh of another slot into lara.mesh_ptrs:
+	 * joby6_control puts MESHSWAP3's mesh 0, the suit's hips, on her hips at
+	 * frame 542 of JOBY3's last cutscene (game\deltapak.cpp), and the hammer,
+	 * the clanger and the catapult go into her hands. The composite draws no
+	 * classic mesh: every node it shows is the outfit's whatever the pointer
+	 * says. One line per change of a node's owner to a slot that is not
+	 * Lara's own and back: her weapons, her scream and her speech heads are
+	 * the wardrobe's and turn over many times a second. Cleared with the
+	 * level, so a level's first frame names any foreign mesh it starts with. */
+	short* g_swap_mesh[HD_LARA_NODES];
+	bool g_swap_foreign[HD_LARA_NODES];
+	bool g_swap_seeded = false;
+
+	/* The slot and the mesh number of a mesh pointer: Lara's own slots
+	 * first, which share their meshes among themselves, then every other
+	 * loaded slot in slot order. False for a pointer no slot holds. */
+	bool owner_of_mesh(short* mesh, int* slot, int* index)
+	{
+		for (int pass = 0; pass < 2; pass++)
+			for (int s = 0; s < NUMBER_OBJECTS; s++)
+			{
+				const bool laras = HDSlotIsLara(s);
+
+				if (!objects[s].loaded || objects[s].nmeshes <= 0 ||
+					laras != (pass == 0))
+					continue;
+
+				for (int m = 0; m < objects[s].nmeshes; m++)
+					if (meshes[objects[s].mesh_index + 2 * m] == mesh)
+					{
+						*slot = s;
+						*index = m;
+						return true;
+					}
+			}
+
+		return false;
+	}
+
+	void swap_log(unsigned int shown)
+	{
+		if (!gLogEnabled || !meshes)
+			return;
+
+		const bool cut = GLOBAL_playing_cutseq != 0;
+
+		for (int node = 0; node < HD_LARA_NODES; node++)
+		{
+			short* have = lara.mesh_ptrs[node];
+
+			if (g_swap_seeded && have == g_swap_mesh[node])
+				continue;
+
+			int slot = -1, index = -1;
+			const bool known = have && owner_of_mesh(have, &slot, &index);
+			const bool foreign = known && !HDSlotIsLara(slot);
+			const bool was = g_swap_seeded && g_swap_foreign[node];
+
+			g_swap_mesh[node] = have;
+			g_swap_foreign[node] = foreign;
+
+			if (!foreign && !was)
+				continue;
+
+			const char* body = HDLaraPartModel(g_level.outfit,
+				HD_LARA_PART_BODY);
+
+			Log("SWAPLOG level=%s cut=%d frame=%d node=%d from=%s(%d) "
+				"mesh=%d foreign=%d hd=%s:%d shown=%d", g_lights_stem,
+				cut ? (int)cutseq_num : 0,
+				cut && GLOBAL_cutseq_frame > 0 ? (int)GLOBAL_cutseq_frame - 1
+					: -1, node,
+				known && HDSlotName(slot) ? HDSlotName(slot) : "?", slot,
+				index, (int)foreign, body ? body : "-", node,
+				(shown >> node) & 1 ? 1 : 0);
+		}
+
+		g_swap_seeded = true;
+	}
+
 	/* The braid's six matrices.
 	 *
 	 * TR5 draws the braid out of six meshes but only three of them stand on
@@ -1419,6 +1501,7 @@ void HDLaraDrawEnd()
 	g_binos_pending = false;
 	g_lights_stem[0] = 0;
 	g_lights_logged = false;
+	g_swap_seeded = false;
 	face_reset();
 
 	// A new level starts the chest's motion at rest, with fresh counters.
@@ -1946,6 +2029,10 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits)
 			if (lara_item->mesh_bits >> 0x10 & 1 << (15 - lara_lmx_of_node[node]))
 				mask |= 1u << node;
 	}
+
+	// A cutscene's swap of her nodes, behind -log - see swap_log.
+	if (!mirror)
+		swap_log(mask);
 
 	/* First person. The classic path leaves the head mesh out and does not
 	 * call DrawHair, because both sit exactly where the camera does and blow

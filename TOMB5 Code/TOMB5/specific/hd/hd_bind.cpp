@@ -319,7 +319,30 @@ namespace
 		{ "DOG_MIP",                 "EXTRA5_SUBSUIT_TOP_CHAIN_JOBY5", "JOBY3 JOBY5" },
 		{ "ANIMATING12_MIP",         "EXTRA5_SUBSUIT_BOTTOM_CHAIN",    "JOBY3 JOBY5" },
 		{ "ANIMATING10_MIP",         "EXTRA5_SUBSUIT_TOP_CHAIN_HALF",  "JOBY3" },
-		{ "ANIMATING10",             "EXTRA5_SUBSUIT_BOTTOM",          "JOBY3" }
+		{ "ANIMATING10",             "EXTRA5_SUBSUIT_BOTTOM",          "JOBY3" },
+
+		/* And the suit in the cutscenes that dress Lara in it. The actors
+		 * are slots of their own (cutseq.bin, CutseqProbe -actors):
+		 *
+		 *   GLADIATOR_MIP, 7 meshes: the legs, actor 3 of JOBY3's last
+		 *     cutscene (5) and of JOBY5's first (32). The tree and meshes
+		 *     of ANIMATING10, and BOTTOM fits it as it fits that one.
+		 *     From frame 542 of cutscene 5 its root is hers (CutseqProbe
+		 *     -frames 5): her legs hidden, these are the suit's on her.
+		 *   SWAT_PLUS_MIP in JOBY3 and CROW_MIP in JOBY4, 17 meshes: Lara
+		 *     in the whole suit, her own fifteen-node tree and two empty
+		 *     nodes - actor 1 of cutscene 5, who takes her place at frame
+		 *     855 behind a camera cut, and of JOBY4's cutscene 40, which
+		 *     hides her and puts her speech heads on its node 14
+		 *     (game\deltapak.cpp, joby7).
+		 *     FULL is the suit on her tree - every bone of it within 40
+		 *     units of its node's mesh, the drift 6 - and the suit she
+		 *     wears in JOBY4 as well: every vertex of OUTFIT_SUBSUIT but 31
+		 *     of the torso's lies within half a unit of one of FULL's. The
+		 *     face in its helmet is hers (hd_model.cpp, the face table). */
+		{ "GLADIATOR_MIP",           "EXTRA5_SUBSUIT_BOTTOM",          "JOBY3 JOBY5" },
+		{ "SWAT_PLUS_MIP",           "EXTRA5_SUBSUIT_FULL",            "JOBY3" },
+		{ "CROW_MIP",                "EXTRA5_SUBSUIT_FULL",            "JOBY4" }
 	};
 
 	/* The DUMMY slots whose look another slot's model carries (hd_bind.h,

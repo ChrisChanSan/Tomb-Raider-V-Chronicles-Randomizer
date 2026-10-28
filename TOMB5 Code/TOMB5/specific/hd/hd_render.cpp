@@ -29538,14 +29538,43 @@ static int GroupVertsIn(const HDGroup& group, const float* verts, int count,
 			p[1] > 32767.0f || p[2] < -32768.0f || p[2] > 32767.0f)
 			continue;
 
-		const unsigned int key = CellKey((int)floorf(p[0]), (int)floorf(p[1]),
-			(int)floorf(p[2]));
-		bool in = free && std::binary_search(group.cellsFree.begin(),
-			group.cellsFree.end(), key);
+		/* A vertex on a cell's boundary - a static's foot on the floor
+		 * line, its end on a sector line - belongs to the cells on both
+		 * sides of it: the cell its coordinate falls into and, where the
+		 * coordinate is a whole multiple of 256, the one before. JOBY3's
+		 * mess hall benches (room 49, slot 24) stand on the floor at 3840,
+		 * the ceiling line of the underfloor room 123 whose art models
+		 * them; their feet in the art stand at 3839, one unit up, in the
+		 * cell above, and the classic feet at exactly 3840 asked only the
+		 * cell below, inside room 123's own box and so free of nothing -
+		 * 10 of the 18 vertices lost, 8 of 18 found, and the benches drawn
+		 * twice (measured with TrgProbe -box 123 1280 2816 3300 3900 5500
+		 * 5760 and RoomProbe -statictable). */
+		int at[3][2], count[3];
 
-		for (size_t s = 0; !in && s < take.size() && s < group.standCells.size(); s++)
-			in = take[s] && std::binary_search(group.standCells[s].begin(),
-				group.standCells[s].end(), key);
+		for (int axis = 0; axis < 3; axis++)
+		{
+			at[axis][0] = (int)floorf(p[axis]);
+			at[axis][1] = at[axis][0] - 1;
+			count[axis] = p[axis] == (float)at[axis][0] &&
+				(at[axis][0] & 255) == 0 ? 2 : 1;
+		}
+
+		bool in = false;
+
+		for (int xi = 0; !in && xi < count[0]; xi++)
+			for (int yi = 0; !in && yi < count[1]; yi++)
+				for (int zi = 0; !in && zi < count[2]; zi++)
+				{
+					const unsigned int key = CellKey(at[0][xi], at[1][yi], at[2][zi]);
+
+					in = free && std::binary_search(group.cellsFree.begin(),
+						group.cellsFree.end(), key);
+
+					for (size_t s = 0; !in && s < take.size() && s < group.standCells.size(); s++)
+						in = take[s] && std::binary_search(group.standCells[s].begin(),
+							group.standCells[s].end(), key);
+				}
 
 		if (in)
 			found++;

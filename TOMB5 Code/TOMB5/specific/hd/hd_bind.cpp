@@ -322,6 +322,28 @@ namespace
 		{ "ANIMATING10",             "EXTRA5_SUBSUIT_BOTTOM",          "JOBY3" }
 	};
 
+	/* The DUMMY slots whose look another slot's model carries (hd_bind.h,
+	 * HDBindDummyHost). JOBY3's console: PUZZLE_HOLE3 and PUZZLE_HOLE4, items
+	 * 89 and 91 of room 40, stand at 52736, 4864, 79360, the very place of
+	 * the suit top ANIMATING10_MIP (item 87); their frame boxes lie on its
+	 * chest, the room art holds no triangle there (TrgProbe -boxes), and the
+	 * top's model carries the console on its torso. The done states take
+	 * the holes' places once the player's items are in. */
+	struct DummyHost
+	{
+		const char* slot;
+		const char* host;
+		const char* levels;	// as in the hand table
+	};
+
+	const DummyHost dummy_hosts[] =
+	{
+		{ "PUZZLE_HOLE3", "ANIMATING10_MIP", "JOBY3" },
+		{ "PUZZLE_HOLE4", "ANIMATING10_MIP", "JOBY3" },
+		{ "PUZZLE_DONE3", "ANIMATING10_MIP", "JOBY3" },
+		{ "PUZZLE_DONE4", "ANIMATING10_MIP", "JOBY3" }
+	};
+
 	/* Does a hand-table line hold for `level`? A line with no level list holds
 	 * everywhere; one with a list holds where a whole token of it equals the
 	 * stem, case aside. No level in hand - a tool asking with no map loaded,
@@ -897,6 +919,28 @@ const char* HDBindSlot(const char* installRoot, int slot, HDBindKind* kind,
 {
 	return bind_against(map_entries, installRoot ? installRoot : "",
 		map_level.c_str(), slot, kind, fromMap, via);
+}
+
+int HDBindDummyHost(int slot)
+{
+	const char* name = HDSlotName(slot);
+	const char* mapped = name ? value_in(map_entries, name) : 0;
+
+	if (!mapped || _stricmp(mapped, "DUMMY") != 0)
+		return -1;
+
+	for (const DummyHost& line : dummy_hosts)
+	{
+		if (_stricmp(line.slot, name) != 0 ||
+			!hand_applies(line.levels, map_level.c_str()))
+			continue;
+
+		for (int host = 0; host < HD_SLOT_COUNT; host++)
+			if (slot_names[host] && _stricmp(slot_names[host], line.host) == 0)
+				return host;
+	}
+
+	return -1;
 }
 
 const char* HDBindDonorSlot(const char* installRoot, const char* donorLevel,

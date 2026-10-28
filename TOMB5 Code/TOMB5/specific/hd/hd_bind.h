@@ -151,6 +151,21 @@ enum HDBindVia
 const char* HDBindSlot(const char* installRoot, int slot, HDBindKind* kind,
 	bool* fromMap, HDBindVia* via);
 
+/* The slot whose model carries a DUMMY slot's look, or -1.
+ *
+ * DUMMY in a level's .MAP mostly means the room art has the object, and the
+ * engine then draws nothing for it (hd_object.cpp, the DUMMY rule). JOBY3's
+ * suit console is the other kind: the two puzzle holes and their done
+ * states stand on the chest of the suit top in room 40, no room art lies
+ * in their box, and the console is part of the top's own model
+ * (EXTRA5_SUBSUIT_TOP_CHAIN_HALF, the hand table). Drawing them nowhere is
+ * right only while that model is drawn; while the top draws classic, its
+ * classic mesh has no console and the holes must draw theirs.
+ *
+ * Answered for the loaded level's map from a table of level-bound lines,
+ * the host by slot name; -1 for every slot no line names there. */
+int HDBindDummyHost(int slot);
+
 // --- a slot whose model came out of another level ---------------------
 //
 // The randomizer copies models between level files: a cross enemy into a

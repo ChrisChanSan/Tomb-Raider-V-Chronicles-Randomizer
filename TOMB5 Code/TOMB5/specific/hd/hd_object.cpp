@@ -100,6 +100,10 @@ namespace
 	{
 		unsigned char hd;	// 1 = this slot's items draw HD
 		unsigned char baked;	// 1 = the art already has it, draw nothing
+		/* For a baked slot whose look another slot's model carries rather
+		 * than the room art (hd_bind.h, HDBindDummyHost): that slot, -1 for
+		 * every other. It draws nothing only while the host draws HD. */
+		int host;
 		unsigned char head;	// 1 = the slot has its own <NAME>_HEAD.TRM
 		const char* why;	// why not, for the log
 		/* Which rule named the model: the very string the HDLOG bind line
@@ -1894,6 +1898,7 @@ static void ObjectLevelBuild(const char* installRoot, const char* stem,
 				continue;
 
 			g_slot[slot].baked = 1;
+			g_slot[slot].host = HDBindDummyHost(slot);
 			g_baked_slots++;
 		}
 
@@ -2527,6 +2532,18 @@ static void ObjectLevelBuild(const char* installRoot, const char* stem,
 			glassCount.opacity, glassCount.factor);
 	}
 
+	/* The DUMMY slots whose look a host's model carries, one line each: the
+	 * host and whether it draws HD, which is when they draw nothing. */
+	for (int slot = 0; slot < NUMBER_OBJECTS; slot++)
+		if (g_slot[slot].baked && g_slot[slot].host >= 0)
+			Log("HDLOG level=%s dummy slot=%d name=%s host=%d name=%s "
+				"host_hd=%d - its look is the host's model; drawn classic "
+				"while the host is not drawn HD", g_stem, slot,
+				HDSlotName(slot) ? HDSlotName(slot) : "?",
+				g_slot[slot].host, HDSlotName(g_slot[slot].host)
+					? HDSlotName(g_slot[slot].host) : "?",
+				(int)g_slot[g_slot[slot].host].hd);
+
 	Log("HDLOG level=%s objects hd=%d classic=%d baked=%d (of %d loaded "
 		"slots), drift limit %.0f units",
 		g_stem, g_hd_slots, g_classic_slots, g_baked_slots, (int)slots.size(),
@@ -3060,6 +3077,10 @@ void HDObjectLevelEnd()
 	HDDonorMapsFree();	// text, no device - the donor levels' .MAP files
 	HDMapFree();		// and the level's own, which the build reads back
 	memset(g_slot, 0, sizeof(g_slot));
+
+	for (int slot = 0; slot < NUMBER_OBJECTS; slot++)
+		g_slot[slot].host = -1;
+
 	g_active = false;
 	g_baked_any = false;
 	g_baked_slots = 0;
@@ -3205,6 +3226,19 @@ enum
 	BEGIN_HD		// drawn as an HD model
 };
 
+/* Whether a baked slot's look is drawn by somebody: by the room art (no
+ * host), or by its host's model while the host's items draw HD - the same
+ * three conditions HDObjectBegin's guard asks, and the host's verdict. A
+ * host drawn classic has no such look, and its DUMMY items draw their own. */
+static bool baked_look_drawn(int host)
+{
+	if (host < 0)
+		return true;
+
+	return g_active && tomb5.hd_objects && HDDrawn() &&
+		host < NUMBER_OBJECTS && g_slot[host].hd;
+}
+
 static int begin_decision(const ITEM_INFO* item, const OBJECT_INFO* obj)
 {
 	if (!item || !obj)
@@ -3229,7 +3263,8 @@ static int begin_decision(const ITEM_INFO* item, const OBJECT_INFO* obj)
 		const int baked_slot = (int)item->object_number;
 
 		if (baked_slot >= 0 && baked_slot < NUMBER_OBJECTS &&
-			g_slot[baked_slot].baked && HDRoomIsHD(item->room_number))
+			g_slot[baked_slot].baked && HDRoomIsHD(item->room_number) &&
+			baked_look_drawn(g_slot[baked_slot].host))
 			return BEGIN_BAKED;
 	}
 

@@ -15478,6 +15478,49 @@ to send.
 
 **Commits.** `7b23e79e`.
 
+### The submarine's grilles, benches and diving suits (#260)
+
+2026-10-28.
+
+**What.** Three things in the Submarine (JOBY3), seen in play: the mess hall's benches
+drawn twice, HD and classic over each other; black openings wherever the remaster shows
+pipes and cables - the ceiling coves, the space under the grating floors, the walls
+behind the truss panels; and SD diving suits in the HD glass cases of the crew cabins,
+in JOBY5 as well. Now the benches are drawn once, the openings show the cavity's pipes,
+and the suits are the remaster's own models. A sweep over every placed item of the
+fifteen levels, made with the same tool, found the other slots the HD path draws
+classic: the keyholes KEY_HOLE6 and KEY_HOLE7 of JOBY2, JOBY3 and JOBY5, the rolling
+balls of ANDREA3 and RICH1, six ANIMATING8 of RICH2 and two flat panels of JOBY3's room
+4; none of them is bound here.
+
+**Why.** (a) The art that models the benches is the underfloor room's, group 123, whose
+box ends at the mess hall's floor line; the classic bench stands on that line, and the
+test of another group's art at a static's own vertices looked each vertex up in the one
+cell its coordinate falls into - the cell below the line, inside that group's own box -
+so 10 of 18 vertices found nothing and the bench stayed classic. (b) Material 17 of the
+room art is a grille whose param[0] names a second page of the file's texture list, a
+picture of the cavity, and param[1] its depth; the grille's openings are the page's
+black texels, and only the grille was drawn. (c) The suits' slots - DOG_MIP and
+ANIMATING12_MIP, and ANIMATING10 and ANIMATING10_MIP in room 40 - bind to no model: the
+map names a file that does not exist, or says nothing, and the models' names
+(EXTRA5_SUBSUIT_FULL, _TOP_CHAIN, _TOP_CHAIN_JOBY5, _BOTTOM_CHAIN) follow no rule.
+
+**How.** `specific/hd/hd_render.cpp`: a vertex on a cell boundary asks the cells on both
+sides of it (GroupVertsIn); measured over all fifteen levels with `RoomProbe
+-statictable`, no answer moved towards classic. `MaterialInside` reads material 17's
+layer and depth into every range (sort key and build hash); draw_pass binds the
+interior's page on stage 4, writes c38 and takes the room shader's HD_INSIDE variant
+(`hd_shader/hd_room.hlsl`: the second page through the grille's dark texels, pushed
+back along the eye's ray out of a tangent frame from the screen derivatives;
+`bshader.bat` compiles it, `be.bat` stamps it); the level line "motion=" ends with
+inside_parts and inside_dropped. `specific/hd/hd_bind.cpp`: five hand-table lines bound
+to JOBY3 and JOBY5, and a map line whose file is in no ITEM folder gives way to a
+hand-table line bound to that level. `Preparation/Tools/Diagnose/TrgProbe.cpp`: `-box`,
+`-boxes` and `-layers`, the modes the three findings were measured with.
+`docs/Engine-Manual.md` says what the grilles show.
+
+**Commits.** `95ee7611`, `eb5b50c1`, `8eabbf14`, `e21c7d6a`.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -15755,3 +15798,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #257 | A frozen game names where its thread stands |
 | #258 | No pickup under a carrier; the roots let the heart go |
 | #259 | Old Mill's secret list opens a third passage |
+| #260 | The submarine's grilles, benches and diving suits |

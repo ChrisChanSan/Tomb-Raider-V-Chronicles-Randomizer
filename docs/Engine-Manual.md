@@ -3074,6 +3074,17 @@ pattern** is finer: the table is sampled once per vertex, and an HD room has
 far more vertices than a classic one. Same table, same speed, same strength — a
 denser grid.
 
+**The grilles of the submarine.** The ceiling vents of the Submarine's mess
+hall, the gratings under its corridors and the truss panels along its walls
+are drawn in the Remaster's art as a grille with a second picture behind it —
+the pipes of a duct, the cables of a bay — and the art names that picture
+beside the grille (its material 17, in the Submarine, Deepsea Dive and
+Sinking Submarine only). The HD path draws the second picture through the
+grille's openings, set back a little along your line of sight so that it
+moves against the bars as you do. Before, those openings were black. What
+shows is the Remaster's own picture of the cavity, read from its art; how far
+back it sits is this engine's reading of the two numbers the art carries.
+
 ### HD objects — what draws, what does not, and why
 
 An object is not a room. A room is one lump of geometry with one matrix; an

@@ -43,10 +43,15 @@
  *     fxc /nologo /T ps_3_0 /E RoomPS /O3 /Vn kHDRoomPS /Fh hd_room_ps.inc hd_room.hlsl
  *     fxc /nologo /T ps_3_0 /E RoomPS /O3 /D HD_GLOSS=1 /Vn kHDRoomGlossPS
  *         /Fh hd_room_gloss_ps.inc hd_room.hlsl
+ *     fxc /nologo /T ps_3_0 /E RoomPS /O3 /D HD_INSIDE=1 /Vn kHDRoomInsidePS
+ *         /Fh hd_room_inside_ps.inc hd_room.hlsl
  *
  * The third is the gloss variant (see "The sheen" below); every line that
  * differs between the two pixel shaders sits under #ifdef HD_GLOSS, so the
- * plain variant's bytecode is the same with or without it.
+ * plain variant's bytecode is the same with or without it. The fourth is
+ * the interior variant (see "the interior" in RoomPS): the plain one with
+ * material 17's second page read through its grille, and without the
+ * ripple, whose slots it spends on that.
  *
  * fxc.exe comes from the Windows SDK (Windows Kits\10\bin\<version>\x86).
  * /Fh writes a plain byte array that CreateVertexShader / CreatePixelShader
@@ -649,6 +654,12 @@ float4 gRipple : register(c36);
  * (0, 0, 0, 0) for every other draw call. */
 float4 gTint : register(c37);
 
+/* Material 17's interior (hd_render.cpp, MaterialInside): x 1 on a draw
+ * call that has one and 0 on every other, y the depth of the interior
+ * behind the grille, in tiles of the grille's page. Read by the HD_INSIDE
+ * variant alone; the others never name it. */
+float4 gInside : register(c38);
+
 /* Two registers per bulb: (x, y, z, radius) in VIEW space, then
  * (r, g, b, density). */
 float4 gBulbs[HD_MAX_BULBS * 2] : register(c40);
@@ -890,6 +901,13 @@ sampler3D sFieldRgb : register(s2);
 #endif
 
 sampler2D sPage : register(s0);
+
+#ifdef HD_INSIDE
+/* The interior behind a grille: material 17's second page (hd_render.cpp,
+ * MaterialInside), on a stage of its own so that the grille's page stays
+ * on stage 0 as on every other draw call. */
+sampler2D sInside : register(s4);
+#endif
 
 /* ---------------------------------------------------------------- shared -- */
 
@@ -1705,7 +1723,7 @@ float4 RoomPS(VS_OUT input) : COLOR0
 {
 	float2 uv = input.uv;
 
-#ifndef HD_GLOSS
+#if !defined(HD_GLOSS) && !defined(HD_INSIDE)
 	/* The ripple of a still water surface - see the note over
 	 * HD_RIPPLE_OCTAVE. gRipple.y is 0 for every draw call that is not one of
 	 * material 16's 28 parts, so this is one compare there and nothing else.
@@ -1729,9 +1747,59 @@ float4 RoomPS(VS_OUT input) : COLOR0
 	}
 #endif
 	/* The gloss variant draws no water surface: hd_render.cpp never hands it
-	 * a draw call that ripples, and the ripple's slots go to the sheen. */
+	 * a draw call that ripples, and the ripple's slots go to the sheen. Nor
+	 * does the interior variant, whose slots go to the second page. */
 
 	float4 texel = tex2D(sPage, uv);
+
+#ifdef HD_INSIDE
+	/* The interior. A material 17 part is a grille with a second page behind
+	 * it (hd_render.cpp, MaterialInside): the part's own page is the grille,
+	 * slats of steel over black, and the page gInside names is what lies in
+	 * the cavity behind - pipes along a duct, cables in a bay. The second
+	 * page shows through the grille's dark texels, pushed back by gInside.y
+	 * tiles along the eye's ray, which is the parallax of a shallow cavity:
+	 * the pipes under a grating and the cables behind a vent move against
+	 * the bars as the camera does. The tangent frame comes out of the
+	 * screen derivatives, since the vertex carries no tangent; where they
+	 * are degenerate the interior sits flat behind the bars. The texel's
+	 * luma says how open the grille is: a texel under 3 % of white is open,
+	 * one over 9 % is a bar, and the sliver between is a mix - the grille
+	 * pages are 41 to 72 % texels under 24 of 765 (pages 3219, 3220, 3222
+	 * and 4823 of JOBY3), and their bars are light steel. */
+	if (gInside.x > 0.0f)
+	{
+		float3 dp1 = ddx(input.viewPos);
+		float3 dp2 = ddy(input.viewPos);
+		float2 du1 = ddx(uv);
+		float2 du2 = ddy(uv);
+		float det = du1.x * du2.y - du2.x * du1.y;
+		float2 uvIn = uv;
+
+		if (abs(det) > 1e-12f)
+		{
+			float3 T = (dp1 * du2.y - dp2 * du1.y) / det;	// dP / du
+			float3 B = (dp2 * du1.x - dp1 * du2.x) / det;	// dP / dv
+			float3 dir = normalize(input.viewPos);		// the eye's ray
+			float3 N = normalize(cross(T, B));
+
+			if (dot(dir, N) > 0.0f)
+				N = -N;
+
+			float depth = gInside.y * length(T);
+			float t = depth / max(-dot(dir, N), 0.2f);
+			float3 delta = dir * t + N * depth;
+
+			uvIn += float2(dot(delta, T) / dot(T, T), dot(delta, B) / dot(B, B));
+		}
+
+		float4 inside = tex2D(sInside, uvIn);
+		float open = saturate((dot(texel.rgb, float3(1.0f, 1.0f, 1.0f)) *
+			(1.0f / 3.0f) - 0.03f) * (1.0f / 0.06f));
+
+		texel.rgb = lerp(inside.rgb, texel.rgb, open);
+	}
+#endif
 
 	/* The alpha test. gPass.x is the reference, and it is zero wherever
 	 * there is no test to run - an alpha is never below zero, so this line

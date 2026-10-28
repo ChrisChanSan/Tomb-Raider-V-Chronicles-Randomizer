@@ -48,6 +48,13 @@ rem "The sheen"). Stamped with the same .hlsl's MD5 as the plain one.
 "%FXC%" /nologo /T ps_3_0 /E RoomPS /O3 /D HD_GLOSS=1 /Vn kHDRoomGlossPS /Fh "%SHADERDIR%\hd_room_gloss_ps.inc" "%SHADERDIR%\hd_room.hlsl"
 if errorlevel 1 exit /b 1
 
+rem The room shader's interior variant: the same file with HD_INSIDE defined,
+rem a pixel shader of its own for material 17's grilles, the cavity's page
+rem read through the bars (hd_room.hlsl, "The interior"). Stamped with the
+rem same .hlsl's MD5 as the plain one.
+"%FXC%" /nologo /T ps_3_0 /E RoomPS /O3 /D HD_INSIDE=1 /Vn kHDRoomInsidePS /Fh "%SHADERDIR%\hd_room_inside_ps.inc" "%SHADERDIR%\hd_room.hlsl"
+if errorlevel 1 exit /b 1
+
 rem The water sheet: the same file's WaterVS and WaterPS, a vertex and a
 rem pixel shader of their own for the water surface (hd_room.hlsl, "the
 rem sheet"). Stamped with the same .hlsl's MD5 as the room shaders.
@@ -250,6 +257,8 @@ if errorlevel 1 exit /b 1
 call :stamp hd_room hd_room_ps.inc
 if errorlevel 1 exit /b 1
 call :stamp hd_room hd_room_gloss_ps.inc
+if errorlevel 1 exit /b 1
+call :stamp hd_room hd_room_inside_ps.inc
 if errorlevel 1 exit /b 1
 call :stamp hd_room hd_room_water_vs.inc
 if errorlevel 1 exit /b 1

@@ -986,6 +986,11 @@ struct HDRenderStats
 	int flipbookDrawn;
 	int flipbookDropped;
 	int flipbookRanges;
+	/* The material 17 grilles (hd_render.cpp, MaterialInside): the parts
+	 * whose interior page resolved, and the ones that keep their own page
+	 * alone because the layer or its page did not. */
+	int insideParts;
+	int insideDropped;
 	/* The material 15 books (hd_render.cpp, MaterialBookTime), counted per
 	 * part and pass that holds triangles: the ones whose every page resolved
 	 * and that turn, how many of those are in the additive pass, the ones

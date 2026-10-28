@@ -1605,5 +1605,5 @@ const BYTE kHDWaterLookPS[] =
       8, 128,   1,   0,   0, 160, 
     255, 255,   0,   0
 };
-// bshader-include hd_room 16b7b5328599f18d48062e726acc9d23
+// bshader-include hd_room eca946f6a240aa589cf226d977871332
 // bshader-stamp 4f485699c8f8a8ddf704333435617c6b

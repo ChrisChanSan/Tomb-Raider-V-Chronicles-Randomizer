@@ -54,6 +54,7 @@ set "STALE="
 call :onestamp hd_room hd_room_vs.inc
 call :onestamp hd_room hd_room_ps.inc
 call :onestamp hd_room hd_room_gloss_ps.inc
+call :onestamp hd_room hd_room_inside_ps.inc
 call :onestamp hd_room hd_room_water_vs.inc
 call :onestamp hd_room hd_room_water_ps.inc
 call :onestamp hd_room hd_room_water_depth_ps.inc
@@ -113,6 +114,7 @@ set "STALE="
 call :onestamp hd_room hd_room_vs.inc
 call :onestamp hd_room hd_room_ps.inc
 call :onestamp hd_room hd_room_gloss_ps.inc
+call :onestamp hd_room hd_room_inside_ps.inc
 call :onestamp hd_room hd_room_water_vs.inc
 call :onestamp hd_room hd_room_water_ps.inc
 call :onestamp hd_room hd_room_water_depth_ps.inc

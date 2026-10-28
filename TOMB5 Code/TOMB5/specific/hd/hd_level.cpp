@@ -7775,7 +7775,8 @@ static void HDLevelBuildHD()
 		"add_swinging=%d gloss_parts=%d reflect=%d book_parts=%d "
 		"book_pages=%d book_dropped=%d book_additive=%d book_step_min=%.3f "
 		"book_step_max=%.3f book_ranges=%d clear_pages=%d clear_parts=%d "
-		"mirrors=%d gloss_pages=%d gloss_draws=%d",
+		"mirrors=%d gloss_pages=%d gloss_draws=%d inside_parts=%d "
+		"inside_dropped=%d",
 		g_stem, tomb5.hd_motion ? 1 : 0, stats.scrollParts, stats.scrollRanges,
 		stats.scrollTris, stats.swayVertices, stats.swayParts,
 		stats.swayDropped, stats.flipbookParts, stats.flipbookDrawn,
@@ -7785,7 +7786,7 @@ static void HDLevelBuildHD()
 		stats.bookPages, stats.bookDropped, stats.bookAdditive,
 		stats.bookStepMin, stats.bookStepMax, stats.bookRanges,
 		stats.clearPages, stats.clearParts, HDRenderMirrorCount(),
-		gloss.pages, gloss.draws);
+		gloss.pages, gloss.draws, stats.insideParts, stats.insideDropped);
 
 	/* GLOSSLOG, with -log: which surfaces shine and why. One level line -
 	 * the table's lines, the override file's pages (none when there is no

@@ -35,6 +35,7 @@
 #include "hd_shader/hd_room_vs.inc"
 #include "hd_shader/hd_room_ps.inc"
 #include "hd_shader/hd_room_gloss_ps.inc"
+#include "hd_shader/hd_room_inside_ps.inc"
 #include "hd_shader/hd_room_water_vs.inc"
 #include "hd_shader/hd_room_water_ps.inc"
 #include "hd_shader/hd_room_water_depth_ps.inc"
@@ -192,6 +193,7 @@ namespace
 #define HD_TRG_MATERIAL_BOOK		15
 #define HD_TRG_MATERIAL_WATER		16
 #define HD_TRG_MATERIAL_FLIPBOOK	13
+#define HD_TRG_MATERIAL_INSIDE		17
 
 	/* The alpha reference of one part.
 	 *
@@ -1205,6 +1207,60 @@ namespace
 		return true;
 	}
 
+	/* The interior of one part.
+	 *
+	 * Material 17 is a grille with a second page behind it. Measured over
+	 * the fifteen levels (TrgProbe -mat 17, -matparts 17, -layers): 7,738
+	 * triangles in JOBY3, 441 in JOBY4 and 9,274 in JOBY5, in no other
+	 * level, all in the opaque pass. param[0] is a whole number from 22 to
+	 * 72 that names a layer of the file's own texture list every time -
+	 * JOBY3's 22 is page 3218, its 25 page 3221, its 36 page 3223 - and the
+	 * page it names is a picture of a cavity: the pipes along a duct, a dark
+	 * bay with pipes along its floor. param[1] is 0.05 or 0.1, param[2] and
+	 * param[3] are 0 in every tuple. The part's own page is the grille -
+	 * page 3219, slats of light steel over pure black, 72 % of its texels
+	 * under 24 of 765; page 3222, a truss, 41 % - and the black is where the
+	 * cavity shows. Drawn with its own page alone the grille's openings came
+	 * out black, which is what JOBY3's mess hall coves, its grating floors
+	 * and its truss walls showed in play (pictures of 2026-10-28), where the
+	 * remaster shows the cavity's pipes.
+	 *
+	 * So param[0] is read as the interior's layer and param[1] as its depth
+	 * in tiles of the grille's page, and the room shader's HD_INSIDE variant
+	 * draws the second page through the grille's dark texels, pushed back
+	 * along the eye's ray by that depth (hd_room.hlsl, "The interior"). How
+	 * the remaster's own shader combines the two pages is not known here and
+	 * was not looked at; the depth's unit is this engine's reading of the
+	 * two values the file carries, to be judged by the picture. A part whose
+	 * number does not resolve - a layer outside the list, a non-integer, a
+	 * page the cache has no slot for - keeps its own page alone and is
+	 * counted in the level line (inside_dropped). */
+	inline bool MaterialInside(const trf::remaster::Trg& trg,
+		const trf::remaster::TrgPart& part, int* slot, float* depth)
+	{
+		if (part.material != HD_TRG_MATERIAL_INSIDE)
+			return false;
+
+		const float value = part.param[0];
+
+		if (value < 1.0f || value > (float)trg.textures.size())
+			return false;
+
+		const int layer = (int)value;
+
+		if ((float)layer != value)
+			return false;
+
+		const int found = HDPageCacheSlotOf((int)trg.textures[layer - 1]);
+
+		if (found < 0)
+			return false;
+
+		*slot = found;
+		*depth = part.param[1] > 0.0f && part.param[1] <= 0.5f ? part.param[1] : 0.0f;
+		return true;
+	}
+
 	/* The book of one part.
 	 *
 	 * Material 15 is a flipbook of N consecutive pages. Its own page - the
@@ -1474,6 +1530,12 @@ namespace
 		 * a draw call is one SetTexture. */
 		float flipTime = 0.0f;
 		int flipSlot[3] = { -1, -1, -1 };
+		/* The interior of this draw call - the page slot of the cavity behind
+		 * a material 17 grille and its depth in tiles, or -1 and 0 for every
+		 * other draw call (MaterialInside). In the sort key: the interior is
+		 * one SetTexture on a stage of its own and one constant. */
+		int insideSlot = -1;
+		float insideDepth = 0.0f;
 		/* The book of this draw call. `bookTime` is how long one page
 		 * stands, in seconds, and 0 means "no book"; `bookFirst` is page 1's
 		 * index in g_book_slots, `bookCount` the pages the book holds and
@@ -1933,6 +1995,11 @@ namespace
 	 * hd_reflect is on. Null when the device refused it - every draw call
 	 * then keeps the plain variant, as with hd_reflect off. */
 	IDirect3DPixelShader9* g_gloss_ps = 0;
+	/* The interior variant (hd_room.hlsl, HD_INSIDE): the plain shader with
+	 * material 17's second page, taken by the draw calls that have one
+	 * (MaterialInside) and by nothing else. Null where the device refused
+	 * it; those draw calls then take the plain variant, grille alone. */
+	IDirect3DPixelShader9* g_inside_ps = 0;
 	// The water sheet's own pair (hd_room.hlsl, "the sheet"). Null when the
 	// device refused either: then no sheet is built.
 	IDirect3DVertexShader9* g_water_vs = 0;
@@ -2112,6 +2179,8 @@ namespace
 	int g_flip_parts = 0;
 	int g_flip_dropped = 0;
 	int g_flip_ranges = 0;
+	int g_inside_parts = 0;		// see MaterialInside
+	int g_inside_dropped = 0;
 	int g_flip_calls = 0;
 	/* Once per level: what the build decided for every material 15 part and
 	 * pass (HDRenderBookPartInfo), and the draw calls the turning ones cost.
@@ -6302,6 +6371,11 @@ bool HDRenderInit(IDirect3DDevice9* device, const char** why)
 	if (FAILED(device->CreatePixelShader((const DWORD*)kHDRoomGlossPS, &g_gloss_ps)))
 		g_gloss_ps = 0;
 
+	// Nor is the interior variant: refused, a grille is drawn as its own
+	// page alone, openings black, which is the picture before it existed.
+	if (FAILED(device->CreatePixelShader((const DWORD*)kHDRoomInsidePS, &g_inside_ps)))
+		g_inside_ps = 0;
+
 	// Nor is the water sheet's pair: without it no sheet is built and the
 	// classic water faces are restored (hd_level.cpp, BuildWaterSurfaces).
 	if (FAILED(device->CreateVertexShader((const DWORD*)kHDRoomWaterVS,
@@ -6513,6 +6587,7 @@ void HDRenderShutdown()
 
 	if (g_glow_ps) { g_glow_ps->Release(); g_glow_ps = 0; }
 	if (g_gloss_ps) { g_gloss_ps->Release(); g_gloss_ps = 0; }
+	if (g_inside_ps) { g_inside_ps->Release(); g_inside_ps = 0; }
 	if (g_water_vs) { g_water_vs->Release(); g_water_vs = 0; }
 	if (g_water_ps) { g_water_ps->Release(); g_water_ps = 0; }
 	if (g_water_depth_ps) { g_water_depth_ps->Release(); g_water_depth_ps = 0; }
@@ -7270,6 +7345,8 @@ static void HashRange(HDFnv64& f, const HDRange& r,
 	f.put(r.flatLight);
 	f.put(r.flipTime);
 	f.put(r.flipSlot);
+	f.put(r.insideSlot);
+	f.put(r.insideDepth);
 	f.put(r.bookTime);
 	f.put(r.bookFirst);
 	f.put(r.bookCount);
@@ -8305,6 +8382,8 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 		float flatLight;		// see PartIsUnlit
 		float flipTime;			// see MaterialFlipTime
 		int flipSlot[3];		// see MaterialFlipSlots
+		int insideSlot;			// see MaterialInside
+		float insideDepth;		// see MaterialInside
 		float bookTime;			// see MaterialBookTime
 		int bookFirst, bookCount, bookPhase;	// see MaterialBookSlots
 		int bookPart;			// the .TRG part, for the log
@@ -8359,6 +8438,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 		float addweightMin = 1.0f;
 		int flatParts = 0, glossParts = 0, blendParts = 0, flipParts = 0;
 		int flipDropped = 0, scrollParts = 0, clearParts = 0;
+		int insideParts = 0, insideDropped = 0;	// see MaterialInside
 		int flipRanges = 0, bookRanges = 0, blendRanges = 0, clearRanges = 0;
 		int flatPlanes = 0, standFromIntrusions = 0;
 		int splitRanges = 0, biggest = 0, fallbackTris = 0;
@@ -9040,6 +9120,23 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 						o.flipParts++;
 					else
 						o.flipDropped++;
+				}
+
+				/* The interior of a material 17 part - the cavity's page and
+				 * its depth, or -1 and 0 for every other part in the game
+				 * (MaterialInside above). Counted per part that holds
+				 * triangles in the opaque pass, the one pass the material
+				 * ever uses. */
+				int islot = -1;
+				float idepth = 0.0f;
+
+				if (part.material == HD_TRG_MATERIAL_INSIDE && pass == 0 &&
+					run.count)
+				{
+					if (MaterialInside(trg, part, &islot, &idepth))
+						o.insideParts++;
+					else
+						o.insideDropped++;
 				}
 
 				/* The book. How long a page stands, where the part starts
@@ -9759,6 +9856,8 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					tri.flipSlot[0] = fslot[0];
 					tri.flipSlot[1] = fslot[1];
 					tri.flipSlot[2] = fslot[2];
+					tri.insideSlot = islot;
+					tri.insideDepth = idepth;
 					{
 						const bool turns = btime != 0.0f && slot == bslot0;
 
@@ -9860,6 +9959,9 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					if (a.flipSlot[0] != b.flipSlot[0]) return a.flipSlot[0] < b.flipSlot[0];
 					if (a.flipSlot[1] != b.flipSlot[1]) return a.flipSlot[1] < b.flipSlot[1];
 					if (a.flipSlot[2] != b.flipSlot[2]) return a.flipSlot[2] < b.flipSlot[2];
+					// The interior is one SetTexture and one constant too.
+					if (a.insideSlot != b.insideSlot) return a.insideSlot < b.insideSlot;
+					if (a.insideDepth != b.insideDepth) return a.insideDepth < b.insideDepth;
 					/* And a book is one SetTexture per frame as well: one
 					 * draw call shows one page, so the book, its step and
 					 * its phase all belong in the key. Zero and -1 on every
@@ -9994,6 +10096,8 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 			range.flipSlot[0] = tris[0].flipSlot[0];
 			range.flipSlot[1] = tris[0].flipSlot[1];
 			range.flipSlot[2] = tris[0].flipSlot[2];
+			range.insideSlot = tris[0].insideSlot;
+			range.insideDepth = tris[0].insideDepth;
 			range.bookTime = tris[0].bookTime;
 			range.bookFirst = tris[0].bookFirst;
 			range.bookCount = tris[0].bookCount;
@@ -10032,6 +10136,8 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					tris[i].flipSlot[0] == range.flipSlot[0] &&
 					tris[i].flipSlot[1] == range.flipSlot[1] &&
 					tris[i].flipSlot[2] == range.flipSlot[2] &&
+					tris[i].insideSlot == range.insideSlot &&
+					tris[i].insideDepth == range.insideDepth &&
 					tris[i].bookTime == range.bookTime &&
 					tris[i].bookFirst == range.bookFirst &&
 					tris[i].bookCount == range.bookCount &&
@@ -10107,6 +10213,8 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					range.flipSlot[0] = tris[i].flipSlot[0];
 					range.flipSlot[1] = tris[i].flipSlot[1];
 					range.flipSlot[2] = tris[i].flipSlot[2];
+					range.insideSlot = tris[i].insideSlot;
+					range.insideDepth = tris[i].insideDepth;
 					range.bookTime = tris[i].bookTime;
 					range.bookFirst = tris[i].bookFirst;
 					range.bookCount = tris[i].bookCount;
@@ -10745,6 +10853,8 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 		g_blend_parts += o.blendParts;
 		g_flip_parts += o.flipParts;
 		g_flip_dropped += o.flipDropped;
+		g_inside_parts += o.insideParts;
+		g_inside_dropped += o.insideDropped;
 		g_scroll_parts += o.scrollParts;
 		g_clear_parts += o.clearParts;
 		g_flip_ranges += o.flipRanges;
@@ -11011,6 +11121,8 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 		stats->flipbookDrawn = g_flip_parts;
 		stats->flipbookDropped = g_flip_dropped;
 		stats->flipbookRanges = g_flip_ranges;
+		stats->insideParts = g_inside_parts;
+		stats->insideDropped = g_inside_dropped;
 
 		{
 			std::vector<int> pages;
@@ -12191,6 +12303,11 @@ namespace
 		/* The gloss variant: whether it is on the device, and its gGloss
 		 * (c36) - see the note beside the switch below. */
 		bool sheen_ps_on = false;
+		/* The interior variant and the stage 4 page it reads, the same way:
+		 * entered after a grille's writes, left before a plain draw call's,
+		 * both cleared when the pass ends (MaterialInside). */
+		bool inside_ps_on = false;
+		int inside_slot_now = -1;
 		float sheen[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 		bool sheen_dirty = true;
 		/* gRipple: the wave scale, the travel and the rate of a material
@@ -12533,14 +12650,25 @@ namespace
 			 * the draw; between two glossy draw calls only c4, c19 and c36
 			 * change; and the pass ends on the plain variant, so the next
 			 * room's constants are written with the plain variant on. */
+			/* A grille with an interior takes the interior variant and not
+			 * the gloss one: the two are separate shaders, and the cavity
+			 * behind the bars is what the grille is for. */
+			const bool want_inside = range.insideSlot >= 0 && g_inside_ps &&
+				!additive_pass;
 			const bool want_sheen = range.sheen > 0.0f && g_gloss_ps &&
 				g_reflect != 0.0f && !blendOnly && !sky && !additive_pass &&
-				!g_under_on;
+				!g_under_on && !want_inside;
 
 			if (!want_sheen && sheen_ps_on)
 			{
 				g_device->SetPixelShader(g_ps);
 				sheen_ps_on = false;
+			}
+
+			if (!want_inside && inside_ps_on)
+			{
+				g_device->SetPixelShader(g_ps);
+				inside_ps_on = false;
 			}
 
 			/* Into the glow shader or out of it, ahead of this draw call's
@@ -12735,6 +12863,29 @@ namespace
 
 			g_device->SetTexture(0, page);
 
+			/* The interior's page on stage 4, its depth in c38 and the
+			 * variant that reads both - see MaterialInside. The constant is
+			 * written per grille draw call: they are few (21 to 27 parts a
+			 * level), and the variant reads nothing else that changes. */
+			if (want_inside)
+			{
+				if (range.insideSlot != inside_slot_now)
+				{
+					g_device->SetTexture(4, HDPageCacheSlotTexture(range.insideSlot));
+					inside_slot_now = range.insideSlot;
+				}
+
+				const float inside[4] = { 1.0f, range.insideDepth, 0.0f, 0.0f };
+
+				g_device->SetPixelShaderConstantF(38, inside, 1);
+
+				if (!inside_ps_on)
+				{
+					g_device->SetPixelShader(g_inside_ps);
+					inside_ps_on = true;
+				}
+			}
+
 			// One-sided or two-sided - see RangeCulls.
 			const DWORD want_cull = range.cull && g_cull_opaque
 				? D3DCULL_CCW : D3DCULL_NONE;
@@ -12825,6 +12976,14 @@ namespace
 		// variant, before the next room's constants are written.
 		if (sheen_ps_on)
 			g_device->SetPixelShader(g_ps);
+
+		// As does one that ended on a grille, and stage 4 is cleared with
+		// it: no other draw of the frame binds that stage.
+		if (inside_ps_on)
+			g_device->SetPixelShader(g_ps);
+
+		if (inside_slot_now >= 0)
+			g_device->SetTexture(4, 0);
 
 		if (glow_on)
 		{

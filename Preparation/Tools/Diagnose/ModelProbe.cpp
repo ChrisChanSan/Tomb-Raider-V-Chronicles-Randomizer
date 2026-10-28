@@ -703,6 +703,14 @@
  *                         offset, each node's turn and how far the classic
  *                         and the .TRM centre of each node travel. With -all
  *                         one `bindcheck` line per bound slot.
+ *     -bones              every bone the .TRM weights, numbered as the file
+ *                         numbers it - the vertices it leads, their box,
+ *                         the vertices alone on it and their centre - with
+ *                         the slot's classic node of that number beside it,
+ *                         or that the bone lies past the slot's node count.
+ *     -model <NAME>       with -slot: that .TRM on the slot instead of the
+ *                         level's own binding - a candidate held against a
+ *                         classic tree.
  *     -crossdrift         with -all: every model on every other slot of the
  *                         level with its node count, by both drifts and the
  *                         fit - the foreign trees the skeleton test refuses.
@@ -3489,6 +3497,148 @@ static void PrintBindCheck(const Tr5Level& level, const std::string& root5,
 
 			printf("\n");
 		}
+	}
+
+	HDTrmFree(&trm);
+}
+
+/* -bones: every bone the .TRM weights, numbered as the file numbers it, with
+ * the slot's classic node of the same number beside it where the slot has
+ * one. Per bone the vertices it leads (its largest weight), their box and
+ * the box's centre, and the vertices that ride on it alone with their
+ * centre - the place the bind drift and the skeleton fit measure. A bone at
+ * or past the slot's node count is marked: the engine has no matrix of its
+ * own for it and refuses the model (hd_object.cpp, the skeleton test). The
+ * classic box is the node's mesh in the bind pose, and `offset` is how far
+ * the two box centres stand apart. */
+static void PrintBoneTable(const Tr5Level* level, const std::string& root5,
+	int slot, const ClassicSlot* here)
+{
+	const char* name = HDModelName(slot);
+	const std::string path = name ? TrmPath(root5, name) : std::string();
+	HDTrmModel trm;
+	const char* why = 0;
+
+	memset(&trm, 0, sizeof(trm));
+	printf("\n-- bones: %s, slot %d --------------------------------\n",
+		name ? name : "-", slot);
+
+	if (path.empty() || !HDTrmLoad(path.c_str(), &trm, &why))
+	{
+		printf("  no .TRM to read (%s)\n", why ? why : "no file");
+		return;
+	}
+
+	int lead[256] = { 0 }, single[256] = { 0 };
+	float lo[256][3], hi[256][3];
+	double sum[256][3] = { { 0 } };
+
+	for (int v = 0; v < trm.vertices; v++)
+	{
+		const HDTrmVertex& in = trm.vertex[v];
+		int w = 0;
+
+		for (int k = 1; k < 3; k++)
+			if (in.weight[k] > in.weight[w])
+				w = k;
+
+		const int b = in.bone[w];
+		const float at[3] = { in.x, in.y, in.z };
+
+		if (!in.weight[w])
+			continue;
+
+		for (int k = 0; k < 3; k++)
+		{
+			if (!lead[b] || at[k] < lo[b][k]) lo[b][k] = at[k];
+			if (!lead[b] || at[k] > hi[b][k]) hi[b][k] = at[k];
+		}
+
+		lead[b]++;
+
+		if (in.weight[0] == 255)
+		{
+			single[in.bone[0]]++;
+
+			for (int k = 0; k < 3; k++)
+				sum[in.bone[0]][k] += at[k];
+		}
+	}
+
+	const int nodes = here ? here->nodes : 0;
+
+	printf("  %-4s %6s %-30s %-18s %6s %-18s %s\n", "bone", "lead",
+		"lead box (x y z)", "box centre", "alone", "alone centre",
+		"classic node");
+
+	for (int b = 0; b < 256; b++)
+	{
+		if (!lead[b])
+			continue;
+
+		float c[3];
+
+		for (int k = 0; k < 3; k++)
+			c[k] = (lo[b][k] + hi[b][k]) * 0.5f;
+
+		char box[64], centre[48], alone[48], node[96];
+
+		sprintf(box, "%.0f..%.0f %.0f..%.0f %.0f..%.0f", lo[b][0], hi[b][0],
+			lo[b][1], hi[b][1], lo[b][2], hi[b][2]);
+		sprintf(centre, "%.0f %.0f %.0f", c[0], c[1], c[2]);
+
+		if (single[b])
+			sprintf(alone, "%.0f %.0f %.0f", sum[b][0] / single[b],
+				sum[b][1] / single[b], sum[b][2] / single[b]);
+		else
+			strcpy(alone, "-");
+
+		if (!here)
+			strcpy(node, "-");
+		else if (b >= nodes)
+			sprintf(node, "none - past the slot's %d nodes", nodes);
+		else
+		{
+			std::vector<float> cv;
+			const int count = level
+				? ClassicNodeVertices(*level, *here, b, cv) : 0;
+
+			if (!count)
+				sprintf(node, "%d: no classic mesh", b);
+			else
+			{
+				float clo[3], chi[3];
+
+				for (int k = 0; k < 3; k++)
+				{
+					clo[k] = chi[k] = cv[(size_t)k];
+
+					for (int v = 1; v < count; v++)
+					{
+						const float x = cv[(size_t)v * 3 + k];
+
+						clo[k] = x < clo[k] ? x : clo[k];
+						chi[k] = x > chi[k] ? x : chi[k];
+					}
+				}
+
+				double d = 0;
+
+				for (int k = 0; k < 3; k++)
+				{
+					const double e = c[k] - (clo[k] + chi[k]) * 0.5;
+
+					d += e * e;
+				}
+
+				sprintf(node,
+					"%d: %.0f..%.0f %.0f..%.0f %.0f..%.0f offset %.0f", b,
+					clo[0], chi[0], clo[1], chi[1], clo[2], chi[2], sqrt(d));
+			}
+		}
+
+		printf("  %-4d %6d %-30s %-18s %6d %-18s %s\n", b, lead[b], box, centre,
+			single[b], alone, node);
 	}
 
 	HDTrmFree(&trm);
@@ -12900,6 +13050,11 @@ int main(int argc, char** argv)
 	 * -animframe <anim> <key>: the picture in that keyframe of one of the
 	 * slot's own animations, numbered from the slot's first. */
 	bool bindCheck = false, crossDrift = false, slideCensus = false;
+	/* -bones: every bone of the .TRM against the slot's classic nodes;
+	 * -model <NAME>: -slot's model is that .TRM instead of the level's own
+	 * binding - a candidate held against a slot's classic tree. */
+	bool bonesAsked = false;
+	std::string modelAsked;
 	// -alpha: the glass rule taken apart; -noglass: the rule left off.
 	bool alphaCheck = false, noGlass = false;
 	int itemAnim = -1, itemKey = 0;
@@ -13379,6 +13534,10 @@ int main(int argc, char** argv)
 			nodes = true;
 		else if (!_stricmp(argv[i], "-bindcheck"))
 			bindCheck = true;
+		else if (!_stricmp(argv[i], "-bones"))
+			bonesAsked = true;
+		else if (!_stricmp(argv[i], "-model") && i + 1 < argc)
+			modelAsked = argv[++i];
 		else if (!_stricmp(argv[i], "-alpha"))
 			alphaCheck = true;
 		else if (!_stricmp(argv[i], "-noglass"))
@@ -14132,7 +14291,9 @@ int main(int argc, char** argv)
 			 * HD face's neck bone follows the head node's parent, and this
 			 * tool has walked the tree for its own node table anyway. */
 			one.parent = classic[i].parent;
-			one.name = 0;
+			// -model: the asked slot takes that .TRM instead of its own.
+			one.name = !modelAsked.empty() && slots[i] == slot
+				? modelAsked.c_str() : 0;
 			wanted.push_back(one);
 			order.push_back((int)i);
 		}
@@ -15002,6 +15163,9 @@ int main(int argc, char** argv)
 
 	if (bindCheck && here)
 		PrintBindCheck(level, root, slot, *here, false);
+
+	if (bonesAsked)
+		PrintBoneTable(&level, root, slot, here && here->ok ? here : 0);
 
 	if (alphaCheck && here)
 		PrintAlpha(level, root, slot, here->nodes, false);

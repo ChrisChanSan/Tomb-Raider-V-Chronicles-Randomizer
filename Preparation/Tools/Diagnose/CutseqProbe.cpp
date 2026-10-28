@@ -22,6 +22,10 @@
  *   CutseqProbe [cutseq.bin] -actors [n]      every cutscene's audio track
  *                                             and its actors' object slots
  *                                             and node counts, or n's alone
+ *   CutseqProbe [cutseq.bin] -turns n i [a b] actor i of cutscene n: per
+ *                                             mesh the range of each axis's
+ *                                             ten-bit turn over frames a..b
+ *                                             and in how many it turns
  *
  * The file is read in place and never written. Every cutscene is decoded with
  * the engine's own decoder (game\cutseq_decode.h, the templates DecodeAnim
@@ -622,6 +626,76 @@ static int DumpFrames(const std::vector<char>& file, int n, long a, long b)
 	return 0;
 }
 
+/* -turns: one actor's mesh turns over frames a..b of cutscene n - per mesh
+ * the smallest and the largest ten-bit angle of each axis and how many
+ * frames turn it at all, the words updateAnimFrame (game\deltapak.cpp)
+ * packs. A mesh's turn is against its parent's frame, so a mesh that never
+ * turns shares its parent's frame translated by its bone offset: what is
+ * drawn on it lands where it would on the parent. Mesh 0's words are the
+ * actor's whole turn; its root is on the -frames line. */
+static int DumpTurns(const std::vector<char>& file, int n, int actor, long a, long b)
+{
+	long size;
+	char* data = SceneData(file, n, &size);
+	Scene s;
+
+	if (!data || !OpenScene(data, n, &s))
+	{
+		printf("cutseq %d: not in the file\n", n);
+		return 1;
+	}
+
+	if (actor < 0 || actor >= s.cut->numactors || !s.actor[actor].decoded)
+	{
+		printf("cutseq %d: no actor %d\n", n, actor);
+		free(data);
+		return 1;
+	}
+
+	const Actor* one = &s.actor[actor];
+	const int meshes = one->count - 1;
+	std::vector<short> lo(3 * (size_t)meshes, 32767), hi(3 * (size_t)meshes, -32768);
+	std::vector<long> turned((size_t)meshes, 0);
+	long eye[3], target[3], frames = 0;
+
+	for (long f = 0; f < s.frames && f <= b; f++)
+	{
+		DecodeFrame(&s, f, eye, target);
+
+		if (f < a)
+			continue;
+
+		frames++;
+
+		for (int m = 0; m < meshes; m++)
+		{
+			const short w[3] = { one->nodes[m + 1].xrot_run, one->nodes[m + 1].yrot_run,
+				one->nodes[m + 1].zrot_run };
+
+			if (w[0] || w[1] || w[2])
+				turned[(size_t)m]++;
+
+			for (int k = 0; k < 3; k++)
+			{
+				lo[3 * (size_t)m + k] = std::min(lo[3 * (size_t)m + k], w[k]);
+				hi[3 * (size_t)m + k] = std::max(hi[3 * (size_t)m + k], w[k]);
+			}
+		}
+	}
+
+	printf("cutseq %d %s actor %d slot %d: %d meshes over frames %ld..%ld (%ld frames), "
+		"ten-bit angles\n", n, CUT_NAME[n], actor, s.cut->actor_data[actor].objslot, meshes,
+		a, std::min(b, (long)s.frames - 1), frames);
+
+	for (int m = 0; m < meshes; m++)
+		printf("  mesh %2d  x %4d..%-4d  y %4d..%-4d  z %4d..%-4d  turned in %ld frames\n", m,
+			lo[3 * (size_t)m], hi[3 * (size_t)m], lo[3 * (size_t)m + 1], hi[3 * (size_t)m + 1],
+			lo[3 * (size_t)m + 2], hi[3 * (size_t)m + 2], turned[(size_t)m]);
+
+	free(data);
+	return 0;
+}
+
 /* The CUTLOG lines a run at fps_mode 1 writes for cutscene n (game\
  * cutseq_interp.cpp), frame for frame: one frame between two ticks per tick,
  * the scene's first tick drawn live (why=open), a camera cut drawing that
@@ -788,7 +862,8 @@ int main(int argc, char** argv)
 	int argi = 1;
 
 	if (argi < argc && strcmp(argv[argi], "-frames") &&
-		strcmp(argv[argi], "-cutlog") && strcmp(argv[argi], "-actors"))
+		strcmp(argv[argi], "-cutlog") && strcmp(argv[argi], "-actors") &&
+		strcmp(argv[argi], "-turns"))
 		path = argv[argi++];
 
 	FILE* fp = fopen(path, "rb");
@@ -823,6 +898,11 @@ int main(int argc, char** argv)
 
 	if (argi + 1 < argc && !strcmp(argv[argi], "-cutlog"))
 		return SimulateLog(file, atoi(argv[argi + 1]));
+
+	if (argi + 2 < argc && !strcmp(argv[argi], "-turns"))
+		return DumpTurns(file, atoi(argv[argi + 1]), atoi(argv[argi + 2]),
+			argi + 3 < argc ? atol(argv[argi + 3]) : 0,
+			argi + 4 < argc ? atol(argv[argi + 4]) : LONG_MAX);
 
 	if (argi < argc && !strcmp(argv[argi], "-actors"))
 		return ListActors(file, argi + 1 < argc ? atoi(argv[argi + 1]) : 0);

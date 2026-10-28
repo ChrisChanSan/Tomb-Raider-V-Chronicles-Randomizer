@@ -283,33 +283,43 @@ namespace
 		{ "BINOCULARS_ITEM",         "EXTRA5_BINOCULARS_ITEM_RICH", "RICH1 RICH2 RICH3" },
 		{ "HK_ITEM",                 "EXTRA5_HK_ITEM_RICH2",        "RICH2" },
 
-		/* The submarine's hanging diving suits. JOBY3 and JOBY5 keep two
-		 * objects in each crew cabin's glass case that their .MAP does not
-		 * reach: DOG_MIP, the full suit (10 meshes), which the map sends to
-		 * DOG_MIP_JOBY3_JOBY5.TRM, a file in no ITEM folder, and
-		 * ANIMATING12_MIP, the suit's top on its chains (8 meshes), on which
-		 * the map is silent and whose own name finds nothing either. Both
-		 * drew classic: SD suits in an HD case (play pictures of 2026-10-28;
-		 * the case itself is ANIMATING11_MIP, DUMMY in the map and really
-		 * baked into the room art). The remaster ships the suits as
-		 * EXTRA5_SUBSUIT_FULL (13 nodes) and EXTRA5_SUBSUIT_TOP_CHAIN (8
-		 * nodes, JOBY3) / EXTRA5_SUBSUIT_TOP_CHAIN_JOBY5 (8 nodes), names no
-		 * rule builds (ModelProbe -name; the node counts are the files' own).
-		 * The map's DOG_MIP line names a file that does not exist, and a map
-		 * line whose file is missing gives way to a level-bound line here -
-		 * see bind_against. JOBY3's room 40 hangs one more pair in slots of
-		 * its own: ANIMATING10_MIP, 10 meshes in the full suit's box (359 x
-		 * 941 x 279 against DOG_MIP's 359 x 941 x 309, ModelOffset), and
-		 * ANIMATING10, 7 meshes 527 units tall - the height of
-		 * EXTRA5_SUBSUIT_BOTTOM_CHAIN's bounds, the suit's bottom half on
-		 * its chain (ModelProbe -name, y -73..454). The folder's
-		 * TOP_CHAIN_HALF and BOTTOM variants are bound to nothing: no slot
-		 * with items in either level was measured to be theirs. */
-		{ "DOG_MIP",                 "EXTRA5_SUBSUIT_FULL",            "JOBY3 JOBY5" },
-		{ "ANIMATING12_MIP",         "EXTRA5_SUBSUIT_TOP_CHAIN",       "JOBY3" },
-		{ "ANIMATING12_MIP",         "EXTRA5_SUBSUIT_TOP_CHAIN_JOBY5", "JOBY5" },
-		{ "ANIMATING10_MIP",         "EXTRA5_SUBSUIT_FULL",            "JOBY3" },
-		{ "ANIMATING10",             "EXTRA5_SUBSUIT_BOTTOM_CHAIN",    "JOBY3" }
+		/* The submarine's diving suits, JOBY3 and JOBY5. Each crew cabin's
+		 * glass case hangs the suit in two halves on chains, and JOBY3's
+		 * room 40 has a third pair: the legs standing and the top hanging
+		 * with the console on its chest. The .MAP reaches none of them -
+		 * DOG_MIP's line names DOG_MIP_JOBY3_JOBY5.TRM, a file in no ITEM
+		 * folder, and the others it does not mention - and the install keeps
+		 * the suit as EXTRA5_SUBSUIT_* files no rule builds a name for.
+		 *
+		 * Which file is which slot's, read off the classic mesh trees
+		 * (ModelProbe -slot -model -bones, the box of each bone against the
+		 * classic mesh of its node):
+		 *
+		 *   DOG_MIP, 10 meshes: the top on its chains - torso on node 0,
+		 *     the arms on 1-3 and 4-6, the chains on 7, the two air tanks
+		 *     on 8 and 9 - with the console filled in its torso mesh.
+		 *     TOP_CHAIN_JOBY5: arms and chains 4 to 38 units off their
+		 *     nodes, and the console with both slots filled.
+		 *   ANIMATING10_MIP, 10 meshes, the same tree without the console:
+		 *     the top at room 40's console, whose console is the two puzzle
+		 *     holes on its chest, DUMMY in the map, with no room art in
+		 *     their box. TOP_CHAIN_HALF, the console with one slot filled
+		 *     and one empty, the slot the puzzle waits for.
+		 *   ANIMATING12_MIP, 8 meshes: the legs on their chains - hips on
+		 *     node 0, legs on 1-6, chains on 7. BOTTOM_CHAIN, 1 to 31 units.
+		 *   ANIMATING10, 7 meshes: the legs standing. BOTTOM, 9 to 31 units.
+		 *
+		 * The three tops carry their torso on bone 8, the node of the right
+		 * tank, which hangs off node 0 with no offset; no keyframe and no
+		 * cutscene frame turns it (CutseqProbe -turns 5 2 and 32 2: 0 frames),
+		 * so it draws where node 0 does. TOP_CHAIN, a plain chest plate with
+		 * no console, is no slot's. The map's DOG_MIP line names a file that
+		 * does not exist, and such a line gives way to a level-bound line
+		 * here - see bind_against. */
+		{ "DOG_MIP",                 "EXTRA5_SUBSUIT_TOP_CHAIN_JOBY5", "JOBY3 JOBY5" },
+		{ "ANIMATING12_MIP",         "EXTRA5_SUBSUIT_BOTTOM_CHAIN",    "JOBY3 JOBY5" },
+		{ "ANIMATING10_MIP",         "EXTRA5_SUBSUIT_TOP_CHAIN_HALF",  "JOBY3" },
+		{ "ANIMATING10",             "EXTRA5_SUBSUIT_BOTTOM",          "JOBY3" }
 	};
 
 	/* Does a hand-table line hold for `level`? A line with no level list holds
@@ -710,9 +720,9 @@ namespace
 					/* A map line whose file is in no ITEM folder gives way
 					 * to a hand-table line bound to this level, if there is
 					 * one: JOBY3's DOG_MIP=DOG_MIP_JOBY3_JOBY5 names a file
-					 * the remaster does not ship, and the suit it stands for
-					 * is EXTRA5_SUBSUIT_FULL (the hand table, "The
-					 * submarine's hanging diving suits"). Lines with no
+					 * the remaster does not ship, and the suit top it stands
+					 * for is EXTRA5_SUBSUIT_TOP_CHAIN_JOBY5 (the hand table,
+					 * "The submarine's diving suits"). Lines with no
 					 * level list are not asked: they name this project's own
 					 * slots, which no map mentions. Without a disk to ask,
 					 * the map's word stands. */

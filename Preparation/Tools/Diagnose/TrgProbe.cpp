@@ -715,6 +715,258 @@ namespace
 		}
 	}
 
+	/* -box: every part of one group, or of every group for -1, with a
+	 * triangle corner in a room-local box - per part and pass the triangles
+	 * with a corner inside and those with their centroid inside, the corners'
+	 * heights (each with its count, the most frequent first, twelve at most),
+	 * the pages those corners wear and the means of their two colours. What
+	 * the art holds where a static or an item stands, when the static table
+	 * or the map says the art has it, and what colour the art is where a
+	 * picture shows black. The box is inclusive on every side. */
+	void dumpBox(const std::string& root, const std::string& stem,
+		int group, int x0, int x1, int y0, int y1, int z0, int z1)
+	{
+		const std::string path = root + "\\DATA\\" + stem + ".TRG";
+		trf::remaster::Trg trg;
+		std::string error;
+
+		if (!trf::remaster::read_trg(path, trg, error) ||
+			group >= (int)trg.groups.size())
+		{
+			std::printf("%-9s FAILED %s\n", stem.c_str(), error.c_str());
+			return;
+		}
+
+		std::printf("box %s group %d x %d..%d y %d..%d z %d..%d\n",
+			stem.c_str(), group, x0, x1, y0, y1, z0, z1);
+
+		const auto inside = [&](double x, double y, double z)
+		{
+			return x >= x0 && x <= x1 && y >= y0 && y <= y1 &&
+				z >= z0 && z <= z1;
+		};
+		const int g0 = group < 0 ? 0 : group;
+		const int g1 = group < 0 ? (int)trg.groups.size() - 1 : group;
+
+		for (int g = g0; g <= g1; g++)
+		{
+			int nr = 0;
+
+			for (const trf::remaster::TrgPart& part :
+				trg.groups[(size_t)g].parts)
+			{
+				for (int pass = 0; pass < 3; pass++)
+				{
+					int corner = 0, centroid = 0, corners = 0;
+					long long c1[3] = { 0, 0, 0 }, c2[3] = { 0, 0, 0 };
+					std::map<int, int> heights;
+					std::map<int, int> pages;
+
+					for (uint32_t i = 0; i + 2 < part.pass[pass].count; i += 3)
+					{
+						const uint32_t index = part.pass[pass].start + i;
+
+						if (index + 2 >= trg.indices.size())
+							break;
+
+						double cx = 0.0, cy = 0.0, cz = 0.0;
+						int in = 0;
+
+						for (int k = 0; k < 3; k++)
+						{
+							const trf::remaster::TrgVertex& v =
+								trg.vertices[trg.indices[index + (uint32_t)k]];
+
+							cx += v.x;
+							cy += v.y;
+							cz += v.z;
+
+							if (!inside(v.x, v.y, v.z))
+								continue;
+
+							in++;
+							corners++;
+							heights[v.y]++;
+							pages[v.layer && (size_t)v.layer <= trg.textures.size() ?
+								(int)trg.textures[v.layer - 1] : -1]++;
+
+							for (int c = 0; c < 3; c++)
+							{
+								c1[c] += v.colour1[c];
+								c2[c] += v.colour2[c];
+							}
+						}
+
+						if (in)
+							corner++;
+
+						if (inside(cx / 3.0, cy / 3.0, cz / 3.0))
+							centroid++;
+					}
+
+					if (!corner && !centroid)
+						continue;
+
+					std::printf("  group %3d part %2d mat %2u pass %d"
+						" tris corner %d centroid %d of %u  corners %d"
+						"  c1 mean %3lld %3lld %3lld  c2 mean %3lld %3lld %3lld\n",
+						g, nr, part.material, pass, corner, centroid,
+						part.pass[pass].count / 3, corners,
+						corners ? c1[0] / corners : 0, corners ? c1[1] / corners : 0,
+						corners ? c1[2] / corners : 0, corners ? c2[0] / corners : 0,
+						corners ? c2[1] / corners : 0, corners ? c2[2] / corners : 0);
+
+					std::vector<std::pair<int, int> > byCount(heights.begin(),
+						heights.end());
+
+					std::sort(byCount.begin(), byCount.end(),
+						[](const std::pair<int, int>& a, const std::pair<int, int>& b)
+						{
+							return a.second != b.second ? a.second > b.second :
+								a.first < b.first;
+						});
+					std::printf("            heights:");
+
+					for (size_t h = 0; h < byCount.size() && h < 12; h++)
+						std::printf(" %d(%d)", byCount[h].first, byCount[h].second);
+
+					std::printf("%s\n", byCount.size() > 12 ? " ..." : "");
+					std::printf("            pages:");
+
+					for (std::map<int, int>::const_iterator at = pages.begin();
+						at != pages.end(); ++at)
+						std::printf(" %d(%d)", at->first, at->second);
+
+					std::printf("\n");
+				}
+
+				nr++;
+			}
+		}
+	}
+
+	/* -boxes: many boxes out of a file, one `label group x0 x1 y0 y1 z0 z1`
+	 * a line (group -1: every group), the file read once; per line one
+	 * `label group corner centroid corners` - the triangles of that group
+	 * with a corner in the box, those with their centroid in it, and the
+	 * corners - the groups with nothing in the box left out. The sweep over
+	 * every item of a level asks this: does the art stand where the item
+	 * stands? */
+	void dumpBoxes(const std::string& root, const std::string& stem,
+		const char* file)
+	{
+		const std::string path = root + "\\DATA\\" + stem + ".TRG";
+		trf::remaster::Trg trg;
+		std::string error;
+
+		if (!trf::remaster::read_trg(path, trg, error))
+		{
+			std::printf("%-9s FAILED %s\n", stem.c_str(), error.c_str());
+			return;
+		}
+
+		FILE* in = std::fopen(file, "r");
+
+		if (!in)
+		{
+			std::printf("%-9s FAILED cannot open %s\n", stem.c_str(), file);
+			return;
+		}
+
+		char line[512];
+
+		while (std::fgets(line, sizeof(line), in))
+		{
+			char label[128];
+			int group, box[6];
+
+			if (std::sscanf(line, "%127s %d %d %d %d %d %d %d", label, &group,
+				&box[0], &box[1], &box[2], &box[3], &box[4], &box[5]) != 8)
+				continue;
+
+			if (group >= (int)trg.groups.size())
+				continue;
+
+			const auto inside = [&](double x, double y, double z)
+			{
+				return x >= box[0] && x <= box[1] && y >= box[2] &&
+					y <= box[3] && z >= box[4] && z <= box[5];
+			};
+			const int g0 = group < 0 ? 0 : group;
+			const int g1 = group < 0 ? (int)trg.groups.size() - 1 : group;
+
+			for (int g = g0; g <= g1; g++)
+			{
+				int corner = 0, centroid = 0, corners = 0;
+
+				for (const trf::remaster::TrgPart& part :
+					trg.groups[(size_t)g].parts)
+					for (int pass = 0; pass < 3; pass++)
+						for (uint32_t i = 0; i + 2 < part.pass[pass].count; i += 3)
+						{
+							const uint32_t index = part.pass[pass].start + i;
+
+							if (index + 2 >= trg.indices.size())
+								break;
+
+							double cx = 0.0, cy = 0.0, cz = 0.0;
+							int in = 0;
+
+							for (int k = 0; k < 3; k++)
+							{
+								const trf::remaster::TrgVertex& v =
+									trg.vertices[trg.indices[index + (uint32_t)k]];
+
+								cx += v.x;
+								cy += v.y;
+								cz += v.z;
+
+								if (inside(v.x, v.y, v.z))
+									in++;
+							}
+
+							corners += in;
+
+							if (in)
+								corner++;
+
+							if (inside(cx / 3.0, cy / 3.0, cz / 3.0))
+								centroid++;
+						}
+
+				if (corner || centroid)
+					std::printf("%s %d %d %d %d\n", label, g, corner, centroid,
+						corners);
+			}
+		}
+
+		std::fclose(in);
+	}
+
+	/* -layers: the file's texture list - which page each one-based layer
+	 * number names. A vertex names its page by layer, and so does a part
+	 * whose material carries layer numbers in its parameters (material 13's
+	 * flipbook frames); this is the table both read. */
+	void dumpLayers(const std::string& root, const std::string& stem)
+	{
+		const std::string path = root + "\\DATA\\" + stem + ".TRG";
+		trf::remaster::Trg trg;
+		std::string error;
+
+		if (!trf::remaster::read_trg(path, trg, error))
+		{
+			std::printf("%-9s FAILED %s\n", stem.c_str(), error.c_str());
+			return;
+		}
+
+		std::printf("layers %s: %u\n", stem.c_str(),
+			(unsigned)trg.textures.size());
+
+		for (size_t i = 0; i < trg.textures.size(); i++)
+			std::printf("  layer %3u -> page %d\n", (unsigned)(i + 1),
+				(int)trg.textures[i]);
+	}
+
 	/* -squares: per floor square of one group, per part and pass, how many
 	 * of 8 x 8 sample points (the centres of a 128-unit grid in the 1024
 	 * square) a triangle covers whose height at the point lies within
@@ -6930,6 +7182,21 @@ int main(int argc, char** argv)
 			" group over\n");
 		std::printf("                        one room-local point, in"
 			" every pass\n");
+		std::printf("       [-box <group> <x0> <x1> <y0> <y1> <z0> <z1>]\n");
+		std::printf("                        every part of one group (-1: of"
+			" every group)\n");
+		std::printf("                        with corners in a room-local"
+			" box: the\n");
+		std::printf("                        triangles with a corner or their"
+			" centroid\n");
+		std::printf("                        inside, the corners' heights and"
+			" colours\n");
+		std::printf("       [-boxes <file>]  the same over many boxes, one"
+			" `label group\n");
+		std::printf("                        x0 x1 y0 y1 z0 z1` a line, as"
+			" counts\n");
+		std::printf("       [-layers]  the texture list: which page each"
+			" layer names\n");
 		std::printf("       [-squares <group> <y0> <y1> <sx0> <sx1> <sz0>"
 			" <sz1>]\n");
 		std::printf("                        per floor square, how much"
@@ -7013,6 +7280,9 @@ int main(int argc, char** argv)
 	int seam_a = -1, seam_b = -1, seam_d[3] = { 0, 0, 0 };
 	int flat_group = -1;
 	int cell_group = -1, cell_x = 0, cell_z = 0;
+	int box_group = -2, box_args[6] = {};
+	const char* boxes_file = 0;
+	bool list_layers = false;
 	int sq_group = -1, sq_args[7] = {};
 	int parts_group = -1;
 	int surface_room = -1;
@@ -7153,6 +7423,19 @@ int main(int argc, char** argv)
 			cell_z = std::atoi(argv[i + 3]);
 			i += 3;
 		}
+		else if (!_stricmp(argv[i], "-box") && i + 7 < argc)
+		{
+			box_group = std::atoi(argv[i + 1]);
+
+			for (int k = 0; k < 6; k++)
+				box_args[k] = std::atoi(argv[i + 2 + k]);
+
+			i += 7;
+		}
+		else if (!_stricmp(argv[i], "-boxes") && i + 1 < argc)
+			boxes_file = argv[++i];
+		else if (!_stricmp(argv[i], "-layers"))
+			list_layers = true;
 		else if (!_stricmp(argv[i], "-squares") && i + 7 < argc)
 		{
 			for (int k = 0; k < 7; k++)
@@ -7426,6 +7709,34 @@ int main(int argc, char** argv)
 		for (const std::string& stem : levels)
 			dumpSquares(root, stem, sq_group, sq_args[1], sq_args[2],
 				sq_args[3], sq_args[4], sq_args[5], sq_args[6]);
+
+		return 0;
+	}
+
+	// -layers
+	if (list_layers)
+	{
+		for (const std::string& stem : levels)
+			dumpLayers(root, stem);
+
+		return 0;
+	}
+
+	// -boxes <file>
+	if (boxes_file)
+	{
+		for (const std::string& stem : levels)
+			dumpBoxes(root, stem, boxes_file);
+
+		return 0;
+	}
+
+	// -box <group> <x0> <x1> <y0> <y1> <z0> <z1>
+	if (box_group >= -1)
+	{
+		for (const std::string& stem : levels)
+			dumpBox(root, stem, box_group, box_args[0], box_args[1],
+				box_args[2], box_args[3], box_args[4], box_args[5]);
 
 		return 0;
 	}

@@ -15521,6 +15521,50 @@ hand-table line bound to that level. `Preparation/Tools/Diagnose/TrgProbe.cpp`: 
 
 **Commits.** `95ee7611`, `eb5b50c1`, `8eabbf14`, `e21c7d6a`.
 
+### The diving suits, their console and Lara in the suit (#261)
+
+2026-10-29.
+
+**What.** The diving suit of the submarine levels is drawn with the install's models
+wherever it stands: the halves in the crew cabins' glass cases of JOBY3 and JOBY5, the
+legs and the top at room 40's console in JOBY3, with the console on the top's chest, and
+the suit in the cutscenes that put it on Lara and take it off again - JOBY3's last,
+JOBY5's first and JOBY4's - with her face in the helmet of the whole suit. Before, all
+of it drew classic, and the console drew nothing.
+
+**Why.** The hand table bound the cabin suits to files that are not theirs:
+EXTRA5_SUBSUIT_FULL, the suit on Lara's fifteen-node tree, to the tops of ten meshes; a
+top of nine bones to the legs on their chains, of eight; legs with a chain to the
+standing legs, of seven. Each model named a node its slot does not have, and the
+skeleton test refused it. The cutscenes' actors - the legs, the top, and the figure of
+Lara in the whole suit who takes her place - had no binding at all. The console is two
+puzzle holes the level's .MAP calls DUMMY; no room art lies in their box, and with the
+top drawn classic nothing drew it.
+
+**How.** `specific/hd/hd_bind.cpp`: the hand table pairs every suit slot with the file
+that fits its tree, measured bone by bone against the classic meshes (ModelProbe
+`-bones`): DOG_MIP, the top whose classic console is filled, takes
+EXTRA5_SUBSUIT_TOP_CHAIN_JOBY5; ANIMATING10_MIP, the top at the console, TOP_CHAIN_HALF,
+whose console has one slot empty; ANIMATING12_MIP, the legs on chains, BOTTOM_CHAIN;
+ANIMATING10 and the cutscenes' legs GLADIATOR_MIP, BOTTOM; the whole suit, SWAT_PLUS_MIP
+in JOBY3 and CROW_MIP in JOBY4, FULL. Every bone lies inside its slot's node count and,
+the tops' torso apart, 4 to 40 units from its node's mesh, the drift 0 to 6 against the
+limit of 256. The tops carry their torso on the node of an air tank, 20 to 35 units from
+node 0's mesh, and no keyframe and no cutscene frame turns that node against node 0
+(CutseqProbe `-turns`). The skeleton test is unchanged. A second table names the DUMMY
+slots whose look another slot's model carries - JOBY3's puzzle holes and their done
+states, on ANIMATING10_MIP - and `specific/hd/hd_object.cpp` draws them nothing only
+while that slot draws HD, and classic otherwise (`HDLOG dummy`).
+`specific/hd/hd_model.cpp`: the face table puts LARA_HEAD on FULL's node 14, where the
+classic mesh shows her face. Her own body keeps her outfit on every node: the suit's
+hips that JOBY3's cutscene puts on her hips node at frame 542 has its HD twin in the
+legs model drawn on her there, which her node stands turned 25 degrees against;
+`specific/hd/hd_laradraw.cpp` writes a `SWAPLOG` line for every node whose mesh a
+cutscene takes from another slot, and for its return. `docs/Engine-Manual.md` says what
+the suit and the console do.
+
+**Commits.** `83dbc995`, `c186a665`, `8fbb2320`, `9447da31`.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -15799,3 +15843,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #258 | No pickup under a carrier; the roots let the heart go |
 | #259 | Old Mill's secret list opens a third passage |
 | #260 | The submarine's grilles, benches and diving suits |
+| #261 | The diving suits, their console and Lara in the suit |

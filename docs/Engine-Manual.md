@@ -3116,7 +3116,7 @@ written into the log with the slot it applies to:
 | `skeleton_nodes` | The model names a mesh-tree node the slot does not have. `FIREROPE` in eleven of the fourteen levels: TR5's slot is a rope with one piece and the model comes from TR4, where it had seventeen. |
 | `skeleton_drift` | The model fits the node **count** but not the tree. This is the randomizer's case: it puts foreign creatures into slots, and `SAS` in ANDREA1 holds a twenty-five-piece body where `SAS.TRM` was drawn for fifteen. Skinning that would tear the model across the room. A model the drift refuses is asked a second question before it is turned away - see "the fit" below. |
 | `no_geometry` | A model with nothing in it at all. Has not been seen; the guard is there so that it cannot become a crash. |
-| `baked` | Not classic at all: **nothing** draws it. The level's own name table says `DUMMY` for that slot, which is the remaster saying it draws nothing there as an object — usually because it has baked the thing into the room's art instead. Rome's lamp posts and its wall lanterns are the clearest case: draw the classic mesh on top and the lamp stands twice, a hand's width apart. Only in a room that really draws HD; a room that stayed classic keeps its lamp post. |
+| `baked` | Not classic at all: **nothing** draws it. The level's own name table says `DUMMY` for that slot, which is the remaster saying it draws nothing there as an object — usually because it has baked the thing into the room's art instead. Rome's lamp posts and its wall lanterns are the clearest case: draw the classic mesh on top and the lamp stands twice, a hand's width apart. Only in a room that really draws HD; a room that stayed classic keeps its lamp post. A `DUMMY` slot whose look is part of another object's model rather than of the room's art draws nothing only while that object is drawn HD, and its classic mesh otherwise: the two puzzle holes on the chest of the diving suit's top in the Submarine's room 40, whose console is the top's own model (with `-log` one `HDLOG dummy` line per such slot, naming the object and whether it is drawn HD). |
 
 **The fit.** The drift compares the distances between the model's pieces
 with the distances between the slot's joints, and that misreads one kind of
@@ -4095,6 +4095,21 @@ laratype=… data3=…` line.
 | The diving suit's two thrusters | they are a separate object on her torso, not a part of her body, and the remaster's wardrobe has no model for them. They keep being drawn the classic way **on top of** the HD suit — two small low-resolution pieces, against a diving suit with nothing on its back. |
 | The catsuit's environment map | the classic catsuit is drawn through the engine's environment map, a second view-dependent pass an HD model does not have. The HD catsuit shines instead through the outfit sheen described above - a latex highlight from the engine's own lights, out of a table named per material, because the wardrobe's pages carry no gloss mask to read - so it glints, but not with the classic reflection. |
 | The inventory | the ring draws its own objects and never calls `DrawLara`. |
+
+**The suit in the cutscenes.** The Submarine's last cutscene puts the diving
+suit on Lara and the Sinking Submarine's first takes it off again, out of
+pieces that are objects of their own: the legs (`GLADIATOR_MIP`) and the top
+with its console (`DOG_MIP`), which the cutscene moves onto her while it
+hides her legs. From the camera cut that shows her dressed, a figure of Lara
+in the whole suit (`SWAT_PLUS_MIP`) stands in her place - the figure that
+plays her in the Deepsea Dive's cutscene as well (`CROW_MIP`). All of them
+are drawn with the install's suit models, the whole suit with her HD face in
+the helmet, which speaks her lines as her own face does. Her own body keeps
+her outfit on every node the cutscene leaves shown; the suit's hips the
+classic game hangs on her hip node is drawn by the legs' model around her.
+With `-log` a `SWAPLOG` line names every node whose mesh a cutscene takes from
+another slot - the cutscene, its frame, the node, the slot and its mesh, and
+the outfit node drawn there - and its return.
 
 **First person** drops the same three things from the HD Lara that it
 drops from the classic one: the head, the face and the braid, all three of

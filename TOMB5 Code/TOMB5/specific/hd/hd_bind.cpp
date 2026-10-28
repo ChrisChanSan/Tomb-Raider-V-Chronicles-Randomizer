@@ -281,7 +281,35 @@ namespace
 		 * levels (measured). The lines hold in the named levels only;
 		 * everywhere else both slots take rule 3 as before. */
 		{ "BINOCULARS_ITEM",         "EXTRA5_BINOCULARS_ITEM_RICH", "RICH1 RICH2 RICH3" },
-		{ "HK_ITEM",                 "EXTRA5_HK_ITEM_RICH2",        "RICH2" }
+		{ "HK_ITEM",                 "EXTRA5_HK_ITEM_RICH2",        "RICH2" },
+
+		/* The submarine's hanging diving suits. JOBY3 and JOBY5 keep two
+		 * objects in each crew cabin's glass case that their .MAP does not
+		 * reach: DOG_MIP, the full suit (10 meshes), which the map sends to
+		 * DOG_MIP_JOBY3_JOBY5.TRM, a file in no ITEM folder, and
+		 * ANIMATING12_MIP, the suit's top on its chains (8 meshes), on which
+		 * the map is silent and whose own name finds nothing either. Both
+		 * drew classic: SD suits in an HD case (play pictures of 2026-10-28;
+		 * the case itself is ANIMATING11_MIP, DUMMY in the map and really
+		 * baked into the room art). The remaster ships the suits as
+		 * EXTRA5_SUBSUIT_FULL (13 nodes) and EXTRA5_SUBSUIT_TOP_CHAIN (8
+		 * nodes, JOBY3) / EXTRA5_SUBSUIT_TOP_CHAIN_JOBY5 (8 nodes), names no
+		 * rule builds (ModelProbe -name; the node counts are the files' own).
+		 * The map's DOG_MIP line names a file that does not exist, and a map
+		 * line whose file is missing gives way to a level-bound line here -
+		 * see bind_against. JOBY3's room 40 hangs one more pair in slots of
+		 * its own: ANIMATING10_MIP, 10 meshes in the full suit's box (359 x
+		 * 941 x 279 against DOG_MIP's 359 x 941 x 309, ModelOffset), and
+		 * ANIMATING10, 7 meshes 527 units tall - the height of
+		 * EXTRA5_SUBSUIT_BOTTOM_CHAIN's bounds, the suit's bottom half on
+		 * its chain (ModelProbe -name, y -73..454). The folder's
+		 * TOP_CHAIN_HALF and BOTTOM variants are bound to nothing: no slot
+		 * with items in either level was measured to be theirs. */
+		{ "DOG_MIP",                 "EXTRA5_SUBSUIT_FULL",            "JOBY3 JOBY5" },
+		{ "ANIMATING12_MIP",         "EXTRA5_SUBSUIT_TOP_CHAIN",       "JOBY3" },
+		{ "ANIMATING12_MIP",         "EXTRA5_SUBSUIT_TOP_CHAIN_JOBY5", "JOBY5" },
+		{ "ANIMATING10_MIP",         "EXTRA5_SUBSUIT_FULL",            "JOBY3" },
+		{ "ANIMATING10",             "EXTRA5_SUBSUIT_BOTTOM_CHAIN",    "JOBY3" }
 	};
 
 	/* Does a hand-table line hold for `level`? A line with no level list holds
@@ -678,6 +706,27 @@ namespace
 				{
 					local_kind = HD_BIND_MODEL;
 					result = mapped;
+
+					/* A map line whose file is in no ITEM folder gives way
+					 * to a hand-table line bound to this level, if there is
+					 * one: JOBY3's DOG_MIP=DOG_MIP_JOBY3_JOBY5 names a file
+					 * the remaster does not ship, and the suit it stands for
+					 * is EXTRA5_SUBSUIT_FULL (the hand table, "The
+					 * submarine's hanging diving suits"). Lines with no
+					 * level list are not asked: they name this project's own
+					 * slots, which no map mentions. Without a disk to ask,
+					 * the map's word stands. */
+					if (!installRoot.empty() &&
+						!extra_model_exists(installRoot, std::string(mapped)))
+						for (const HandBound& bound : hand_table)
+							if (bound.levels && _stricmp(bound.slot, name) == 0 &&
+								hand_applies(bound.levels, level))
+							{
+								result = bound.model;
+								local_via = HD_BIND_VIA_HAND;
+								local_from_map = false;
+								break;
+							}
 				}
 			}
 			else

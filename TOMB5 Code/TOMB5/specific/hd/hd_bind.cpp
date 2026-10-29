@@ -306,7 +306,7 @@ namespace
 		 *     their box. TOP_CHAIN_HALF, the console with one slot filled
 		 *     and one empty, the slot the puzzle waits for.
 		 *   ANIMATING12_MIP, 8 meshes: the legs on their chains - hips on
-		 *     node 0, legs on 1-6, chains on 7. BOTTOM_CHAIN, 1 to 31 units.
+		 *     node 0, legs on 1-6, chains on 7. BOTTOM_CHAIN, 9 to 31 units.
 		 *   ANIMATING10, 7 meshes: the legs standing. BOTTOM, 9 to 31 units.
 		 *
 		 * The three tops carry their torso on bone 8, the node of the right

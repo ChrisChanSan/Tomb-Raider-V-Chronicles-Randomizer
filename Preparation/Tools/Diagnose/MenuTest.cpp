@@ -14,10 +14,10 @@
 /* MenuTest - the arithmetic of the options menu, checked without a game.
  *
  * Build with bmenu.bat, run with no arguments from this folder: the last
- * ten families (pad_scheme_repair, controls_mouse_rows,
+ * eleven families (pad_scheme_repair, controls_mouse_rows,
  * graphics_softbody_row, graphics_water_row, graphics_shadow_row,
- * hd_switch_rows, graphics_hd_row, graphics_build_row, display_gamma_row
- * and slider_numbers)
+ * hd_switch_rows, graphics_hd_row, graphics_build_row, display_gamma_row,
+ * slider_numbers and slider_held_word)
  * read engine files as text, by their paths relative to it, because the
  * tables and rows they check live in files that cannot be linked here.
  *
@@ -3279,8 +3279,9 @@ static void display_gamma_row()
 		check(drive != 0 && next != 0 && dir != 0 && dir < next, 1,
 			"gamma row: every slider is driven by MenuSliderDir");
 	}
-	check(strstr(frame, "if (input & IN_LEFT || keymap[DIK_LEFT])") != 0 &&
-		strstr(frame, "if (input & IN_RIGHT || keymap[DIK_RIGHT])") != 0, 1,
+	check(strstr(frame, "MenuSliderHeldDir((inputBusy & IN_LEFT) != 0,") != 0
+		&& strstr(frame, "(inputBusy & IN_RIGHT) != 0, keymap[DIK_LEFT] != 0,")
+		!= 0, 1,
 		"gamma row: held LEFT/RIGHT of the pad's and keys' input, and the "
 		"arrow keys");
 
@@ -4379,6 +4380,219 @@ static void slider_numbers()
 	free(defs);
 }
 
+/* -------------------------------------------- the slider's held word -- */
+
+/* A held slider follows the pad on the title screen as it does in a level.
+ * game\menu_nav.h's MenuSliderHeldDir is the way a slider row is held - the
+ * word S_UpdateInput builds for every caller (inputBusy) or an arrow key,
+ * LEFT winning - and MenuSliderHands the hands the MENULOG slider line names;
+ * both are swept. Then the tree, as text: game\menu_frame.cpp's
+ * MenuSliderDir hands that rule inputBusy and keymap and reads neither
+ * `input` nor dbinput, which the title masks (ControlPhase keeps only IN_LOOK
+ * of `input` while the title's flyby holds bDisableLaraControl) and shadows
+ * (DoTitle zeroes both on a present without a tick); the value rows' edges
+ * stay on dbinput; the seam is one line per change, behind -log.
+ * specific\input.cpp writes inputBusy once, before the one mask that leads
+ * to `input`, and that mask keeps both direction bits, so in a level the
+ * slider reads what it read before; the pad pair's own bits are kept before
+ * a key joins them, and the Modern menus' predicate names the title. No
+ * other file that runs a menu writes inputBusy, and the title's shadow still
+ * zeroes input and dbinput around TitleOptions and puts both back. */
+static int span_count(const char* from, const char* to, const char* what)
+{
+	int n = 0;
+
+	if (!from || !to)
+		return -1;
+
+	for (const char* p = strstr(from, what); p && p < to; p = strstr(p + 1, what))
+		n++;
+
+	return n;
+}
+
+static const char* body_end(const char* body)
+{
+	return body ? strstr(body, "\r\n}\r\n") : 0;
+}
+
+static void slider_held_word()
+{
+	static const char* const writes[4] =
+	{
+		"inputBusy =", "inputBusy &=", "inputBusy |=", "inputBusy ^="
+	};
+	char* frame = tree_file("../../../TOMB5 Code/TOMB5/game/menu_frame.cpp");
+	char* inp = tree_file("../../../TOMB5 Code/TOMB5/specific/input.cpp");
+	char* flow = tree_file("../../../TOMB5 Code/TOMB5/game/gameflow.cpp");
+	char* ctrl = tree_file("../../../TOMB5 Code/TOMB5/game/control.cpp");
+	char* inv = tree_file("../../../TOMB5 Code/TOMB5/game/newinv2.cpp");
+	char* save = tree_file("../../../TOMB5 Code/TOMB5/specific/LoadSave.cpp");
+	char what[96];
+
+	for (int wl = 0; wl < 2; wl++)
+		for (int wr = 0; wr < 2; wr++)
+			for (int kl = 0; kl < 2; kl++)
+				for (int kr = 0; kr < 2; kr++)
+				{
+					const int want = (wl || kl) ? -1 : (wr || kr) ? 1 : 0;
+
+					snprintf(what, sizeof(what),
+						"held word: word %d%d keys %d%d", wl, wr, kl, kr);
+					check(MenuSliderHeldDir(wl, wr, kl, kr), want, what);
+				}
+
+	for (int dir = -1; dir <= 1; dir++)
+		for (int w = 0; w < 2; w++)
+			for (int k = 0; k < 2; k++)
+				for (int p = 0; p < 2; p++)
+				{
+					int want = 0;
+
+					if (dir && p)
+						want |= MENU_HAND_PAD;
+
+					if (dir && (k || (w && !p)))
+						want |= MENU_HAND_KEY;
+
+					snprintf(what, sizeof(what),
+						"held word: hands of way %d word %d key %d pad %d",
+						dir, w, k, p);
+					check(MenuSliderHands(dir, w, k, p), want, what);
+				}
+
+	check(MenuSliderHeldDir(1, 0, 0, 0), -1,
+		"held word: the stick or the d-pad alone holds it left");
+	check(MenuSliderHeldDir(0, 1, 0, 0), 1, "held word: ... and right");
+	check(MenuSliderHands(-1, 1, 0, 1), MENU_HAND_PAD,
+		"held word: the pad's own bit names the pad");
+	check(MenuSliderHands(-1, 1, 1, 0), MENU_HAND_KEY,
+		"held word: an arrow key names the keyboard");
+	check(MenuSliderHands(1, 1, 0, 0), MENU_HAND_KEY,
+		"held word: so does a direction key without the pad");
+	check(MenuSliderHands(-1, 1, 1, 1), MENU_HAND_PAD | MENU_HAND_KEY,
+		"held word: both hands at once");
+	check(MenuSliderHands(0, 1, 1, 1), 0, "held word: no way, no hands");
+	check(MENU_HAND_KEY == 1 && MENU_HAND_PAD == 2, 1,
+		"held word: the hands index the line's four names");
+
+	check(frame && inp && flow && ctrl && inv && save, 1,
+		"held word: the six engine files are readable from here");
+
+	if (!frame || !inp || !flow || !ctrl || !inv || !save)
+	{
+		free(frame);
+		free(inp);
+		free(flow);
+		free(ctrl);
+		free(inv);
+		free(save);
+		return;
+	}
+
+	{
+		const char* dir = strstr(frame, "static long MenuSliderDir()");
+		const char* dir_end = body_end(dir);
+		const char* step = strstr(frame, "static long MenuStepDir()");
+		const char* step_end = body_end(step);
+		const char* seam = strstr(frame, "static void MenuLogSlider(");
+		const char* seam_end = body_end(seam);
+
+		check(span_count(dir, dir_end,
+			"MenuSliderHeldDir((inputBusy & IN_LEFT) != 0,\r\n"
+			"\t\t(inputBusy & IN_RIGHT) != 0, keymap[DIK_LEFT] != 0,\r\n"
+			"\t\tkeymap[DIK_RIGHT] != 0);"), 1,
+			"held word: MenuSliderDir hands the rule inputBusy and keymap");
+		check(span_count(dir, dir_end, "input & IN_"), 0,
+			"held word: it reads no `input`, which the title masks");
+		check(span_count(dir, dir_end, "dbinput"), 0,
+			"held word: nor dbinput, which is an edge");
+		check(span_count(step, step_end, "dbinput & IN_LEFT") +
+			span_count(step, step_end, "dbinput & IN_RIGHT"), 2,
+			"held word: the value rows' step stays on dbinput's edges");
+		check(span_count(step, step_end, "inputBusy"), 0,
+			"held word: and reads no held word");
+		check(tree_count(frame, "MenuSliderDir()"), 2,
+			"held word: one definition, one reader");
+		check(tree_count(frame, "dir = MenuSliderDir();\r\n"
+			"\t\t\t\tMenuLogSlider(page, row, dir);"), 1,
+			"held word: the slider case reads it and logs it");
+		check(tree_count(frame, "\"MENULOG slider page=%s row=%s dir=%ld "
+			"src=%s shadow=%d\""), 1, "held word: the seam's one line");
+		check(span_count(seam, seam_end,
+			"\tif (!gLogEnabled)\r\n\t\treturn;\r\n\r\n\thands ="), 1,
+			"held word: behind -log, before it reads anything");
+		check(span_count(seam, seam_end, "if (row == logged_row && dir == "
+			"logged_dir && hands == logged_hands)\r\n\t\treturn;"), 1,
+			"held word: a line per change, not per present");
+		check(span_count(seam, seam_end,
+			"{ \"-\", \"key\", \"pad\", \"pad+key\" }"), 1,
+			"held word: the four names in the hands' order");
+		check(span_count(seam, seam_end, "InputPadDirection()") +
+			span_count(seam, seam_end, "TitleInputShadowed()"), 2,
+			"held word: it asks the pad's bits and the title's shadow");
+	}
+
+	{
+		const char* busy = strstr(inp, "\tinputBusy = linput;");
+		const char* mask = strstr(inp, "\tif (lara.Busy)\r\n\t{\r\n\t\tlinput &= "
+			"IN_PAUSE | IN_LOOK | IN_OPTION | IN_RIGHT | IN_LEFT | IN_BACK | "
+			"IN_FORWARD;");
+		const char* word = mask ? strstr(mask, "\tinput = linput;") : 0;
+
+		check(busy && mask && word && busy < mask, 1,
+			"held word: inputBusy is written before the mask to `input`");
+		check(tree_count(inp, "\tinput = linput;"), 1,
+			"held word: which keeps both direction bits for `input`");
+		check(tree_count(inp, "\t\tif (tank_x < -8)\r\n\t\t\tlinput = IN_LEFT;"
+			"\r\n\t\telse if (tank_x > 8)\r\n\t\t\tlinput = IN_RIGHT;"), 1,
+			"held word: the pad pair writes LEFT and RIGHT");
+		check(tree_count(inp, "\t\telse if (tank_y < -8)\r\n\t\t\tlinput |= "
+			"IN_FORWARD;\r\n\t}\r\n\r\n\tpad_dir_bits = linput;\t// the pad's "
+			"own four, before the keys join them\r\n\r\n\tif (Key(0))"), 1,
+			"held word: its bits are kept before a key joins them");
+		check(tree_count(inp, "pad_dir_bits ="), 1,
+			"held word: and written nowhere else");
+		check(tree_count(inp, "return (InventoryActive || gfLevelId == "
+			"LVL5_TITLE) ? 1 : 0;"), 1,
+			"held word: the Modern menus' pair is the title's too");
+	}
+
+	{
+		const char* const text[6] = { inp, frame, flow, ctrl, inv, save };
+		int others = 0;
+
+		for (int i = 0; i < 4; i++)
+		{
+			check(tree_count(inp, writes[i]), i ? 0 : 1,
+				"held word: input.cpp writes inputBusy once");
+
+			for (int f = 1; f < 6; f++)
+				others += tree_count(text[f], writes[i]);
+		}
+
+		check(others, 0, "held word: no file that runs a menu writes it");
+	}
+
+	check(tree_count(flow, "\t\t\tif (shadow)\r\n\t\t\t{\r\n\t\t\t\tinput = 0;"
+		"\r\n\t\t\t\tdbinput = 0;\r\n\t\t\t}"), 1,
+		"held word: the title's shadow still zeroes input and dbinput");
+	check(tree_count(flow, "\t\t\t\tinput = savedInput;\r\n"
+		"\t\t\t\tdbinput = savedDbInput;"), 1,
+		"held word: and puts both back");
+	check(tree_count(flow, "\t\t\ttitle_input_shadowed = shadow;\r\n"
+		"\t\t\tgfStatus = TitleOptions();\r\n"
+		"\t\t\ttitle_input_shadowed = 0;"), 1,
+		"held word: the seam's shadow flag stands for that one call");
+
+	free(frame);
+	free(inp);
+	free(flow);
+	free(ctrl);
+	free(inv);
+	free(save);
+}
+
 int main()
 {
 	printf("MenuTest - game\\menu_nav.h, game\\key_scheme.h, game\\pad_scheme.h\n\n");
@@ -4414,6 +4628,7 @@ int main()
 	display_gamma_row();
 	slider_numbers();
 	slider_reads();
+	slider_held_word();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

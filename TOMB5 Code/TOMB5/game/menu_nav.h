@@ -186,3 +186,49 @@ inline int MenuSliderStep(int value, int dir, int top)
 
 	return value;
 }
+
+/* The way a selected slider row is held on one frame. `word_left` and
+ * `word_right` are the two direction bits of the word S_UpdateInput builds
+ * for every caller (inputBusy): the stick, the d-pad and the direction keys.
+ * `key_left` and `key_right` are the two arrow keys as the keyboard reads
+ * them. Either road moves the slider. LEFT wins if both ever arrived
+ * together, which no hand and no stick can do - base would have applied both
+ * and netted zero. */
+inline int MenuSliderHeldDir(int word_left, int word_right, int key_left,
+	int key_right)
+{
+	if (word_left || key_left)
+		return -1;
+
+	if (word_right || key_right)
+		return 1;
+
+	return 0;
+}
+
+/* The hands behind that way, for the MENULOG slider line
+ * (game/menu_frame.cpp). Each argument is the bit of the way held: `word`
+ * the word's, `key` the arrow key's, `pad` the pad pair's own, as the stick
+ * and the d-pad wrote it before any key was read (InputPadDirection,
+ * specific/input.cpp). The pad holds it when its own bit is set; the
+ * keyboard when the arrow key is down, or when the word carries the bit
+ * without the pad - a direction key of the active layout. No way, no
+ * hands. */
+#define MENU_HAND_KEY	1
+#define MENU_HAND_PAD	2
+
+inline int MenuSliderHands(int dir, int word, int key, int pad)
+{
+	int hands = 0;
+
+	if (!dir)
+		return 0;
+
+	if (pad)
+		hands |= MENU_HAND_PAD;
+
+	if (key || (word && !pad))
+		hands |= MENU_HAND_KEY;
+
+	return hands;
+}

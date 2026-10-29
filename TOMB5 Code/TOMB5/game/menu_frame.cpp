@@ -1965,6 +1965,46 @@ static void MenuLogSet(long page, const menu_row* row, const char* value)
 		Log("MENULOG set page=%s row=%s value=%s", menu_pages[page].name, row->label, value ? value : "");
 }
 
+/* MENULOG slider: the way a selected slider row is held, and by which hand.
+ * One line when the way or its hands change while a slider row is selected -
+ * a hold arriving, a release, the other hand taking over - and none while
+ * they stay, so a held slider writes one line and not one per present; a
+ * slider row selected with nothing held writes nothing. `src` names the hands
+ * (MenuSliderHands, game/menu_nav.h): key, pad, pad+key, or - for none.
+ * `shadow` is 1 when the title handed this present a zeroed input and dbinput
+ * (TitleInputShadowed, game/gameflow.cpp), which the slider does not read. */
+static void MenuLogSlider(long page, const menu_row* row, long dir)
+{
+	static const char* const src_name[4] = { "-", "key", "pad", "pad+key" };
+	static const menu_row* logged_row;
+	static long logged_dir;
+	static long logged_hands;
+	const long bit = dir < 0 ? IN_LEFT : IN_RIGHT;
+	long hands;
+	bool fresh;
+
+	if (!gLogEnabled)
+		return;
+
+	hands = MenuSliderHands(dir, (inputBusy & bit) != 0,
+		keymap[dir < 0 ? DIK_LEFT : DIK_RIGHT] != 0,
+		(InputPadDirection() & bit) != 0);
+
+	if (row == logged_row && dir == logged_dir && hands == logged_hands)
+		return;
+
+	fresh = row != logged_row;
+	logged_row = row;
+	logged_dir = dir;
+	logged_hands = hands;
+
+	if (fresh && !dir)
+		return;
+
+	Log("MENULOG slider page=%s row=%s dir=%ld src=%s shadow=%d", menu_pages[page].name, row->label,
+		dir, src_name[hands & 3], TitleInputShadowed() ? 1 : 0);
+}
+
 // Block A is written whole on every edit, as it always was; block B is only
 // marked here and written when the page is left.
 static void MenuAfterChange(long page, const menu_row* row, const char* value)
@@ -2046,17 +2086,26 @@ static void MenuLeave()
 }
 
 /* The continuous word, not the debounced one: a feel slider is meant to be
- * held down, not tapped once. LEFT wins if both ever arrived together, which
- * no hand and no stick can do - base would have applied both and netted zero. */
+ * held down, not tapped once. The rule, LEFT winning, is MenuSliderHeldDir
+ * (game/menu_nav.h).
+ *
+ * The word is inputBusy, the one S_UpdateInput builds for every caller, and
+ * not `input`. On the title screen ControlPhase masks `input` down to IN_LOOK
+ * after every read while the title's flyby holds bDisableLaraControl, zeroes
+ * it while one of the title's cutscenes runs, and keeps dbinput for the menu
+ * (game/control.cpp); so there the stick, the d-pad and the direction keys
+ * never reached a slider, at any frame rate, and the arrow keys did only
+ * through keymap. The pause menu calls
+ * S_UpdateInput itself, and its `input` carries the same two bits as
+ * inputBusy, so in a level nothing changes. The title's input shadow
+ * (game/gameflow.cpp) zeroes input and dbinput on a present without a tick
+ * and leaves inputBusy standing, as it leaves keymap: a held slider moves on
+ * every present by either road, and a held slider is not an edge. */
 static long MenuSliderDir()
 {
-	if (input & IN_LEFT || keymap[DIK_LEFT])
-		return -1;
-
-	if (input & IN_RIGHT || keymap[DIK_RIGHT])
-		return 1;
-
-	return 0;
+	return MenuSliderHeldDir((inputBusy & IN_LEFT) != 0,
+		(inputBusy & IN_RIGHT) != 0, keymap[DIK_LEFT] != 0,
+		keymap[DIK_RIGHT] != 0);
 }
 
 static long MenuStepDir()
@@ -2588,6 +2637,7 @@ void MenuFrameRun()
 			if (row->step)
 			{
 				dir = MenuSliderDir();
+				MenuLogSlider(page, row, dir);
 
 				if (row->step(row->param, dir))
 					menu_slider_unsaved = row;

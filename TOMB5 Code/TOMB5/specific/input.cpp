@@ -772,6 +772,17 @@ long InputMouseButtons()
 	return mouse_buttons;
 }
 
+/* The pad pair's own direction bits of the last S_UpdateInput call, as the
+ * stick and the d-pad wrote them before any key was read - 0 on the keyboard
+ * page. Only the MENULOG slider line asks (game\menu_frame.cpp), to name the
+ * hand that holds a slider; nothing acts on it. */
+static long pad_dir_bits;
+
+long InputPadDirection()
+{
+	return pad_dir_bits;
+}
+
 /* The look key, as the Modern scheme remembers it. While the stick steers Lara
  * as in Tank the look bit is taken out of the input word - the engine must not
  * answer it with the look camera - so the gate cannot read `input & IN_LOOK`:
@@ -1498,6 +1509,8 @@ long S_UpdateInput()
 		else if (tank_y < -8)
 			linput |= IN_FORWARD;
 	}
+
+	pad_dir_bits = linput;	// the pad's own four, before the keys join them
 
 	if (Key(0))
 		linput |= IN_FORWARD;

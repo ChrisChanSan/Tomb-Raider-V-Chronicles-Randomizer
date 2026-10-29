@@ -101,6 +101,7 @@ extern ulong _CutSceneTriggered2;
 extern long SetDebounce;
 extern long framecount;
 extern long reset_flag;
+extern long DeathMenuActive;	// the game-over menu reads the input word
 extern long LaserSightX;
 extern long LaserSightY;
 extern long LaserSightZ;

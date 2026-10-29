@@ -172,6 +172,24 @@ inline int MenuPageStep(int page, int pages, int dir)
 	return page;
 }
 
+/* The hand behind a menu step, for a MENULOG line (the game-over menu's,
+ * game/control.cpp). `pair` is whether the pad pair's own direction bits
+ * carry the step's bit (InputPadDirection, specific/input.cpp), `dpad`
+ * whether the d-pad's own button for that way is down. The pair carries the
+ * stick and the d-pad alike, so the button tells them apart; a step the pair
+ * does not carry came from the keyboard. */
+#define MENU_SRC_KEY	0
+#define MENU_SRC_STICK	1
+#define MENU_SRC_PAD	2
+
+inline int MenuStepSource(int pair, int dpad)
+{
+	if (!pair)
+		return MENU_SRC_KEY;
+
+	return dpad ? MENU_SRC_PAD : MENU_SRC_STICK;
+}
+
 /* One frame of a 0..top slider: one down for a negative dir, one up for a
  * positive one, nothing for 0, and the two ends hold. The rule Camera speed
  * and Dead zone write out by hand (game/menu_frame.cpp), put here for the

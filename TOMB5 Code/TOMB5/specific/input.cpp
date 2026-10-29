@@ -568,16 +568,20 @@ long JoyBitBack()
  * pair goes back to joy_x/joy_y, which the d-pad writes into: stick and pad
  * both, as at Tank.
  *
- * These are the two terms the movement seam in S_UpdateInput carries with the
- * opposite sign; the two must never disagree. InventoryActive is not only the
- * ring: the pause menu, the load and save screens (specific\LoadSave.cpp) and
- * the outfit window (specific\hd) set it too. The title has no Lara to steer,
- * so it is named by its level id. The rest of the seam's guard - first person,
- * a spotcam, a cutscene, bDisableLaraControl, the look key - are game states,
- * and none of them reads a direction bit as a cursor step. */
+ * These are the three terms the movement seam in S_UpdateInput carries with
+ * the opposite sign; the two must never disagree. InventoryActive is not only
+ * the ring: the pause menu, the load and save screens (specific\LoadSave.cpp)
+ * and the outfit window (specific\hd) set it too. The game-over menu
+ * (S_Death, game\control.cpp) raises DeathMenuActive instead, for its rows
+ * and the load list it opens; without it the d-pad and the arrow keys were
+ * refused there under Modern and only the stick, as a movement pair, came
+ * through. The title has no Lara to steer, so it is named by its level id.
+ * The rest of the seam's guard - first person, a spotcam, a cutscene,
+ * bDisableLaraControl, the look key - are game states, and none of them reads
+ * a direction bit as a cursor step. */
 static long ModernMenuReadsPad()
 {
-	return (InventoryActive || gfLevelId == LVL5_TITLE) ? 1 : 0;
+	return (InventoryActive || DeathMenuActive || gfLevelId == LVL5_TITLE) ? 1 : 0;
 }
 
 // Whether this binding is one of the d-pad's own four bits (20..23,
@@ -770,6 +774,17 @@ static long mouse_owed_x, mouse_owed_y;
 long InputMouseButtons()
 {
 	return mouse_buttons;
+}
+
+/* The pad pair's own direction bits of the last S_UpdateInput call, as the
+ * stick and the d-pad wrote them before any key was read - 0 on the keyboard
+ * page. Only the MENULOG lines ask, to name the hand behind a menu step;
+ * nothing acts on it. */
+static long pad_dir_bits;
+
+long InputPadDirection()
+{
+	return pad_dir_bits;
 }
 
 /* The look key, as the Modern scheme remembers it. While the stick steers Lara
@@ -1366,8 +1381,9 @@ long S_UpdateInput()
 	 * own: no pad answering means no axes, not the last poll's.
 	 *
 	 * Where a menu reads the direction bits as a cursor step (the inventory,
-	 * the title - ModernMenuReadsPad(), the mirror of the movement seam's two
-	 * menu terms), the pair stays joy_x/joy_y: stick and d-pad both, as at Tank.
+	 * the game-over menu, the title - ModernMenuReadsPad(), the mirror of the
+	 * movement seam's three menu terms), the pair stays joy_x/joy_y: stick and
+	 * d-pad both, as at Tank.
 	 *
 	 * Otherwise the raw left stick goes through a radial zone of XInput's own
 	 * 7849 of 32767, so a circling thumb does not snap onto the four cardinals
@@ -1418,11 +1434,12 @@ long S_UpdateInput()
 	 * person is skipped because the camera is Lara's head there and a
 	 * camera-relative heading means nothing; spotcams, cutscenes and
 	 * bDisableLaraControl because Lara is not the player's to steer then (the
-	 * last also covers pickups, switches and lifts); the inventory and the
-	 * title because the direction bits steer a menu there. */
+	 * last also covers pickups, switches and lifts); the inventory, the
+	 * game-over menu and the title because the direction bits steer a menu
+	 * there. */
 	const long modern_seam = tomb5.control_modern && !FirstPersonActive() &&
 		!bUseSpotCam && !GLOBAL_playing_cutseq && !bDisableLaraControl && lara_item &&
-		!InventoryActive && gfLevelId != LVL5_TITLE;
+		!InventoryActive && !DeathMenuActive && gfLevelId != LVL5_TITLE;
 
 	/* Whether the look key is steering Lara this tick, i.e. the seam stands
 	 * aside: the inverse of the bypass gate below, read by all three readers.
@@ -1498,6 +1515,8 @@ long S_UpdateInput()
 		else if (tank_y < -8)
 			linput |= IN_FORWARD;
 	}
+
+	pad_dir_bits = linput;	// the pad's own four, before the keys join them
 
 	if (Key(0))
 		linput |= IN_FORWARD;
@@ -1748,13 +1767,14 @@ long S_UpdateInput()
 	/* The menus keep the arrows and Return under Modern. Modern binds W/S/A/D to
 	 * the four direction slots, and every menu steps with IN_FORWARD/IN_BACK/
 	 * IN_LEFT/IN_RIGHT out of Key(0..3) - the title, the pause menu and its
-	 * option pages, the inventory ring, load/save and the outfit changer.
+	 * option pages, the inventory ring, load/save, the outfit changer and the
+	 * game-over menu.
 	 * Without this a player who rebound W/S/A/D elsewhere would be locked out of
 	 * the menu he rebound them in.
 	 *
 	 * The predicate is ModernMenuReadsPad(), the one answer to "is a menu
 	 * reading the direction bits rather than Lara"; it is the inverse of the
-	 * movement seam's last two terms, so in play the arrows do only what the
+	 * movement seam's last three terms, so in play the arrows do only what the
 	 * active table says.
 	 *
 	 * Raw keymap and not Key(), because these five are the menus' fixed keys,

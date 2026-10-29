@@ -63,6 +63,7 @@
 #include "../specific/hd/hd_feet.h"	// HDFeetStepItem - her weapon's step
 #include "../tomb5/tomb5.h"
 #include "lift_door_rule.h"	// LiftDoorKeepsTimer - a held pad's delay
+#include "menu_nav.h"	// MenuStepSource - the MENULOG death line
 
 uchar ShatterSounds[18][10] =
 {
@@ -155,6 +156,47 @@ static short los_rooms[20];
 static char richcutfrigflag = 0;
 static char globoncuttrig;
 
+/* Whether the game-over menu is reading the input word: raised by S_Death for
+ * its whole loop - its two rows and the load list it opens - so that
+ * ModernMenuReadsPad (specific\input.cpp) hands it the d-pad and the menu
+ * keys as it hands them every other menu. S_Death never raised
+ * InventoryActive, which chooses more than the input (the ring's object
+ * light, the pickup display, the HD key), so it has a flag of its own. */
+long DeathMenuActive;
+
+/* MENULOG death step: one line for each press the game-over menu's two rows
+ * see - up, down or select, as dbinput edges, so a hold is one line - with
+ * the row it found and the hand that made it (MenuStepSource,
+ * game\menu_nav.h): the keyboard, the pad's d-pad, or its stick. The d-pad's
+ * own buttons are bits 20 and 21 of the fire mask on both of the pad's paths
+ * (specific\dxshell.cpp). A select names the pad when the pad's Action role,
+ * which carries IN_SELECT, is down. */
+static void DeathLogStep(long selection)
+{
+	static const char* const src_name[3] = { "key", "stick", "pad" };
+	static const char* const step_name[3] = { "up", "down", "select" };
+	static const long bit[3] = { IN_FORWARD, IN_BACK, IN_SELECT };
+	static const long dpad[2] = { 1L << 20, 1L << 21 };	// D-Pad Up, D-Pad Down
+	long src;
+
+	if (!gLogEnabled)
+		return;
+
+	for (long i = 0; i < 3; i++)
+	{
+		if (!(dbinput & bit[i]))
+			continue;
+
+		if (i < 2)
+			src = MenuStepSource((InputPadDirection() & bit[i]) != 0,
+				(joystick_read_fire & dpad[i]) != 0);
+		else
+			src = ControlMethod == 1 && JoyRole(4) ? MENU_SRC_PAD : MENU_SRC_KEY;
+
+		Log("MENULOG death step=%s row=%ld src=%s", step_name[i], selection, src_name[src]);
+	}
+}
+
 static long S_Death()
 {
 	long selection, menu, ret;
@@ -163,6 +205,11 @@ static long S_Death()
 	selection = 0;
 	menu = 0;
 	ret = 0;
+	DeathMenuActive = 1;
+
+	if (gLogEnabled)
+		Log("MENULOG death open load=%d scheme=%s method=%ld", Gameflow->LoadSaveEnabled ? 1 : 0,
+			tomb5.control_modern ? "modern" : "tank", ControlMethod);
 
 	while (!ret)
 	{
@@ -177,6 +224,7 @@ static long S_Death()
 		{
 			if (!menu)	//"main" menu
 			{
+				DeathLogStep(selection);
 				PrintString(phd_centerx, phd_centery, 3, SCRIPT_TEXT(TXT_GAME_OVER), FF_CENTER);
 				PrintString(phd_centerx, phd_centery + 2 * font_height, !selection ? 1 : 2, SCRIPT_TEXT(TXT_Load_Game), FF_CENTER);
 				PrintString(phd_centerx, phd_centery + 3 * font_height, selection == 1 ? 1 : 2, SCRIPT_TEXT(TXT_Exit_to_Title), FF_CENTER);
@@ -233,7 +281,10 @@ static long S_Death()
 			PrintString(phd_centerx, phd_centery, 3, SCRIPT_TEXT(TXT_GAME_OVER), FF_CENTER);
 
 			if (lara.death_count > 300 || (lara.death_count > 150 && input != IN_NONE))
+			{
+				DeathMenuActive = 0;
 				return 1;
+			}
 		}
 
 		S_OutputPolyList();
@@ -241,6 +292,7 @@ static long S_Death()
 	}
 
 	FreeMonoScreen();
+	DeathMenuActive = 0;
 	return ret;
 }
 

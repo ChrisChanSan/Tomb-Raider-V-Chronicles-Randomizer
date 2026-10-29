@@ -15565,6 +15565,51 @@ the suit and the console do.
 
 **Commits.** `83dbc995`, `c186a665`, `8fbb2320`, `9447da31`, `b1829f23`.
 
+### The suit's console states and Lara's legs inside the suit (#262)
+
+2026-10-29.
+
+**What.** The top of the diving suit at room 40's console in JOBY3 shows the console as
+the puzzle stands: the empty bezel with its plate until the player has put anything in,
+the console with the battery's slot empty once the console is in, the whole console once
+the battery is. In the two cutscenes that put the suit on Lara and take it off again her
+legs stay hidden whatever outfit she wears. The outfit menu no longer offers Russia
+Extra, the install's Russia body without legs made for those two cutscenes.
+
+**Why.** The top was bound to the half-filled file, so the console stood in place before
+the player had found it. The classic slot is a pair per item, and a hole turns into its
+done slot in place when its item goes in: PUZZLE_HOLE3's mesh is the empty frame,
+PUZZLE_HOLE4's is PUZZLE_DONE3's 76 vertices with every face on 16 transparent texels,
+so it draws nothing, PUZZLE_DONE3 is the console with the battery's slot empty and
+PUZZLE_DONE4 the console with the battery. The three top files are those looks: every
+vertex of the plain one is in the other two, which add 825 and 1297 vertices inside the
+holes' box. Her legs: the game hides them with the mesh bits 0x81FF01FF from frame 542
+of JOBY3's cutscene 5 and up to frame 440 of JOBY5's cutscene 32. DrawLara__1 reads the
+bits, the catsuit's and the diving suit's variants do not, and the HD seam honoured them
+for __1 alone - so with the randomizer's catsuit in JOBY5 the HD body showed its legs
+bent backwards in the air beside the suit's. Russia Extra has no vertex on her six leg
+nodes; worn in play she walks without legs.
+
+**How.** `specific/hd/hd_bind.cpp`: the top binds the plain file, and the table of DUMMY
+hosts names for each hole the slot it becomes and the top's model from then on
+(`HDBindGuestStates`). `specific/hd/hd_object.cpp` loads the two other files as the
+top's alternative models, as the cyborg's stages are loaded, and picks one per drawn
+frame by the object numbers of the items at the top's place; the last done hole in the
+table's order decides. The bind, dummy and swap lines name the states, and an
+`HDLOG guests` line the state drawn, at the first draw and on every change.
+`specific/hd/hd_lara.cpp`: `HDLaraNodesShown`, DrawLara__1's own test on a mesh-bits
+word; `specific/hd/hd_laradraw.cpp` masks every body with it, ends the `SWAPLOG` line
+in the hidden nodes and writes a `HIDELOG` line on every change no swap line carries.
+No level or cutscene table is needed: the classic data hides exactly these nodes, and
+Russia Extra lacks the same six. `specific/hd/hd_wardrobe.cpp`: an entry is offered
+unless a table names its file; `specific/hd/hd_outfitmenu.cpp` lists the offered ones,
+and a registry choice of another falls back to the level's facts. ModelProbe takes
+`-larabits <bits>` and draws her as such a word leaves her. `docs/Engine-Manual.md`
+says all three. The verdict census over the fifteen levels changes in the top's row
+alone. With `hd_build` 0 none of it runs.
+
+**Commits.** `a5bc13a9`, `68a0352a`, `9da367d4`.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -15844,3 +15889,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #259 | Old Mill's secret list opens a third passage |
 | #260 | The submarine's grilles, benches and diving suits |
 | #261 | The diving suits, their console and Lara in the suit |
+| #262 | The suit's console states and Lara's legs inside the suit |

@@ -3116,7 +3116,7 @@ written into the log with the slot it applies to:
 | `skeleton_nodes` | The model names a mesh-tree node the slot does not have. `FIREROPE` in eleven of the fourteen levels: TR5's slot is a rope with one piece and the model comes from TR4, where it had seventeen. |
 | `skeleton_drift` | The model fits the node **count** but not the tree. This is the randomizer's case: it puts foreign creatures into slots, and `SAS` in ANDREA1 holds a twenty-five-piece body where `SAS.TRM` was drawn for fifteen. Skinning that would tear the model across the room. A model the drift refuses is asked a second question before it is turned away - see "the fit" below. |
 | `no_geometry` | A model with nothing in it at all. Has not been seen; the guard is there so that it cannot become a crash. |
-| `baked` | Not classic at all: **nothing** draws it. The level's own name table says `DUMMY` for that slot, which is the remaster saying it draws nothing there as an object — usually because it has baked the thing into the room's art instead. Rome's lamp posts and its wall lanterns are the clearest case: draw the classic mesh on top and the lamp stands twice, a hand's width apart. Only in a room that really draws HD; a room that stayed classic keeps its lamp post. A `DUMMY` slot whose look is part of another object's model rather than of the room's art draws nothing only while that object is drawn HD, and its classic mesh otherwise: the two puzzle holes on the chest of the diving suit's top in the Submarine's room 40, whose console is the top's own model (with `-log` one `HDLOG dummy` line per such slot, naming the object and whether it is drawn HD). |
+| `baked` | Not classic at all: **nothing** draws it. The level's own name table says `DUMMY` for that slot, which is the remaster saying it draws nothing there as an object — usually because it has baked the thing into the room's art instead. Rome's lamp posts and its wall lanterns are the clearest case: draw the classic mesh on top and the lamp stands twice, a hand's width apart. Only in a room that really draws HD; a room that stayed classic keeps its lamp post. A `DUMMY` slot whose look is part of another object's model rather than of the room's art draws nothing only while that object is drawn HD, and its classic mesh otherwise: the two puzzle holes on the chest of the diving suit's top in the Submarine's room 40, whose console is the top's own model (with `-log` one `HDLOG dummy` line per such slot, naming the object and whether it is drawn HD). And the top's model follows the two holes as the player's items go in, as the classic holes turn into their done states: the empty bezel with its plate while both wait, the console with the battery's slot empty once the console is in, the whole console once the battery is - three files, one per state, chosen as the top is drawn by what stands at its place (the dummy lines end in the slot each hole becomes and the top's model then, the `HDLOG bind` line of the top in its states, and an `HDLOG level=… guests` line names the state at the top's first draw and on every change). |
 
 **The fit.** The drift compares the distances between the model's pieces
 with the distances between the slot's joints, and that misreads one kind of
@@ -4107,9 +4107,16 @@ are drawn with the install's suit models, the whole suit with her HD face in
 the helmet, which speaks her lines as her own face does. Her own body keeps
 her outfit on every node the cutscene leaves shown; the suit's hips the
 classic game hangs on her hip node is drawn by the legs' model around her.
-With `-log` a `SWAPLOG` line names every node whose mesh a cutscene takes from
-another slot - the cutscene, its frame, the node, the slot and its mesh, and
-the outfit node drawn there - and its return.
+The nodes it hides - her legs, by her mesh bits, from frame 542 of the
+Submarine's cutscene and up to frame 440 of the Sinking Submarine's - stay
+hidden on every outfit she wears: the classic catsuit and diving suit read no
+mesh bits, and with the randomizer's outfit roll an HD body drawn whole put
+her own legs beside the suit's. The install's *Russia Extra*, a Russia body
+without legs made for these two cutscenes, is therefore not offered in the
+outfit menu. With `-log` a `SWAPLOG` line names every node whose mesh a
+cutscene takes from another slot - the cutscene, its frame, the node, the slot
+and its mesh, and the outfit node drawn there - and its return, and ends in the
+nodes the frame hides; a `HIDELOG` line names them on every other change.
 
 **First person** drops the same three things from the HD Lara that it
 drops from the classic one: the head, the face and the braid, all three of

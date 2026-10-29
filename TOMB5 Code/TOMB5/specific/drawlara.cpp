@@ -277,7 +277,13 @@ static void DrawLara__1(ITEM_INFO* item, long mirror)
 		// Drawing it anyway drops a lump of geometry wherever the rest pose
 		// happens to be, as with a Tomb Raider III body in LARA_SKIN.
 		if (!SkinJointUsable[i])
+		{
+			// The step to the next joint's mesh, which `continue` skips at
+			// the end of the body: without it every joint after this one
+			// would draw the mesh of the joint before it.
+			meshpp += 2;
 			continue;
+		}
 
 		SkinVerticesToScratch(NodesToStashToScratch[i][0]);
 		SkinVerticesToScratch(NodesToStashToScratch[i][1]);
@@ -561,7 +567,13 @@ static void DrawLara__4(ITEM_INFO* item, long mirror)
 		// Drawing it anyway drops a lump of geometry wherever the rest pose
 		// happens to be, as with a Tomb Raider III body in LARA_SKIN.
 		if (!SkinJointUsable[i])
+		{
+			// The step to the next joint's mesh, which `continue` skips at
+			// the end of the body: without it every joint after this one
+			// would draw the mesh of the joint before it.
+			meshpp += 2;
 			continue;
+		}
 
 		SkinVerticesToScratch(NodesToStashToScratch[i][0]);
 		SkinVerticesToScratch(NodesToStashToScratch[i][1]);
@@ -925,7 +937,13 @@ static void DrawLara__6(ITEM_INFO* item, long mirror)
 		// Drawing it anyway drops a lump of geometry wherever the rest pose
 		// happens to be, as with a Tomb Raider III body in LARA_SKIN.
 		if (!SkinJointUsable[i])
+		{
+			// The step to the next joint's mesh, which `continue` skips at
+			// the end of the body: without it every joint after this one
+			// would draw the mesh of the joint before it.
+			meshpp += 2;
 			continue;
+		}
 
 		SkinVerticesToScratch(NodesToStashToScratch[i][0]);
 		SkinVerticesToScratch(NodesToStashToScratch[i][1]);

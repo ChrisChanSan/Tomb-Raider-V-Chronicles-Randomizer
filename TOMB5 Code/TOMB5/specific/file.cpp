@@ -32,6 +32,7 @@
 #include "../game/items.h"
 #include "../game/objects.h"
 #include "../game/laraskin.h"
+#include "../game/delstuff.h"		// SkinJointUsable - the skin line's seams
 #include "drawroom.h"
 #include "dxsound.h"
 #include "LoadSave.h"
@@ -1075,7 +1076,29 @@ bool LoadObjects()
 	if (LaraDrawType != LARA_DIVESUIT)
 		CreateSkinningData();
 
-	Log("OBJLOG skinning done");
+	/* The seam pieces the skinning sewed and, by joint number, the ones it
+	 * left out (game\delstuff.h, SkinJointUsable), which the joint loops of
+	 * drawlara.cpp skip. The diving suit is not skinned: `-` for both. */
+	if (gLogEnabled)
+	{
+		char leftOut[48] = "none";
+		int used = 0, at = 0;
+
+		for (int i = 0; i < 14; i++)
+		{
+			if (SkinJointUsable[i])
+				used++;
+			else
+				at += snprintf(leftOut + at, sizeof(leftOut) - at, "%s%d",
+					at ? "," : "", i);
+		}
+
+		if (LaraDrawType == LARA_DIVESUIT)
+			Log("OBJLOG skinning done joints_used=- left_out=-");
+		else
+			Log("OBJLOG skinning done joints_used=%d left_out=%s", used,
+				leftOut);
+	}
 
 	for (int i = 0; i < NUMBER_OBJECTS; i++)
 	{

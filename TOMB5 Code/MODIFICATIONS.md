@@ -15608,7 +15608,7 @@ and a registry choice of another falls back to the level's facts. ModelProbe tak
 says all three. The verdict census over the fifteen levels changes in the top's row
 alone. With `hd_build` 0 none of it runs.
 
-**Commits.** `a5bc13a9`, `68a0352a`, `9da367d4`.
+**Commits.** `a5bc13a9`, `68a0352a`, `9da367d4`, `c9e80143`.
 
 ## 3. Randomizer changes since Beta 1.0
 

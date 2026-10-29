@@ -8496,6 +8496,9 @@ struct LaraOptions
 	int handFold;
 	bool noFold;			// the picture before the hand fold existed
 	bool noHandMix;			// the other half of that before picture
+	/* -xray: the level's X-ray set planned beside the outfit and drawn in
+	 * its place, as the composite draws her while lara.skelebob holds. */
+	bool xray;
 	/* The head rule forced for this picture - one of the
 	 * HD_WARDROBE_HEAD_*, or -1 to let the wardrobe decide, which is what
 	 * the engine always does. */
@@ -9262,6 +9265,53 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 	wardrobe.hairNodes = haveHair ? HD_LARA_HAIR_NODES : 0;
 	wardrobe.slots = present.empty() ? 0 : &present[0];
 	wardrobe.slotCount = (int)present.size();
+	wardrobe.xray = o.xray;
+
+	/* -xray: the squares of this level that can X-ray her, out of the
+	 * randomizer's own reader of the floor data - the count the engine's own
+	 * walk makes at the level build (hd_laradraw.cpp, skeleton_squares), so
+	 * the two can be held side by side. A trigger is function 4 and its
+	 * kind 13, SKELETON_T (global\types.h). */
+	if (o.xray)
+	{
+		const std::vector<Tr5Room>& rooms = level.rooms();
+		int squares = 0;
+		std::string where;
+
+		for (int r = 0; r < (int)rooms.size(); r++)
+		{
+			int here = 0;
+
+			for (int sx = 0; sx < rooms[(size_t)r].numXSectors; sx++)
+				for (int sz = 0; sz < rooms[(size_t)r].numZSectors; sz++)
+				{
+					std::vector<Tr5FloorEntry> chain;
+					const int index = level.sectorIndex(r, sx, sz);
+
+					if (index <= 0 || !level.readChain(index, chain))
+						continue;
+
+					for (const Tr5FloorEntry& e : chain)
+						if (e.function == 4 && e.kind == 13)
+						{
+							here++;
+							break;
+						}
+				}
+
+			if (here)
+			{
+				char text[32];
+
+				sprintf(text, "%s%d:%d", where.empty() ? "" : " ", r, here);
+				where += text;
+				squares += here;
+			}
+		}
+
+		printf("xray    : %d squares carry a SKELETON trigger (room:squares "
+			"%s)\n", squares, where.empty() ? "none" : where.c_str());
+	}
 
 	printf("slots   : %d of Lara's own slots loaded in this level\n",
 		(int)present.size());
@@ -9458,6 +9508,29 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 			cover.c_str());
 	}
 
+	/* -xray: the X-ray set's parts in their own block, the same columns
+	 * without the coverage, which the engine does not keep for them. */
+	for (int part = 0; o.xray && part < HD_LARA_PART_COUNT; part++)
+	{
+		if (!HDLaraXrayPlanned(part))
+			continue;
+
+		const int xslot = HDLaraPartXraySlot(part);
+		float mean = -1, worst = -1;
+		char driftText[16] = "-", worstText[16] = "-";
+
+		if (HDLaraHasXrayPart(part) && HDModelBindDrift(xslot, &mean, &worst))
+		{
+			sprintf(driftText, "%.0f", mean);
+			sprintf(worstText, "%.0f", worst);
+		}
+
+		printf("%-26s %-28s %7d %7s %7s %s\n", HDLaraPartLabel(part),
+			HDLaraPartXrayModel(part), HDLaraHasXrayPart(part)
+			? HDModelVertices(xslot) : 0, driftText, worstText,
+			HDLaraHasXrayPart(part) ? "x-ray" : "x-ray, NOT LOADED");
+	}
+
 	if (!ok)
 	{
 		printf("\nHDLaraLevelBuild says classic - see the notes above.\n");
@@ -9584,7 +9657,7 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 	}
 
 	HDLaraDraw list[8];
-	const int pieces = HDLaraFrameParts(&now, list, 8);
+	const int pieces = HDLaraFrameParts(&now, list, 8, o.xray);
 
 	printf("\n-- this frame ------------------------------------------------\n");
 	printf("hands   : right from %s, left from %s\n",
@@ -9595,15 +9668,27 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 		HDSlotName(now.rightHolsterSlot) ? HDSlotName(now.rightHolsterSlot) : "-");
 	printf("back    : %s\n",
 		HDSlotName(now.backGunSlot) ? HDSlotName(now.backGunSlot) : "nothing");
-	printf("drawn   : %s%s%s", HDLaraOutfitModel(outfit),
-		HDLaraHasPart(HD_LARA_PART_FACE) ? " + LARA_HEAD" : "",
-		HDLaraHasPart(HD_LARA_PART_HOLSTER_RIG) ? " + holster rig" : "");
+	/* -xray: the X-ray set in the outfit's place - its body, its hands and
+	 * holsters out of their own block, and no face, rig or braid. */
+	const bool xrayDraw = o.xray && HDLaraHasXrayPart(HD_LARA_PART_BODY);
+
+	if (o.xray && !xrayDraw)
+		printf("xray    : the X-ray set's body is not on the card - %s\n",
+			HDLaraOutfitIsXray(outfit) ? "the outfit is the X-ray body and "
+			"wears the set already" : "the outfit is drawn");
+
+	printf("drawn   : %s%s%s", xrayDraw
+		? HDLaraPartXrayModel(HD_LARA_PART_BODY) : HDLaraOutfitModel(outfit),
+		!xrayDraw && HDLaraHasPart(HD_LARA_PART_FACE) ? " + LARA_HEAD" : "",
+		!xrayDraw && HDLaraHasPart(HD_LARA_PART_HOLSTER_RIG)
+			? " + holster rig" : "");
 
 	for (int i = 0; i < pieces; i++)
-		printf(" + %s(%08x)", HDModelName(HDLaraPartSlot(list[i].part)),
+		printf(" + %s(%08x)", HDModelName(xrayDraw
+			? HDLaraPartXraySlot(list[i].part) : HDLaraPartSlot(list[i].part)),
 			list[i].nodeMask);
 
-	if (HDLaraHasPart(HD_LARA_PART_BRAID))
+	if (!xrayDraw && HDLaraHasPart(HD_LARA_PART_BRAID))
 		printf(" + HAIR_OG");
 
 	printf("\n");
@@ -10470,9 +10555,11 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 			HDLaraSoftRegion()->ok ? "" : " - the region is not ok, nothing moves");
 	}
 
-	const auto soft = [&o, &softConstants](int part) -> const HDModelSoft*
+	const auto soft = [&o, &softConstants, xrayDraw](int part)
+		-> const HDModelSoft*
 	{
-		return o.softTest && HDLaraPartSoft(part) ? &softConstants : 0;
+		return o.softTest && !xrayDraw && HDLaraPartSoft(part)
+			? &softConstants : 0;
 	};
 
 	/* -shadowmap, -shadowcast, -shadowdevice: the projected shadow's box for
@@ -11322,27 +11409,30 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 			bool any = false;
 
 			if (draws(HD_LARA_PART_BODY))
-				any = one(HDLaraPartSlot(HD_LARA_PART_BODY), false, mats, HD_LARA_NODES,
-					light, ownBody, &lighting, bodyCut, o.cull, -1, -1,
-					soft(HD_LARA_PART_BODY)) || any;
+				any = one(xrayDraw ? HDLaraPartXraySlot(HD_LARA_PART_BODY)
+					: HDLaraPartSlot(HD_LARA_PART_BODY), false, mats, HD_LARA_NODES,
+					light, xrayDraw ? bodyMask : ownBody, &lighting, bodyCut,
+					o.cull, -1, -1, soft(HD_LARA_PART_BODY)) || any;
 
-			if (draws(HD_LARA_PART_HEAD) && HDLaraHasPart(HD_LARA_PART_HEAD))
+			if (!xrayDraw && draws(HD_LARA_PART_HEAD) &&
+				HDLaraHasPart(HD_LARA_PART_HEAD))
 				any = one(HDLaraPartSlot(HD_LARA_PART_HEAD), false, mats, HD_LARA_NODES,
 					light, bodyMask, &lighting, bodyCut, o.cull, -1, -1,
 					soft(HD_LARA_PART_HEAD)) || any;
 
-			if (o.firstPerson && cutting && !o.noCap && draws(HD_LARA_PART_NECK_CAP) &&
-				HDLaraHasPart(HD_LARA_PART_NECK_CAP))
+			if (!xrayDraw && o.firstPerson && cutting && !o.noCap &&
+				draws(HD_LARA_PART_NECK_CAP) && HDLaraHasPart(HD_LARA_PART_NECK_CAP))
 				any = one(HDLaraPartSlot(HD_LARA_PART_NECK_CAP), false, mats, HD_LARA_NODES,
 					light, ~0u, &lighting, 0, HD_MODEL_CULL_NONE, -1, -1,
 					soft(HD_LARA_PART_NECK_CAP)) || any;
 
-			if (!o.firstPerson && draws(HD_LARA_PART_FACE))
+			if (!xrayDraw && !o.firstPerson && draws(HD_LARA_PART_FACE))
 				any = one(HDLaraPartSlot(HD_LARA_PART_FACE), false, mats, HD_LARA_NODES,
 					light, bodyMask, &lighting, 0, HD_MODEL_CULL_NONE, lipsT, lipsF,
 					soft(HD_LARA_PART_FACE)) || any;
 
-			if (draws(HD_LARA_PART_HOLSTER_RIG) && HDLaraHasPart(HD_LARA_PART_HOLSTER_RIG))
+			if (!xrayDraw && draws(HD_LARA_PART_HOLSTER_RIG) &&
+				HDLaraHasPart(HD_LARA_PART_HOLSTER_RIG))
 				any = one(HDLaraPartSlot(HD_LARA_PART_HOLSTER_RIG), false, mats,
 					HD_LARA_NODES, light, HDLaraPartCoverage(HD_LARA_PART_HOLSTER_RIG) & bodyMask,
 					&lighting, 0, HD_MODEL_CULL_NONE, -1, -1,
@@ -11351,17 +11441,20 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 			for (int i = 0; i < pieces; i++)
 			{
 				if (draws(list[i].part))
-					any = one(HDLaraPartSlot(list[i].part), false, mats, HD_LARA_NODES,
+					any = one(xrayDraw ? HDLaraPartXraySlot(list[i].part)
+						: HDLaraPartSlot(list[i].part), false, mats, HD_LARA_NODES,
 						light, list[i].nodeMask & bodyMask, &lighting, 0, HD_MODEL_CULL_NONE,
 						-1, -1, 0) || any;
 
-				if (draws(list[i].part) && HDLaraHasPartTwin(list[i].part))
+				if (!xrayDraw && draws(list[i].part) &&
+					HDLaraHasPartTwin(list[i].part))
 					any = one(HDLaraPartTwinSlot(list[i].part), false, mats, HD_LARA_NODES,
 						light, list[i].nodeMask & bodyMask, &lighting, 0, HD_MODEL_CULL_NONE,
 						-1, -1, 0) || any;
 			}
 
-			if (!o.firstPerson && draws(HD_LARA_PART_BRAID) && HDLaraHasPart(HD_LARA_PART_BRAID))
+			if (!xrayDraw && !o.firstPerson && draws(HD_LARA_PART_BRAID) &&
+				HDLaraHasPart(HD_LARA_PART_BRAID))
 			{
 				float hairLight[HD_LARA_HAIR_NODES * 3];
 
@@ -11598,15 +11691,29 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 		tag(1);
 		SetSheen(lighting, HD_LARA_PART_BODY, sheenOn);
 
-		if (draws(HD_LARA_PART_BODY) && HDModelDraw(HDLaraPartSlot(HD_LARA_PART_BODY), matrices, HD_LARA_NODES,
-			light, ownBody, &lighting, cutting ? &neckCut : 0, o.cull, -1, -1,
-			soft(HD_LARA_PART_BODY)))
+		/* -xray: the X-ray body out of its own block, with its own sheen and
+		 * its own node 14, as hd_laradraw.cpp draws it. */
+		if (xrayDraw)
+		{
+			float xs = 0.0f, xp = 1.0f;
+
+			HDLaraXraySheen(&xs, &xp);
+			lighting.specStrength = sheenOn ? xs : 0.0f;
+			lighting.specPower = xp;
+		}
+
+		if (draws(HD_LARA_PART_BODY) && HDModelDraw(xrayDraw
+			? HDLaraPartXraySlot(HD_LARA_PART_BODY)
+			: HDLaraPartSlot(HD_LARA_PART_BODY), matrices, HD_LARA_NODES,
+			light, xrayDraw ? bodyMask : ownBody, &lighting,
+			cutting ? &neckCut : 0, o.cull, -1, -1, soft(HD_LARA_PART_BODY)))
 			drawn++;
 
 		/* TR5's own head, in the same place and with the same rules the
 		 * seam has: after the body and before the face, the frame's mask, the
 		 * body's cut and the body's cull - see specific\hd\hd_laradraw.cpp. */
-		if (draws(HD_LARA_PART_HEAD) && HDLaraHasPart(HD_LARA_PART_HEAD))
+		if (!xrayDraw && draws(HD_LARA_PART_HEAD) &&
+			HDLaraHasPart(HD_LARA_PART_HEAD))
 		{
 			SetSheen(lighting, HD_LARA_PART_HEAD, sheenOn);
 
@@ -11622,8 +11729,8 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 		 * boundary), no cull, every node (its rim is skinned to whatever the
 		 * body's rim is), and the skin's own material. -nocap leaves it out, which
 		 * is the picture from before the lid existed. */
-		if (o.firstPerson && cutting && !o.noCap && draws(HD_LARA_PART_NECK_CAP) &&
-			HDLaraHasPart(HD_LARA_PART_NECK_CAP))
+		if (!xrayDraw && o.firstPerson && cutting && !o.noCap &&
+			draws(HD_LARA_PART_NECK_CAP) && HDLaraHasPart(HD_LARA_PART_NECK_CAP))
 		{
 			SetSheen(lighting, HD_LARA_PART_NECK_CAP, sheenOn);
 
@@ -11636,7 +11743,7 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 		SetSheen(lighting, HD_LARA_PART_FACE, sheenOn);
 
 		// The face with her lips at the frame asked for, and -1 without -lips.
-		if (!o.firstPerson && draws(HD_LARA_PART_FACE) &&
+		if (!xrayDraw && !o.firstPerson && draws(HD_LARA_PART_FACE) &&
 			HDModelDraw(HDLaraPartSlot(HD_LARA_PART_FACE), matrices, HD_LARA_NODES,
 			light, bodyMask, &lighting, 0, HD_MODEL_CULL_NONE, lipsTrack, lipsFrame,
 			soft(HD_LARA_PART_FACE)))
@@ -11647,7 +11754,8 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 		 * because it belongs to the outfit and not to the weapon. */
 		SetSheen(lighting, HD_LARA_PART_HOLSTER_RIG, sheenOn);
 
-		if (draws(HD_LARA_PART_HOLSTER_RIG) && HDLaraHasPart(HD_LARA_PART_HOLSTER_RIG) &&
+		if (!xrayDraw && draws(HD_LARA_PART_HOLSTER_RIG) &&
+			HDLaraHasPart(HD_LARA_PART_HOLSTER_RIG) &&
 			HDModelDraw(HDLaraPartSlot(HD_LARA_PART_HOLSTER_RIG), matrices,
 				HD_LARA_NODES, light,
 				HDLaraPartCoverage(HD_LARA_PART_HOLSTER_RIG) & bodyMask, &lighting, 0,
@@ -11659,20 +11767,22 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 			SetSheen(lighting, list[i].part, sheenOn);
 
 			if (draws(list[i].part) &&
-				HDModelDraw(HDLaraPartSlot(list[i].part), matrices, HD_LARA_NODES,
+				HDModelDraw(xrayDraw ? HDLaraPartXraySlot(list[i].part)
+				: HDLaraPartSlot(list[i].part), matrices, HD_LARA_NODES,
 				light, list[i].nodeMask & bodyMask, &lighting))
 				drawn++;
 
 			/* The install's own hands under a mod's gun, in the
 			 * same place and with the same arguments the engine gives them - see
 			 * hd_laradraw.cpp. */
-			if (draws(list[i].part) && HDLaraHasPartTwin(list[i].part) &&
+			if (!xrayDraw && draws(list[i].part) &&
+				HDLaraHasPartTwin(list[i].part) &&
 				HDModelDraw(HDLaraPartTwinSlot(list[i].part), matrices,
 				HD_LARA_NODES, light, list[i].nodeMask & bodyMask, &lighting))
 				drawn++;
 		}
 
-		if (!o.firstPerson && draws(HD_LARA_PART_BRAID) &&
+		if (!xrayDraw && !o.firstPerson && draws(HD_LARA_PART_BRAID) &&
 			HDLaraHasPart(HD_LARA_PART_BRAID))
 		{
 			float hairLight[HD_LARA_HAIR_NODES * 3];
@@ -11819,9 +11929,10 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 	 * first, the last and the step. */
 	const std::string lipsName = LipsName(o.lips, lipsTrack, pictures > 1);
 
-	sprintf(path, "%s_lara_%s%s%s%s%s%s.png", o.out.c_str(),
+	sprintf(path, "%s_lara_%s%s%s%s%s%s%s.png", o.out.c_str(),
 		HDLaraOutfitModel(outfit), o.firstPerson ? "_firstperson" : "", cut,
-		o.mirror ? "_mirror" : "", lipsName.c_str(), o.shadowCast ? "_cast" : "");
+		o.mirror ? "_mirror" : "", lipsName.c_str(), o.shadowCast ? "_cast" : "",
+		xrayDraw ? "_xray" : "");
 
 	/* A picture with a room says which, and what the receive did to it. */
 	if (roomHas)
@@ -13093,6 +13204,7 @@ int main(int argc, char** argv)
 	int laraHandFold = -1;		// -handfold
 	bool laraNoFold = false;	// -nofold: the before picture
 	bool laraNoHandMix = false;	// -nohandmix: and the other half of it
+	bool laraXray = false;		// -xray: the X-ray look of the skeleton cheat
 	int laraHead = -1;		// -lara-head: -1 = the wardrobe's own answer
 	bool laraPoseRisk = false;	// -poserisk
 	std::vector<int> laraTween60;	// -tween60
@@ -13289,6 +13401,15 @@ int main(int argc, char** argv)
 		{
 			lara = true;
 			laraNoHandMix = true;
+		}
+		/* The X-ray look: the level's X-ray set (hd_lara.cpp, kXray) planned
+		 * and drawn in place of the outfit's parts, which is what the game
+		 * draws while lara.skelebob holds in a level with a SKELETON
+		 * trigger. */
+		else if (!_stricmp(argv[i], "-xray"))
+		{
+			lara = true;
+			laraXray = true;
 		}
 		/* The head rule this picture is drawn with, whatever the
 		 * wardrobe says - "outfit" is the picture from before the head rule existed.
@@ -14125,6 +14246,7 @@ int main(int argc, char** argv)
 		o.handFold = laraHandFold;
 		o.noFold = laraNoFold;
 		o.noHandMix = laraNoHandMix;
+		o.xray = laraXray;
 		o.head = laraHead;
 		o.poseRisk = laraPoseRisk;
 		o.tween60 = laraTween60;

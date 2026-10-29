@@ -10504,9 +10504,36 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 	for (int i = 0; i < HD_LARA_NODES * 3; i++)
 		light[i] = (float)o.shadeRgb[i % 3];
 
+	/* The X-ray look - -xray, or an outfit that is the X-ray body: the set's
+	 * tone on the light it is handed, the ambient and every -light alike, as
+	 * specific\hd\hd_laradraw.cpp hands it (hd_lara.h, HDLaraXrayTone). */
+	HDObjLight tonedLights[HD_MAX_OBJ_LIGHTS];
+	const bool xrayLit = xrayDraw || HDLaraOutfitIsXray(outfit);
+
+	if (xrayLit)
+	{
+		float level = 1.0f, hue[3] = { 1.0f, 1.0f, 1.0f };
+
+		HDLaraXrayTone(&level, hue);
+
+		for (int i = 0; i < HD_LARA_NODES * 3; i++)
+			light[i] *= level * hue[i % 3];
+
+		for (int i = 0; i < o.lightCount && i < HD_MAX_OBJ_LIGHTS; i++)
+		{
+			tonedLights[i] = o.lights[i];
+			tonedLights[i].r *= level * hue[0];
+			tonedLights[i].g *= level * hue[1];
+			tonedLights[i].b *= level * hue[2];
+		}
+
+		printf("xray    : the set's tone %.2f/%.2f,%.2f,%.2f on its light, "
+			"every part lit as the hull\n", level, hue[0], hue[1], hue[2]);
+	}
+
 	HDModelLighting lighting;
 
-	lighting.lights = o.lightCount ? o.lights : 0;
+	lighting.lights = o.lightCount ? (xrayLit ? tonedLights : o.lights) : 0;
 	lighting.lightCount = o.lightCount;
 	lighting.sunScale = 0.75f;
 	lighting.specStrength = 0.0f;

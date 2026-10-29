@@ -7179,6 +7179,12 @@ void HDLevelLoad(const char* wadName)
 	if (!g_stem[0])
 		return;
 
+	/* The mesh table as the level loaded it - InitialiseObjects has written
+	 * the swaps every level sets up, no cutscene has run - against which a
+	 * cutscene's borrowed meshes are told (hd_object.h). Before the kept
+	 * level's early return below: the table is this load's. */
+	HDObjectMeshTableTake();
+
 	/* What the randomizer changed, before anything else is measured: the
 	 * sidecar names the rooms whose shape no longer matches the Remaster's art
 	 * and the slots whose model came out of another file, and both decide what

@@ -3108,6 +3108,12 @@ void DrawCutSeqActors()
 			actor->mesh_bits = (long)cutseq_meshbits[i];
 			actor->meshswap_meshbits = (long)cutseq_meshswapbits[i];
 
+			/* The nodes this cutscene gave a mesh of another slot - the crane
+			 * guard's pistol hand, the priest's torch: what the HD path draws
+			 * for them, which HDObjectBegin takes (hd_object.h). One pointer
+			 * compare a node, and nothing at all without an HD build. */
+			HDObjectCutActor(i, actor, fading, gLogEnabled && !cutseq_actors_logged);
+
 			const bool hd = !fading && HDObjectBegin(actor, obj);
 
 			/* The actor's lips: an HD face speaks its own track file at the
@@ -3126,9 +3132,11 @@ void DrawCutSeqActors()
 			 * after the level slot (ANIMATING4_RICHCUT2), so a rule that
 			 * looks for <MODEL>_HEAD finds nothing; hd_model.cpp resolves
 			 * this mapping instead. This line records which actor is drawn
-			 * in HD and whether a face was found for its slot, and lips=
+			 * in HD and whether a face was found for its slot, lips=
 			 * the track and the frame count of the face's track file, or
-			 * - for none. */
+			 * - for none, and swap= the nodes holding a mesh of another
+			 * slot with what was drawn for each (HDObjectCutActorSwaps);
+			 * later changes are HDLOG cutswap lines of their own. */
 			if (gLogEnabled && !cutseq_actors_logged)
 			{
 				char lipsWord[32] = "-";
@@ -3137,7 +3145,7 @@ void DrawCutSeqActors()
 					sprintf(lipsWord, "%ld/%d", GLOBAL_cutme->audio_track, lips);
 
 				Log("HDLOG cutseq actor=%d slot=%d name=%s model=%s hd=%d "
-					"head=%d fading=%d bits=%08X swapbits=%08X lips=%s",
+					"head=%d fading=%d bits=%08X swapbits=%08X lips=%s swap=%s",
 					i, (int)actor->object_number,
 					HDSlotName(actor->object_number)
 						? HDSlotName(actor->object_number) : "?",
@@ -3147,7 +3155,7 @@ void DrawCutSeqActors()
 					HDModelHasHead(actor->object_number)
 						? HDModelHeadNode(actor->object_number) : -1,
 					(int)fading, cutseq_meshbits[i], cutseq_meshswapbits[i],
-					lipsWord);
+					lipsWord, HDObjectCutActorSwaps());
 			}
 
 			if (hd)

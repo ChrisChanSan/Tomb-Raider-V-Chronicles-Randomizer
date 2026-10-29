@@ -5367,6 +5367,26 @@ bool HDModelNodeCovered(int slot, int node)
 	return (model->covered & (1u << node)) != 0;
 }
 
+void HDModelBorrowJoints(const float* bind, int node, const float* at,
+	float* out, int nodes)
+{
+	if (!bind || !at || !out || node < 0 || node >= nodes)
+		return;
+
+	for (int j = 0; j < nodes && j < kJointBudget; j++)
+	{
+		const float dx = bind[j * 3 + 0] - bind[node * 3 + 0];
+		const float dy = bind[j * 3 + 1] - bind[node * 3 + 1];
+		const float dz = bind[j * 3 + 2] - bind[node * 3 + 2];
+		float* m = out + j * 16;
+
+		memcpy(m, at, sizeof(float) * 16);
+		m[12] = at[12] + dx * at[0] + dy * at[4] + dz * at[8];
+		m[13] = at[13] + dx * at[1] + dy * at[5] + dz * at[9];
+		m[14] = at[14] + dx * at[2] + dy * at[6] + dz * at[10];
+	}
+}
+
 int HDModelMaxBone(int slot)
 {
 	const Model* model = find(g_models, slot);

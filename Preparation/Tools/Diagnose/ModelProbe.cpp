@@ -716,6 +716,13 @@
  *     -model <NAME>       with -slot: that .TRM on the slot instead of the
  *                         level's own binding - a candidate held against a
  *                         classic tree.
+ *     -meshes             with -slot: the slot's classic meshes, vertices
+ *                         and box per node in the node's frame, with or
+ *                         without a model.
+ *     -borrow <node> <slot> <index>
+ *                         with -slot: its node <node> drawn by node <index>
+ *                         of <slot>'s model, as a cutscene's borrowed mesh
+ *                         is drawn (hd_model.h, HDModelBorrowJoints).
  *     -crossdrift         with -all: every model on every other slot of the
  *                         level with its node count, by both drifts and the
  *                         fit - the foreign trees the skeleton test refuses.
@@ -3505,6 +3512,55 @@ static void PrintBindCheck(const Tr5Level& level, const std::string& root5,
 	}
 
 	HDTrmFree(&trm);
+}
+
+/* -meshes: the classic mesh of every node of the asked slot, read out of the
+ * .TRC - its vertex count and its box in the node's own frame (the bind
+ * offset taken off), whether or not the slot has an HD model. A cutscene that
+ * hands an actor another slot's mesh (game\deltapak.cpp) names the slot and
+ * the node, and this says what that mesh is: a hand with a pistol, a torch,
+ * an empty fist. The size column is the box's extent on each axis. */
+static void PrintClassicMeshes(const Tr5Level& level, const ClassicSlot& here)
+{
+	printf("\n-- classic meshes: slot %d %s, %d nodes --------------------\n",
+		here.slot, HDSlotName(here.slot) ? HDSlotName(here.slot) : "?",
+		here.nodes);
+	printf("  %-4s %6s  %-34s %s\n", "node", "verts",
+		"box in the node's frame (x y z)", "size");
+
+	for (int node = 0; node < here.nodes; node++)
+	{
+		std::vector<float> cv;
+		const int count = ClassicNodeVertices(level, here, node, cv);
+
+		if (!count)
+		{
+			printf("  %-4d %6d  no classic mesh\n", node, 0);
+			continue;
+		}
+
+		float lo[3], hi[3];
+
+		for (int k = 0; k < 3; k++)
+		{
+			lo[k] = hi[k] = cv[(size_t)k] - here.bind[node][k];
+
+			for (int v = 1; v < count; v++)
+			{
+				const float x = cv[(size_t)v * 3 + k] - here.bind[node][k];
+
+				lo[k] = x < lo[k] ? x : lo[k];
+				hi[k] = x > hi[k] ? x : hi[k];
+			}
+		}
+
+		char box[64];
+
+		sprintf(box, "%.0f..%.0f %.0f..%.0f %.0f..%.0f", lo[0], hi[0], lo[1],
+			hi[1], lo[2], hi[2]);
+		printf("  %-4d %6d  %-34s %.0f %.0f %.0f\n", node, count, box,
+			hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]);
+	}
 }
 
 /* -bones: every bone the .TRM weights, numbered as the file numbers it, with
@@ -13057,8 +13113,15 @@ int main(int argc, char** argv)
 	bool bindCheck = false, crossDrift = false, slideCensus = false;
 	/* -bones: every bone of the .TRM against the slot's classic nodes;
 	 * -model <NAME>: -slot's model is that .TRM instead of the level's own
-	 * binding - a candidate held against a slot's classic tree. */
+	 * binding - a candidate held against a slot's classic tree;
+	 * -meshes: the slot's classic meshes, model or none
+	 * (PrintClassicMeshes). */
 	bool bonesAsked = false;
+	bool meshesAsked = false;
+	/* -borrow <node> <slot> <index>: a cutscene's borrowed mesh - -slot's
+	 * node <node> drawn by <slot>'s model, its node <index> hung on it the
+	 * way the engine hangs it (hd_model.h, HDModelBorrowJoints). */
+	int borrowNode = -1, borrowSlot = -1, borrowIndex = -1;
 	std::string modelAsked;
 	// -alpha: the glass rule taken apart; -noglass: the rule left off.
 	bool alphaCheck = false, noGlass = false;
@@ -13541,6 +13604,14 @@ int main(int argc, char** argv)
 			bindCheck = true;
 		else if (!_stricmp(argv[i], "-bones"))
 			bonesAsked = true;
+		else if (!_stricmp(argv[i], "-meshes"))
+			meshesAsked = true;
+		else if (!_stricmp(argv[i], "-borrow") && i + 3 < argc)
+		{
+			borrowNode = atoi(argv[++i]);
+			borrowSlot = atoi(argv[++i]);
+			borrowIndex = atoi(argv[++i]);
+		}
 		else if (!_stricmp(argv[i], "-model") && i + 1 < argc)
 			modelAsked = argv[++i];
 		else if (!_stricmp(argv[i], "-alpha"))
@@ -14286,7 +14357,8 @@ int main(int argc, char** argv)
 
 		for (size_t i = 0; i < slots.size(); i++)
 		{
-			if (!all && slots[i] != slot)
+			// -borrow: the slot the mesh is borrowed from is built as well.
+			if (!all && slots[i] != slot && slots[i] != borrowSlot)
 				continue;
 
 			ReadClassicSlot(level, slots[i], classic[i]);
@@ -15133,6 +15205,14 @@ int main(int argc, char** argv)
 	}
 
 	/* --- one model ------------------------------------------------------ */
+	/* -meshes before the model is asked for: the classic meshes are the
+	 * level's whatever the slot binds, and a holder slot such as MESHSWAP2
+	 * has no model at all. */
+	if (meshesAsked)
+		for (size_t i = 0; i < order.size(); i++)
+			if (wanted[i].slot == slot && classic[(size_t)order[i]].ok)
+				PrintClassicMeshes(level, classic[(size_t)order[i]]);
+
 	if (!HDModelHas(slot))
 	{
 		printf("\nModelProbe: slot %d has no HD model - nothing to draw\n", slot);
@@ -16277,10 +16357,42 @@ int main(int argc, char** argv)
 		/* A model that is itself a face (-name LARA_HEAD -rigid) takes the
 		 * lips on its own draw; a body with a separate face leaves them to
 		 * the face below. */
+		const bool borrowing = borrowNode >= 0 && borrowNode < here->nodes &&
+			borrowIndex >= 0 && HDModelHas(borrowSlot);
+
 		drew = HDModelDraw(slot, &own[0], here->nodes,
-			&light[0], nodeMask, &lighting, 0,
-			cullMode >= 0 ? cullMode : HD_MODEL_CULL_NONE,
+			&light[0], borrowing ? nodeMask & ~(1u << borrowNode) : nodeMask,
+			&lighting, 0, cullMode >= 0 ? cullMode : HD_MODEL_CULL_NONE,
 			lipsOnHead ? -1 : lipsTrack, lipsOnHead || lipsTrack < 0 ? -1 : lips.frames[0]);
+
+		/* -borrow: the lender's model on the borrowing node, its own node
+		 * out (above), with that node's light - the actor's rule 2 of
+		 * hd_object.cpp, drawn with the engine's joints. */
+		const ClassicSlot* lender = 0;
+
+		for (size_t i = 0; borrowing && i < order.size(); i++)
+			if (wanted[i].slot == borrowSlot)
+				lender = &classic[(size_t)order[i]];
+
+		if (lender && borrowIndex < lender->nodes)
+		{
+			std::vector<float> joints((size_t)lender->nodes * 16);
+			std::vector<float> lent((size_t)lender->nodes * 3);
+
+			HDModelBorrowJoints(&lender->bind[0][0], borrowIndex,
+				&own[(size_t)borrowNode * 16], &joints[0], lender->nodes);
+
+			for (int n = 0; n < lender->nodes; n++)
+				memcpy(&lent[(size_t)n * 3], &light[(size_t)borrowNode * 3],
+					sizeof(float) * 3);
+
+			printf("borrow  : node %d of slot %d drawn by %s, its node %d%s\n",
+				borrowNode, slot, HDModelName(borrowSlot) ? HDModelName(borrowSlot)
+					: "?", borrowIndex, HDModelNodeCovered(borrowSlot, borrowIndex)
+					? "" : " - which has no geometry");
+			HDModelDraw(borrowSlot, &joints[0], lender->nodes, &lent[0],
+				1u << borrowIndex, &lighting);
+		}
 
 		/* -classicdots: every vertex of the classic mesh of each node, in
 		 * the node's own frame (the .TRC's shorts, the bind offset left

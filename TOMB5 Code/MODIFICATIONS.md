@@ -15610,6 +15610,42 @@ alone. With `hd_build` 0 none of it runs.
 
 **Commits.** `a5bc13a9`, `68a0352a`, `9da367d4`, `c9e80143`.
 
+### Lara's legs inside the suit, on the classic path (#263)
+
+2026-10-29.
+
+**What.** With the HD path off too, Lara's legs stay hidden in the two cutscenes that
+put the diving suit on her and take it off again, whatever outfit she wears: from frame
+542 of JOBY3's cutscene 5 and up to frame 440 of JOBY5's cutscene 32. The `SWAPLOG` and
+`HIDELOG` lines are written for her classic draw as well and name the draw.
+
+**Why.** Both cutscenes hide her legs with the mesh bits 0x81FF01FF while the suit's
+actor wears its own. DrawLara__1 reads them; the catsuit's DrawLara__4 and the diving
+suit's DrawLara__5 read none. The shipped game never brings the two together: the word
+is written in these two cutscenes alone, which play in JOBY3 and JOBY5, and both levels
+dress her through __1; every other writer writes 0 or -1. The randomizer's outfit roll
+can dress JOBY5 in the catsuit, and the classic body then showed its own legs bent
+backwards beside the suit's. The two log lines came from the HD composite alone.
+
+**How.** `specific/drawlara.cpp`: __4 and __5 put __1's own tests, literally, where __1
+has them: `mesh_bits >> 0x10 & 1 << (15 - i)` around each skin node's draw and stash,
+and `mesh_bits & 1 << (14 - i)` around each of the catsuit's seam pieces; the diving
+suit has none and stashes nothing. Dropping a hidden node's stash with it is __1's way
+and is safe for this word: the seam pieces it leaves drawn, 6 to 13, sew the hips, the
+torso, the head and the arms, all of them drawn; the six it hides sit at the hips, the
+knees and the ankles. The holsters, the weapon on the back and the suit's thrusters are
+drawn without a test, as __1 draws its own. __1 and the skeleton's __6 are unchanged: a
+SKELETON trigger picks __6 only from Lara's own control, which does not run in a
+cutscene. `specific/hd/hd_laradraw.cpp`: `HDLaraClassicLog`, called by __1, __4 and __5
+where they draw her classic, runs the writer of both lines with its state; each line
+ends in `drawn=hd` or `drawn=DrawLara__<n>`, and a level without an HD build takes its
+name from the frame clock (`specific/hd/hd_level.cpp`, `HDLevelLogName`).
+`docs/Engine-Manual.md` says it. hd_build 0: unchanged for every vanilla level; a
+catsuit or diving suit in JOBY3's last and JOBY5's first cutscene now hides the legs as
+the vanilla outfit does.
+
+**Commits.** `64ca409f`, `7db3fc3d`.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -15890,3 +15926,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #260 | The submarine's grilles, benches and diving suits |
 | #261 | The diving suits, their console and Lara in the suit |
 | #262 | The suit's console states and Lara's legs inside the suit |
+| #263 | Lara's legs inside the suit, on the classic path |

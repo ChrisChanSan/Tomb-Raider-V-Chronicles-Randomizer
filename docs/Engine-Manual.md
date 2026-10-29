@@ -4109,14 +4109,22 @@ her outfit on every node the cutscene leaves shown; the suit's hips the
 classic game hangs on her hip node is drawn by the legs' model around her.
 The nodes it hides - her legs, by her mesh bits, from frame 542 of the
 Submarine's cutscene and up to frame 440 of the Sinking Submarine's - stay
-hidden on every outfit she wears: the classic catsuit and diving suit read no
-mesh bits, and with the randomizer's outfit roll an HD body drawn whole put
-her own legs beside the suit's. The install's *Russia Extra*, a Russia body
+hidden on every outfit she wears, HD or classic: the HD body reads the bits
+whatever the outfit, and the classic catsuit and diving suit read them with
+the same tests as her other classic outfits. A body that ignored them would
+put her own legs beside the suit's, and the randomizer's outfit roll can
+dress her in the catsuit there. The install's *Russia Extra*, a Russia body
 without legs made for these two cutscenes, is therefore not offered in the
 outfit menu. With `-log` a `SWAPLOG` line names every node whose mesh a
 cutscene takes from another slot - the cutscene, its frame, the node, the slot
 and its mesh, and the outfit node drawn there - and its return, and ends in the
-nodes the frame hides; a `HIDELOG` line names them on every other change.
+nodes the frame hides and the draw that drew her: `drawn=hd`, or
+`drawn=DrawLara__1`, `__4` or `__5` for the classic outfit, the catsuit and
+the diving suit drawn classic. A `HIDELOG` line names them on every other
+change. With the HD path off and the catsuit worn, the Sinking Submarine's
+first cutscene opens with `HIDELOG level=JOBY5 cut=32 frame=…
+mesh_bits=0x81FF01FF hidden=1,2,3,4,5,6 hd=- drawn=DrawLara__4`, and a second
+line with `hidden=none` follows when frame 440 or a skip gives her legs back.
 
 **First person** drops the same three things from the HD Lara that it
 drops from the classic one: the head, the face and the braid, all three of
@@ -4254,6 +4262,10 @@ negative determinant.
 `if (lara_item->mesh_bits && !SCNoDrawLara)` before it calls `DrawLara` — so
 nothing of her is put on the HD frame list while the scope is up, and leaving
 it puts `mesh_bits` back to −1 in the same place it was always put back. The
+same test hides her whole on the classic path, whichever `DrawLara` variant
+would draw her. The one word that hides only part of her, the suit cutscenes'
+`0x81FF01FF` (above), is read inside the draw - by the HD composite and by
+`DrawLara__1`, `__4` and `__5` alike. The
 scope's own mask, the pickup display and the fade lie **above** the HD world:
 the HD rooms and objects are drawn immediately before `DrawBuckets`, and the
 depth clear that separates the world from the overlays comes after all

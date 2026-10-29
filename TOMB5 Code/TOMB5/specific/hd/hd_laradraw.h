@@ -136,13 +136,13 @@ void HDLaraDrawFrameReset();
  *                    call with a second set of matrices, exactly as it is for
  *                    the classic path; see the .cpp for why the winding does
  *                    not have to be touched.
- *   honourMeshBits   whether lara_item->mesh_bits hides nodes. TRUE for
- *                    DrawLara__1, which reads them; FALSE for __4 and __5,
- *                    which do not - and a seam that read them where the
- *                    classic path does not would make the catsuit vanish in
- *                    the very cutscenes that hide the classic joints.
+ *
+ * lara_item->mesh_bits hides nodes for every body, whichever variant calls
+ * (hd_lara.h, HDLaraNodesShown): the bits are the cutscene's word about her
+ * and not the classic body's, and the two cutscenes that hide her legs
+ * inside the diving suit's mean it of any body she wears.
  */
-void HDLaraDrawFrame(long mirror, bool honourMeshBits);
+void HDLaraDrawFrame(long mirror);
 
 // --- the projected shadow --------------------------------------------------
 

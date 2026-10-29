@@ -628,6 +628,11 @@
  *     -meshbits <mask>    hide nodes exactly as item->mesh_bits does in the
  *                         game; 0xBFFF takes a SWAT's head off. Decimal or
  *                         0x. Default: every node drawn.
+ *     -larabits <bits>    with -lara: hide her nodes exactly as the game's
+ *                         lara_item->mesh_bits does, read by the engine's own
+ *                         test (hd_lara.h, HDLaraNodesShown) - 0x81FF01FF is
+ *                         the word of the two cutscenes that hide her legs
+ *                         inside the diving suit. Decimal or 0x.
  *     -pose <node> <yaw> <pitch>
  *                         turn that node of the mesh tree and everything
  *                         below it. Repeat the switch for more nodes.
@@ -13707,6 +13712,14 @@ int main(int argc, char** argv)
 		}
 		else if (!_stricmp(argv[i], "-meshbits") && i + 1 < argc)
 			nodeMask = (unsigned int)strtoul(argv[++i], 0, 0);
+		else if (!_stricmp(argv[i], "-larabits") && i + 1 < argc)
+		{
+			const unsigned long bits = strtoul(argv[++i], 0, 0);
+
+			nodeMask = HDLaraNodesShown(bits);
+			printf("larabits: mesh_bits %08lx shows nodes %04x of her 15\n",
+				bits, nodeMask);
+		}
 		else if (!_stricmp(argv[i], "-light") && i + 7 < argc && lightCount < HD_MAX_OBJ_LIGHTS)
 		{
 			/* x y z r g b range - a POINT light in view space, which is what

@@ -146,14 +146,14 @@ static void DrawLara__1(ITEM_INFO* item, long mirror)
 	 * frame's list. Never both, and never half of each: a classic seam piece
 	 * on an HD body is the very thing TROne tried and took out again.
 	 *
-	 * True for the mesh bits, because this variant reads them: `mesh_bits >>
-	 * 0x10 & 1 << (15 - i)` above, which the two other variants do not have.
+	 * The mesh bits are read there with this variant's own test below,
+	 * `mesh_bits >> 0x10 & 1 << (15 - i)` (hd_lara.h, HDLaraNodesShown).
 	 *
 	 * The single push at the top of this function is popped here, and the
 	 * clipping window is restored exactly as the tail restores it. */
 	if (HDLaraDrawActive())
 	{
-		HDLaraDrawFrame(mirror, true);
+		HDLaraDrawFrame(mirror);
 		phd_PopMatrix();
 		bLaraUnderWater = 0;
 		phd_top = top;
@@ -416,10 +416,13 @@ static void DrawLara__4(ITEM_INFO* item, long mirror)
 	 * textures, so the HD catsuit is matte where the classic one glints.
 	 * Named here and in the manual rather than faked: inventing a specular
 	 * term would be inventing a look, and the remaster's own picture is what
-	 * this path draws. */
+	 * this path draws.
+	 *
+	 * The mesh bits this variant does not read are read there, as for every
+	 * body (hd_laradraw.h). */
 	if (HDLaraDrawActive())
 	{
-		HDLaraDrawFrame(mirror, false);
+		HDLaraDrawFrame(mirror);
 		phd_PopMatrix();
 		bLaraUnderWater = 0;
 		phd_top = top;
@@ -678,11 +681,13 @@ static void DrawLara__5(ITEM_INFO* item, long mirror)
 	 * manual; the day the wardrobe grows a model for them this becomes one
 	 * more part.
 	 *
-	 * False for the mesh bits: this variant does not read them either. */
+	 * This variant reads no mesh bits and the seam does, as for every body:
+	 * the cutscenes that hide her legs inside the suit's write them for
+	 * whatever she wears (hd_laradraw.h). */
 	const bool hd = HDLaraDrawActive();
 
 	if (hd)
-		HDLaraDrawFrame(mirror, false);
+		HDLaraDrawFrame(mirror);
 
 	for (int i = 0; i < 15 && !hd; i++)//skin
 	{

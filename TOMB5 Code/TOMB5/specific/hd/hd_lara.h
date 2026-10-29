@@ -621,6 +621,35 @@ enum HDLaraNode
 	HD_LARA_HEAD_NODE
 };
 
+/* Where each node's matrix and mesh bit stand in the engine's LMX_ order,
+ * the order DrawLara walks her skin in: the hips, the legs and the torso
+ * where the tree has them, the head moved up to 8 and the arms one further
+ * on. game\delstuff.h spells the same table for the engine as
+ * lara_lmx_of_node, and the seam asserts at compile time that the two are
+ * one table; this one is here for a caller with no engine behind it. */
+constexpr int HD_LARA_LMX_OF_NODE[HD_LARA_NODES] =
+{
+	0,			// hips
+	1, 2, 3,		// the left leg
+	4, 5, 6,		// the right leg
+	7,			// torso
+	9, 10, 11,		// the right arm
+	12, 13, 14,		// the left arm
+	8			// head
+};
+
+/* The nodes Lara's mesh_bits show, bit n for node n of HDLaraNode.
+ *
+ * The engine's own test, the one DrawLara__1 puts each skin mesh under
+ * (specific\drawlara.cpp): `mesh_bits >> 16 & 1 << (15 - i)` with i the
+ * LMX_ index. Her fifteen bits sit in the high half and count backwards,
+ * so the hips are bit 31, a thigh bit 30 or 27 and the head bit 23; the
+ * low half belongs to the classic joint pieces, which an HD body does not
+ * have. -1, the bits of nearly every frame, shows all fifteen; the
+ * cutscenes that hide her legs write 0x81FF01FF, which shows the hips, the
+ * torso, the head and both arms. */
+unsigned int HDLaraNodesShown(unsigned long meshBits);
+
 /* Which body Lara wears. The section table that picks one is in the .cpp.
  *
  * These nine are the level-facts path and nothing more. They are the outfits

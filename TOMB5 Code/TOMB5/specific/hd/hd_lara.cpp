@@ -2419,6 +2419,17 @@ unsigned int HDLaraBodyMask()
 	return g_body_mask;
 }
 
+unsigned int HDLaraNodesShown(unsigned long meshBits)
+{
+	unsigned int shown = 0;
+
+	for (int node = 0; node < HD_LARA_NODES; node++)
+		if (meshBits >> 16 & 1ul << (15 - HD_LARA_LMX_OF_NODE[node]))
+			shown |= 1u << node;
+
+	return shown;
+}
+
 bool HDLaraHasPart(int part)
 {
 	return part >= 0 && part < HD_LARA_PART_COUNT && g_has[part];

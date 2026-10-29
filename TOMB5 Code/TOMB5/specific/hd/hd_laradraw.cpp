@@ -589,10 +589,32 @@ namespace
 	 * says. One line per change of a node's owner to a slot that is not
 	 * Lara's own and back: her weapons, her scream and her speech heads are
 	 * the wardrobe's and turn over many times a second. Cleared with the
-	 * level, so a level's first frame names any foreign mesh it starts with. */
+	 * level, so a level's first frame names any foreign mesh it starts with.
+	 *
+	 * And the nodes her mesh_bits hide (hd_lara.h, HDLaraNodesShown): at
+	 * the end of every SWAPLOG line, and in a HIDELOG line of their own on
+	 * every change no SWAPLOG line of the same frame carried - JOBY5's
+	 * first cutscene hides her legs with no swap at all. */
 	short* g_swap_mesh[HD_LARA_NODES];
 	bool g_swap_foreign[HD_LARA_NODES];
 	bool g_swap_seeded = false;
+	unsigned int g_hide_said = 0;	// the hidden nodes the log last named
+
+	// The nodes a mask leaves out, for the log: "none", or "1,2,3".
+	void hidden_text(unsigned int shown, char* out, int size)
+	{
+		int at = 0;
+
+		out[0] = 0;
+
+		for (int node = 0; node < HD_LARA_NODES && at < size; node++)
+			if (!(shown >> node & 1))
+				at += std::snprintf(out + at, size - at, "%s%d",
+					at ? "," : "", node);
+
+		if (!at)
+			std::snprintf(out, size, "none");
+	}
 
 	/* The slot and the mesh number of a mesh pointer: Lara's own slots
 	 * first, which share their meshes among themselves, then every other
@@ -626,6 +648,10 @@ namespace
 			return;
 
 		const bool cut = GLOBAL_playing_cutseq != 0;
+		const unsigned int hidden = ~shown & ((1u << HD_LARA_NODES) - 1);
+		char hiddenList[64];
+
+		hidden_text(shown, hiddenList, sizeof(hiddenList));
 
 		for (int node = 0; node < HD_LARA_NODES; node++)
 		{
@@ -649,16 +675,28 @@ namespace
 				HD_LARA_PART_BODY);
 
 			Log("SWAPLOG level=%s cut=%d frame=%d node=%d from=%s(%d) "
-				"mesh=%d foreign=%d hd=%s:%d shown=%d", g_lights_stem,
-				cut ? (int)cutseq_num : 0,
+				"mesh=%d foreign=%d hd=%s:%d shown=%d hidden=%s",
+				g_lights_stem, cut ? (int)cutseq_num : 0,
 				cut && GLOBAL_cutseq_frame > 0 ? (int)GLOBAL_cutseq_frame - 1
 					: -1, node,
 				known && HDSlotName(slot) ? HDSlotName(slot) : "?", slot,
 				index, (int)foreign, body ? body : "-", node,
-				(shown >> node) & 1 ? 1 : 0);
+				(shown >> node) & 1 ? 1 : 0, hiddenList);
+			g_hide_said = hidden;
 		}
 
 		g_swap_seeded = true;
+
+		if (hidden == g_hide_said)
+			return;
+
+		g_hide_said = hidden;
+		Log("HIDELOG level=%s cut=%d frame=%d mesh_bits=0x%08lX hidden=%s "
+			"hd=%s", g_lights_stem, cut ? (int)cutseq_num : 0,
+			cut && GLOBAL_cutseq_frame > 0 ? (int)GLOBAL_cutseq_frame - 1
+				: -1, (unsigned long)lara_item->mesh_bits, hiddenList,
+			HDLaraPartModel(g_level.outfit, HD_LARA_PART_BODY)
+				? HDLaraPartModel(g_level.outfit, HD_LARA_PART_BODY) : "-");
 	}
 
 	/* The braid's six matrices.
@@ -1502,6 +1540,7 @@ void HDLaraDrawEnd()
 	g_lights_stem[0] = 0;
 	g_lights_logged = false;
 	g_swap_seeded = false;
+	g_hide_said = 0;
 	face_reset();
 
 	// A new level starts the chest's motion at rest, with fresh counters.
@@ -1701,7 +1740,18 @@ void HDLaraDrawFrameReset()
 	}
 }
 
-void HDLaraDrawFrame(long mirror, bool honourMeshBits)
+/* hd_lara.h keeps the LMX_ order for callers with no engine behind them, and
+ * this is where the engine's own table is in reach: the two are one. */
+constexpr bool lmx_tables_agree(int node)
+{
+	return node == HD_LARA_NODES || (HD_LARA_LMX_OF_NODE[node] ==
+		lara_lmx_of_node[node] && lmx_tables_agree(node + 1));
+}
+
+static_assert(lmx_tables_agree(0),
+	"HD_LARA_LMX_OF_NODE (hd_lara.h) is not lara_lmx_of_node (delstuff.h)");
+
+void HDLaraDrawFrame(long mirror)
 {
 	float matrices[HD_LARA_NODES * 16];
 	float nodeLight[HD_LARA_NODES * 3];
@@ -2014,21 +2064,18 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits)
 	const int castWith = casting ? HD_OBJ_CAST_ALSO : HD_OBJ_CAST_NONE;
 
 	/* --- which nodes are drawn at all ------------------------------------ */
-	unsigned int mask = ~0u;
-
-	if (honourMeshBits)
-	{
-		/* Lara's mesh_bits are not an item's. The skin's fifteen bits sit in
-		 * the high half and are counted backwards in LMX order - DrawLara__1
-		 * asks `mesh_bits >> 16 & 1 << (15 - i)` with i the LMX index, so the
-		 * head is bit 23 and not bit 14. The low half belongs to the fourteen
-		 * seam pieces, which the HD body does not have. */
-		mask = 0;
-
-		for (int node = 0; node < HD_LARA_NODES; node++)
-			if (lara_item->mesh_bits >> 0x10 & 1 << (15 - lara_lmx_of_node[node]))
-				mask |= 1u << node;
-	}
+	/* What her mesh_bits show, for every body (hd_lara.h, HDLaraNodesShown:
+	 * DrawLara__1's own test). The game writes three values into them: -1,
+	 * 0, which keeps her from being drawn at all (game\draw.cpp), and
+	 * 0x81FF01FF, her legs hidden while the diving suit's actor wears its
+	 * own - joby6_control from frame 542 of JOBY3's cutscene 5, joby8_init
+	 * up to frame 440 of JOBY5's cutscene 32 (game\deltapak.cpp). The
+	 * classic catsuit and diving suit, DrawLara__4 and __5, read no bits,
+	 * and in the shipped game they never meet these: both levels dress her
+	 * through __1. The randomizer's outfit roll puts them there, and then a
+	 * whole HD body showed her own legs beside the suit's, bent backwards in
+	 * the air - so the HD draw honours the bits whatever the variant. */
+	unsigned int mask = HDLaraNodesShown((unsigned long)lara_item->mesh_bits);
 
 	// A cutscene's swap of her nodes, behind -log - see swap_log.
 	if (!mirror)

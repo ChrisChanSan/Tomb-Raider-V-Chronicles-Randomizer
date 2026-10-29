@@ -15563,7 +15563,7 @@ legs model drawn on her there, which her node stands turned 25 degrees against;
 cutscene takes from another slot, and for its return. `docs/Engine-Manual.md` says what
 the suit and the console do.
 
-**Commits.** `83dbc995`, `c186a665`, `8fbb2320`, `9447da31`.
+**Commits.** `83dbc995`, `c186a665`, `8fbb2320`, `9447da31`, `b1829f23`.
 
 ## 3. Randomizer changes since Beta 1.0
 

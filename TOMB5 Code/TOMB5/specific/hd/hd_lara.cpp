@@ -1496,12 +1496,103 @@ namespace
 		HDSoftFindRegion(&verts[0], source->vertices, &sk, &g_soft_region);
 	}
 
-	/* The body's look at its own file: the throat texel and the chest's
-	 * regions, both while the vertices can still be read. */
+	/* ------------------------------------------------ the thrusters -- */
+	/* The diving suit's two units against the back she wears (hd_lara.h,
+	 * HDLaraThrusters): the units' box and the classic back are settled at
+	 * the plan, the worn back while the body file is read, the shift at the
+	 * level build. Reset at every plan, like the chest's regions. */
+	HDLaraThrusters g_thrusters;
+
+	struct BackScan
+	{
+		float back = 0.0f;
+		int under = 0;
+		int inside = 0;
+	};
+
+	/* One point of a torso, in the torso node's frame. The left unit is the
+	 * same mesh as the right one, drawn twice the side offset further over,
+	 * so its box is the right one's moved along x. */
+	void back_scan(BackScan& scan, float x, float y, float z)
+	{
+		const float* box = g_thrusters.box;
+		const float over = 2.0f * HD_LARA_THRUSTER_X;
+		const bool right = x >= box[0] && x <= box[1];
+		const bool left = x >= box[0] - over && x <= box[1] - over;
+
+		if ((!right && !left) || y < box[2] || y > box[3])
+			return;
+
+		if (z >= box[4] && z <= box[5])
+		{
+			scan.inside++;
+			return;
+		}
+
+		if (!scan.under || z < scan.back)
+			scan.back = z;
+
+		scan.under++;
+	}
+
+	void thrusters_plan(const HDLaraLevel* level)
+	{
+		g_thrusters = HDLaraThrusters();
+
+		if (!level->thruster || level->thrusterVerts <= 0 || !level->torso ||
+			level->torsoVerts <= 0)
+			return;
+
+		float lo[3], hi[3];
+
+		for (int k = 0; k < 3; k++)
+			lo[k] = hi[k] = level->thruster[k];
+
+		for (int i = 1; i < level->thrusterVerts; i++)
+			for (int k = 0; k < 3; k++)
+			{
+				const float at = level->thruster[i * 3 + k];
+
+				if (at < lo[k]) lo[k] = at;
+				if (at > hi[k]) hi[k] = at;
+			}
+
+		const float place[3] =
+		{
+			(float)HD_LARA_THRUSTER_X, (float)HD_LARA_THRUSTER_Y,
+			(float)HD_LARA_THRUSTER_Z
+		};
+
+		for (int k = 0; k < 3; k++)
+		{
+			g_thrusters.box[k * 2 + 0] = lo[k] + place[k];
+			g_thrusters.box[k * 2 + 1] = hi[k] + place[k];
+		}
+
+		g_thrusters.asked = true;
+
+		BackScan scan;
+
+		for (int i = 0; i < level->torsoVerts; i++)
+			back_scan(scan, level->torso[i * 3 + 0], level->torso[i * 3 + 1],
+				level->torso[i * 3 + 2]);
+
+		g_thrusters.classicUnder = scan.under;
+		g_thrusters.classicInside = scan.inside;
+		g_thrusters.classicBack = scan.back;
+	}
+
+	/* The body's look at its own file: the throat texel, the chest's
+	 * regions and the back the thrusters hang on, all while the vertices
+	 * can still be read. */
 	void measure_body(const HDTrmModel* source)
 	{
 		measure_neck_skin(source);
 		measure_softbody(source);
+
+		if (g_neck_bind_ok)
+			HDLaraThrusterBack(source, g_neck_bind, &g_thrusters.hdBack,
+				&g_thrusters.hdUnder, &g_thrusters.hdInside);
 	}
 
 	/* ---------------------------------------------------- the lid ------ */
@@ -1962,6 +2053,9 @@ namespace
 
 int HDLaraPlan(const HDLaraLevel* level, HDModelSlot* out, int max)
 {
+	// No thrusters until this level's plan has measured them.
+	g_thrusters = HDLaraThrusters();
+
 	if (!level || !out || max <= 0)
 		return 0;
 
@@ -1981,6 +2075,7 @@ int HDLaraPlan(const HDLaraLevel* level, HDModelSlot* out, int max)
 	std::memcpy(g_neck_bind, level->bodyBind, sizeof(g_neck_bind));
 	g_neck_bind_ok = true;
 	soft_region_clear();
+	thrusters_plan(level);
 
 	int written = 0;
 
@@ -2584,6 +2679,18 @@ bool HDLaraLevelBuild(const HDLaraLevel* level, HDLaraStats* stats)
 				"is the X-ray body and wears it already");
 	}
 
+	/* The diving suit's thrusters onto the body that arrived (hd_lara.h,
+	 * HDLaraThrusters): both backs measured, the difference rounded to the
+	 * whole units phd_TranslateRel takes. */
+	if (g_thrusters.asked && g_thrusters.classicUnder > 0 &&
+		g_thrusters.hdUnder > 0)
+	{
+		const float shift = g_thrusters.hdBack - g_thrusters.classicBack;
+
+		g_thrusters.applied = true;
+		g_thrusters.shift = (long)(shift < 0.0f ? shift - 0.5f : shift + 0.5f);
+	}
+
 	g_active = true;
 	return true;
 }
@@ -2613,6 +2720,44 @@ void HDLaraLevelEnd()
 
 	g_xray_sheen[0] = 0.0f;
 	g_xray_sheen[1] = 1.0f;
+
+	/* The shift goes with the build; what the plan and the body file
+	 * measured stays for the log, until the next plan resets it. */
+	g_thrusters.applied = false;
+	g_thrusters.shift = 0;
+}
+
+const HDLaraThrusters* HDLaraThrusterState()
+{
+	return &g_thrusters;
+}
+
+bool HDLaraThrusterBack(const HDTrmModel* body, const float* bind,
+	float* back, int* under, int* inside)
+{
+	BackScan scan;
+
+	if (body && bind && g_thrusters.asked)
+		for (int i = 0; i < body->vertices; i++)
+		{
+			const HDTrmVertex& v = body->vertex[i];
+
+			if (dominant_node(v) != HD_LARA_TORSO)
+				continue;
+
+			back_scan(scan, v.x - bind[HD_LARA_TORSO * 3 + 0],
+				v.y - bind[HD_LARA_TORSO * 3 + 1],
+				v.z - bind[HD_LARA_TORSO * 3 + 2]);
+		}
+
+	if (back)
+		*back = scan.back;
+	if (under)
+		*under = scan.under;
+	if (inside)
+		*inside = scan.inside;
+
+	return scan.under > 0;
 }
 
 bool HDLaraActive()

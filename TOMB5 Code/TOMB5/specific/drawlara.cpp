@@ -695,15 +695,17 @@ static void DrawLara__5(ITEM_INFO* item, long mirror)
 	/* The seam, and the one of the three that does not leave the function.
 	 * The diving suit is drawn out of two objects: her body, which the
 	 * wardrobe has as OUTFIT_SUBSUIT, and the two propulsion units below,
-	 * which are LARA_EXTRA_MESH1 turned by subsuit.XRot and which the
-	 * remaster's wardrobe has no model for.
+	 * which are LARA_EXTRA_MESH1 turned by subsuit.XRot and which no .TRM
+	 * of either install models on its own.
 	 *
 	 * They are not a node of the body - they are a separate object on the
-	 * torso's matrix - so drawing them classically over an HD suit is not the
+	 * torso's matrix - so drawing them classically over an HD body is not the
 	 * patchwork the object path refuses. It is two small classic meshes where
-	 * the alternative is a diving suit with no thrusters at all. Named in the
-	 * manual; the day the wardrobe grows a model for them this becomes one
-	 * more part.
+	 * the alternative is a diving suit with no thrusters at all. Over the HD
+	 * composite they keep the classic suit's place against the back of the
+	 * body she wears, whichever the wardrobe put on her (hd/hd_lara.h,
+	 * HDLaraThrusters). Named in the manual; the day the wardrobe grows a
+	 * model for them this becomes one more part.
 	 *
 	 * The seam reads the mesh bits as for every body, and the skin loop below
 	 * with DrawLara__1's own test: the cutscenes that hide her legs inside
@@ -748,7 +750,11 @@ static void DrawLara__5(ITEM_INFO* item, long mirror)
 	/* The thrusters hang on her torso, which no word the game writes hides
 	 * while she is drawn at all (game\draw.cpp leaves her out at 0), so
 	 * they are drawn as DrawLara__1 draws the weapon on her back: without
-	 * a test. */
+	 * a test. Over the HD composite both move along the torso's z by the
+	 * level build's measurement, onto the back she wears; 0 for the classic
+	 * body (hd/hd_laradraw.h, HDLaraThrusterShift). */
+	const long back = hd ? HDLaraThrusterShift() : 0;
+
 	obj = &objects[LARA_EXTRA_MESH1];
 	meshpp = &meshes[obj->mesh_index];
 
@@ -765,7 +771,7 @@ static void DrawLara__5(ITEM_INFO* item, long mirror)
 	aMXPtr[M21] = lara_matrices[LMX_TORSO * indices_count + M21];
 	aMXPtr[M22] = lara_matrices[LMX_TORSO * indices_count + M22];
 	aMXPtr[M23] = lara_matrices[LMX_TORSO * indices_count + M23];
-	phd_TranslateRel(-80, -192, -160);
+	phd_TranslateRel(-80, -192, -160 + back);
 	phd_RotX(subsuit.XRot);
 	phd_PutPolygons(*meshpp, -1);
 	phd_PopMatrix();
@@ -783,7 +789,7 @@ static void DrawLara__5(ITEM_INFO* item, long mirror)
 	aMXPtr[M21] = lara_matrices[LMX_TORSO * indices_count + M21];
 	aMXPtr[M22] = lara_matrices[LMX_TORSO * indices_count + M22];
 	aMXPtr[M23] = lara_matrices[LMX_TORSO * indices_count + M23];
-	phd_TranslateRel(80, -192, -160);
+	phd_TranslateRel(80, -192, -160 + back);
 	phd_RotX(subsuit.XRot);
 	phd_PutPolygons(*meshpp, -1);
 	phd_PopMatrix();

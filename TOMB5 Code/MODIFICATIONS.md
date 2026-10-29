@@ -15646,6 +15646,45 @@ the vanilla outfit does.
 
 **Commits.** `64ca409f`, `7db3fc3d`.
 
+### The classic holsters hide with her thighs, a left-out seam keeps its place (#267)
+
+2026-10-29.
+
+**What.** On the classic path the two thigh holsters are drawn only while the thigh
+each hangs on is shown: in the two cutscenes that hide Lara's legs inside the diving
+suit's, from frame 542 of JOBY3's cutscene 5 and up to frame 440 of JOBY5's cutscene 32,
+they go with her legs, in the classic outfit as in the catsuit. A seam piece the
+skinning leaves out no longer shifts the pieces after it. The `SWAPLOG` and `HIDELOG`
+lines of the classic draw end in the holsters it drew, the loader's
+`OBJLOG skinning done` line in the seam pieces it sewed and left out.
+
+**Why.** DrawLara__1 and the catsuit's DrawLara__4 drew the holsters on the thighs'
+matrices with no test of her mesh bits, so with the word 0x81FF01FF, which hides nodes 1
+to 6, they hung at thighs that are not drawn - in the shipped game as well, whose two
+levels dress her through __1. The HD composite masks its holster rig, which covers the
+belt and both thighs, with the nodes the bits show. The joint loops of __1, __4 and the
+skeleton's __6 leave out a seam piece whose seam found nothing to sew by `continue`, and
+the step to the next piece's mesh stood at the end of the loop's body: after a piece
+left out, every later seam drew the piece of a seam before it on its own rim - the
+left-out piece among them - and the last seam's own piece was not drawn.
+
+**How.** `specific/drawlara.cpp`: `LaraHolstersDrawn` gives the holsters of the frame,
+each by __1's own skin test, `mesh_bits >> 0x10 & 1 << (15 - i)`, with i the place of
+`LM_LTHIGH` or `LM_RTHIGH` in `lara_mesh_sweetness_table` - 1 and 4, the places whose
+matrices, `LMX_THIGH_L` and `LMX_THIGH_R`, the holsters are drawn with - inside the
+draws' own brackets: none on young Lara, and for __4 both holster slots loaded. With the
+bits at -1 both thighs are shown and the holsters are drawn as before; the two cutscenes,
+the shipped outfit's included, are the one change of the classic picture. The joint
+loops take the step before `continue`, so a piece left out is still neither drawn nor
+fed from the stash, and every seam after it draws its own; a skin that leaves out no
+piece draws as before. `specific/hd/hd_laradraw.cpp`: `HDLaraClassicLog` takes the
+holsters and ends the classic lines in `holsters=LR`, `L`, `R` or `none`; the HD lines
+are unchanged. `specific/file.cpp`: `OBJLOG skinning done` ends in `joints_used=` and
+`left_out=`, the pieces left out by joint number, `-` for the diving suit, which is not
+skinned. `docs/Engine-Manual.md` says it.
+
+**Commits.** `94c99b8c`, `190cc510`.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -15927,3 +15966,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #261 | The diving suits, their console and Lara in the suit |
 | #262 | The suit's console states and Lara's legs inside the suit |
 | #263 | Lara's legs inside the suit, on the classic path |
+| #267 | The classic holsters hide with her thighs, a left-out seam keeps its place |

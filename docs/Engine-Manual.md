@@ -4115,16 +4115,20 @@ the same tests as her other classic outfits. A body that ignored them would
 put her own legs beside the suit's, and the randomizer's outfit roll can
 dress her in the catsuit there. The install's *Russia Extra*, a Russia body
 without legs made for these two cutscenes, is therefore not offered in the
-outfit menu. With `-log` a `SWAPLOG` line names every node whose mesh a
-cutscene takes from another slot - the cutscene, its frame, the node, the slot
-and its mesh, and the outfit node drawn there - and its return, and ends in the
-nodes the frame hides and the draw that drew her: `drawn=hd`, or
-`drawn=DrawLara__1`, `__4` or `__5` for the classic outfit, the catsuit and
-the diving suit drawn classic. A `HIDELOG` line names them on every other
-change. With the HD path off and the catsuit worn, the Sinking Submarine's
-first cutscene opens with `HIDELOG level=JOBY5 cut=32 frame=…
-mesh_bits=0x81FF01FF hidden=1,2,3,4,5,6 hd=- drawn=DrawLara__4`, and a second
-line with `hidden=none` follows when frame 440 or a skip gives her legs back.
+outfit menu. Her thigh holsters go with her thighs: the HD composite masks its
+holster rig with the nodes shown, and the classic outfit and the catsuit draw
+each holster only while the thigh it hangs on is shown. With `-log` a
+`SWAPLOG` line names every node whose mesh a cutscene takes from another slot -
+the cutscene, its frame, the node, the slot and its mesh, and the outfit node
+drawn there - and its return, and ends in the nodes the frame hides and the
+draw that drew her: `drawn=hd`, or `drawn=DrawLara__1`, `__4` or `__5` for the
+classic outfit, the catsuit and the diving suit drawn classic, a classic line
+ending in the thigh holsters that draw drew, `holsters=LR`, `L`, `R` or
+`none`. A `HIDELOG` line names them on every other change. With the HD path
+off and the catsuit worn, the Sinking Submarine's first cutscene opens with
+`HIDELOG level=JOBY5 cut=32 frame=… mesh_bits=0x81FF01FF hidden=1,2,3,4,5,6
+hd=- drawn=DrawLara__4 holsters=none`, and a second line with `hidden=none`
+and `holsters=LR` follows when frame 440 or a skip gives her legs back.
 
 **First person** drops the same three things from the HD Lara that it
 drops from the classic one: the head, the face and the braid, all three of
@@ -4990,7 +4994,7 @@ wrote it, and each seam answers a different question:
 | an item is in the wrong place, or vanishes | `ITEMLOG` — slot, room, OCB and flags per item at load |
 | …and something moved it later | `ITEMWATCH` — who wrote which room number, and when |
 | an enemy carries an item off, or does not | `CARRYLOG` — at the level start, one line per pickup within a carrier's reach: the carrier, the item, its OCB and offset, and whether it was carried or left on its wall |
-| the outfit looks wrong, a limb is misplaced | `SKINLOG` — the skin's bone stack |
+| the outfit looks wrong, a limb is misplaced | `SKINLOG` — the skin's bone stack; `OBJLOG skinning done` ends in the seam pieces sewn and, by joint number, those left out (`joints_used=`, `left_out=`) |
 | the first person view sits wrong | `FPHEAD`, `ALTERFOV` — the head bone per frame, and the field of view |
 | a face in a cutscene does not move its lips, or moves them wrong | `HDLOG … lips` — at the level build, one line per face and per track file it has: which file, how many frames, how many of the face's joints it moves, and why it would not be used (`reason=`) - a mod's face ends them in `rig=`, whose track files it speaks: its own, the installed game's for a face on the same rig, or none (`own`, `install`, `differs`, `none`); `LIPLOG` — while a cutscene plays, one line each time a speaking face's frame changes: the frame, the track, whether the file, the settling back or the face at rest was shown (`src=`), how far the face moved from rest at its farthest point (`jaw=`) and the language; and `lips=` at the end of `HDLOG cutseq actor` and `HDLOG frame lara` |
 | Lara's face does not blink between her lines, or does not bare its teeth when she fires | `HDLOG … lips loop` — at the level build, one line per face: how many frames its joint block holds, where it loops, where it lies in the file, which of its joints the loop moves and how many blinks it has, and why it would not play (`reason=`); `LIPLOG … lara face=` — one line each time her face changes between the cutscene line, the firing face, the loop and rest, with what it was before and why; `LIPLOG … lara blink` — one line on the first frame of each blink, with how far the lids are closed; and `lips=loop` or `lips=fire` at the end of `HDLOG frame lara` |

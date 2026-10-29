@@ -180,6 +180,11 @@ bool HDLevelBuilt();
  * has nothing for, and a level drawn classic, walks the classic way. */
 bool HDLevelActive();
 
+/* The level's name for a log line of the main thread: its file name without
+ * folder or extension, as FPSLOG prints it, whatever hd_build and hd_enable
+ * say - set at every level build, "?" before the first. */
+const char* HDLevelLogName();
+
 /* A mirror in a room's wall, as the game side needs it: the room, the plane
  * (`axis` 0 for a plane of constant x, 2 for constant z, `plane` its world
  * coordinate), `side` -1 when the copy behind the glass lies at smaller

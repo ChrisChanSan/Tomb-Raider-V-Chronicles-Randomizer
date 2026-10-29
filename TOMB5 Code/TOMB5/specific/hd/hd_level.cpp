@@ -9167,6 +9167,13 @@ bool HDLevelActive()
 	return g_level_active && HDDrawn();
 }
 
+/* The frame clock's copy, made in HDLevelBuildHD on the main thread before
+ * the HD gate; the load thread's own (g_log_stem) is not read from here. */
+const char* HDLevelLogName()
+{
+	return g_fps_level[0] ? g_fps_level : "?";
+}
+
 /* The mirrors the room build found, handed to the game side in the engine's
  * own integer units. Behind HDLevelActive, so a classic frame never sees
  * one. */

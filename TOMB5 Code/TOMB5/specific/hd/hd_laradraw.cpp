@@ -602,7 +602,13 @@ namespace
 	 * And the nodes her mesh_bits hide (hd_lara.h, HDLaraNodesShown): at
 	 * the end of every SWAPLOG line, and in a HIDELOG line of their own on
 	 * every change no SWAPLOG line of the same frame carried - JOBY5's
-	 * first cutscene hides her legs with no swap at all. */
+	 * first cutscene hides her legs with no swap at all.
+	 *
+	 * Both lines are written by whichever draw puts her on the screen: the
+	 * composite here, and the classic variants through HDLaraClassicLog,
+	 * which draw the pointer's own mesh. Their last field says which -
+	 * drawn=hd or drawn=DrawLara__1, __4 or __5. The state is one for both,
+	 * so a change is named once, by the draw that meets it. */
 	short* g_swap_mesh[HD_LARA_NODES];
 	bool g_swap_foreign[HD_LARA_NODES];
 	bool g_swap_seeded = false;
@@ -650,11 +656,15 @@ namespace
 		return false;
 	}
 
-	void swap_log(unsigned int shown)
+	void swap_log(unsigned int shown, const char* drawn)
 	{
 		if (!gLogEnabled || !meshes)
 			return;
 
+		/* The level as the HD build names it. A level drawn classic has no
+		 * HD build and takes the frame clock's name, the same file name
+		 * (hd_level.h, HDLevelLogName). */
+		const char* stem = g_lights_stem[0] ? g_lights_stem : HDLevelLogName();
 		const bool cut = GLOBAL_playing_cutseq != 0;
 		const unsigned int hidden = ~shown & ((1u << HD_LARA_NODES) - 1);
 		char hiddenList[64];
@@ -683,13 +693,13 @@ namespace
 				HD_LARA_PART_BODY);
 
 			Log("SWAPLOG level=%s cut=%d frame=%d node=%d from=%s(%d) "
-				"mesh=%d foreign=%d hd=%s:%d shown=%d hidden=%s",
-				g_lights_stem, cut ? (int)cutseq_num : 0,
+				"mesh=%d foreign=%d hd=%s:%d shown=%d hidden=%s drawn=%s",
+				stem, cut ? (int)cutseq_num : 0,
 				cut && GLOBAL_cutseq_frame > 0 ? (int)GLOBAL_cutseq_frame - 1
 					: -1, node,
 				known && HDSlotName(slot) ? HDSlotName(slot) : "?", slot,
 				index, (int)foreign, body ? body : "-", node,
-				(shown >> node) & 1 ? 1 : 0, hiddenList);
+				(shown >> node) & 1 ? 1 : 0, hiddenList, drawn);
 			g_hide_said = hidden;
 		}
 
@@ -700,11 +710,12 @@ namespace
 
 		g_hide_said = hidden;
 		Log("HIDELOG level=%s cut=%d frame=%d mesh_bits=0x%08lX hidden=%s "
-			"hd=%s", g_lights_stem, cut ? (int)cutseq_num : 0,
+			"hd=%s drawn=%s", stem, cut ? (int)cutseq_num : 0,
 			cut && GLOBAL_cutseq_frame > 0 ? (int)GLOBAL_cutseq_frame - 1
 				: -1, (unsigned long)lara_item->mesh_bits, hiddenList,
 			HDLaraPartModel(g_level.outfit, HD_LARA_PART_BODY)
-				? HDLaraPartModel(g_level.outfit, HD_LARA_PART_BODY) : "-");
+				? HDLaraPartModel(g_level.outfit, HD_LARA_PART_BODY) : "-",
+			drawn);
 	}
 
 	/* The braid's six matrices.
@@ -2077,17 +2088,18 @@ void HDLaraDrawFrame(long mirror)
 	 * 0, which keeps her from being drawn at all (game\draw.cpp), and
 	 * 0x81FF01FF, her legs hidden while the diving suit's actor wears its
 	 * own - joby6_control from frame 542 of JOBY3's cutscene 5, joby8_init
-	 * up to frame 440 of JOBY5's cutscene 32 (game\deltapak.cpp). The
-	 * classic catsuit and diving suit, DrawLara__4 and __5, read no bits,
-	 * and in the shipped game they never meet these: both levels dress her
-	 * through __1. The randomizer's outfit roll puts them there, and then a
-	 * whole HD body showed her own legs beside the suit's, bent backwards in
-	 * the air - so the HD draw honours the bits whatever the variant. */
+	 * up to frame 440 of JOBY5's cutscene 32 (game\deltapak.cpp). In the
+	 * shipped game only DrawLara__1 meets the last: both levels dress her
+	 * through it. The randomizer's outfit roll puts the catsuit and the
+	 * diving suit there, and a whole HD body then showed her own legs
+	 * beside the suit's, bent backwards in the air - so the HD draw honours
+	 * the bits whatever the variant, as DrawLara__4 and __5 do with __1's
+	 * own tests (specific\drawlara.cpp). */
 	unsigned int mask = HDLaraNodesShown((unsigned long)lara_item->mesh_bits);
 
 	// A cutscene's swap of her nodes, behind -log - see swap_log.
 	if (!mirror)
-		swap_log(mask);
+		swap_log(mask, "hd");
 
 	/* First person. The classic path leaves the head mesh out and does not
 	 * call DrawHair, because both sit exactly where the camera does and blow
@@ -2530,4 +2542,18 @@ void HDLaraDrawFrame(long mirror)
 			HDSlotName(speech_head_slot()) ? HDSlotName(speech_head_slot()) : "-",
 			lipsWord);
 	}
+}
+
+/* The classic draw's share of SWAPLOG and HIDELOG (hd_laradraw.h). The mask
+ * is the one the composite reads her bits into, so a line names the same
+ * hidden nodes whichever draw wrote it. */
+void HDLaraClassicLog(int variant)
+{
+	char drawn[16];
+
+	if (!gLogEnabled)
+		return;
+
+	std::snprintf(drawn, sizeof(drawn), "DrawLara__%d", variant);
+	swap_log(HDLaraNodesShown((unsigned long)lara_item->mesh_bits), drawn);
 }

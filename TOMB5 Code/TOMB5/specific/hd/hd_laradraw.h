@@ -144,6 +144,15 @@ void HDLaraDrawFrameReset();
  */
 void HDLaraDrawFrame(long mirror);
 
+/* The log of a frame that draws her classic. DrawLara__1, __4 and __5 call
+ * it where they draw the classic composite, outside a mirror, with their own
+ * number, and it writes the SWAPLOG and HIDELOG lines HDLaraDrawFrame writes
+ * for the HD one: the same fields and the same state, the last field
+ * drawn=DrawLara__<variant> where the HD lines say drawn=hd. Behind -log and
+ * nothing else: it reads her mesh bits and mesh pointers and draws nothing,
+ * so the classic picture is the same with or without it. */
+void HDLaraClassicLog(int variant);
+
 // --- the projected shadow --------------------------------------------------
 
 /* Whether the projected shadow runs in this drawn frame (hd_shadow.h,

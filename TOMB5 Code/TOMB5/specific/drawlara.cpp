@@ -163,6 +163,11 @@ static void DrawLara__1(ITEM_INFO* item, long mirror)
 		return;
 	}
 
+	// Drawn classic: the swap and hide lines name this variant, behind -log
+	// (hd_laradraw.h, HDLaraClassicLog). A mirror's draw writes none.
+	if (!mirror)
+		HDLaraClassicLog(1);
+
 	for (int i = 0; i < 15; i++)//skin
 	{
 		aMXPtr[M00] = lara_matrices[i * indices_count + M00];
@@ -431,6 +436,10 @@ static void DrawLara__4(ITEM_INFO* item, long mirror)
 		phd_right = right;
 		return;
 	}
+
+	// Drawn classic, as in DrawLara__1.
+	if (!mirror)
+		HDLaraClassicLog(4);
 
 	for (int i = 0; i < 15; i++)//skin
 	{
@@ -703,6 +712,8 @@ static void DrawLara__5(ITEM_INFO* item, long mirror)
 
 	if (hd)
 		HDLaraDrawFrame(mirror);
+	else if (!mirror)
+		HDLaraClassicLog(5);	// drawn classic, as in DrawLara__1
 
 	for (int i = 0; i < 15 && !hd; i++)//skin
 	{

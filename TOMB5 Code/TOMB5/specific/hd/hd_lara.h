@@ -640,14 +640,14 @@ constexpr int HD_LARA_LMX_OF_NODE[HD_LARA_NODES] =
 
 /* The nodes Lara's mesh_bits show, bit n for node n of HDLaraNode.
  *
- * The engine's own test, the one DrawLara__1 puts each skin mesh under
- * (specific\drawlara.cpp): `mesh_bits >> 16 & 1 << (15 - i)` with i the
- * LMX_ index. Her fifteen bits sit in the high half and count backwards,
- * so the hips are bit 31, a thigh bit 30 or 27 and the head bit 23; the
- * low half belongs to the classic joint pieces, which an HD body does not
- * have. -1, the bits of nearly every frame, shows all fifteen; the
- * cutscenes that hide her legs write 0x81FF01FF, which shows the hips, the
- * torso, the head and both arms. */
+ * The engine's own test, the one DrawLara__1, __4 and __5 put each skin
+ * mesh under (specific\drawlara.cpp): `mesh_bits >> 16 & 1 << (15 - i)`
+ * with i the LMX_ index. Her fifteen bits sit in the high half and count
+ * backwards, so the hips are bit 31, a thigh bit 30 or 27 and the head
+ * bit 23; the low half belongs to the classic joint pieces, which an HD
+ * body does not have. -1, the bits of nearly every frame, shows all
+ * fifteen; the cutscenes that hide her legs write 0x81FF01FF, which shows
+ * the hips, the torso, the head and both arms. */
 unsigned int HDLaraNodesShown(unsigned long meshBits);
 
 /* Which body Lara wears. The section table that picks one is in the .cpp.

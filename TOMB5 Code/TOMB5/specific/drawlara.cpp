@@ -418,8 +418,8 @@ static void DrawLara__4(ITEM_INFO* item, long mirror)
 	 * term would be inventing a look, and the remaster's own picture is what
 	 * this path draws.
 	 *
-	 * The mesh bits this variant does not read are read there, as for every
-	 * body (hd_laradraw.h). */
+	 * The mesh bits are read there as for every body (hd_laradraw.h), and
+	 * below with DrawLara__1's own two tests. */
 	if (HDLaraDrawActive())
 	{
 		HDLaraDrawFrame(mirror);
@@ -454,21 +454,31 @@ static void DrawLara__4(ITEM_INFO* item, long mirror)
 
 		aSetViewMatrix();
 
-		// First person: do not draw the head, stash the vertices anyway -
-		// reasoning as in DrawLara__1. This version does not even check
-		// mesh_bits, it would have kept drawing the head otherwise.
-		if (!(FirstPersonActive() && lara_mesh_sweetness_table[i] == LM_HEAD))
-			phd_PutPolygonsSpcEnvmap(lara.mesh_ptrs[lara_mesh_sweetness_table[i]], -1);
-
-		for (int j = 0; j < 4; j++)
+		/* Her mesh bits, with DrawLara__1's test and bracket: a node they
+		 * hide is neither drawn nor stashed. The two cutscenes that hide
+		 * her legs inside the diving suit's write 0x81FF01FF whatever she
+		 * wears (game\deltapak.cpp), and the randomizer's outfit roll can
+		 * put the catsuit there. Dropping the stash with the node is safe
+		 * for that word: every seam piece it leaves drawn joins two nodes
+		 * it leaves drawn (NodesToStashToScratch), so none of them reads a
+		 * stash this skips. */
+		if (lara_item->mesh_bits >> 0x10 & 1 << (15 - i))
 		{
-			stash = (uchar)NodesToStashFromScratch[i][j];
+			// First person: do not draw the head, stash the vertices anyway -
+			// reasoning as in DrawLara__1.
+			if (!(FirstPersonActive() && lara_mesh_sweetness_table[i] == LM_HEAD))
+				phd_PutPolygonsSpcEnvmap(lara.mesh_ptrs[lara_mesh_sweetness_table[i]], -1);
 
-			if (stash == 255)
-				break;
+			for (int j = 0; j < 4; j++)
+			{
+				stash = (uchar)NodesToStashFromScratch[i][j];
 
-			StashSkinVertices(stash);
-			StashSkinNormals(stash);
+				if (stash == 255)
+					break;
+
+				StashSkinVertices(stash);
+				StashSkinNormals(stash);
+			}
 		}
 	}
 
@@ -507,53 +517,58 @@ static void DrawLara__4(ITEM_INFO* item, long mirror)
 		else
 			bLaraUnderWater = -1;
 
-		if (SkinUseMatrix[i][0] >= 255)
+		// The seam pieces, with DrawLara__1's own test: the word that hides
+		// her legs hides the six pieces at her hips, knees and ankles.
+		if (lara_item->mesh_bits & 1 << (14 - i))
 		{
-			aSetViewMatrix();
-			phd_PutPolygonsSpcEnvmap(*meshpp, -1);
-		}
-		else
-		{
-			phd_PushMatrix();
-			aMXPtr[M00] = lara_matrices[SkinUseMatrix[i][1] * indices_count + M00];
-			aMXPtr[M01] = lara_matrices[SkinUseMatrix[i][1] * indices_count + M01];
-			aMXPtr[M02] = lara_matrices[SkinUseMatrix[i][1] * indices_count + M02];
-			aMXPtr[M03] = lara_matrices[SkinUseMatrix[i][1] * indices_count + M03];
-			aMXPtr[M10] = lara_matrices[SkinUseMatrix[i][1] * indices_count + M10];
-			aMXPtr[M11] = lara_matrices[SkinUseMatrix[i][1] * indices_count + M11];
-			aMXPtr[M12] = lara_matrices[SkinUseMatrix[i][1] * indices_count + M12];
-			aMXPtr[M13] = lara_matrices[SkinUseMatrix[i][1] * indices_count + M13];
-			aMXPtr[M20] = lara_matrices[SkinUseMatrix[i][1] * indices_count + M20];
-			aMXPtr[M21] = lara_matrices[SkinUseMatrix[i][1] * indices_count + M21];
-			aMXPtr[M22] = lara_matrices[SkinUseMatrix[i][1] * indices_count + M22];
-			aMXPtr[M23] = lara_matrices[SkinUseMatrix[i][1] * indices_count + M23];
-
-			v0.x = lara_matrices[SkinUseMatrix[i][0] * indices_count + M01];
-			v0.y = lara_matrices[SkinUseMatrix[i][0] * indices_count + M11];
-			v0.z = lara_matrices[SkinUseMatrix[i][0] * indices_count + M21];
-			v1.x = lara_matrices[SkinUseMatrix[i][1] * indices_count + M01];
-			v1.y = lara_matrices[SkinUseMatrix[i][1] * indices_count + M11];
-			v1.z = lara_matrices[SkinUseMatrix[i][1] * indices_count + M21];
-
-			v0.x *= 1 << W2V_SHIFT;
-			v0.y *= 1 << W2V_SHIFT;
-			v0.z *= 1 << W2V_SHIFT;
-			v1.x *= 1 << W2V_SHIFT;
-			v1.y *= 1 << W2V_SHIFT;
-			v1.z *= 1 << W2V_SHIFT;
-
-			c = long((v0.x * v1.x) + (v0.y * v1.y) + (v0.z * v1.z)) >> W2V_SHIFT;
-			s = phd_sqrt(0x1000000 - SQUARE(c));
-
-			if (i == 1 || i == 4)
-				xRot = -phd_atan(c, s);
+			if (SkinUseMatrix[i][0] >= 255)
+			{
+				aSetViewMatrix();
+				phd_PutPolygonsSpcEnvmap(*meshpp, -1);
+			}
 			else
-				xRot = phd_atan(c, s);
+			{
+				phd_PushMatrix();
+				aMXPtr[M00] = lara_matrices[SkinUseMatrix[i][1] * indices_count + M00];
+				aMXPtr[M01] = lara_matrices[SkinUseMatrix[i][1] * indices_count + M01];
+				aMXPtr[M02] = lara_matrices[SkinUseMatrix[i][1] * indices_count + M02];
+				aMXPtr[M03] = lara_matrices[SkinUseMatrix[i][1] * indices_count + M03];
+				aMXPtr[M10] = lara_matrices[SkinUseMatrix[i][1] * indices_count + M10];
+				aMXPtr[M11] = lara_matrices[SkinUseMatrix[i][1] * indices_count + M11];
+				aMXPtr[M12] = lara_matrices[SkinUseMatrix[i][1] * indices_count + M12];
+				aMXPtr[M13] = lara_matrices[SkinUseMatrix[i][1] * indices_count + M13];
+				aMXPtr[M20] = lara_matrices[SkinUseMatrix[i][1] * indices_count + M20];
+				aMXPtr[M21] = lara_matrices[SkinUseMatrix[i][1] * indices_count + M21];
+				aMXPtr[M22] = lara_matrices[SkinUseMatrix[i][1] * indices_count + M22];
+				aMXPtr[M23] = lara_matrices[SkinUseMatrix[i][1] * indices_count + M23];
 
-			phd_RotX(short(-xRot >> 1));
-			aSetViewMatrix();
-			phd_PutPolygonsSpcEnvmap(*meshpp, -1);
-			phd_PopMatrix();
+				v0.x = lara_matrices[SkinUseMatrix[i][0] * indices_count + M01];
+				v0.y = lara_matrices[SkinUseMatrix[i][0] * indices_count + M11];
+				v0.z = lara_matrices[SkinUseMatrix[i][0] * indices_count + M21];
+				v1.x = lara_matrices[SkinUseMatrix[i][1] * indices_count + M01];
+				v1.y = lara_matrices[SkinUseMatrix[i][1] * indices_count + M11];
+				v1.z = lara_matrices[SkinUseMatrix[i][1] * indices_count + M21];
+
+				v0.x *= 1 << W2V_SHIFT;
+				v0.y *= 1 << W2V_SHIFT;
+				v0.z *= 1 << W2V_SHIFT;
+				v1.x *= 1 << W2V_SHIFT;
+				v1.y *= 1 << W2V_SHIFT;
+				v1.z *= 1 << W2V_SHIFT;
+
+				c = long((v0.x * v1.x) + (v0.y * v1.y) + (v0.z * v1.z)) >> W2V_SHIFT;
+				s = phd_sqrt(0x1000000 - SQUARE(c));
+
+				if (i == 1 || i == 4)
+					xRot = -phd_atan(c, s);
+				else
+					xRot = phd_atan(c, s);
+
+				phd_RotX(short(-xRot >> 1));
+				aSetViewMatrix();
+				phd_PutPolygonsSpcEnvmap(*meshpp, -1);
+				phd_PopMatrix();
+			}
 		}
 
 		meshpp += 2;
@@ -681,9 +696,9 @@ static void DrawLara__5(ITEM_INFO* item, long mirror)
 	 * manual; the day the wardrobe grows a model for them this becomes one
 	 * more part.
 	 *
-	 * This variant reads no mesh bits and the seam does, as for every body:
-	 * the cutscenes that hide her legs inside the suit's write them for
-	 * whatever she wears (hd_laradraw.h). */
+	 * The seam reads the mesh bits as for every body, and the skin loop below
+	 * with DrawLara__1's own test: the cutscenes that hide her legs inside
+	 * the suit's write them for whatever she wears (hd_laradraw.h). */
 	const bool hd = HDLaraDrawActive();
 
 	if (hd)
@@ -709,13 +724,20 @@ static void DrawLara__5(ITEM_INFO* item, long mirror)
 		else
 			bLaraUnderWater = -1;
 
-		phd_PutPolygons(lara.mesh_ptrs[lara_mesh_sweetness_table[i]], -1);
+		// Her mesh bits, with DrawLara__1's test (DrawLara__4 says why). The
+		// suit has no seam pieces and stashes nothing.
+		if (lara_item->mesh_bits >> 0x10 & 1 << (15 - i))
+			phd_PutPolygons(lara.mesh_ptrs[lara_mesh_sweetness_table[i]], -1);
 	}
 
 	phd_PopMatrix();
 
 	bLaraUnderWater = (LaraNodeUnderwater[0] != 0) - 1;
 
+	/* The thrusters hang on her torso, which no word the game writes hides
+	 * while she is drawn at all (game\draw.cpp leaves her out at 0), so
+	 * they are drawn as DrawLara__1 draws the weapon on her back: without
+	 * a test. */
 	obj = &objects[LARA_EXTRA_MESH1];
 	meshpp = &meshes[obj->mesh_index];
 

@@ -723,11 +723,12 @@ static void WinFreeGame()
  * A lost device (dxshell.cpp, DXShowFrame) is given back by this thread,
  * which made it. WM_APP_DEVICE starts WIN_DEVICE_TIMER, and four times a
  * second WinDeviceRestore asks whether the player is in the window again -
- * the thread not parked, the window active and in front, no film, no level
- * loading - and whether the device can be given back (TestCooperativeLevel);
- * then the game thread is held, the device made anew (DXRestoreDevice) and
- * the thread let go. The first tick comes a quarter of a second after the
- * loss, by when the secure desktop's WA_INACTIVE has parked the thread.
+ * the thread not parked, the window in front and not minimised, no film,
+ * no level loading - and whether the device can be given back
+ * (TestCooperativeLevel); then the game thread is held, the device made
+ * anew (DXRestoreDevice) and the thread let go. The first tick comes a
+ * quarter of a second after the loss, by when the secure desktop's
+ * WA_INACTIVE has parked the thread.
  *   WINLOG activate state=<inactive|active|click> minimized=<0|1>
  *     front=<ours|other|none> parked=<0|1> fmv=<0|1> closing=<0|1>
  *     device=<ok|lost> - every WM_ACTIVATE
@@ -738,8 +739,8 @@ static void WinFreeGame()
  *     device=<ok|lost>
  *   WINLOG front <ours|other|none> parked_ms=<n> - while parked, each time
  *     another window, or none, is in front
- *   WINLOG device waits why=<setup|parked|inactive|front|film|loading|lost|
- *     hold> coop=<ok|lost|notreset|internal|other> - once per reason
+ *   WINLOG device waits why=<setup|parked|front|film|loading|lost|hold>
+ *     coop=<ok|lost|notreset|internal|other> - once per reason
  *   WINLOG device restore coop=<...> ok=<0|1> - before the new device's
  *     render states; ok=0 is a device that could not be made */
 #define WIN_PARK_TIMER		2
@@ -817,10 +818,8 @@ static void WinDeviceRestore()
 		why = "setup";
 	else if (game_parked)
 		why = "parked";
-	else if (!mouse_active)
-		why = "inactive";
-	else if (WinFront() != 0)
-		why = "front";
+	else if (WinFront() != 0 || IsIconic(App.hWnd))
+		why = "front";		// another window, another desktop, minimised
 	else if (App.fmv)
 		why = "film";
 	else if (LevelLoadingThread.active || g_level_loading)

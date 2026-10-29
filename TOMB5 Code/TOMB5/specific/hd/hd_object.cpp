@@ -896,10 +896,12 @@ namespace
 	}
 
 	/* Which of its guests' states a host drew, behind -log: one line at its
-	 * first draw in a level and one on every change - the state, the guest
-	 * that decided it ("none" while every guest is still what it was) and
-	 * the model drawn, which is the host's own while a state's file is
-	 * missing (and the line says which). */
+	 * first draw in a level and one on every change - the state, 0 while
+	 * every guest is still what it was and else the deciding guest's place
+	 * in the table counted from 1 (the console's 0, 1 and 2: empty, the
+	 * console in, the battery too), that guest ("none" for 0) and the model
+	 * drawn, which is the host's own while a state's file is missing (and
+	 * the line says which). */
 	void guest_state_log(int slot, const ITEM_INFO* item)
 	{
 		if (!gLogEnabled)
@@ -930,7 +932,7 @@ namespace
 		Log("HDLOG level=%s guests item=%ld slot=%d name=%s state=%d by=%s "
 			"model=%s%s%s", g_stem, number >= 0 && number < MAX_ITEMS
 				? number : -1L, slot,
-			HDSlotName(slot) ? HDSlotName(slot) : "?", state,
+			HDSlotName(slot) ? HDSlotName(slot) : "?", state + 1,
 			state >= 0 ? (by ? by : "?") : "none", drawn ? drawn : "-",
 			have ? "" : " missing=", have ? "" : (want ? want : "-"));
 	}

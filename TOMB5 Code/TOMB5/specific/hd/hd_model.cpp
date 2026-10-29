@@ -311,6 +311,9 @@ namespace
 		// The additive run from the front alone (HDModelSlot).
 		bool additiveOneSided = false;
 
+		// Every run lit as the additive run is (HDModelSlot).
+		bool lightAsAdditive = false;
+
 		/* A face's lips, or null - see Lips above. Owned by the model and
 		 * given back by free_model. */
 		Lips* lips = 0;
@@ -3054,6 +3057,17 @@ namespace
 				constants[3] = 0.0f;
 			}
 
+			/* A model lit as its additive run is (HDModelSlot::
+			 * lightAsAdditive) takes the same two switches in its other runs:
+			 * the light under 1.0, no sheen, weighed by the alpha, a glow
+			 * under the water and no overbright add. The alpha test of the
+			 * alpha run stays its own. */
+			if (model.lightAsAdditive && !glassStep)
+			{
+				constants[1] = 1.0f;
+				constants[3] = 0.0f;
+			}
+
 			g_device->SetPixelShaderConstantF(4, constants, 1);
 
 			/* The cut-out alpha test in the opaque pass runs on the ranges
@@ -4242,6 +4256,7 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 				// beside the model that asked.
 				model.keepPoints = slots[k].keepPoints;
 				model.additiveOneSided = slots[k].additiveOneSided;
+				model.lightAsAdditive = slots[k].lightAsAdditive;
 
 				if (slots[k].bind)
 				{

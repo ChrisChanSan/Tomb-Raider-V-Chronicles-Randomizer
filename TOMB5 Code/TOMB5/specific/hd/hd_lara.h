@@ -1086,6 +1086,13 @@ bool HDLaraXrayReady();
 /* The X-ray body's own sheen, out of its wardrobe entry - the outfit's body
  * sheen is the outfit's and not the bones'. Settled at level build. */
 void HDLaraXraySheen(float* strength, float* power);
+
+/* The X-ray tone: a level and a hue (three channel factors) that the light of
+ * every part of the X-ray set is multiplied by, the ambient and every light
+ * alike. A choice made from the reference pictures, written down with its
+ * measurement at kXrayToneLevel in the .cpp. The draw multiplies the light it
+ * hands the set (hd_laradraw.cpp); nothing else is toned. */
+void HDLaraXrayTone(float* level, float* hue);
 // Bit per classic node the part covers, as hd_model measured it. 0 for a part
 // that is not on the card.
 unsigned int HDLaraPartCoverage(int part);

@@ -297,6 +297,15 @@ struct HDModelSlot
 	 * matrix, as the glass does - and the opaque and alpha-tested runs stay
 	 * double sided. A draw that culls already keeps its own cull. */
 	bool additiveOneSided = false;
+
+	/* Every run of the model lit as its additive run is lit: the light held
+	 * under 1.0 where the opaque and alpha-tested runs take up to twice it,
+	 * no sheen, the texel weighed by its alpha, and under the water dimmed as
+	 * a glow - the pixel shader's own additive branch (hd_model.hlsl, gPass.y
+	 * and gPass.w), switched on for the model's other runs. For a set whose
+	 * opaque pieces stand inside a translucent shell, so that no piece is lit
+	 * as ordinary gear beside it. */
+	bool lightAsAdditive = false;
 };
 
 /* What the classic pose did to one slot, for the caller's log line - the

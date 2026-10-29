@@ -788,6 +788,8 @@ namespace
 	 *              the .TRM stems drawn as the body, in her hands, on her
 	 *              thighs and on her back, - for none
 	 *   drawn=     hd or DrawLara__<n>, as on the SWAPLOG line
+	 *   tone=      the set's tone, level/red,green,blue (hd_lara.h,
+	 *              HDLaraXrayTone), - for the classic figure and when off
 	 *
 	 * Written by whichever draw puts her on the screen, outside a mirror, as
 	 * SWAPLOG is. Level state, cleared in HDLaraDrawEnd: a level she is
@@ -798,15 +800,16 @@ namespace
 	// The level's SKELETON squares, counted at the plan for the build's line.
 	int g_xray_squares = 0;
 
-	void xray_log(bool on, const char* fields, const char* drawn)
+	void xray_log(bool on, const char* fields, const char* drawn,
+		const char* tone)
 	{
 		if (!gLogEnabled || (!on && !g_xray_on))
 			return;
 
 		char now[256];
 
-		std::snprintf(now, sizeof(now), "%s drawn=%s", on ? fields : "set=-",
-			drawn);
+		std::snprintf(now, sizeof(now), "%s drawn=%s tone=%s",
+			on ? fields : "set=-", drawn, on ? tone : "-");
 
 		if (on && g_xray_on && !strcmp(now, g_xray_said))
 			return;
@@ -2472,9 +2475,41 @@ void HDLaraDrawFrame(long mirror)
 	if (!mirror)
 	{
 		char fields[192];
+		char tone[48];
+		float level = 1.0f, hue[3] = { 1.0f, 1.0f, 1.0f };
 
+		HDLaraXrayTone(&level, hue);
+		std::snprintf(tone, sizeof(tone), "%.2f/%.2f,%.2f,%.2f", level,
+			hue[0], hue[1], hue[2]);
 		xray_fields(xray, pieces, pieceCount, fields, sizeof(fields));
-		xray_log(lara.skelebob != 0, fields, "hd");
+		xray_log(lara.skelebob != 0, fields, "hd", tone);
+	}
+
+	/* --- the X-ray tone ------------------------------------------------- */
+	/* In the X-ray look - the level's block, or an outfit that is the X-ray
+	 * body - every part pushed below belongs to the X-ray set, and the light
+	 * it is handed, the ambient of every node and every light alike, takes
+	 * the set's tone (hd_lara.h, HDLaraXrayTone): one tone for the hull, the
+	 * bones, the hands, the holsters and the weapon on the back. After the
+	 * shadow's decision and the light log, which describe the room's light
+	 * and not the set's. */
+	const bool xrayLook = xray || HDLaraOutfitIsXray(g_level.outfit);
+	float toneLevel = 1.0f;
+	float toneHue[3] = { 1.0f, 1.0f, 1.0f };
+
+	if (xrayLook)
+	{
+		HDLaraXrayTone(&toneLevel, toneHue);
+
+		for (int i = 0; i < HD_LARA_NODES * 3; i++)
+			nodeLight[i] *= toneLevel * toneHue[i % 3];
+
+		for (int i = 0; i < lightCount; i++)
+		{
+			lights[i].r *= toneLevel * toneHue[0];
+			lights[i].g *= toneLevel * toneHue[1];
+			lights[i].b *= toneLevel * toneHue[2];
+		}
 	}
 
 	/* --- on the list ----------------------------------------------------- */
@@ -2788,5 +2823,5 @@ void HDLaraClassicLog(int variant)
 	/* And the X-ray look: on when the skeleton cheat's own variant draws it
 	 * classic, off when another variant draws her. */
 	xray_log(variant == 6, "set=classic body=- right=- left=- holsters=-/- "
-		"back=-", drawn);
+		"back=-", drawn, "-");
 }

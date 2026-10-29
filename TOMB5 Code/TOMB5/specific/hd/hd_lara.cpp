@@ -718,6 +718,30 @@ namespace
 		{ HD_LARA_PART_BACK_GRAPPLE,    "HOLSTER_GRAPPLE_XRAY" }
 	};
 
+	/* The X-ray tone: what the set's light is multiplied by, channel by
+	 * channel, for every part of it - the hull, the bones, the hands with
+	 * their weapons, the holsters and the weapon on the back alike, each of
+	 * them lit as the hull is (HDModelSlot::lightAsAdditive), so that no
+	 * piece reads as ordinary gear beside the body.
+	 *
+	 * A CHOICE, made from the reference pictures and nothing else: the
+	 * remaster's X-ray Lara in a flooded brick tunnel (front and side) and
+	 * this composite in the same tunnel, its hull drawn one sided. What the
+	 * hull adds to the wall behind the belly, measured as the patch's mean
+	 * less the wall's beside it, in 0..255:
+	 *
+	 *   the remaster, front    47.5 / 63.4 / 33.6
+	 *   the remaster, side     34.9 / 57.9 / 31.0
+	 *   their mean             41.2 / 60.7 / 32.3   luma 54.5
+	 *   this composite         61.6 / 82.2 / 83.9   luma 77.9
+	 *
+	 * The level is the luma ratio, 0.70; the hue the channel ratios over it,
+	 * 0.96 / 1.06 / 0.55 - the green kept, the blue cut. One tone for every
+	 * level and every room: the light it multiplies is the room's own, so a
+	 * bright room stays brighter than a dark one, only greener and lower. */
+	const float kXrayToneLevel = 0.70f;
+	const float kXrayToneHue[3] = { 0.96f, 1.06f, 0.55f };
+
 	const char* xray_model(int part)
 	{
 		for (int i = 0; i < (int)(sizeof(kXray) / sizeof(kXray[0])); i++)
@@ -2021,8 +2045,11 @@ int HDLaraPlan(const HDLaraLevel* level, HDModelSlot* out, int max)
 		one.onlyPage = kPart[part].onlyPage;
 		one.onlyNode = kPart[part].onlyNode;
 
-		// The X-ray body worn from the wardrobe: its hull one sided (kXray).
+		// The X-ray body worn from the wardrobe: its hull one sided and every
+		// part lit as the hull, the lid on its neck as well (kXray).
 		one.additiveOneSided = wears_xray(level->outfit) && xray_model(part);
+		one.lightAsAdditive = one.additiveOneSided ||
+			(wears_xray(level->outfit) && part == HD_LARA_PART_NECK_CAP);
 
 		/* The mirrored weights of a hand file. Every part
 		 * of kind 1 and no other: those are the files that cover nodes 9, 10,
@@ -2113,6 +2140,7 @@ int HDLaraPlan(const HDLaraLevel* level, HDModelSlot* out, int max)
 			one.bind = level->bodyBind;
 			one.name = model;
 			one.additiveOneSided = true;
+			one.lightAsAdditive = true;
 
 			if (kPart[part].kind == 1)
 			{
@@ -2693,6 +2721,15 @@ bool HDLaraXrayReady()
 
 	return wears_xray(g_outfit) ? g_has[HD_LARA_PART_BODY]
 		: g_xray_has[HD_LARA_PART_BODY];
+}
+
+void HDLaraXrayTone(float* level, float* hue)
+{
+	if (level)
+		*level = kXrayToneLevel;
+
+	for (int k = 0; hue && k < 3; k++)
+		hue[k] = kXrayToneHue[k];
 }
 
 void HDLaraXraySheen(float* strength, float* power)

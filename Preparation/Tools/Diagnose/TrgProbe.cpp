@@ -4674,12 +4674,19 @@ namespace
 		std::printf("vistable: %s rooms=%d groups=%d art_rooms=%d walls=%d "
 			"bare=%d void=%d guests=%d guest_tris=%lld portals=%d wide=%d "
 			"ms=%.0f guests_unlinked=%d openings=%d openings_unlinked=%d "
-			"openings_twin=%d wide_mirror=%d\n",
+			"openings_twin=%d wide_mirror=%d guests_hanging=%d\n",
 			stem.c_str(), (int)rooms.size(), (int)trg.groups.size(), t.artRooms,
 			t.wallFaces, t.bareFaces, t.voidFaces, t.guestPairs, t.guestTris,
 			(int)portals.size(), t.widePortals, t.ms, t.guestsUnlinked,
 			(int)t.openings.size(), t.openingsUnlinked, t.openingsTwin,
-			t.wideMirrored);
+			t.wideMirrored, t.guestsHanging);
+
+		// The guests the sky's rule refused, one line each.
+		for (const HDVisRefused& one : t.hanging)
+			std::printf("vistable: %s hanging room=%d guest=%d tris=%d box "
+				"%.0f..%.0f %.0f..%.0f %.0f..%.0f\n", stem.c_str(), one.holder,
+				one.group, one.tris, one.lo[0], one.hi[0], one.lo[1], one.hi[1],
+				one.lo[2], one.hi[2]);
 
 		/* The faces the art plainly covers: wholly covered at the largest
 		 * reach asked. `plain=` on each reach's line is the share of them

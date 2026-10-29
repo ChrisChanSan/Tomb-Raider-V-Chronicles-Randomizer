@@ -2296,6 +2296,26 @@ void HDRenderShellCounts(int* groups, int* pairs, int* dropped, int* rest,
 	int* air);
 int HDRenderGroupShellDropped(int group);
 
+/* The cut-out cards drawn one-sided, found with the second shells (the
+ * visibility path only): a card of a cut-out material, drawn two-sided as
+ * one card seen from both sides, that lies wholly on cards of another
+ * group drawn with it facing the other way - the art carrying each side
+ * as a card of its own - is drawn culled, as an opaque range is. One line
+ * per group and the group whose card lies behind its own (`with`):
+ * `cards` the group's triangles drawn one-sided. A flipmap room's card is
+ * never paired with its twin's. After the build: the lines, and the
+ * level's cut-out triangles, those drawn one-sided and what the scan
+ * cost (HDRenderCardCounts). */
+struct HDCardLine
+{
+	int group, with;
+	int cards;
+};
+
+int HDRenderCardLines();
+bool HDRenderCardLine(int index, HDCardLine* out);
+void HDRenderCardCounts(int* asked, int* culled, double* ms);
+
 /* The hollow groups of the level built last: a room's group with
  * triangles none of whose centroids stands in the room's own box with
  * HD_OVERHANG_SLACK (HDRenderGroupOverhangTriangles equal to

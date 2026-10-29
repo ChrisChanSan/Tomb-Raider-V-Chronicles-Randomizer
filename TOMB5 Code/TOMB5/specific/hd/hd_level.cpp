@@ -4636,7 +4636,8 @@ static void BuildShellRooms()
  * why (fifth, exact, mirror, touch, or flip: a flipmap room's pair, of which
  * only what every state of the host carries went) -, one per group with a
  * second-shell pair with the rest and the air it lost, and one for the
- * level on the visibility path. Then the rooms are given back. */
+ * level on the visibility path; then the `HDLOG cards` lines of the cut-out
+ * cards drawn one-sided (HDCardLine). Then the rooms are given back. */
 static void ReportShells()
 {
 	static const char* const why[] = { "", "fifth", "exact", "flip",
@@ -4668,6 +4669,28 @@ static void ReportShells()
 		HDRenderShellCounts(&groups, &pairs, &dropped, &rest, &air);
 		Log("HDLOG shell level=%s groups=%d pairs=%d dropped=%d rest=%d "
 			"air=%d", g_stem, groups, pairs, dropped, rest, air);
+
+		/* The cut-out cards lying back to back, drawn one-sided: one line
+		 * per group and the group whose card lies behind its own, then the
+		 * level's (HDCardLine in hd_render.h). */
+		int asked = 0, culled = 0;
+
+		for (int i = 0; i < HDRenderCardLines(); i++)
+		{
+			HDCardLine card;
+
+			if (!HDRenderCardLine(i, &card))
+				break;
+
+			Log("HDLOG cards level=%s group=%d with=%d one_sided=%d", g_stem,
+				card.group, card.with, card.cards);
+		}
+
+		double card_ms = 0.0;
+
+		HDRenderCardCounts(&asked, &culled, &card_ms);
+		Log("HDLOG cards level=%s cutout=%d one_sided=%d ms=%.1f", g_stem,
+			asked, culled, card_ms);
 	}
 
 	HDRenderSetShellRooms(0, 0);
@@ -8142,7 +8165,14 @@ static void HDLevelBuildHD()
 
 	/* The flip pairs of this level, one line each and only with -log. A pair
 	 * whose two halves disagree about HD turns a room classic (or HD) in
-	 * mid-level, a visible change, so it is named in the log. */
+	 * mid-level, a visible change, so it is named in the log. Ending in
+	 * what the place shows when the level starts: `start=` the group drawn
+	 * there (the other state's is out of the world until a flip),
+	 * `classic=` 1 for a state drawn by its classic faces and not by art,
+	 * per state, and `kept=` the triangles of other groups' art standing
+	 * in the pair's rooms that the second shells kept because one state
+	 * does not carry them (hd_render.h, HD_SHELL_FLIP) - drawn in both
+	 * states, the only art of the pair that is. */
 	if (gLogEnabled)
 	{
 		int pairs = 0, mixed = 0;
@@ -8159,10 +8189,24 @@ static void HDLevelBuildHD()
 			if (g_group_hd[r] != g_group_hd[other])
 				mixed++;
 
-			Log("HDLOG flippair room=%d alt=%d flip=%d hd=%d/%d tris=%d/%d",
-				r, other, (int)room[r].FlipNumber,
-				(int)g_group_hd[r], (int)g_group_hd[other],
-				HDRenderGroupTriangles(r, -1), HDRenderGroupTriangles(other, -1));
+			int kept = 0;
+
+			for (int i = 0; i < HDRenderShellLines(); i++)
+			{
+				HDShellLine line;
+
+				if (HDRenderShellLine(i, &line) &&
+					line.refused == HD_SHELL_FLIP &&
+					(line.host == r || line.host == other))
+					kept += line.tris - line.dropped;
+			}
+
+			Log("HDLOG flippair room=%d alt=%d flip=%d hd=%d/%d tris=%d/%d "
+				"start=%d classic=%d/%d kept=%d", r, other,
+				(int)room[r].FlipNumber, (int)g_group_hd[r],
+				(int)g_group_hd[other], HDRenderGroupTriangles(r, -1),
+				HDRenderGroupTriangles(other, -1), (int)g_room_group[r],
+				g_group_hd[r] ? 0 : 1, g_group_hd[other] ? 0 : 1, kept);
 		}
 
 		Log("HDLOG level=%s flip pairs=%d mixed_hd=%d", g_stem, pairs, mixed);
@@ -8996,7 +9040,8 @@ static int SurfaceRoom()
  *
  *   HDLOG level=<stem> vis=1 rooms= art_rooms= walls= bare= void= guests=
  *         guest_tris= wide= ms= twin= wide_bare= edge= statics_held=
- *         statics_ms= enclosed= hull_guests=
+ *         statics_ms= enclosed= hull_guests= hollow_hidden= guests_hanging=
+ *   HDLOG visguest level=<stem> room= group= tris= box= refused=hanging
  *
  * art_rooms the rooms whose walls were asked, walls their classic wall
  * faces, bare those the art leaves bare (the openings), void those with no
@@ -9008,7 +9053,11 @@ static int SurfaceRoom()
  * statics_ms what asking them cost; enclosed the rooms that stand inside
  * another whose art stands in them (HDVisTables::enclosedBy); hull_guests
  * the guest pairs whose group is a hull, which the walk is not handed
- * (g_vis_guests). */
+ * (g_vis_guests); hollow_hidden the rooms whose hollow art is drawn and
+ * whose faces go; guests_hanging the guests the sky's rule refused, art
+ * hanging into a room under the sky from an enclosed room over it with no
+ * link (hd_vis.h, guestRule), each with a visguest line of its holder, its
+ * group, its triangles in the holder's inside and their box. */
 
 static int VisContents(int roomIndex)
 {
@@ -9076,11 +9125,19 @@ bool HDVisWalkOn()
 		Log("HDLOG level=%s vis=1 rooms=%d art_rooms=%d walls=%d bare=%d "
 			"void=%d guests=%d guest_tris=%lld wide=%d ms=%.0f twin=%d "
 			"wide_bare=%.2f edge=%.5f statics_held=%d statics_ms=%.0f "
-			"enclosed=%d hull_guests=%d hollow_hidden=%d", g_stem, t->rooms,
-			t->artRooms, t->wallFaces, t->bareFaces, t->voidFaces,
-			t->guestPairs, t->guestTris, t->widePortals, t->ms,
+			"enclosed=%d hull_guests=%d hollow_hidden=%d guests_hanging=%d",
+			g_stem, t->rooms, t->artRooms, t->wallFaces, t->bareFaces,
+			t->voidFaces, t->guestPairs, t->guestTris, t->widePortals, t->ms,
 			t->openingsTwin, p.wideBare, p.edge, t->staticsHeld, t->staticMs,
-			t->roomsEnclosed, g_vis_hull_guests, hollow_hidden);
+			t->roomsEnclosed, g_vis_hull_guests, hollow_hidden,
+			t->guestsHanging);
+
+		// The guests the sky's rule refused (HDVisRefused), one line each.
+		for (const HDVisRefused& one : t->hanging)
+			Log("HDLOG visguest level=%s room=%d group=%d tris=%d "
+				"box=%.0f..%.0f,%.0f..%.0f,%.0f..%.0f refused=hanging", g_stem,
+				one.holder, one.group, one.tris, one.lo[0], one.hi[0],
+				one.lo[1], one.hi[1], one.lo[2], one.hi[2]);
 	}
 
 	return true;

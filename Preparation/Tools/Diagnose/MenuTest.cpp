@@ -3174,10 +3174,10 @@ static void graphics_build_row()
  * run, read with 50 for a missing or out-of-range value, saved) and a round
  * trip through that read; the field in global\types.h; and in
  * specific\dxshell.cpp that the pass runs nowhere at 50, that the picture
- * goes back after the present, and that the device's release and reset
- * take the pass's objects with them; that both of the engine's presents,
- * DXShowFrame and the loading bar's held one (specific\drawbars.cpp),
- * take the pass. */
+ * goes back after the present, and that the device's release takes the
+ * pass's objects with it and no Reset is left; that both of the engine's
+ * presents, DXShowFrame and the loading bar's held one
+ * (specific\drawbars.cpp), take the pass. */
 static void display_gamma_row()
 {
 	static const char* const want[3] = { "Frame rate", "VSync", "Gamma" };
@@ -3356,8 +3356,11 @@ static void display_gamma_row()
 		"gamma row: the engine's picture goes back after the present");
 	check(strstr(dx, "FmvDeviceLost();\r\n\t\tGammaRelease();") != 0, 1,
 		"gamma row: DXClose releases the pass's objects");
-	check(strstr(dx, "HDLevelDeviceLost();\r\n\t\t\tGammaRelease();") != 0, 1,
-		"gamma row: and so does the reset");
+	/* The device has no Reset any more: a lost device gets a new one as a
+	 * new size does (DXRestoreDevice), so DXClose's release above is the
+	 * pass's one way out with the device. */
+	check(tree_count(dx, "->Reset("), 0,
+		"gamma row: and no Reset is left to keep them alive");
 
 	/* Both of the engine's presents take the pass: DXShowFrame and the
 	 * loading bar's held frames, each with the start before its Present and

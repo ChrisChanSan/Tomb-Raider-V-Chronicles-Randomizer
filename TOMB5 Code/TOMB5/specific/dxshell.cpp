@@ -32,6 +32,7 @@ char keymap[256];
 ulong DXTextureMemoryAtStart = 0;	// see dxshell.h
 DXWINDOWPLACE DXWindowPlace;		// see dxshell.h
 volatile long DXWindowBusy;		// see dxshell.h
+volatile long DXDeviceLost;		// see dxshell.h
 
 /* DXResizeToClient's two words to DXCreate: keep the window where it is and
  * take its client as the back buffer's size, and - only when a device of
@@ -577,44 +578,31 @@ HRESULT DXShowFrame()
 	// The back buffer the engine's own picture again (the gamma pass).
 	DXGammaFinish(curved, hr);
 
+	/* A lost device. "Full screen" is a windowed device (see DXCreate), which
+	 * a focus change never loses; another desktop taking the screen does -
+	 * the secure desktop of Ctrl+Alt+Del, the lock screen, a UAC prompt - and
+	 * so do a display mode another program sets and a monitor unplugged.
+	 * Every present fails until the device is given back, and this thread
+	 * cannot give it back: D3D9 refuses a Reset on any thread but the one
+	 * that made the device, the window's, and while any D3DPOOL_DEFAULT
+	 * object lives (D3DERR_INVALIDCALL in two frames running, in the dump of
+	 * a game frozen behind Ctrl+Alt+Del), and a reset here would take the HD
+	 * level's objects away in the middle of a frame (HDLevelDeviceLost).
+	 * So the window is told, once per loss, and the frames go on drawing
+	 * nothing; the window thread makes a new device once the player is back
+	 * in the window, with this thread held at the start of its scene
+	 * (winmain.cpp, WinDeviceRestore).
+	 *   WINLOG device lost coop=<ok|lost|notreset|internal|other> hr=<0x...>
+	 *   - TestCooperativeLevel's answer at the loss */
 	if (hr == D3DERR_DEVICELOST)
 	{
-		// "Fullscreen" now always runs as a border-less windowed device (see DXCreate),
-		// which never loses the device on focus changes - this path is only a defensive
-		// fallback for other, rarer causes of device loss (display mode changed by
-		// another app, monitor unplugged, etc). Kept minimal since it's not the normal
-		// case anymore; see git history for the fuller diagnostic version used while
-		// tracking down the original exclusive-fullscreen alt-tab bug this replaced.
-		HRESULT hrCoopLevel = G_dxptr->lpD3DDevice->TestCooperativeLevel();
-
-		if (hrCoopLevel == D3DERR_DEVICENOTRESET)
+		if (!InterlockedExchange(&DXDeviceLost, 1))
 		{
-			Log("Device lost, resetting");
+			const HRESULT coop = G_dxptr->lpD3DDevice->TestCooperativeLevel();
 
-			// Reset() refuses point blank while any D3DPOOL_DEFAULT
-			// object is alive, and the HD path's vertex buffer, index buffer
-			// and page textures all are (that pool is the whole point - it
-			// keeps 300 MB of decoded pages out of the process's address
-			// space). They are released here so that the reset below can
-			// succeed at all; the next level load makes them again.
-			HDLevelDeviceLost();
-			GammaRelease();	// its copy is D3DPOOL_DEFAULT as well
-
-			HRESULT hrReset = G_dxptr->lpD3DDevice->Reset(&G_dxptr->PresentParams);
-
-			if (SUCCEEDED(hrReset))
-			{
-				// Reset() implicitly discards all render/sampler states (back to
-				// D3D9 defaults) and recreates the swap chain - HWInitialise() is
-				// the same call used at startup and after FMV playback to
-				// (re)establish the render state this engine relies on. Textures
-				// are D3DPOOL_MANAGED (see specific/texture.cpp) so D3D9 restores
-				// their contents automatically - nothing to redo there.
-				Log("Device reset OK");
-				HWInitialise();
-			}
-			else
-				Log("Device reset failed: %s (0x%08X)", DXGetErrorString(hrReset), (unsigned)hrReset);
+			Log("WINLOG device lost coop=%s hr=0x%08lX", DXCoopName(coop),
+				(unsigned long)coop);
+			PostMessage(G_dxptr->hWnd, WM_APP_DEVICE, 0, 0);
 		}
 	}
 	else
@@ -799,7 +787,9 @@ static long DXCreateIn(long w, long h, long bpp, long Flags, DXPTR* dxptr,
 		// run a border-less window sized to exactly cover the target monitor at its
 		// current desktop resolution, with the D3D9 device created in *windowed*
 		// mode - windowed-mode devices never lose the device on focus changes at
-		// all, and a border-less window filling the screen is visually
+		// all (a switch of the desktop, Ctrl+Alt+Del or the lock screen, still
+		// loses it: see DXShowFrame), and a border-less window filling the
+		// screen is visually
 		// indistinguishable from real exclusive fullscreen. WinSetStyle() already
 		// strips the window border (WS_POPUP) for DXF_FULLSCREEN, so only
 		// positioning/sizing and PresentParams.Windowed (below) need to change here.
@@ -844,8 +834,8 @@ static long DXCreateIn(long w, long h, long bpp, long Flags, DXPTR* dxptr,
 	 * Where this takes effect, and where it does not: PresentationInterval is
 	 * a device-creation parameter, read here, and this function runs at
 	 * startup, on Alt+Enter and on a new window size (DXToggleFullScreen
-	 * and DXResizeToClient both call DXCreate). The device-lost path in
-	 * DXShowFrame resets with this same G_dxptr->PresentParams, so it follows
+	 * and DXResizeToClient both call DXCreate). A lost device's new one
+	 * (DXRestoreDevice) is made here as well, so it follows
 	 * too. Switching the menu row over does not change a running device -
 	 * the row says so, and the setting is picked up the next time the game
 	 * starts. Resetting the device on the spot would work
@@ -906,17 +896,17 @@ long DXDisplayHz()
 
 /* The back buffer made the client's size: a drag of the frame has ended,
  * the window was maximized, restored or snapped, or a resolution key gave
- * it a new size. The window stays as it is.
+ * it a new size. The window stays as it is. A lost device takes the same
+ * way back (DXRestoreDevice), at the size it had.
  *
  * The device is made anew, as Alt+Enter makes it: DXCreate releases the HD
  * level with the old device (DXClose, HDLevelDeviceLost) and builds it again
  * on the new one after the classic pages have moved (MoveTexturesToDevice,
  * HDLevelDeviceRecreated), whose DXLOG device recreated line gives the
  * build's cost. A Reset of the same device would also need every
- * D3DPOOL_DEFAULT object released first, and the reset path of DXShowFrame
- * leaves the HD level away until the next level load; the rebuild, which is
- * the cost either way, would have to be added there. The device is the
- * engine's own, so the caller holds the game thread (winmain.cpp).
+ * D3DPOOL_DEFAULT object released first and the HD level built again after
+ * it; the rebuild is the cost either way. The device is the engine's own,
+ * so the caller holds the game thread (winmain.cpp).
  *
  * A device of the new size that cannot be made leaves the old size, the
  * picture stretched into the client as it is during a drag.
@@ -955,6 +945,51 @@ long DXResizeToClient(const char* why)
 		G_dxptr->dwRenderHeight, val,
 		(long)((end.QuadPart - start.QuadPart) * 1000 / rate.QuadPart));
 	return val;
+}
+
+HRESULT DXDeviceCoop()
+{
+	if (!G_dxptr || !G_dxptr->lpD3DDevice)
+		return D3D_OK;
+
+	return G_dxptr->lpD3DDevice->TestCooperativeLevel();
+}
+
+const char* DXCoopName(HRESULT hr)
+{
+	switch (hr)
+	{
+	case D3D_OK:
+		return "ok";
+
+	case D3DERR_DEVICELOST:
+		return "lost";
+
+	case D3DERR_DEVICENOTRESET:
+		return "notreset";
+
+	case D3DERR_DRIVERINTERNALERROR:
+		return "internal";
+	}
+
+	return "other";
+}
+
+/* A lost device (DXDeviceLost) given back: a new device, made as a new
+ * size makes it - DXClose releases the HD level, the film's texture, the
+ * gamma pass and the old device, the classic pages move and the HD level
+ * is built again on the new device (MoveTexturesToDevice) - rather than a
+ * Reset, which every D3DPOOL_DEFAULT object still alive would refuse and
+ * which would leave the HD level away until the next level load. The
+ * DXLOG window resize line says `device` and gives the cost. */
+long DXRestoreDevice()
+{
+	const long made = DXResizeToClient("device");
+
+	if (made)
+		InterlockedExchange(&DXDeviceLost, 0);
+
+	return made;
 }
 
 long DXToggleFullScreen()

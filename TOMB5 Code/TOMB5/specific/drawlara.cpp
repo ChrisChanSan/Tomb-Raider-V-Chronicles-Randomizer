@@ -815,8 +815,43 @@ static void DrawLara__6(ITEM_INFO* item, long mirror)
 	phd_PushMatrix();
 	obj = &objects[item->object_number];
 
+	/* The seam, as in the other three variants: the HD composite in the
+	 * remaster's X-ray set (hd/hd_laradraw.h, HDLaraDrawXray), or the
+	 * classic X-ray body below - never both. Her blob and her light as
+	 * DrawLara__1's HD draw has them.
+	 *
+	 * The caller has put the level's X-ray meshes on her
+	 * (game\draw.cpp and game\mirror.cpp, SetupSkelebobMeshswaps): the HK in
+	 * her hand as PISTOLS_ANIM's, the left hand as LARA_EXTRA_MESH2's, the
+	 * weapon on her back as another slot's. The composite reads which slot
+	 * owns each hand and the back gun out of those, so they are put back for
+	 * the length of its draw and swapped in again after it, which leaves the
+	 * caller's RestoreLaraMeshswaps exactly what it expects. */
+	const bool hd = HDLaraDrawXray();
+
+	if (hd && (mirror || HDShadowFrameBlob()))
+		S_PrintShadow(obj->shadow_size, GLaraShadowframe, item);
+
 	if (!mirror)
 		CalculateObjectLightingLara();
+
+	if (hd)
+	{
+		RestoreLaraMeshswaps();
+		HDLaraDrawFrame(mirror);
+		SetupSkelebobMeshswaps();
+		phd_PopMatrix();
+		bLaraUnderWater = 0;
+		phd_top = top;
+		phd_bottom = bottom;
+		phd_left = left;
+		phd_right = right;
+		return;
+	}
+
+	// Drawn classic, behind -log (hd/hd_laradraw.h, HDLaraClassicLog).
+	if (!mirror)
+		HDLaraClassicLog(6);
 
 	meshpp = &meshes[objects[LARA_EXTRA_MESH1].mesh_index];
 

@@ -35,6 +35,7 @@
 #include "../d3dmatrix.h"
 #include "../lighting.h"
 #include "../function_stubs.h"
+#include "../file.h"			// floor_data - the SKELETON triggers
 #include "../profile.h"			// PROFLOG phases
 #include "../../tomb5/tomb5.h"
 #include "../../game/objects.h"
@@ -716,6 +717,159 @@ namespace
 			HDLaraPartModel(g_level.outfit, HD_LARA_PART_BODY)
 				? HDLaraPartModel(g_level.outfit, HD_LARA_PART_BODY) : "-",
 			drawn);
+	}
+
+	/* The squares whose floor data carries a SKELETON trigger, the one thing
+	 * that sets lara.skelebob (game\control.cpp, _TestTriggers: the type is
+	 * bits 8..13 of the trigger's own word). The chain is walked entry by
+	 * entry as hd_level.cpp walks it for the rooms' air (hd_render.h,
+	 * HDFloorEntryWords), and a broken one stops at the same 65536 words.
+	 * Flipped rooms are rooms of their own and are counted with the rest. */
+	int skeleton_squares()
+	{
+		int found = 0;
+
+		if (!floor_data || !room)
+			return 0;
+
+		for (int r = 0; r < number_rooms; r++)
+		{
+			const ROOM_INFO& here = room[r];
+
+			if (!here.floor)
+				continue;
+
+			for (int s = 0; s < here.x_size * here.y_size; s++)
+			{
+				const unsigned short index = here.floor[s].index;
+				const unsigned short* chain = index
+					? (const unsigned short*)&floor_data[index] : 0;
+
+				for (int at = 0; chain && at < 65536; )
+				{
+					const unsigned short type = chain[at++];
+					const int fn = type & 0x1F;
+					const int length = HDFloorEntryWords(chain, at, 65536, fn);
+
+					if (length < 0)
+						break;
+
+					if (fn == TRIGGER_TYPE &&
+						((type >> 8) & 0x3F) == SKELETON_T)
+					{
+						found++;
+						break;
+					}
+
+					at += length;
+
+					if (type & 0x8000)
+						break;
+				}
+			}
+		}
+
+		return found;
+	}
+
+	/* The X-ray look, for the log (XRAYLOG).
+	 *
+	 * lara.skelebob is set by a SKELETON trigger under her and cleared at the
+	 * top of every control frame (game\control.cpp), so every drawn frame
+	 * says whether she is X-rayed in it. A line when the look comes on, one
+	 * whenever what draws it changes while it holds - a gun drawn, the body
+	 * gone classic - and one when it goes off:
+	 *
+	 *   room=      the room she stands in
+	 *   set=       block: the level's X-ray set over the outfit she wears;
+	 *              worn: her outfit is the X-ray body; classic: DrawLara__6;
+	 *              - when off
+	 *   body= right= left= holsters= back=
+	 *              the .TRM stems drawn as the body, in her hands, on her
+	 *              thighs and on her back, - for none
+	 *   drawn=     hd or DrawLara__<n>, as on the SWAPLOG line
+	 *
+	 * Written by whichever draw puts her on the screen, outside a mirror, as
+	 * SWAPLOG is. Level state, cleared in HDLaraDrawEnd: a level she is
+	 * never X-rayed in has no line at all. */
+	bool g_xray_on = false;
+	char g_xray_said[256] = { 0 };
+
+	// The level's SKELETON squares, counted at the plan for the build's line.
+	int g_xray_squares = 0;
+
+	void xray_log(bool on, const char* fields, const char* drawn)
+	{
+		if (!gLogEnabled || (!on && !g_xray_on))
+			return;
+
+		char now[256];
+
+		std::snprintf(now, sizeof(now), "%s drawn=%s", on ? fields : "set=-",
+			drawn);
+
+		if (on && g_xray_on && !strcmp(now, g_xray_said))
+			return;
+
+		const char* stem = g_lights_stem[0] ? g_lights_stem : HDLevelLogName();
+		const bool cut = GLOBAL_playing_cutseq != 0;
+
+		g_xray_on = on;
+		std::snprintf(g_xray_said, sizeof(g_xray_said), "%s", now);
+		Log("XRAYLOG level=%s cut=%d frame=%d room=%d xray=%s %s", stem,
+			cut ? (int)cutseq_num : 0,
+			cut && GLOBAL_cutseq_frame > 0 ? (int)GLOBAL_cutseq_frame - 1
+				: -1, lara_item ? (int)lara_item->room_number : -1,
+			on ? "on" : "off", now);
+	}
+
+	/* The fields of an XRAYLOG line for a frame the composite draws: the
+	 * parts out of this frame's list, each named by the file it draws. */
+	void xray_fields(bool block, const HDLaraDraw* pieces, int count,
+		char* out, int size)
+	{
+		const char* right = "-";
+		const char* left = "-";
+		const char* thighL = "-";
+		const char* thighR = "-";
+		const char* back = "-";
+
+		for (int i = 0; i < count; i++)
+		{
+			const int part = pieces[i].part;
+			const unsigned int nodes = pieces[i].nodeMask;
+			const char* model = block ? HDLaraPartXrayModel(part)
+				: HDLaraPartModel(g_level.outfit, part);
+
+			if (!model)
+				continue;
+
+			if (part >= HD_LARA_PART_BACK_SHOTGUN)
+				back = model;
+			else if (part >= HD_LARA_PART_HOLSTER_PISTOL)
+			{
+				if (nodes >> HD_LARA_LTHIGH & 1)
+					thighL = model;
+
+				if (nodes >> HD_LARA_RTHIGH & 1)
+					thighR = model;
+			}
+			else
+			{
+				if (nodes >> HD_LARA_RHAND & 1)
+					right = model;
+
+				if (nodes >> HD_LARA_LHAND & 1)
+					left = model;
+			}
+		}
+
+		const char* body = block ? HDLaraPartXrayModel(HD_LARA_PART_BODY)
+			: HDLaraPartModel(g_level.outfit, HD_LARA_PART_BODY);
+
+		std::snprintf(out, size, "set=%s body=%s right=%s left=%s "
+			"holsters=%s/%s back=%s", block ? "block" : "worn",
+			body ? body : "-", right, left, thighL, thighR, back);
 	}
 
 	/* The braid's six matrices.
@@ -1404,6 +1558,11 @@ int HDLaraDrawPlan(HDModelSlot* out, int max)
 
 	g_level.slots = g_laraSlotCount ? g_laraSlots : 0;
 	g_level.slotCount = g_laraSlotCount;
+
+	/* The X-ray set is read only where the floor can X-ray her: RICH2's
+	 * scanner, in the shipped game, and nowhere else. */
+	g_xray_squares = skeleton_squares();
+	g_level.xray = g_xray_squares > 0;
 	g_planned = true;
 
 	return HDLaraPlan(&g_level, out, max);
@@ -1531,6 +1690,31 @@ void HDLaraDrawBuild(const char* stem)
 			sheen, sheenPower, held, heldPower,
 			HDLaraHasPart(part) ? HDModelPageSheenCount(slot) : 0);
 	}
+
+	/* The X-ray set, where the floor can X-ray her: how many squares carry
+	 * the trigger, whether the composite can draw the look, and the set
+	 * part by part as the outfit's parts are listed above. */
+	if (!g_level.xray)
+		return;
+
+	Log("HDLOG level=%s lara xray squares=%d ready=%d worn=%d", stem,
+		g_xray_squares, (int)HDLaraXrayReady(),
+		(int)HDLaraOutfitIsXray(g_level.outfit));
+
+	for (int part = 0; part < HD_LARA_PART_COUNT; part++)
+	{
+		if (!HDLaraXrayPlanned(part))
+			continue;
+
+		const int slot = HDLaraPartXraySlot(part);
+		float mean = 0, worst = 0;
+
+		HDModelBindDrift(slot, &mean, &worst);
+		Log("HDLOG level=%s lara xray part=%s model=%s hd=%d verts=%d "
+			"drift=%.0f/%.0f", stem, HDLaraPartLabel(part),
+			HDLaraPartXrayModel(part), (int)HDLaraHasXrayPart(part),
+			HDLaraHasXrayPart(part) ? HDModelVertices(slot) : 0, mean, worst);
+	}
 }
 
 void HDLaraDrawEnd()
@@ -1560,6 +1744,9 @@ void HDLaraDrawEnd()
 	g_lights_logged = false;
 	g_swap_seeded = false;
 	g_hide_said = 0;
+	g_xray_on = false;
+	g_xray_said[0] = 0;
+	g_xray_squares = 0;
 	face_reset();
 
 	// A new level starts the chest's motion at rest, with fresh counters.
@@ -1599,6 +1786,11 @@ void HDLaraDrawEnd()
 bool HDLaraDrawActive()
 {
 	return g_active && tomb5.hd_objects && HDLaraActive() && HDDrawn();
+}
+
+bool HDLaraDrawXray()
+{
+	return HDLaraDrawActive() && HDLaraXrayReady();
 }
 
 int HDLaraDrawOutfit()
@@ -1783,6 +1975,16 @@ void HDLaraDrawFrame(long mirror)
 	if (!HDLaraDrawActive())
 		return;
 
+	/* The X-ray look out of the level's own block: lara.skelebob holds -
+	 * DrawLara__6 is the only variant that calls this then (HDLaraDrawXray)
+	 * - and her outfit is not the X-ray body, which would wear the set on
+	 * its own slots. Every part below then draws its X-ray twin or nothing:
+	 * the body and what she holds and wears out of HDLaraPartXraySlot, and
+	 * no borrowed head, face, lid, rig or braid, because the set has none
+	 * (hd_lara.cpp, kXray). Nothing of it is kept: the next frame without
+	 * the flag draws the outfit's parts again, from the same state. */
+	const bool xray = lara.skelebob && HDLaraHasXrayPart(HD_LARA_PART_BODY);
+
 	/* --- the fifteen matrices ------------------------------------------ */
 	for (int node = 0; node < HD_LARA_NODES; node++)
 		to_row_major(&lara_matrices[lara_lmx_of_node[node] * indices_count],
@@ -1795,7 +1997,9 @@ void HDLaraDrawFrame(long mirror)
 	const bool softOn = soft_constants(mirror, matrices, &softConstants);
 	const auto soft = [&](int part) -> const HDModelSoft*
 	{
-		return softOn && HDLaraPartSoft(part) ? &softConstants : 0;
+		/* The region was found on the outfit's body, so the X-ray body's
+		 * draw takes no motion; the spring itself steps on regardless. */
+		return softOn && !xray && HDLaraPartSoft(part) ? &softConstants : 0;
 	};
 
 	/* --- the light ------------------------------------------------------ */
@@ -2134,8 +2338,11 @@ void HDLaraDrawFrame(long mirror)
 	 * It is a mask of its own and not part of `mask`, because `mask` is what
 	 * the frame says - mesh_bits and first person - and every other part of
 	 * the composite uses that. The borrowed head is drawn with `mask` like
-	 * the rest, so a head shot away by mesh_bits takes it too. */
-	const unsigned int bodyMask = mask & HDLaraBodyMask();
+	 * the rest, so a head shot away by mesh_bits takes it too.
+	 *
+	 * The X-ray body keeps its node 14 whatever the outfit borrowed: the
+	 * skull is its own. */
+	const unsigned int bodyMask = xray ? mask : mask & HDLaraBodyMask();
 
 	/* And the neck under it. Masking the head node is where the classic path
 	 * stops, and for a classic body that is enough: LM_HEAD is head and neck
@@ -2258,7 +2465,17 @@ void HDLaraDrawFrame(long mirror)
 	now.rightHolsterSlot = lara.holster;
 	now.backGunSlot = lara.back_gun;
 
-	const int pieceCount = HDLaraFrameParts(&now, pieces, 8);
+	const int pieceCount = HDLaraFrameParts(&now, pieces, 8, xray);
+
+	/* The X-ray look's line, on its edges (XRAYLOG). With the flag on and no
+	 * block of its own the outfit is the X-ray body, worn. */
+	if (!mirror)
+	{
+		char fields[192];
+
+		xray_fields(xray, pieces, pieceCount, fields, sizeof(fields));
+		xray_log(lara.skelebob != 0, fields, "hd");
+	}
 
 	/* --- on the list ----------------------------------------------------- */
 	/* The body first and the face on top of it, then the hands, the holsters
@@ -2281,12 +2498,17 @@ void HDLaraDrawFrame(long mirror)
 	 * nothing. */
 	float sheen = 0.0f, sheenPower = 1.0f;
 
-	HDLaraPartSheen(HD_LARA_PART_BODY, &sheen, &sheenPower);
+	if (xray)
+		HDLaraXraySheen(&sheen, &sheenPower);
+	else
+		HDLaraPartSheen(HD_LARA_PART_BODY, &sheen, &sheenPower);
 
-	if (!HDObjectPush(HDLaraPartSlot(HD_LARA_PART_BODY), matrices,
+	if (!HDObjectPush(xray ? HDLaraPartXraySlot(HD_LARA_PART_BODY)
+		: HDLaraPartSlot(HD_LARA_PART_BODY), matrices,
 		HD_LARA_NODES, nodeLight, bodyMask, lights, lightCount, sunScale,
 		cutting ? &neckCut : 0, cull, sheen, sheenPower, -1, -1,
-		soft(HD_LARA_PART_BODY), castWith, castMask & HDLaraBodyMask()))
+		soft(HD_LARA_PART_BODY), castWith,
+		xray ? castMask : castMask & HDLaraBodyMask()))
 	{
 		g_dropped++;
 		return;
@@ -2314,7 +2536,7 @@ void HDLaraDrawFrame(long mirror)
 	 * HDLaraHasPart is the whole guard: the part exists only for a body the
 	 * head rule dressed, and for anybody else HDLaraPartSlot names a slot no
 	 * model was built for, which HDObjectPush turns down at its first line. */
-	if (HDLaraHasPart(HD_LARA_PART_HEAD))
+	if (!xray && HDLaraHasPart(HD_LARA_PART_HEAD))
 	{
 		float headSheen = 0.0f, headPower = 1.0f;
 
@@ -2360,7 +2582,7 @@ void HDLaraDrawFrame(long mirror)
 	 * A level whose lid could not be built (no bind pose, no rim at the cut)
 	 * has none: HDLaraHasPart says so, first person keeps the open hole, and
 	 * the note at level build says why. */
-	if (firstPerson && cutting && HDLaraHasPart(HD_LARA_PART_NECK_CAP))
+	if (!xray && firstPerson && cutting && HDLaraHasPart(HD_LARA_PART_NECK_CAP))
 	{
 		float capSheen = 0.0f, capPower = 1.0f;
 
@@ -2396,16 +2618,20 @@ void HDLaraDrawFrame(long mirror)
 	int faceTrack = -1;
 	int faceFrame = -1;
 
-	choose_face(HDLaraPartSlot(HD_LARA_PART_FACE), firstPerson,
-		(mask >> HD_LARA_HEAD_NODE & 1) != 0, lipsTrack, lipsFrame, &faceTrack,
-		&faceFrame);
+	/* The X-ray look has no face: the skull is the body's. The face's own
+	 * state - which line, which loop - waits for the next frame it draws. */
+	if (!xray)
+		choose_face(HDLaraPartSlot(HD_LARA_PART_FACE), firstPerson,
+			(mask >> HD_LARA_HEAD_NODE & 1) != 0, lipsTrack, lipsFrame,
+			&faceTrack, &faceFrame);
 
-	if (!firstPerson && HDObjectPush(HDLaraPartSlot(HD_LARA_PART_FACE),
+	if (!xray && !firstPerson &&
+		HDObjectPush(HDLaraPartSlot(HD_LARA_PART_FACE),
 		matrices, HD_LARA_NODES, nodeLight, mask, lights, lightCount, sunScale,
 		0, HD_MODEL_CULL_NONE, sheen, sheenPower, faceTrack, faceFrame,
 		soft(HD_LARA_PART_FACE), castWith, castMask))
 		drawn++;
-	else if (firstPerson && casting)
+	else if (!xray && firstPerson && casting)
 		/* First person leaves the face out of the picture; the map still
 		 * takes it, as built, so her shadow keeps its head. */
 		HDObjectPush(HDLaraPartSlot(HD_LARA_PART_FACE), matrices, HD_LARA_NODES,
@@ -2431,7 +2657,7 @@ void HDLaraDrawFrame(long mirror)
 	 * everything else. */
 	HDLaraPartSheen(HD_LARA_PART_HOLSTER_RIG, &sheen, &sheenPower);
 
-	if (HDLaraHasPart(HD_LARA_PART_HOLSTER_RIG) &&
+	if (!xray && HDLaraHasPart(HD_LARA_PART_HOLSTER_RIG) &&
 		HDObjectPush(HDLaraPartSlot(HD_LARA_PART_HOLSTER_RIG), matrices,
 			HD_LARA_NODES, nodeLight, HDLaraPartCoverage(HD_LARA_PART_HOLSTER_RIG) & mask,
 			lights, lightCount, sunScale, 0, HD_MODEL_CULL_NONE,
@@ -2443,7 +2669,8 @@ void HDLaraDrawFrame(long mirror)
 	{
 		HDLaraPartSheen(pieces[i].part, &sheen, &sheenPower);
 
-		if (HDObjectPush(HDLaraPartSlot(pieces[i].part), matrices,
+		if (HDObjectPush(xray ? HDLaraPartXraySlot(pieces[i].part)
+			: HDLaraPartSlot(pieces[i].part), matrices,
 			HD_LARA_NODES, nodeLight, pieces[i].nodeMask & mask, lights,
 			lightCount, sunScale, 0, HD_MODEL_CULL_NONE, sheen, sheenPower, -1, -1, 0,
 			castWith, pieces[i].nodeMask & castMask))
@@ -2456,7 +2683,7 @@ void HDLaraDrawFrame(long mirror)
 		 * cut away and this is what stands in their place. HDLaraHasPartTwin
 		 * is false for every part of an unmodded wardrobe, so this line costs
 		 * a test and nothing else. */
-		if (HDLaraHasPartTwin(pieces[i].part) &&
+		if (!xray && HDLaraHasPartTwin(pieces[i].part) &&
 			HDObjectPush(HDLaraPartTwinSlot(pieces[i].part), matrices,
 				HD_LARA_NODES, nodeLight, pieces[i].nodeMask & mask, lights,
 				lightCount, sunScale, 0, HD_MODEL_CULL_NONE, sheen, sheenPower, -1, -1, 0,
@@ -2473,7 +2700,7 @@ void HDLaraDrawFrame(long mirror)
 
 	/* In first person the braid is left out of the picture and still goes
 	 * into the map, like the face. */
-	if ((!firstPerson || casting) && HDLaraHasPart(HD_LARA_PART_BRAID))
+	if (!xray && (!firstPerson || casting) && HDLaraHasPart(HD_LARA_PART_BRAID))
 	{
 		float hairLight[HD_LARA_HAIR_NODES * 3];
 		const int head = HD_LARA_HEAD_NODE;
@@ -2522,7 +2749,8 @@ void HDLaraDrawFrame(long mirror)
 		// stack and needs no interpolation of its own.
 		Log("HDLOG frame lara parts=%d(%d this frame) interp=%.2f outfit=%s right=%s left=%s "
 			"holsters=%s/%s back=%s braid=%d head=%s/%d mask=%08x body=%08x mirror=%d "
-			"firstperson=%d headcut=%d lights=%d dropped=%d speechhead=%s lips=%s",
+			"firstperson=%d headcut=%d lights=%d dropped=%d speechhead=%s lips=%s "
+			"xray=%d",
 			drawn, g_frame_parts, InterpFrameAlpha(), HDLaraOutfitModel(HDLaraOutfitNow())
 				? HDLaraOutfitModel(HDLaraOutfitNow()) : "-",
 			HDSlotName(now.rightHandSlot) ? HDSlotName(now.rightHandSlot) : "-",
@@ -2540,7 +2768,7 @@ void HDLaraDrawFrame(long mirror)
 			mask, bodyMask, (int)mirror,
 			(int)firstPerson, (int)cutting, lightCount, g_dropped,
 			HDSlotName(speech_head_slot()) ? HDSlotName(speech_head_slot()) : "-",
-			lipsWord);
+			lipsWord, (int)xray);
 	}
 }
 
@@ -2556,4 +2784,9 @@ void HDLaraClassicLog(int variant)
 
 	std::snprintf(drawn, sizeof(drawn), "DrawLara__%d", variant);
 	swap_log(HDLaraNodesShown((unsigned long)lara_item->mesh_bits), drawn);
+
+	/* And the X-ray look: on when the skeleton cheat's own variant draws it
+	 * classic, off when another variant draws her. */
+	xray_log(variant == 6, "set=classic body=- right=- left=- holsters=-/- "
+		"back=-", drawn);
 }

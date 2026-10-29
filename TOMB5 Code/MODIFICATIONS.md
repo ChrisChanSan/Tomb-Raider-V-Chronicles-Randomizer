@@ -15646,6 +15646,60 @@ the vanilla outfit does.
 
 **Commits.** `64ca409f`, `7db3fc3d`.
 
+### What a cutscene puts into a hand, in HD (#266)
+
+2026-10-29.
+
+**What.** With the HD path on, the crane guard of JOBY2's cutscene 27 holds his pistol,
+the priest of ANDY1's cutscene 19 and ANDY2's cutscene 33 holds his torch, Pierre's
+gun leaves his node 11 hand at frame 3173 of ANDREA3's cutscene 41, the guard of
+RICH1's cutscene 11 starts with empty hands and takes his guns off the rack, and Lara
+holds the catapult of ANDY1's cutscene 14, the clanger of its cutscene 9, the hammer of
+RICH1's cutscene 20 and the chalk of ANDY3's cutscene 38. Before, every one of them
+showed its model's own hands throughout.
+
+**Why.** `game/deltapak.cpp` hands a thing over by writing another slot's mesh into a
+node of the mesh table: `cranecut_init` gives ANIMATING4 BLUE_GUARD's mesh 13, the hand
+with the pistol (24 vertices against the 8 of his fist; ModelProbe `-meshes`);
+`do_pierre_gun_meshswap`, `setup_preist_meshswap` and `richcut4_init` put a mesh of
+MESHSWAP2, MESHSWAP3 or MAFIA2_MIP into the swap half of a node and set its swap bit;
+the four `do_*_meshswap` of Lara's hands exchange her hand with a holder slot's.
+`joby6_control` puts the diving suit's hips on her at frame 542 of JOBY3's cutscene 5;
+the speech heads are the same mechanism on a face. An HD model is drawn out of its own
+file whatever the table says.
+
+**How.** `specific/hd/hd_object.cpp` keeps the mesh table as the level loaded it,
+after `InitialiseObjects` (`HDObjectMeshTableTake`, called by `HDLevelLoad` with the HD
+path on); a node whose drawn mesh is not that entry has borrowed it from the slot whose
+own mesh it was, Lara's slots first and then slot order. A mesh of one of Lara's slots
+and a mesh on the node a separate HD face rides on are speech heads and are not
+borrowed. `HDObjectCutActor`, called by `DrawCutSeqActors` before `HDObjectBegin` with
+one pointer compare per node, decides per node and per frame: the install's model of
+the actor in that state where it ships one, a new swap kind keyed on the model name and
+the set of borrowed nodes (PIERRE_SWAP for node 11, PATRICK_1_TORCH and
+PATRICK_2_TORCH for node 8, TWOGUN_LEFT for node 5 and TWOGUN_EMPTY for 5 and 8,
+measured node by node with ModelProbe `-name -nodes`); else, where the lending slot's
+model draws HD and has geometry on that node, the node of that model hung rigidly on
+the actor's node in its bind pose (`specific/hd/hd_model.cpp`, `HDModelBorrowJoints`)
+with the actor's light, and the actor's own node left out; else the actor's own node.
+The classic mesh is never drawn into an HD body: it is the whole node, a hand with the
+thing in it, and the swap rule refuses that patchwork. `specific/hd/hd_laradraw.cpp`
+does the second rule for Lara while a cutscene plays, out of the same table;
+`specific/hd/hd_bind.cpp`'s hand table binds the four holder slots to the install's
+hand files: CROW_MIP in ANDY1 to HAND_BARE_CATAPULT, MESHSWAP2 in ANDY1 to
+HAND_BARE_IRON_CLAPPER, MESHSWAP3 in RICH1 to HAND_BARE_HAMMER, MAFIA_MIP in ANDY3 to
+HAND_BARE_CHALK - holders with her fifteen-node tree and no item, each file's hand bone
+10 to 25 units from the holder's mesh. The suit's hips have no model and stay her
+own, as #261 left them. The state models, the lending slot's node and the prop hands
+are TROne's rules. `HDLOG cutseq actor` ends in `swap=`, every borrowed node with its
+slot, mesh and what drew it; a change later in the cutscene writes `HDLOG cutswap`;
+`SWAPLOG` ends in `shows=` and finds a mesh's slot in the load-time table, which also
+names the catapult's holder after the exchange. ModelProbe takes `-meshes` and
+`-borrow`. The verdict census over the fifteen levels changes in the four holders' rows
+alone, from classic to `hand`. With `hd_build` 0 nothing of it runs.
+
+**Commits.** `aa2732b2`.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -15927,3 +15981,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #261 | The diving suits, their console and Lara in the suit |
 | #262 | The suit's console states and Lara's legs inside the suit |
 | #263 | Lara's legs inside the suit, on the classic path |
+| #266 | What a cutscene puts into a hand, in HD |

@@ -257,7 +257,7 @@ namespace
 			{
 				const int found = HDWardrobeFind(chosen);
 
-				if (found >= 0)
+				if (found >= 0 && HDWardrobeAt(found)->offered)
 				{
 					const char* factsWhy = "";
 					const int facts = HDLaraOutfitFor(LaraDrawType, cap, young,
@@ -271,7 +271,15 @@ namespace
 					return HDLaraOutfitOfWear(found);
 				}
 
-				Log("HDLOG wardrobe hd_outfit=%s not found - level facts", chosen);
+				/* A body the wardrobe knows and does not offer - one made for
+				 * a cutscene, with no legs - is not worn in play, even where
+				 * an earlier build let the player choose it. */
+				if (found >= 0)
+					Log("HDLOG wardrobe hd_outfit=%s is not offered (a "
+						"cutscene's body) - level facts", chosen);
+				else
+					Log("HDLOG wardrobe hd_outfit=%s not found - level facts",
+						chosen);
 			}
 		}
 

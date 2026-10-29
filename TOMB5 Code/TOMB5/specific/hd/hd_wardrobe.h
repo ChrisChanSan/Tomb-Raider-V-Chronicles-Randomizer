@@ -158,6 +158,12 @@ struct HDWardrobeEntry
 	int source;			// HD_WARDROBE_SOURCE_*
 	int mod;			// the mod's index, or -1
 
+	/* Whether the menu offers it and the player's choice may wear it. False
+	 * for a body made for one scene and not for play - a table in the .cpp,
+	 * by file name. Known all the same: a tool draws it and the log names
+	 * it. */
+	bool offered;
+
 	// What the body takes of the rest of the wardrobe.
 	bool hands;
 	bool braid;

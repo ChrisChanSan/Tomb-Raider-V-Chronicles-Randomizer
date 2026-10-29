@@ -73,17 +73,29 @@ namespace
 	bool g_saidNothingToDo;		// the one line an unarmed F4 gets
 
 	/* What the menu shows, one row per line: the first is "Level facts" and
-	 * the rest are the wardrobe scan in its own order. Held as an index
-	 * rather than as a key, so that nothing here keeps a pointer into a scan
-	 * that could be redone under it. */
+	 * the rest are the wardrobe scan in its own order, every entry it offers
+	 * (hd_wardrobe.h, `offered` - a body made for one cutscene is not a row).
+	 * Held as an index rather than as a key, so that nothing here keeps a
+	 * pointer into a scan that could be redone under it. A walk of the scan
+	 * per question: a hundred entries, and only while the menu is open. */
 	int row_count()
 	{
-		return 1 + HDWardrobeCount();
+		int rows = 1;
+
+		for (int i = 0; i < HDWardrobeCount(); i++)
+			if (HDWardrobeAt(i)->offered)
+				rows++;
+
+		return rows;
 	}
 
 	const HDWardrobeEntry* entry_of(int row)
 	{
-		return row > 0 ? HDWardrobeAt(row - 1) : 0;
+		for (int i = 0, at = 0; row > 0 && i < HDWardrobeCount(); i++)
+			if (HDWardrobeAt(i)->offered && ++at == row)
+				return HDWardrobeAt(i);
+
+		return 0;
 	}
 
 	const char* key_of(int row)
@@ -123,7 +135,8 @@ namespace
 	}
 
 	// Which row the registry's key is on, or 0 - "Level facts" - when there
-	// is none or this machine's scan has not got it.
+	// is none, this machine's scan has not got it or the menu does not offer
+	// it (which is what the level build makes of it, too).
 	int row_of_key(const char* key)
 	{
 		if (!key || !*key)
@@ -131,7 +144,16 @@ namespace
 
 		const int found = HDWardrobeFind(key);
 
-		return found >= 0 ? found + 1 : 0;
+		if (found < 0 || !HDWardrobeAt(found)->offered)
+			return 0;
+
+		int row = 1;
+
+		for (int i = 0; i < found; i++)
+			if (HDWardrobeAt(i)->offered)
+				row++;
+
+		return row;
 	}
 
 	void write_outfit(const char* key)

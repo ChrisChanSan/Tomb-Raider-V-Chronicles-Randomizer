@@ -811,6 +811,29 @@ namespace
 		std::fclose(file);
 	}
 
+	/* The bodies the wardrobe knows and does not offer, by file name.
+	 *
+	 * OUTFIT_RUSSIA_EXTRA is the Russia outfit of the cutscenes that put the
+	 * diving suit on Lara and take it off again, JOBY3's fifth and JOBY5's
+	 * first: it has no vertex on nodes 1 to 6, her legs, which the suit's
+	 * actor wears there; nodes 7 to 14 are OUTFIT_RUSSIA's to the vertex
+	 * count, and node 0 is a band of 684 vertices at the waist where
+	 * OUTFIT_RUSSIA's hips have 1156 (the .TRM's bone weights). Worn in play
+	 * she has no legs. Those cutscenes hide her legs on every body she wears
+	 * (hd_lara.h, HDLaraNodesShown), so it is no outfit to choose. */
+	const char* const kNotOffered[] = { "OUTFIT_RUSSIA_EXTRA" };
+
+	bool offered_file(const std::string& file)
+	{
+		const std::string up = upper(file);
+
+		for (const char* name : kNotOffered)
+			if (up == name)
+				return false;
+
+		return true;
+	}
+
 	/* ------------------------------------------------------ the property -- */
 
 	const Row* row_of(const std::string& file)
@@ -1023,6 +1046,7 @@ namespace
 		put(e.out.file, HD_WARDROBE_FILE, upper(file));
 		e.out.source = source;
 		e.out.mod = mod;
+		e.out.offered = offered_file(file);
 		e.path = path;
 		e.sort = lower(e.out.key);
 

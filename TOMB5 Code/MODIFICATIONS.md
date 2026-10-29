@@ -15656,7 +15656,10 @@ own skull and headset, X-ray hands, no braid and no face. The X-ray outfit of th
 menu wears the same set wherever it is worn; it showed her braid, her face, her bare hands
 and solid black guns on the translucent body. The body's shell is drawn from the front
 alone: the figure is green with its bones readable where it was white, and in a bright
-room it stays a pale green over visible bones instead of a white outline.
+room it stays a pale green over visible bones instead of a white outline. Every part of
+the set - the shell, the bones, the hands with what they hold, the holsters and the weapon
+on the back - takes one darker, greener tone, and no piece of it looks like ordinary gear
+beside the body.
 
 **Why.** The scanner's 36 squares, in rooms 11 and 151 of RICH2 and nowhere else in the
 fifteen levels, set `lara.skelebob` for every frame she stands on one, and DrawLara hands
@@ -15675,7 +15678,11 @@ turned the figure white in a bright room and hid the bones. The classic adds eve
 its X-ray body single sided (specific\output.cpp, phd_PutPolygonsSpcXLU, double_sided 0).
 Page 8030's alpha is 240 or more on every texel, so the additive pass's weight by alpha
 changes nothing, and the part's param[0] of 0.5 is the alpha reference of material 6, not
-a weight.
+a weight. Beside the shell the opaque parts were lit as ordinary gear, up to twice the
+light where the shell stops at its full value and the holsters with a gunmetal sheen, and
+the figure added more light than the reference: in the same flooded tunnel the shell adds
+61.6/82.2/83.9 to the wall behind her belly, the reference pictures of the remaster's
+X-ray Lara 41.2/60.7/32.3 (the mean of a front and a side view).
 
 **How.** `specific/hd/hd_lara.cpp`: a table names the X-ray set part by part (`kXray`) -
 OUTFIT_XRAY, the eleven HAND_XRAY_ parts, HOLSTER_PISTOL_XRAY and the three weapons on the
@@ -15707,8 +15714,18 @@ for every part of the X-ray set, in the level's block and on an outfit that is t
 body. The bones stay two-sided, because their right half is wound the other way round.
 Every other model keeps both sides, its additive runs included: the classic draws those by
 each face's own double-sided flag, which a .TRM does not carry.
+`specific/hd/hd_model.cpp`: a model whose plan entry asks for it
+(`HDModelSlot::lightAsAdditive`) draws its other runs with the pixel shader's own additive
+switches - the light held under 1.0, no sheen, weighed by the alpha, a glow under the
+water; `hd_lara.cpp` asks for it for every part of the X-ray set. `hd_lara.cpp` keeps the
+set's tone, a choice made from the reference pictures and written down there with its
+measurement: the level 0.70, the ratio of the two lumas, and the hue 0.96/1.06/0.55, the
+ratio of each channel over it. `hd_laradraw.cpp` multiplies the light it hands the set by
+it, the ambient of every node and every light, after the shadow's decision and the light
+log, and the `XRAYLOG` line ends in `tone=`. Every model outside the set is lit as before.
 
-**Commits.** `a62561ea`, `753df221`, `0d6713d7`, `354cee0b`, `3c0c289b`.
+**Commits.** `a62561ea`, `753df221`, `0d6713d7`, `354cee0b`, `3c0c289b`, `03fa2e66`,
+`92cff2d9`.
 
 ## 3. Randomizer changes since Beta 1.0
 

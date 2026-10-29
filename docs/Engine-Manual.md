@@ -3116,7 +3116,7 @@ written into the log with the slot it applies to:
 | `skeleton_nodes` | The model names a mesh-tree node the slot does not have. `FIREROPE` in eleven of the fourteen levels: TR5's slot is a rope with one piece and the model comes from TR4, where it had seventeen. |
 | `skeleton_drift` | The model fits the node **count** but not the tree. This is the randomizer's case: it puts foreign creatures into slots, and `SAS` in ANDREA1 holds a twenty-five-piece body where `SAS.TRM` was drawn for fifteen. Skinning that would tear the model across the room. A model the drift refuses is asked a second question before it is turned away - see "the fit" below. |
 | `no_geometry` | A model with nothing in it at all. Has not been seen; the guard is there so that it cannot become a crash. |
-| `baked` | Not classic at all: **nothing** draws it. The level's own name table says `DUMMY` for that slot, which is the remaster saying it draws nothing there as an object — usually because it has baked the thing into the room's art instead. Rome's lamp posts and its wall lanterns are the clearest case: draw the classic mesh on top and the lamp stands twice, a hand's width apart. Only in a room that really draws HD; a room that stayed classic keeps its lamp post. A `DUMMY` slot whose look is part of another object's model rather than of the room's art draws nothing only while that object is drawn HD, and its classic mesh otherwise: the two puzzle holes on the chest of the diving suit's top in the Submarine's room 40, whose console is the top's own model (with `-log` one `HDLOG dummy` line per such slot, naming the object and whether it is drawn HD). And the top's model follows the two holes as the player's items go in, as the classic holes turn into their done states: the empty bezel with its plate while both wait, the console with the battery's slot empty once the console is in, the whole console once the battery is - three files, one per state, chosen as the top is drawn by what stands at its place (the dummy lines end in the slot each hole becomes and the top's model then, the `HDLOG bind` line of the top in its states, and an `HDLOG level=… guests` line names the state at the top's first draw and on every change). |
+| `baked` | Not classic at all: **nothing** draws it. The level's own name table says `DUMMY` for that slot, which is the remaster saying it draws nothing there as an object — usually because it has baked the thing into the room's art instead. Rome's lamp posts and its wall lanterns are the clearest case: draw the classic mesh on top and the lamp stands twice, a hand's width apart. Only in a room that really draws HD; a room that stayed classic keeps its lamp post. And never for an item the randomizer added: the art carries a `DUMMY` slot's objects only where the original level has them, so an added one - the shelf the glitchless secret list puts into the Submarine's bunk room, whose slot has no model anywhere in the installation - draws its classic mesh, with its search animation and the pickup inside, as a slot without a model draws every item (the `.hdm` names the items a run added; with `-log` one `HDLOG level=… added item=…` line per such item). A `DUMMY` slot whose look is part of another object's model rather than of the room's art draws nothing only while that object is drawn HD, and its classic mesh otherwise: the two puzzle holes on the chest of the diving suit's top in the Submarine's room 40, whose console is the top's own model (with `-log` one `HDLOG dummy` line per such slot, naming the object and whether it is drawn HD). And the top's model follows the two holes as the player's items go in, as the classic holes turn into their done states: the empty bezel with its plate while both wait, the console with the battery's slot empty once the console is in, the whole console once the battery is - three files, one per state, chosen as the top is drawn by what stands at its place (the dummy lines end in the slot each hole becomes and the top's model then, the `HDLOG bind` line of the top in its states, and an `HDLOG level=… guests` line names the state at the top's first draw and on every change). |
 
 **The fit.** The drift compares the distances between the model's pieces
 with the distances between the slot's joints, and that misreads one kind of
@@ -3553,6 +3553,18 @@ level and the slot the model was taken from, and the engine reads the
 **donor's** `.MAP` for it. A guest out of Tomb Raider III is written `TR3` and
 resolved out of the other bundle (see `hd_install_tr3` above).
 
+And it names every **item the run added** - the extra enemies and pickups of
+the roll and every item a secret list adds - one `item` line each, by its
+index in the level file. An item draws by its slot whatever level it stands
+in: HD where the slot has a model, the ANDY3 doors a secret list adds among
+them, and classic where it has none. The one exception is a slot the level's
+`.MAP` calls `DUMMY`, whose objects the remaster has baked into the room art:
+the art has them where the original level placed them and nowhere else, so
+such a slot's own items draw nothing in an HD room - and an added one, which
+the art does not have, draws classic. Without the line, as in a sidecar an
+older randomizer wrote, an added item of such a slot draws nothing; an
+engine older than the line counts it as a line it has no rule for.
+
 The file is written on every run for every level, even when it has nothing to
 say, and "restore original" deletes it again; a level with no such file has
 no markers, which is what a vanilla installation looks like. It is plain text
@@ -3802,6 +3814,16 @@ HDLOG level=ANDY3 markers version=2 rooms=0 of them classic now=0 cuts=2
 A box that caught nothing says so in its own line rather than passing in
 silence — an opening the remaster's art never covered and a box in the wrong
 place look alike in a picture, and only that number tells them apart.
+
+The closing `markers` line ends in `items=`, the count of `item` lines, and
+every added item whose slot the art carries gets a line of its own, written
+whether `hd_objects` is on or off:
+
+```
+HDLOG level=JOBY3 added item=279 slot=168 name=SEARCH_OBJECT3 room=52
+      host=-1 - the .hdm names it the run's own and the art carries the
+      slot where Core placed it only: drawn classic
+```
 
 and one `donor` line per named slot says where its name came from and whether
 the model arrived: `donor_map` (the donor level's own `.MAP` named it),

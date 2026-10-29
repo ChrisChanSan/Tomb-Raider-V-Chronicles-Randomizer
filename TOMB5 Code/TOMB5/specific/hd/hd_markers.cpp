@@ -16,6 +16,7 @@
  */
 #include "hd_markers.h"
 
+#include <algorithm>
 #include <cstdio>
 #include <cstring>
 #include <string>
@@ -41,6 +42,8 @@ namespace
 	std::vector<std::string> g_unknown;
 	// The sound ids this run imported from another game.
 	std::vector<int> g_sfx_imports;
+	// The items this run added, by index - sorted once the file is read.
+	std::vector<int> g_items;
 
 	// Exported through HDMarkersDonor as a plain struct, so the strings the
 	// caller sees stay owned by this file and alive until HDMarkersFree.
@@ -196,10 +199,25 @@ bool HDMarkersLoad(const char* levelPath)
 			continue;
 		}
 
+		/* An item the run added. A negative index names no item and is not
+		 * kept; one past the level's last item is kept and never asked. */
+		if (std::sscanf(line, "item %d", &a) == 1)
+		{
+			if (a >= 0)
+				g_items.push_back(a);
+
+			continue;
+		}
+
 		g_unknown.push_back(line);
 	}
 
 	std::fclose(file);
+
+	/* Sorted and each index once, whatever order the file had them in, so
+	 * the draw path's question is a binary search. */
+	std::sort(g_items.begin(), g_items.end());
+	g_items.erase(std::unique(g_items.begin(), g_items.end()), g_items.end());
 
 	/* The version is a refusal and not a warning. An unknown line can be
 	 * ignored safely - it says something this engine does not act on - but an
@@ -227,6 +245,7 @@ bool HDMarkersLoad(const char* levelPath)
 		g_donors.clear();
 		g_unknown.clear();
 		g_sfx_imports.clear();
+		g_items.clear();
 		g_outfit = 0;
 		return false;
 	}
@@ -249,6 +268,7 @@ void HDMarkersFree()
 	g_donor_view.clear();
 	g_unknown.clear();
 	g_sfx_imports.clear();
+	g_items.clear();
 }
 
 bool HDMarkersPresent()
@@ -337,6 +357,25 @@ const HDMarkerDonor* HDMarkersDonorOfSlot(int slot)
 			return &g_donor_view[i];
 
 	return 0;
+}
+
+int HDMarkersItemCount()
+{
+	return g_present ? (int)g_items.size() : 0;
+}
+
+int HDMarkersItem(int at)
+{
+	if (!g_present || at < 0 || at >= (int)g_items.size())
+		return -1;
+
+	return g_items[(size_t)at];
+}
+
+bool HDMarkersItemAdded(int item)
+{
+	return g_present && item >= 0 &&
+		std::binary_search(g_items.begin(), g_items.end(), item);
 }
 
 int HDMarkersSoundImportCount()

@@ -680,6 +680,17 @@ namespace
 	 * holster with no X-ray file draws nothing - a solid gun on the
 	 * translucent body is the fault the set is there to avoid.
 	 *
+	 * The hull is drawn from the front alone (HDModelSlot::additiveOneSided).
+	 * The classic adds every face of the X-ray body single sided
+	 * (specific\output.cpp, phd_PutPolygonsSpcXLU, double_sided 0, and
+	 * specific\polyinsert.cpp drops the face turned away), while the HD
+	 * path draws every model from both sides - and the hull is a closed
+	 * shell, so both sides put it on every pixel twice. Measured on page
+	 * 8030 at full light: the front layer adds 112/163/117 over the abdomen,
+	 * the back layer a whiter 121/86/127 on top of it. The bones stay double
+	 * sided: their right half is wound the other way round (culled, 8 % of
+	 * their pixels change, the hull's outline loses 0.5 %).
+	 *
 	 * The rule is TROne's (TROne-main, copy of 2026-10-23, commit a3c0c633):
 	 * S_InitialisePolyList in games\tr5\glue\hostglue_draw5.cpp puts
 	 * OUTFIT_XRAY with the XRAY hand and holster set on her while
@@ -2010,6 +2021,9 @@ int HDLaraPlan(const HDLaraLevel* level, HDModelSlot* out, int max)
 		one.onlyPage = kPart[part].onlyPage;
 		one.onlyNode = kPart[part].onlyNode;
 
+		// The X-ray body worn from the wardrobe: its hull one sided (kXray).
+		one.additiveOneSided = wears_xray(level->outfit) && xray_model(part);
+
 		/* The mirrored weights of a hand file. Every part
 		 * of kind 1 and no other: those are the files that cover nodes 9, 10,
 		 * 12 and 13, and a file drawn once and mirrored is the only place the
@@ -2098,6 +2112,7 @@ int HDLaraPlan(const HDLaraLevel* level, HDModelSlot* out, int max)
 			one.nodes = HD_LARA_NODES;
 			one.bind = level->bodyBind;
 			one.name = model;
+			one.additiveOneSided = true;
 
 			if (kPart[part].kind == 1)
 			{

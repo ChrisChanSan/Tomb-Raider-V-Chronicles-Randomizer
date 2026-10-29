@@ -4138,7 +4138,12 @@ file's own additive material - the green figure is the art and the room's
 light, no shader of its own - with its own skull and headset; the X-ray hands
 `HAND_XRAY_*` with whatever she holds; the X-ray pistols on her thighs and the
 X-ray shotgun, HK or grappling gun on her back. No braid and no face. The
-install has no X-ray file for the uzis' holsters or the Desert Eagle's, and
+shell is drawn from the front only, as the classic game draws its X-ray body:
+every other HD model is drawn from both sides, and from both sides the closed
+shell lies on every pixel twice - the back half adds a second, whiter layer
+that turned the figure white in a bright room and hid the bones. The bones
+themselves stay two-sided. The install has no X-ray file for the uzis'
+holsters or the Desert Eagle's, and
 those draw nothing while she is X-rayed. The set, eight models in Escape with
 the Iris, is loaded only in a level whose floor carries such a trigger, and the
 frame she steps off the scanner draws her outfit again. A mirror shows her the

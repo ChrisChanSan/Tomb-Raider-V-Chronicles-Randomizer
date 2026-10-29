@@ -956,6 +956,12 @@ struct OverlayDot
 static std::vector<OverlayDot> g_dots;
 static bool g_dotsAsked = false;
 
+/* -bg r,g,b: the colour every picture is cleared to, and the colour the
+ * background count looks for. Magenta unless asked (see the shot's own
+ * note); a dark one is what an additive pass is measured against, because
+ * magenta plus a glow saturates to white whatever the glow is. */
+static unsigned long g_clear = 0x00FF00FFu;
+
 static void OverlayClear()
 {
 	g_overlay.clear();
@@ -1374,7 +1380,7 @@ static bool ShotBegin(Shot& shot, long w, long h)
 	 * black are the same picture on a black background, and the first is a
 	 * bug while the second is a dark corner. */
 	g_device->Clear(0, 0, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER,
-		D3DCOLOR_XRGB(255, 0, 255), 1.0f, 0);
+		(D3DCOLOR)(0xFF000000u | g_clear), 1.0f, 0);
 
 	return true;
 }
@@ -1417,7 +1423,7 @@ static bool ShotWrite(Shot& shot, const char* path)
 
 			pixels[y * shot.w + x] = c;
 
-			if ((c & 0x00FFFFFFu) == 0x00FF00FFu)
+			if ((c & 0x00FFFFFFu) == g_clear)
 				background++;
 
 			sum += (double)((c >> 16) & 255) + (double)((c >> 8) & 255) + (double)(c & 255);
@@ -1453,7 +1459,7 @@ static bool ShotWrite(Shot& shot, const char* path)
 					const long px = x + dx, py = y + dy;
 
 					hit = px >= 0 && px < shot.w && py >= 0 && py < shot.h &&
-						(pixels[py * shot.w + px] & 0x00FFFFFFu) != 0x00FF00FFu;
+						(pixels[py * shot.w + px] & 0x00FFFFFFu) != g_clear;
 				}
 
 			all[n]++;
@@ -8496,6 +8502,11 @@ struct LaraOptions
 	int handFold;
 	bool noFold;			// the picture before the hand fold existed
 	bool noHandMix;			// the other half of that before picture
+	/* -passes solid|additive: which of hd_model's passes Lara's picture
+	 * draws - the opaque and alpha-tested runs, or the additive run alone.
+	 * HD_PASS_ALL without the switch. A measurement of what each run adds,
+	 * and nothing the game ever draws on its own. */
+	unsigned int passes;
 	/* -xray: the level's X-ray set planned beside the outfit and drawn in
 	 * its place, as the composite draws her while lara.skelebob holds. */
 	bool xray;
@@ -11650,7 +11661,7 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 
 		if (picture)
 			g_device->Clear(0, 0, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER,
-				D3DCOLOR_XRGB(255, 0, 255), 1.0f, 0);
+				(D3DCOLOR)(0xFF000000u | g_clear), 1.0f, 0);
 
 		g_device->BeginScene();
 		HDRenderFrameBegin((const D3DMATRIX*)view, &projection, &frame);
@@ -11681,7 +11692,7 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 		const bool additiveAfter = o.shadowReceive && roomHas && !o.shadowCount;
 
 		HDModelFrameBegin(&projection, bulbCount,
-			o.shadowCount || additiveAfter ? HD_PASS_SOLID : HD_PASS_ALL);
+			o.shadowCount || additiveAfter ? HD_PASS_SOLID : o.passes);
 
 		// Every model of the picture, through the passes HDModelFrameBegin set.
 		const auto drawModels = [&]()
@@ -13205,6 +13216,7 @@ int main(int argc, char** argv)
 	bool laraNoFold = false;	// -nofold: the before picture
 	bool laraNoHandMix = false;	// -nohandmix: and the other half of it
 	bool laraXray = false;		// -xray: the X-ray look of the skeleton cheat
+	unsigned int laraPasses = HD_PASS_ALL;	// -passes solid|additive
 	int laraHead = -1;		// -lara-head: -1 = the wardrobe's own answer
 	bool laraPoseRisk = false;	// -poserisk
 	std::vector<int> laraTween60;	// -tween60
@@ -13410,6 +13422,26 @@ int main(int argc, char** argv)
 		{
 			lara = true;
 			laraXray = true;
+		}
+		/* The runs of Lara's picture, one at a time: what the opaque bones
+		 * and what the additive hull of the X-ray body each put on the
+		 * picture. */
+		else if (!_stricmp(argv[i], "-passes") && i + 1 < argc)
+		{
+			const char* what = argv[++i];
+
+			laraPasses = !_stricmp(what, "solid") ? HD_PASS_SOLID
+				: !_stricmp(what, "additive") ? HD_PASS_ADDITIVE : HD_PASS_ALL;
+		}
+		else if (!_stricmp(argv[i], "-bg") && i + 1 < argc)
+		{
+			int r = 0, g = 0, b = 0;
+
+			if (sscanf_s(argv[++i], "%d,%d,%d", &r, &g, &b) == 3)
+				g_clear = (unsigned long)(((r & 255) << 16) | ((g & 255) << 8)
+					| (b & 255));
+			else
+				printf("ModelProbe: -bg wants r,g,b - '%s' ignored\n", argv[i]);
 		}
 		/* The head rule this picture is drawn with, whatever the
 		 * wardrobe says - "outfit" is the picture from before the head rule existed.
@@ -14247,6 +14279,7 @@ int main(int argc, char** argv)
 		o.noFold = laraNoFold;
 		o.noHandMix = laraNoHandMix;
 		o.xray = laraXray;
+		o.passes = laraPasses;
 		o.head = laraHead;
 		o.poseRisk = laraPoseRisk;
 		o.tween60 = laraTween60;
@@ -16493,7 +16526,7 @@ int main(int argc, char** argv)
 			const int lipsFrame = lips.frames[(size_t)picture];
 
 			g_device->Clear(0, 0, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER,
-				D3DCOLOR_XRGB(255, 0, 255), 1.0f, 0);
+				(D3DCOLOR)(0xFF000000u | g_clear), 1.0f, 0);
 			g_device->BeginScene();
 			HDRenderFrameBegin((const D3DMATRIX*)view, &projection, &frame);
 			HDModelFrameBegin(&projection, bulbCount);

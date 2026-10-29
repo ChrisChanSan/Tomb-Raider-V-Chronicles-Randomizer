@@ -15648,13 +15648,15 @@ the vanilla outfit does.
 
 ### Lara in the X-ray scanner and the X-ray outfit, in HD (#268)
 
-2026-10-29.
+2026-10-29 to 2026-10-30.
 
 **What.** The scanner in Escape with the Iris X-rays Lara, and with the HD path she is now
 drawn there in the remaster's X-ray set: a translucent green body over solid bones, its
 own skull and headset, X-ray hands, no braid and no face. The X-ray outfit of the outfit
 menu wears the same set wherever it is worn; it showed her braid, her face, her bare hands
-and solid black guns on the translucent body.
+and solid black guns on the translucent body. The body's shell is drawn from the front
+alone: the figure is green with its bones readable where it was white, and in a bright
+room it stays a pale green over visible bones instead of a white outline.
 
 **Why.** The scanner's 36 squares, in rooms 11 and 151 of RICH2 and nowhere else in the
 fifteen levels, set `lara.skelebob` for every frame she stands on one, and DrawLara hands
@@ -15666,7 +15668,14 @@ bones in the opaque run and the body's shell in the additive run (material 6), i
 on node 14; thirty HAND_XRAY_ files, one for every HAND_BARE_ one; seven HOLSTER_*_XRAY
 files, none for the uzis or the Desert Eagle; no X-ray head and no X-ray braid. Worn from
 the outfit menu, OUTFIT_XRAY took the outfit's other parts: LARA_HEAD's face over its
-skull, HAIR_OG, the bare hands and the plain holsters.
+skull, HAIR_OG, the bare hands and the plain holsters. Drawn from both sides like every HD
+model, the closed shell lay on every pixel twice, and the back half added a second, whiter
+layer - at full light 121/86/127 over the front layer's 112/163/117 on the abdomen - which
+turned the figure white in a bright room and hid the bones. The classic adds every face of
+its X-ray body single sided (specific\output.cpp, phd_PutPolygonsSpcXLU, double_sided 0).
+Page 8030's alpha is 240 or more on every texel, so the additive pass's weight by alpha
+changes nothing, and the part's param[0] of 0.5 is the alpha reference of material 6, not
+a weight.
 
 **How.** `specific/hd/hd_lara.cpp`: a table names the X-ray set part by part (`kXray`) -
 OUTFIT_XRAY, the eleven HAND_XRAY_ parts, HOLSTER_PISTOL_XRAY and the three weapons on the
@@ -15690,9 +15699,16 @@ figure is the art's own and the room's light, and no shader changed.
 `hostglue_draw5.cpp`, `lara_build_models` and `lara_head_for_outfit` in
 `game_renderer.cpp`); no code was taken. `docs/Engine-Manual.md` says it. With `hd_build`
 0 none of it runs: the X-ray set exists only inside the HD draw of Lara. The verdict
-census over the fifteen levels is unchanged.
+census over the fifteen levels is unchanged. `specific/hd/hd_model.cpp`: a model whose
+plan entry asks for it (`HDModelSlot::additiveOneSided`) draws its additive run from the
+front alone - the winding turned away from the eye culled, the other one under a mirrored
+matrix, as the glass does - and its other runs from both sides; `hd_lara.cpp` asks for it
+for every part of the X-ray set, in the level's block and on an outfit that is the X-ray
+body. The bones stay two-sided, because their right half is wound the other way round.
+Every other model keeps both sides, its additive runs included: the classic draws those by
+each face's own double-sided flag, which a .TRM does not carry.
 
-**Commits.** `a62561ea`, `753df221`, `0d6713d7`.
+**Commits.** `a62561ea`, `753df221`, `0d6713d7`, `354cee0b`, `3c0c289b`.
 
 ## 3. Randomizer changes since Beta 1.0
 

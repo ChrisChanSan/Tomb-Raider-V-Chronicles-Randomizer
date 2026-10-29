@@ -107,6 +107,41 @@ static uchar SkinUseMatrix[14][2] =
 	{255, 255}
 };
 
+/* The thigh holsters DrawLara__1 and __4 draw in this frame: 1 the left one,
+ * on LMX_THIGH_L, 2 the right one, on LMX_THIGH_R. Each only while her mesh
+ * bits show the thigh it hangs on, by the skin loop's own test with the
+ * thigh's place in lara_mesh_sweetness_table - the place whose matrix the
+ * holster is drawn with. The two cutscenes that hide her legs inside the
+ * diving suit's write 0x81FF01FF (game\deltapak.cpp), and a holster drawn
+ * there hangs at a thigh that is not drawn; the HD composite masks its
+ * holster rig with the same nodes. With the bits at -1 both thighs are
+ * shown. The other two tests are the draws' own brackets around the two:
+ * no holsters on young Lara, and __4's test that both slots are loaded.
+ * The log reads the same value (hd_laradraw.h, HDLaraClassicLog). */
+static long LaraHolstersDrawn(long loadedTest)
+{
+	long holsters = 0;
+
+	if (gfLevelFlags & GF_YOUNGLARA)
+		return 0;
+
+	if (loadedTest && !(objects[LHolster].loaded && objects[lara.holster].loaded))
+		return 0;
+
+	for (int i = 0; i < 15; i++)
+	{
+		if (!(lara_item->mesh_bits >> 0x10 & 1 << (15 - i)))
+			continue;
+
+		if (lara_mesh_sweetness_table[i] == LM_LTHIGH)
+			holsters |= 1;
+		else if (lara_mesh_sweetness_table[i] == LM_RTHIGH)
+			holsters |= 2;
+	}
+
+	return holsters;
+}
+
 static void DrawLara__1(ITEM_INFO* item, long mirror)
 {
 	OBJECT_INFO* obj;
@@ -163,10 +198,13 @@ static void DrawLara__1(ITEM_INFO* item, long mirror)
 		return;
 	}
 
-	// Drawn classic: the swap and hide lines name this variant, behind -log
-	// (hd_laradraw.h, HDLaraClassicLog). A mirror's draw writes none.
+	// Drawn classic: the swap and hide lines name this variant and the
+	// holsters it draws, behind -log (hd_laradraw.h, HDLaraClassicLog). A
+	// mirror's draw writes none.
+	const long holsters = LaraHolstersDrawn(0);
+
 	if (!mirror)
-		HDLaraClassicLog(1);
+		HDLaraClassicLog(1, holsters);
 
 	for (int i = 0; i < 15; i++)//skin
 	{
@@ -304,39 +342,46 @@ static void DrawLara__1(ITEM_INFO* item, long mirror)
 
 	if (!(gfLevelFlags & GF_YOUNGLARA))
 	{
-		obj = &objects[LHolster];
-		meshpp = &meshes[obj->mesh_index];
-		meshpp += 8;
-		aMXPtr[M00] = lara_matrices[LMX_THIGH_L * indices_count + M00];
-		aMXPtr[M01] = lara_matrices[LMX_THIGH_L * indices_count + M01];
-		aMXPtr[M02] = lara_matrices[LMX_THIGH_L * indices_count + M02];
-		aMXPtr[M03] = lara_matrices[LMX_THIGH_L * indices_count + M03];
-		aMXPtr[M10] = lara_matrices[LMX_THIGH_L * indices_count + M10];
-		aMXPtr[M11] = lara_matrices[LMX_THIGH_L * indices_count + M11];
-		aMXPtr[M12] = lara_matrices[LMX_THIGH_L * indices_count + M12];
-		aMXPtr[M13] = lara_matrices[LMX_THIGH_L * indices_count + M13];
-		aMXPtr[M20] = lara_matrices[LMX_THIGH_L * indices_count + M20];
-		aMXPtr[M21] = lara_matrices[LMX_THIGH_L * indices_count + M21];
-		aMXPtr[M22] = lara_matrices[LMX_THIGH_L * indices_count + M22];
-		aMXPtr[M23] = lara_matrices[LMX_THIGH_L * indices_count + M23];
-		phd_PutPolygons(*meshpp, -1);
+		// Each holster only while its thigh is shown (LaraHolstersDrawn).
+		if (holsters & 1)
+		{
+			obj = &objects[LHolster];
+			meshpp = &meshes[obj->mesh_index];
+			meshpp += 8;
+			aMXPtr[M00] = lara_matrices[LMX_THIGH_L * indices_count + M00];
+			aMXPtr[M01] = lara_matrices[LMX_THIGH_L * indices_count + M01];
+			aMXPtr[M02] = lara_matrices[LMX_THIGH_L * indices_count + M02];
+			aMXPtr[M03] = lara_matrices[LMX_THIGH_L * indices_count + M03];
+			aMXPtr[M10] = lara_matrices[LMX_THIGH_L * indices_count + M10];
+			aMXPtr[M11] = lara_matrices[LMX_THIGH_L * indices_count + M11];
+			aMXPtr[M12] = lara_matrices[LMX_THIGH_L * indices_count + M12];
+			aMXPtr[M13] = lara_matrices[LMX_THIGH_L * indices_count + M13];
+			aMXPtr[M20] = lara_matrices[LMX_THIGH_L * indices_count + M20];
+			aMXPtr[M21] = lara_matrices[LMX_THIGH_L * indices_count + M21];
+			aMXPtr[M22] = lara_matrices[LMX_THIGH_L * indices_count + M22];
+			aMXPtr[M23] = lara_matrices[LMX_THIGH_L * indices_count + M23];
+			phd_PutPolygons(*meshpp, -1);
+		}
 
-		obj = &objects[lara.holster];
-		meshpp = &meshes[obj->mesh_index];
-		meshpp += 16;
-		aMXPtr[M00] = lara_matrices[LMX_THIGH_R * indices_count + M00];
-		aMXPtr[M01] = lara_matrices[LMX_THIGH_R * indices_count + M01];
-		aMXPtr[M02] = lara_matrices[LMX_THIGH_R * indices_count + M02];
-		aMXPtr[M03] = lara_matrices[LMX_THIGH_R * indices_count + M03];
-		aMXPtr[M10] = lara_matrices[LMX_THIGH_R * indices_count + M10];
-		aMXPtr[M11] = lara_matrices[LMX_THIGH_R * indices_count + M11];
-		aMXPtr[M12] = lara_matrices[LMX_THIGH_R * indices_count + M12];
-		aMXPtr[M13] = lara_matrices[LMX_THIGH_R * indices_count + M13];
-		aMXPtr[M20] = lara_matrices[LMX_THIGH_R * indices_count + M20];
-		aMXPtr[M21] = lara_matrices[LMX_THIGH_R * indices_count + M21];
-		aMXPtr[M22] = lara_matrices[LMX_THIGH_R * indices_count + M22];
-		aMXPtr[M23] = lara_matrices[LMX_THIGH_R * indices_count + M23];
-		phd_PutPolygons(*meshpp, -1);
+		if (holsters & 2)
+		{
+			obj = &objects[lara.holster];
+			meshpp = &meshes[obj->mesh_index];
+			meshpp += 16;
+			aMXPtr[M00] = lara_matrices[LMX_THIGH_R * indices_count + M00];
+			aMXPtr[M01] = lara_matrices[LMX_THIGH_R * indices_count + M01];
+			aMXPtr[M02] = lara_matrices[LMX_THIGH_R * indices_count + M02];
+			aMXPtr[M03] = lara_matrices[LMX_THIGH_R * indices_count + M03];
+			aMXPtr[M10] = lara_matrices[LMX_THIGH_R * indices_count + M10];
+			aMXPtr[M11] = lara_matrices[LMX_THIGH_R * indices_count + M11];
+			aMXPtr[M12] = lara_matrices[LMX_THIGH_R * indices_count + M12];
+			aMXPtr[M13] = lara_matrices[LMX_THIGH_R * indices_count + M13];
+			aMXPtr[M20] = lara_matrices[LMX_THIGH_R * indices_count + M20];
+			aMXPtr[M21] = lara_matrices[LMX_THIGH_R * indices_count + M21];
+			aMXPtr[M22] = lara_matrices[LMX_THIGH_R * indices_count + M22];
+			aMXPtr[M23] = lara_matrices[LMX_THIGH_R * indices_count + M23];
+			phd_PutPolygons(*meshpp, -1);
+		}
 
 		if (lara.back_gun)//back gun
 		{
@@ -438,8 +483,10 @@ static void DrawLara__4(ITEM_INFO* item, long mirror)
 	}
 
 	// Drawn classic, as in DrawLara__1.
+	const long holsters = LaraHolstersDrawn(1);
+
 	if (!mirror)
-		HDLaraClassicLog(4);
+		HDLaraClassicLog(4, holsters);
 
 	for (int i = 0; i < 15; i++)//skin
 	{
@@ -595,39 +642,46 @@ static void DrawLara__4(ITEM_INFO* item, long mirror)
 	// the bug that became visible with missing holsters in DrawLara__1).
 	if (!(gfLevelFlags & GF_YOUNGLARA) && objects[LHolster].loaded && objects[lara.holster].loaded)
 	{
-		obj = &objects[LHolster];
-		meshpp = &meshes[obj->mesh_index];
-		meshpp += 8;
-		aMXPtr[M00] = lara_matrices[LMX_THIGH_L * indices_count + M00];
-		aMXPtr[M01] = lara_matrices[LMX_THIGH_L * indices_count + M01];
-		aMXPtr[M02] = lara_matrices[LMX_THIGH_L * indices_count + M02];
-		aMXPtr[M03] = lara_matrices[LMX_THIGH_L * indices_count + M03];
-		aMXPtr[M10] = lara_matrices[LMX_THIGH_L * indices_count + M10];
-		aMXPtr[M11] = lara_matrices[LMX_THIGH_L * indices_count + M11];
-		aMXPtr[M12] = lara_matrices[LMX_THIGH_L * indices_count + M12];
-		aMXPtr[M13] = lara_matrices[LMX_THIGH_L * indices_count + M13];
-		aMXPtr[M20] = lara_matrices[LMX_THIGH_L * indices_count + M20];
-		aMXPtr[M21] = lara_matrices[LMX_THIGH_L * indices_count + M21];
-		aMXPtr[M22] = lara_matrices[LMX_THIGH_L * indices_count + M22];
-		aMXPtr[M23] = lara_matrices[LMX_THIGH_L * indices_count + M23];
-		phd_PutPolygons(*meshpp, -1);
+		// Each holster only while its thigh is shown (LaraHolstersDrawn).
+		if (holsters & 1)
+		{
+			obj = &objects[LHolster];
+			meshpp = &meshes[obj->mesh_index];
+			meshpp += 8;
+			aMXPtr[M00] = lara_matrices[LMX_THIGH_L * indices_count + M00];
+			aMXPtr[M01] = lara_matrices[LMX_THIGH_L * indices_count + M01];
+			aMXPtr[M02] = lara_matrices[LMX_THIGH_L * indices_count + M02];
+			aMXPtr[M03] = lara_matrices[LMX_THIGH_L * indices_count + M03];
+			aMXPtr[M10] = lara_matrices[LMX_THIGH_L * indices_count + M10];
+			aMXPtr[M11] = lara_matrices[LMX_THIGH_L * indices_count + M11];
+			aMXPtr[M12] = lara_matrices[LMX_THIGH_L * indices_count + M12];
+			aMXPtr[M13] = lara_matrices[LMX_THIGH_L * indices_count + M13];
+			aMXPtr[M20] = lara_matrices[LMX_THIGH_L * indices_count + M20];
+			aMXPtr[M21] = lara_matrices[LMX_THIGH_L * indices_count + M21];
+			aMXPtr[M22] = lara_matrices[LMX_THIGH_L * indices_count + M22];
+			aMXPtr[M23] = lara_matrices[LMX_THIGH_L * indices_count + M23];
+			phd_PutPolygons(*meshpp, -1);
+		}
 
-		obj = &objects[lara.holster];
-		meshpp = &meshes[obj->mesh_index];
-		meshpp += 16;
-		aMXPtr[M00] = lara_matrices[LMX_THIGH_R * indices_count + M00];
-		aMXPtr[M01] = lara_matrices[LMX_THIGH_R * indices_count + M01];
-		aMXPtr[M02] = lara_matrices[LMX_THIGH_R * indices_count + M02];
-		aMXPtr[M03] = lara_matrices[LMX_THIGH_R * indices_count + M03];
-		aMXPtr[M10] = lara_matrices[LMX_THIGH_R * indices_count + M10];
-		aMXPtr[M11] = lara_matrices[LMX_THIGH_R * indices_count + M11];
-		aMXPtr[M12] = lara_matrices[LMX_THIGH_R * indices_count + M12];
-		aMXPtr[M13] = lara_matrices[LMX_THIGH_R * indices_count + M13];
-		aMXPtr[M20] = lara_matrices[LMX_THIGH_R * indices_count + M20];
-		aMXPtr[M21] = lara_matrices[LMX_THIGH_R * indices_count + M21];
-		aMXPtr[M22] = lara_matrices[LMX_THIGH_R * indices_count + M22];
-		aMXPtr[M23] = lara_matrices[LMX_THIGH_R * indices_count + M23];
-		phd_PutPolygons(*meshpp, -1);
+		if (holsters & 2)
+		{
+			obj = &objects[lara.holster];
+			meshpp = &meshes[obj->mesh_index];
+			meshpp += 16;
+			aMXPtr[M00] = lara_matrices[LMX_THIGH_R * indices_count + M00];
+			aMXPtr[M01] = lara_matrices[LMX_THIGH_R * indices_count + M01];
+			aMXPtr[M02] = lara_matrices[LMX_THIGH_R * indices_count + M02];
+			aMXPtr[M03] = lara_matrices[LMX_THIGH_R * indices_count + M03];
+			aMXPtr[M10] = lara_matrices[LMX_THIGH_R * indices_count + M10];
+			aMXPtr[M11] = lara_matrices[LMX_THIGH_R * indices_count + M11];
+			aMXPtr[M12] = lara_matrices[LMX_THIGH_R * indices_count + M12];
+			aMXPtr[M13] = lara_matrices[LMX_THIGH_R * indices_count + M13];
+			aMXPtr[M20] = lara_matrices[LMX_THIGH_R * indices_count + M20];
+			aMXPtr[M21] = lara_matrices[LMX_THIGH_R * indices_count + M21];
+			aMXPtr[M22] = lara_matrices[LMX_THIGH_R * indices_count + M22];
+			aMXPtr[M23] = lara_matrices[LMX_THIGH_R * indices_count + M23];
+			phd_PutPolygons(*meshpp, -1);
+		}
 	}
 
 	if (!(gfLevelFlags & GF_YOUNGLARA) && lara.back_gun)
@@ -713,7 +767,7 @@ static void DrawLara__5(ITEM_INFO* item, long mirror)
 	if (hd)
 		HDLaraDrawFrame(mirror);
 	else if (!mirror)
-		HDLaraClassicLog(5);	// drawn classic, as in DrawLara__1
+		HDLaraClassicLog(5, 0);	// drawn classic, as in DrawLara__1
 
 	for (int i = 0; i < 15 && !hd; i++)//skin
 	{

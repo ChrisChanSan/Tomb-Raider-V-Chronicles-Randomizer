@@ -856,8 +856,9 @@ struct HDLaraLevel
 	 * data, the one thing that sets lara.skelebob (game\control.cpp). Then
 	 * the X-ray set is planned beside the outfit, on the same slot list -
 	 * unless the outfit is the X-ray body itself, which wears the set
-	 * already (HDLaraOutfitIsXray). */
-	bool xray;
+	 * already (HDLaraOutfitIsXray). False unless the caller says so: a tool
+	 * that builds her outfit alone, as RoomProbe does, plans no X-ray set. */
+	bool xray = false;
 };
 
 struct HDLaraStats

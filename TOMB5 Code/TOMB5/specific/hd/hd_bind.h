@@ -157,14 +157,41 @@ const char* HDBindSlot(const char* installRoot, int slot, HDBindKind* kind,
  * engine then draws nothing for it (hd_object.cpp, the DUMMY rule). JOBY3's
  * suit console is the other kind: the two puzzle holes and their done
  * states stand on the chest of the suit top in room 40, no room art lies
- * in their box, and the console is part of the top's own model
- * (EXTRA5_SUBSUIT_TOP_CHAIN_HALF, the hand table). Drawing them nowhere is
- * right only while that model is drawn; while the top draws classic, its
- * classic mesh has no console and the holes must draw theirs.
+ * in their box, and the console is part of the top's own model (the
+ * EXTRA5_SUBSUIT_TOP_CHAIN files, the hand table and HDBindGuestStates).
+ * Drawing them nowhere is right only while that model is drawn; while the
+ * top draws classic, its classic mesh has no console and the holes must
+ * draw theirs.
  *
  * Answered for the loaded level's map from a table of level-bound lines,
  * the host by slot name; -1 for every slot no line names there. */
 int HDBindDummyHost(int slot);
+
+/* The models a host draws as its DUMMY guests change.
+ *
+ * The console on the suit top's chest is a puzzle: each hole becomes its
+ * done slot when the player's item goes in (game\pickup.cpp, PuzzleDone),
+ * and the top's model changes with it - the files differ in the console
+ * alone. A guest is a hole of the same table as HDBindDummyHost's, `done`
+ * the slot it becomes and `model` the file the host draws from then on.
+ * With no guest done the host draws its own binding; with any done, the
+ * model of the last done guest in the table's order.
+ *
+ * Fills up to `max` guests of `host` in the table's order for the loaded
+ * level, and only those the level's map calls DUMMY; returns how many. */
+struct HDGuestState
+{
+	int guest;		// the hole's slot
+	int done;		// the slot the hole becomes
+	const char* model;	// the host's model once it has
+};
+
+int HDBindGuestStates(int host, HDGuestState* out, int max);
+
+/* For one guest: the name of the slot it becomes and, in `model`, the
+ * host's model from then on - 0 for a slot no such line names. For the
+ * log. */
+const char* HDBindGuestDone(int guest, const char** model);
 
 // --- a slot whose model came out of another level ---------------------
 //

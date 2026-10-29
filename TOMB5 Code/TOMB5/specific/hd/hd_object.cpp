@@ -746,6 +746,13 @@ namespace
 	 * not need one - MAFIA.TRM already holds the pistol in the hand, and so
 	 * do SWAT, SWAT_PLUS and the guards. Those swaps are ignored.
 	 *
+	 * The same machinery carries one kind that is no swap of the engine's: a
+	 * host whose look follows the items standing in it - JOBY3's suit top
+	 * and its console's two puzzle holes, three files for the three states
+	 * of the puzzle. Its plan comes out of the level-bound table in
+	 * hd_bind.cpp (HDBindGuestStates) and not out of this one, and the item
+	 * picks its file by its guests' object numbers (guest_state below).
+	 *
 	 * The table is keyed on the model name, not on the slot: the randomizer's
 	 * MESHSWAP_CROSS_HITMAN and CYBORG both bind HITMAN.TRM, and a donor slot
 	 * carries its donor's model into a slot with any name at all. */
@@ -753,8 +760,13 @@ namespace
 	{
 		SWAP_NONE = 0,
 		SWAP_WHOLE,		// one alternative model, chosen by a bit
-		SWAP_HITMAN		// the cyborg's eleven stages
+		SWAP_HITMAN,		// the cyborg's eleven stages
+		SWAP_GUESTS		// the model of its DUMMY guests' state
 	};
+
+	/* The guests one host's model can follow (hd_bind.h, HDBindGuestStates):
+	 * the suit console's two holes. */
+	#define HD_GUESTS_MAX	4
 
 	struct SwapRule
 	{
@@ -779,10 +791,19 @@ namespace
 		SwapKind kind;
 		unsigned int bits;
 		int model[HD_OBJ_NODES];	// -1 where no file arrived
+		/* SWAP_GUESTS: the slots its guests become, in the table's order,
+		 * model[k] the host's model once guest k has, named for the log; and
+		 * the state the log last named, so its line is written on a
+		 * change. */
+		int guests;
+		int guestDone[HD_GUESTS_MAX];
+		const char* guestModel[HD_GUESTS_MAX];
+		int stateSaid;
 	};
 
-	/* Eight is four times what the whole game needs: MAFIA2 and CYBORG, plus
-	 * the randomizer's cross slots for the same two. */
+	/* Eight leaves room to spare: the whole game needs MAFIA2, CYBORG and
+	 * JOBY3's suit top, and the randomizer's cross slots for the first
+	 * two. */
 	SwapPlanSlot g_swap_plan[8];
 	int g_swap_plans = 0;
 	int g_swap_models = 0;
@@ -794,6 +815,38 @@ namespace
 				return &g_swap_plan[i];
 
 		return 0;
+	}
+
+	/* The state of a host's guests: the last guest in the table's order
+	 * that stands on the host's place as its done slot, or -1 for none. The
+	 * guests are the items of the host's own room at its very position -
+	 * the console's holes stand where the top does - and a hole that has
+	 * taken its item has become its done slot in place (game\pickup.cpp,
+	 * PuzzleDone, which finds a hole's airlock switch by its place too).
+	 * One walk of the room's item list per drawn frame of the host. */
+	int guest_state(const SwapPlanSlot* plan, const ITEM_INFO* item)
+	{
+		int state = -1;
+
+		if (!room || item->room_number < 0 || item->room_number >= number_rooms)
+			return -1;
+
+		for (short n = room[item->room_number].item_number; n != NO_ITEM;
+			n = items[n].next_item)
+		{
+			const ITEM_INFO& guest = items[n];
+
+			if (guest.pos.x_pos != item->pos.x_pos ||
+				guest.pos.y_pos != item->pos.y_pos ||
+				guest.pos.z_pos != item->pos.z_pos)
+				continue;
+
+			for (int k = state + 1; k < plan->guests; k++)
+				if (guest.object_number == plan->guestDone[k])
+					state = k;
+		}
+
+		return state;
 	}
 
 	/* Which alternative model this item wants, or -1 for the plain one. */
@@ -832,7 +885,78 @@ namespace
 			}
 		}
 
+		if (plan->kind == SWAP_GUESTS)
+		{
+			const int state = guest_state(plan, item);
+
+			return state >= 0 ? plan->model[state] : -1;
+		}
+
 		return -1;
+	}
+
+	/* Which of its guests' states a host drew, behind -log: one line at its
+	 * first draw in a level and one on every change - the state, the guest
+	 * that decided it ("none" while every guest is still what it was) and
+	 * the model drawn, which is the host's own while a state's file is
+	 * missing (and the line says which). */
+	void guest_state_log(int slot, const ITEM_INFO* item)
+	{
+		if (!gLogEnabled)
+			return;
+
+		SwapPlanSlot* plan = 0;
+
+		for (int i = 0; i < g_swap_plans; i++)
+			if (g_swap_plan[i].slot == slot)
+				plan = &g_swap_plan[i];
+
+		if (!plan || plan->kind != SWAP_GUESTS)
+			return;
+
+		const int state = guest_state(plan, item);
+
+		if (state == plan->stateSaid)
+			return;
+
+		plan->stateSaid = state;
+
+		const long number = item - items;
+		const char* by = state >= 0 ? HDSlotName(plan->guestDone[state]) : 0;
+		const char* want = state >= 0 ? plan->guestModel[state] : 0;
+		const bool have = state < 0 || plan->model[state] >= 0;
+		const char* drawn = have && want ? want : HDModelName(slot);
+
+		Log("HDLOG level=%s guests item=%ld slot=%d name=%s state=%d by=%s "
+			"model=%s%s%s", g_stem, number >= 0 && number < MAX_ITEMS
+				? number : -1L, slot,
+			HDSlotName(slot) ? HDSlotName(slot) : "?", state,
+			state >= 0 ? (by ? by : "?") : "none", drawn ? drawn : "-",
+			have ? "" : " missing=", have ? "" : (want ? want : "-"));
+	}
+
+	/* A host's guest states for the end of its bind line: " states=" and,
+	 * per guest, the slot it becomes and the model the host draws then.
+	 * Empty for every other slot. */
+	void guest_states_text(int slot, char* out, size_t size)
+	{
+		const SwapPlanSlot* plan = swap_plan_of(slot);
+
+		out[0] = 0;
+
+		if (!plan || plan->kind != SWAP_GUESTS)
+			return;
+
+		int at = std::snprintf(out, size, " states=");
+
+		for (int k = 0; k < plan->guests && at > 0 && at < (int)size; k++)
+		{
+			const char* done = HDSlotName(plan->guestDone[k]);
+
+			at += std::snprintf(out + at, size - at, "%s%s:%s", k ? "," : "",
+				done ? done : "?",
+				plan->guestModel[k] ? plan->guestModel[k] : "-");
+		}
 	}
 
 	/* Per level: how often a light had to be turned away at the shader's
@@ -2125,7 +2249,15 @@ static void ObjectLevelBuild(const char* installRoot, const char* stem,
 				break;
 			}
 
-		if (!rule || g_swap_plans >= (int)(sizeof(g_swap_plan) / sizeof(g_swap_plan[0])))
+		/* Or a host whose model follows its guests' state, out of the
+		 * level-bound table (hd_bind.h, HDBindGuestStates). Never a donor
+		 * slot: the table speaks of this level's own slots. */
+		HDGuestState guests[HD_GUESTS_MAX];
+		const int guestCount = plan ? 0
+			: HDBindGuestStates(slot, guests, HD_GUESTS_MAX);
+
+		if ((!rule && !guestCount) ||
+			g_swap_plans >= (int)(sizeof(g_swap_plan) / sizeof(g_swap_plan[0])))
 			continue;
 
 		/* And only if the level really puts one down. The cyborg's eleven
@@ -2146,13 +2278,35 @@ static void ObjectLevelBuild(const char* installRoot, const char* stem,
 		SwapPlanSlot& swap = g_swap_plan[g_swap_plans];
 
 		swap.slot = slot;
-		swap.kind = rule->kind;
-		swap.bits = rule->bits;
+		swap.kind = rule ? rule->kind : SWAP_GUESTS;
+		swap.bits = rule ? rule->bits : 0;
+		swap.guests = 0;
+		swap.stateSaid = -2;
 
 		for (int n = 0; n < HD_OBJ_NODES; n++)
 			swap.model[n] = -1;
 
-		if (rule->kind == SWAP_WHOLE)
+		if (!rule)
+		{
+			/* One model per guest, each the host's look once that guest is
+			 * done, on a node pseudo slot of the host as the cyborg's stages
+			 * are - the host's own skeleton and bind pose. */
+			for (int k = 0; k < guestCount; k++)
+			{
+				HDModelSlot alt = one;
+
+				alt.slot = HD_SWAP_NODE_BASE + slot * HD_OBJ_NODES + k;
+				alt.name = guests[k].model;
+				swap.model[k] = alt.slot;
+				swap.guestDone[k] = guests[k].done;
+				swap.guestModel[k] = guests[k].model;
+				wanted.push_back(alt);
+				g_swap_models++;
+			}
+
+			swap.guests = guestCount;
+		}
+		else if (rule->kind == SWAP_WHOLE)
 		{
 			swapNames.push_back(std::string(base) + rule->suffix);
 
@@ -2397,10 +2551,12 @@ static void ObjectLevelBuild(const char* installRoot, const char* stem,
 			verdict.via = viaStr;		// for the ring's log line
 
 			const int trmNodes = HDModelHas(slot) ? HDModelMaxBone(slot) + 1 : 0;
+			char states[256];
 
-			Log("HDLOG bind slot=%d name=%s via=%s model=%s nodes=%d/%d",
+			guest_states_text(slot, states, sizeof(states));
+			Log("HDLOG bind slot=%d name=%s via=%s model=%s nodes=%d/%d%s",
 				slot, HDSlotName(slot) ? HDSlotName(slot) : "?", viaStr,
-				bindModel, trmNodes, wanted[i].nodes);
+				bindModel, trmNodes, wanted[i].nodes, states);
 		}
 
 		verdict.nodes = wanted[i].nodes;
@@ -2533,16 +2689,29 @@ static void ObjectLevelBuild(const char* installRoot, const char* stem,
 	}
 
 	/* The DUMMY slots whose look a host's model carries, one line each: the
-	 * host and whether it draws HD, which is when they draw nothing. */
+	 * host and whether it draws HD, which is when they draw nothing - and,
+	 * for a guest whose state the host's model follows, the slot it becomes
+	 * and the host's model from then on (HDLOG guests says which is
+	 * drawn). */
 	for (int slot = 0; slot < NUMBER_OBJECTS; slot++)
 		if (g_slot[slot].baked && g_slot[slot].host >= 0)
+		{
+			const char* hostModel = 0;
+			const char* done = HDBindGuestDone(slot, &hostModel);
+			char state[160] = "";
+
+			if (done && hostModel)
+				std::snprintf(state, sizeof(state), " done=%s host_model=%s",
+					done, hostModel);
+
 			Log("HDLOG level=%s dummy slot=%d name=%s host=%d name=%s "
 				"host_hd=%d - its look is the host's model; drawn classic "
-				"while the host is not drawn HD", g_stem, slot,
+				"while the host is not drawn HD%s", g_stem, slot,
 				HDSlotName(slot) ? HDSlotName(slot) : "?",
 				g_slot[slot].host, HDSlotName(g_slot[slot].host)
 					? HDSlotName(g_slot[slot].host) : "?",
-				(int)g_slot[g_slot[slot].host].hd);
+				(int)g_slot[g_slot[slot].host].hd, state);
+		}
 
 	Log("HDLOG level=%s objects hd=%d classic=%d baked=%d (of %d loaded "
 		"slots), drift limit %.0f units",
@@ -2591,7 +2760,9 @@ static void ObjectLevelBuild(const char* installRoot, const char* stem,
 		Log("HDLOG level=%s swap slot=%d name=%s kind=%s models=%d missing=%d",
 			g_stem, swap.slot,
 			HDSlotName(swap.slot) ? HDSlotName(swap.slot) : "?",
-			swap.kind == SWAP_WHOLE ? "whole" : "hitman_stages", have, lost);
+			swap.kind == SWAP_WHOLE ? "whole"
+				: swap.kind == SWAP_GUESTS ? "guest_states" : "hitman_stages",
+			have, lost);
 	}
 
 	/* A mod's inventory model, measured. After the verdicts,
@@ -3367,6 +3538,7 @@ bool HDObjectBegin(ITEM_INFO* item, OBJECT_INFO* obj)
 	 * reports of classic patches on an HD model (TROne-main, copy of
 	 * 2026-10-05, build_skinned_model). */
 	g_open_swap = swap_model_for(swap_plan_of(slot), item);
+	guest_state_log(slot, item);
 
 	if (g_open_swap < 0 && item->meshswap_meshbits &&
 		(unsigned int)item->meshswap_meshbits & g_slot[slot].covered)

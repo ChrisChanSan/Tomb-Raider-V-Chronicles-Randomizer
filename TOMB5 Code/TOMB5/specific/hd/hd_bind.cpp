@@ -303,8 +303,9 @@ namespace
 		 *   ANIMATING10_MIP, 10 meshes, the same tree without the console:
 		 *     the top at room 40's console, whose console is the two puzzle
 		 *     holes on its chest, DUMMY in the map, with no room art in
-		 *     their box. TOP_CHAIN_HALF, the console with one slot filled
-		 *     and one empty, the slot the puzzle waits for.
+		 *     their box. TOP_CHAIN, the empty bezel with its plate, is the
+		 *     console before the player's items are in; the guests' table
+		 *     below names the two files it changes to as they go in.
 		 *   ANIMATING12_MIP, 8 meshes: the legs on their chains - hips on
 		 *     node 0, legs on 1-6, chains on 7. BOTTOM_CHAIN, 9 to 31 units.
 		 *   ANIMATING10, 7 meshes: the legs standing. BOTTOM, 9 to 31 units.
@@ -312,13 +313,12 @@ namespace
 		 * The three tops carry their torso on bone 8, the node of the right
 		 * tank, which hangs off node 0 with no offset; no keyframe and no
 		 * cutscene frame turns it (CutseqProbe -turns 5 2 and 32 2: 0 frames),
-		 * so it draws where node 0 does. TOP_CHAIN, a plain chest plate with
-		 * no console, is no slot's. The map's DOG_MIP line names a file that
-		 * does not exist, and such a line gives way to a level-bound line
+		 * so it draws where node 0 does. The map's DOG_MIP line names a file
+		 * that does not exist, and such a line gives way to a level-bound line
 		 * here - see bind_against. */
 		{ "DOG_MIP",                 "EXTRA5_SUBSUIT_TOP_CHAIN_JOBY5", "JOBY3 JOBY5" },
 		{ "ANIMATING12_MIP",         "EXTRA5_SUBSUIT_BOTTOM_CHAIN",    "JOBY3 JOBY5" },
-		{ "ANIMATING10_MIP",         "EXTRA5_SUBSUIT_TOP_CHAIN_HALF",  "JOBY3" },
+		{ "ANIMATING10_MIP",         "EXTRA5_SUBSUIT_TOP_CHAIN",       "JOBY3" },
 		{ "ANIMATING10",             "EXTRA5_SUBSUIT_BOTTOM",          "JOBY3" },
 
 		/* And the suit in the cutscenes that dress Lara in it. The actors
@@ -351,21 +351,57 @@ namespace
 	 * the suit top ANIMATING10_MIP (item 87); their frame boxes lie on its
 	 * chest, the room art holds no triangle there (TrgProbe -boxes), and the
 	 * top's model carries the console on its torso. The done states take
-	 * the holes' places once the player's items are in. */
+	 * the holes' places once the player's items are in.
+	 *
+	 * And the host's model follows them (hd_bind.h, HDBindGuestStates). A
+	 * hole becomes its done slot when its item goes in (game\pickup.cpp,
+	 * PuzzleDone, object_number + 8); PUZZLE_HOLE3 takes puzzle item 3, the
+	 * suit's console, and PUZZLE_HOLE4 puzzle item 4, its battery, whose
+	 * OCB of 1029 starts cutscene 5 as it goes in (PuzzleHoleCollision,
+	 * hole + PUZZLE_ITEM1). The classic meshes are the four looks: HOLE3's
+	 * the empty frame, HOLE4's DONE3's 76 vertices with every face on a
+	 * patch of texels that are all transparent - it draws nothing - DONE3's
+	 * the console with the battery's slot empty, DONE4's the console with
+	 * the battery. The three top files are the same three looks on the
+	 * chest: every vertex of TOP_CHAIN, the bezel round a plate, is in the
+	 * other two, which add the console into the bezel - TOP_CHAIN_HALF 825
+	 * vertices with the battery's slot empty, TOP_CHAIN_JOBY5 1297 with it
+	 * filled, all in the holes' frame box. So the empty frame is in the
+	 * file, and no state draws a hole's classic mesh beside it. The last
+	 * done guest in the table's order decides, which is the classic look
+	 * in either order the items go in: DONE4's mesh holds the console too.
+	 */
 	struct DummyHost
 	{
 		const char* slot;
 		const char* host;
 		const char* levels;	// as in the hand table
+		const char* done;	// what the guest becomes, or 0
+		const char* model;	// the host's model from then on, or 0
 	};
 
 	const DummyHost dummy_hosts[] =
 	{
-		{ "PUZZLE_HOLE3", "ANIMATING10_MIP", "JOBY3" },
-		{ "PUZZLE_HOLE4", "ANIMATING10_MIP", "JOBY3" },
-		{ "PUZZLE_DONE3", "ANIMATING10_MIP", "JOBY3" },
-		{ "PUZZLE_DONE4", "ANIMATING10_MIP", "JOBY3" }
+		{ "PUZZLE_HOLE3", "ANIMATING10_MIP", "JOBY3", "PUZZLE_DONE3",
+			"EXTRA5_SUBSUIT_TOP_CHAIN_HALF" },
+		{ "PUZZLE_HOLE4", "ANIMATING10_MIP", "JOBY3", "PUZZLE_DONE4",
+			"EXTRA5_SUBSUIT_TOP_CHAIN_JOBY5" },
+		{ "PUZZLE_DONE3", "ANIMATING10_MIP", "JOBY3", 0, 0 },
+		{ "PUZZLE_DONE4", "ANIMATING10_MIP", "JOBY3", 0, 0 }
 	};
+
+	// The slot number of an engine slot name, or -1.
+	int slot_of_name(const char* name)
+	{
+		if (!name)
+			return -1;
+
+		for (int slot = 0; slot < HD_SLOT_COUNT; slot++)
+			if (slot_names[slot] && _stricmp(slot_names[slot], name) == 0)
+				return slot;
+
+		return -1;
+	}
 
 	/* Does a hand-table line hold for `level`? A line with no level list holds
 	 * everywhere; one with a list holds where a whole token of it equals the
@@ -958,12 +994,65 @@ int HDBindDummyHost(int slot)
 			!hand_applies(line.levels, map_level.c_str()))
 			continue;
 
-		for (int host = 0; host < HD_SLOT_COUNT; host++)
-			if (slot_names[host] && _stricmp(slot_names[host], line.host) == 0)
-				return host;
+		return slot_of_name(line.host);
 	}
 
 	return -1;
+}
+
+int HDBindGuestStates(int host, HDGuestState* out, int max)
+{
+	const char* name = HDSlotName(host);
+	int count = 0;
+
+	if (!name || !out)
+		return 0;
+
+	for (const DummyHost& line : dummy_hosts)
+	{
+		if (count >= max || !line.done || !line.model ||
+			_stricmp(line.host, name) != 0 ||
+			!hand_applies(line.levels, map_level.c_str()))
+			continue;
+
+		const char* mapped = value_in(map_entries, line.slot);
+
+		// The guests are DUMMY in the level's own map, or no guests at all.
+		if (!mapped || _stricmp(mapped, "DUMMY") != 0)
+			continue;
+
+		out[count].guest = slot_of_name(line.slot);
+		out[count].done = slot_of_name(line.done);
+		out[count].model = line.model;
+
+		if (out[count].guest >= 0 && out[count].done >= 0)
+			count++;
+	}
+
+	return count;
+}
+
+const char* HDBindGuestDone(int guest, const char** model)
+{
+	const char* name = HDSlotName(guest);
+
+	if (model)
+		*model = 0;
+
+	if (!name)
+		return 0;
+
+	for (const DummyHost& line : dummy_hosts)
+		if (line.done && _stricmp(line.slot, name) == 0 &&
+			hand_applies(line.levels, map_level.c_str()))
+		{
+			if (model)
+				*model = line.model;
+
+			return line.done;
+		}
+
+	return 0;
 }
 
 const char* HDBindDonorSlot(const char* installRoot, const char* donorLevel,

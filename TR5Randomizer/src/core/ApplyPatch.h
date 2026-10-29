@@ -178,7 +178,7 @@ namespace Patch
     //
     // The engine can draw a level with the Remaster's own geometry and
     // models. That data describes the VANILLA level, so the randomizer has
-    // to say where it no longer fits. Four things, and exactly four:
+    // to say where it no longer fits. Five things:
     //
     //   1. THE OUTFIT, in data[3] of the level header. Written by apply()
     //      itself, because it is part of the file. See hdOutfitId.
@@ -194,9 +194,14 @@ namespace Patch
     //      file, because the Remaster resolves a slot by the name THIS
     //      level gives it, and ANIMATING10 means something different in
     //      every level.
+    //   5. THE ADDED ITEMS - every item the run appended, by its index in
+    //      the file. The Remaster bakes the objects of the slots a level's
+    //      .MAP calls DUMMY into the room art, where Core placed them; an
+    //      item added to such a slot stands where the art has nothing of
+    //      it, and the engine draws it classic instead of not at all.
     //
-    // 2, 3 and 4 do not fit in the header: a room bit field would need up
-    // to 254 bits, and a cut list and a donor list are both unbounded. They
+    // 2 to 5 do not fit in the header: a room bit field would need up
+    // to 254 bits, and the cut, donor and item lists are all unbounded. They
     // go into a sidecar file `<level>.hdm` beside the .trc - plain text, one
     // fact per line:
     //
@@ -207,6 +212,8 @@ namespace Patch
     //     cut 38400 8832 25728 39424 10112 26496
     //     donor 386 Andrea1 386
     //     donor 462 Andrea1 405
+    //     item 244
+    //     item 245
     //
     // The first line is the version, and it is the LOWEST one that can say
     // what the file holds: a file with a `cut` line in it declares 2, a
@@ -215,11 +222,14 @@ namespace Patch
     // that has the sidecar open anyway (both come out of the same value, so they cannot
     // drift); the engine reads the header byte, which is there before a room
     // is loaded. `room` lines are ascending, `cut` lines ascending by their
-    // six numbers, `donor` lines ascending by slot, so the same seed gives
+    // six numbers, `donor` lines ascending by slot, `item` lines ascending
+    // by index and last in the file, so the same seed gives
     // the same file byte for byte. A donor line names the slot in THIS
     // level, the donor level's stem (or "TR3" for a guest out of Tomb
     // Raider III), and the slot the model was taken FROM - which differs
-    // whenever a mesh store is copied into an enemy's own slot.
+    // whenever a mesh store is copied into an enemy's own slot. An `item`
+    // line needs no version of its own: an engine that predates it ignores
+    // the line and draws the item by its slot's rule alone, as it did.
     //
     // A `cut` line is an axis-aligned box in WORLD units, lower corner then
     // upper corner, and Y GROWS DOWNWARD as everywhere else in this format

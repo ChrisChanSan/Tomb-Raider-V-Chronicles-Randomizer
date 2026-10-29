@@ -63,6 +63,7 @@ bool Tr5Level::load(const std::wstring& path, std::string& error)
     m_hdDonors.clear();
     m_hdSoundImports.clear();
     m_hdCuts.clear();
+    m_hdAddedItems.clear();
 
     FILE* f = nullptr;
     if (_wfopen_s(&f, path.c_str(), L"rb") != 0 || !f)
@@ -364,7 +365,15 @@ bool Tr5Level::addItem(const Tr5Item& in, std::string& error)
     std::memcpy(m_bytes.data() + m_mainOffset - 8, &newSize, 4);
     std::memcpy(m_bytes.data() + m_mainOffset - 4, &newSize, 4);
 
-    return setItem(m_itemCount - 1, in);
+    const int index = m_itemCount - 1;
+
+    if (!setItem(index, in)) return false;
+
+    // The run's own item, for the sidecar's `item` lines. Nothing is ever
+    // inserted before it or removed, so the index it gets here is the one
+    // it has in the saved file.
+    m_hdAddedItems.insert(index);
+    return true;
 }
 
 bool Tr5Level::setItem(int index, const Tr5Item& in)

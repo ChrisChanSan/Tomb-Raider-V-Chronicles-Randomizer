@@ -1833,6 +1833,17 @@ bool Patch::writeHdMarkers(const Tr5Level& level, const std::wstring& levelPath,
         if (donorsOut) ++*donorsOut;
     }
 
+    /* The items this run added, one line each, ascending because a
+     * std::set is - the same seed, the same file. Last in the file, so every
+     * line an older build wrote stands where it stood and a run that added
+     * nothing writes the file it always wrote. One per line rather than all
+     * on one: a level can take hundreds, and the engine reads a line into a
+     * buffer of 512. An engine that predates the line has no rule for the
+     * word and ignores it - such an item is then drawn as before, by its
+     * slot's rule alone. */
+    for (int index : level.hdAddedItems())
+        std::fprintf(f, "item %d\n", index);
+
     const bool ok = (std::fclose(f) == 0);
     if (!ok) error = "HD markers: the sidecar file could not be closed";
     return ok;

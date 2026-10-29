@@ -239,7 +239,9 @@ public:
     // Appends an item at the end. That is the only way to add items:
     // appending shifts no existing indices, so the triggers' "Object N"
     // references stay valid. There is deliberately NO removal here - it
-    // would shift all subsequent indices.
+    // would shift all subsequent indices. The new index is recorded for
+    // the HD markers (hdAddedItems), and it stays the item's index in the
+    // saved file for the same reason.
     bool    addItem(const Tr5Item& in, std::string& error);
 
     // The engine holds items[] as a fixed array of this size (MAX_ITEMS in
@@ -1080,6 +1082,18 @@ public:
     // not listed: those really are the remaster's own sounds.
     void hdMarkSoundImport(int soundId);
     const std::set<int>& hdSoundImports() const { return m_hdSoundImports; }
+    // The items this run appended, by their index in the file - recorded by
+    // addItem, the one way an item gets into a level, whoever asked for it
+    // (the roll's extra enemies and pickups, a secret list's `add` lines).
+    //
+    // The Remaster bakes the objects of some slots into the room art - the
+    // slots the level's .MAP calls DUMMY - and the art has them only where
+    // Core placed them. An item the run adds to such a slot stands where
+    // the art has nothing of it: JOBY3's secret list puts a SEARCH_OBJECT3
+    // shelf into room 52, and with the slot's rule alone the engine drew
+    // nothing there. The engine draws an item this list names by its slot's
+    // own rule wherever the slot is not baked, and classic where it is.
+    const std::set<int>& hdAddedItems() const { return m_hdAddedItems; }
     const std::set<int>& hdTouchedRooms() const { return m_hdRooms; }
     const std::vector<HdDonor>& hdDonors() const { return m_hdDonors; }
     // A std::set, so the same seed writes the same lines in the same order
@@ -1112,6 +1126,8 @@ private:
     std::set<HdCut>      m_hdCuts;
     // A std::set again, so the same seed writes the same line.
     std::set<int>        m_hdSoundImports;
+    // Ascending, and each index once - the same seed, the same lines.
+    std::set<int>        m_hdAddedItems;
 
     // Record the box around one opening. Both are
     // private: an opening is recorded by the edit that made it, out of the

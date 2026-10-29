@@ -15692,7 +15692,7 @@ figure is the art's own and the room's light, and no shader changed.
 0 none of it runs: the X-ray set exists only inside the HD draw of Lara. The verdict
 census over the fifteen levels is unchanged.
 
-**Commits.** `a62561ea`, `753df221`.
+**Commits.** `a62561ea`, `753df221`, `0d6713d7`.
 
 ## 3. Randomizer changes since Beta 1.0
 

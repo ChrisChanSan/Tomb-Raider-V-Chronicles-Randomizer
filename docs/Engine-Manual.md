@@ -4127,8 +4127,8 @@ mesh_bits=0x81FF01FF hidden=1,2,3,4,5,6 hd=- drawn=DrawLara__4`, and a second
 line with `hidden=none` follows when frame 440 or a skip gives her legs back.
 
 **The X-ray scanner.** In Escape with the Iris the scanner X-rays Lara while
-she walks through it: 36 squares of its two scanner rooms carry a trigger that
-sets the engine's X-ray state for every frame she stands on one. The classic
+she walks through it: 36 squares in two of its rooms carry a trigger that sets
+the engine's X-ray state for every frame she stands on one. The classic
 game then draws her through a draw path of its own - her skin translucent, the
 level's own bone meshes solid inside it, no braid and no thigh holsters, the HK
 and the grappling gun as the level's own X-ray meshes. In HD the composite

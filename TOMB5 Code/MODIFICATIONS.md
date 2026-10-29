@@ -15646,6 +15646,45 @@ the vanilla outfit does.
 
 **Commits.** `64ca409f`, `7db3fc3d`.
 
+### The title menu's sliders follow the pad (#264)
+
+2026-10-29.
+
+**What.** On the title screen the six sliders of the options pages follow the stick, the
+d-pad and the direction keys of the active layout, as they do in the pause menu; before,
+only the arrow keys moved them there, at every frame rate. With `-log` a `MENULOG slider`
+line names the way a selected slider is held, the hand holding it and the title's input
+shadow.
+
+**Why.** A slider reads the held word beside the raw arrow keys, and it read `input`. On
+the title screen ControlPhase masks `input` down to `IN_LOOK` after every `S_UpdateInput`
+while bDisableLaraControl stands and zeroes it while a cutscene runs; `dbinput` it keeps
+for the title alone (`game/control.cpp`). The title's flybys raise the flag in game mode 1
+(`InitialiseSpotCam`, `game/spotcam.cpp`), the title's mode from the start of the game; a
+title reached from a level has it from its first cutscene on, and none of the title's 55
+cameras lowers it. So the word never brought the slider a direction there, and the arrow
+keys reached it only through `keymap`; the value rows step on `dbinput` and worked. The
+pause menu calls `S_UpdateInput` itself, outside ControlPhase, so in a level `input`
+carried the pad's bits. The title's input shadow (`TitleInputShadow`) is not the cause: at
+30 frames a second it never acts.
+
+**How.** `game/menu_frame.cpp`: `MenuSliderDir` reads `inputBusy`, the word
+`S_UpdateInput` writes for every caller before any caller's mask, beside the two arrow
+keys, through `MenuSliderHeldDir` (`game/menu_nav.h`). In a level `input` and `inputBusy`
+carry the same two direction bits - the one mask between them, under `lara.Busy`, keeps
+both - so the pause menu reads what it read before. On a title present without a game
+step the shadow still zeroes `input` and `dbinput` and leaves `inputBusy` standing, as it
+leaves `keymap`: a held slider moves on every present by key and pad alike, and every edge
+is still read once. The value rows, the ring and `do_debounced_joystick_poo` are
+untouched. `MenuLogSlider` writes the line - `dir=`, `src=` (`key`, `pad`, `pad+key` or
+`-`, from `MenuSliderHands`) and `shadow=` - once per change and never while both stay;
+for it alone `specific/input.cpp` keeps the pad pair's own direction bits of the last call
+(`InputPadDirection`) and `game/gameflow.cpp` the shadow of the running `TitleOptions`
+call (`TitleInputShadowed`). MenuTest's `slider_held_word` holds the rule;
+`docs/Engine-Manual.md` says it.
+
+**Commits.** `f8b6a5a1`.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -15927,3 +15966,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #261 | The diving suits, their console and Lara in the suit |
 | #262 | The suit's console states and Lara's legs inside the suit |
 | #263 | Lara's legs inside the suit, on the classic path |
+| #264 | The title menu's sliders follow the pad |

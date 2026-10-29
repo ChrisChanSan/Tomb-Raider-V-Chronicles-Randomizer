@@ -405,12 +405,13 @@ round.
 
 **Menus under Modern.** Wherever the game reads keys for a menu rather than
 for Lara — the title screen, the pause menu and every options page, the
-inventory ring, load/save, the outfit changer — the four arrow keys and
-Return still step and confirm, whatever you bound W/S/A/D and Enter's Modern
-equivalent to. A Modern player who rebound the movement keys is not forced to
-use them in a menu, and a player who unbound them entirely is never locked
-out of one. In the game itself the arrow keys do only what the active
-scheme's table says they do.
+inventory ring, load/save, the outfit changer, the Game Over menu after Lara's
+death and the load list it opens — the four arrow keys and Return still step
+and confirm, whatever you bound W/S/A/D and Enter's Modern equivalent to, and
+the pad's d-pad steers beside its left stick. A Modern player who rebound the
+movement keys is not forced to use them in a menu, and a player who unbound
+them entirely is never locked out of one. In the game itself the arrow keys
+do only what the active scheme's table says they do.
 
 One consequence of Modern's default *Walk* key worth knowing: it is **Left
 Alt**, and the title screen, load/save and the outfit changer all refuse to
@@ -5014,6 +5015,7 @@ wrote it, and each seam answers a different question:
 | at *Frame rate 60* a fade, a caption or the rain seems to run at double speed | `TICKLOG` — per second: how often the engine's own clocks stepped. The same line has to come out of a 30 run and a 60 run |
 | at *Frame rate 60* or *Display*, a black flash — or sky — for a frame or two as the camera swings past a pillar or a door frame | `CAMLOG` — a `tick` line per pass of the chase, combat, fixed and look cameras (none during flybys, binoculars or cutscenes): where the camera stands and with which room, what it aimed for and how the wall cut it, what kind of place it stands in (`kind=open`, `wall`, `door->36`, `below:12`) and how close it is to a wall face and a corner, and `clear=`, how far the *Modern* camera was just moved off a wall (`0` nothing to do, `-1` a move refused), and last `diag=`, how far the game's push off a slanted wall panel (13th Floor, Escape with the Iris) moved the *Modern* camera (`0` none); a `draw` line for every picture whose camera had to be put right between two steps, saying how (`fix=prevroom`, `chord`, `tick` or `nosky`) and how far it moved (`moved=`); and a `sum` line per second with the counts |
 | under *Modern* the mouse does not turn the camera, a mouse button does nothing, or the cursor stays hidden or visible when it should not | `MOUSELOG` — a line whenever the mouse moved or a button changed: the counts it moved (`dx=`, `dy=`), the buttons held (`buttons=`, left 1, right 2, middle 4, the side buttons 8 and 16), how far that turned the camera (`yaw=`, `pitch=`), the sensitivity (`sens=`), whether the cursor was held (`captured=`) and the counts still to be paid out on later ticks (`owed_x=`, `owed_y=`; while they are, a line comes with `dx=0 dy=0` and the step turned); and a `MOUSELOG capture=on` or `capture=off` line every time the cursor is caught or let go, with the reasons (`active=` the window has the focus, `modern=`, `fmv=`) |
+| the Game Over menu after Lara's death does not move with the d-pad, the stick or a key | `MENULOG death` — an `open` line when the menu comes up (`load=` whether it offers a reload, `scheme=` tank or modern, `method=` 0 for the keyboard page and 1 for the pad's), then one `step` line for each press its two rows see: `step=` up, down or select, `row=` the row it found and `src=` `key`, `pad` for the d-pad and the pad's buttons, or `stick` |
 | under *Modern* Lara does not run where the camera looks, with the stick or with the movement keys | `MODERNLOG` — one line per game tick of the modern control: the stick it was handed (`stick=`), the camera and her course (`cam=`, `ref=`, `course=`), the bits it sent (`bits=`), `feed=pad` for the controller's stick, `feed=keys` for the four movement keys, `feed=none` when both rest, and at the end `ref_view=1` on a tick the stick is read in the view on screen rather than in the angle the *Modern* camera was set to (the sniper camera, the level camera that follows her through the X-ray corridor, a slanted wall panel's push), and last `latch_drop=1` on the tick a turn of the stick by more than 45 degrees ended a course held through a camera cut (0 on every other tick); while *Look* is held a `MODERNLOG … mode=tank` line instead |
 | at *Frame rate 60* an arm or the weapon in her hands shakes | `ARMLOG` — per drawn frame: both arms' animation frames, whether they were blended, and where shoulder, elbow and hand came out |
 | the *Ledge hang* move misbehaves, or the camera jumps during it | `LEDGELOG` — one line per phase of the move, one when it starts, one when the reasons it would refuse an edge change; and with the Modern camera a `LEDGELOG cam` line on every step of the move and the ten after it: where the camera stands and what it looks at, with their rooms, and whether it had to put the look-at point back (`snaps=`, `rejected=`) |

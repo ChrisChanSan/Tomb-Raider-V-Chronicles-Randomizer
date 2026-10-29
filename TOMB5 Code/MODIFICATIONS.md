@@ -15646,6 +15646,43 @@ the vanilla outfit does.
 
 **Commits.** `64ca409f`, `7db3fc3d`.
 
+### The Game Over menu takes the d-pad and the arrow keys (#271)
+
+2026-10-29.
+
+**What.** Under the Modern scheme the Game Over menu after Lara's death, and the load list
+it opens, take the d-pad and the arrow keys beside the left stick, and Return whatever the
+layout binds, as every other menu does; before, the stick alone moved the cursor there.
+With `-log` a `MENULOG death` line names the menu's opening and each press its two rows
+see.
+
+**Why.** `S_Death` (`game/control.cpp`) runs a loop of its own around `S_UpdateInput` and
+steps its two rows on `dbinput`'s edges, but it raised no term of `ModernMenuReadsPad`
+(`specific/input.cpp`), so the input read the screen as play. Under Modern the movement
+pair is then the left stick's own axes through the radial zone, which the d-pad never
+writes into; the d-pad's own buttons reached only the roles bound to them, by default the
+medipacks; the arrow keys and Return, the menus' fixed keys, are added only where the
+predicate holds. The stick's bits came through as classic direction bits because the
+movement seam stands aside on a call that follows no game step. `S_Death` never raised
+`InventoryActive`, which also chooses the ring's object light, the pickup display and the
+HD key. Tank reads the shared pair and its own arrow keys there and was right.
+
+**How.** `game/control.cpp`: `DeathMenuActive`, raised by `S_Death` before its loop - the
+two rows and the load list - and lowered on both of its ways out. `specific/input.cpp`:
+`ModernMenuReadsPad` names it beside `InventoryActive` and the title, and the movement
+seam carries it with the opposite sign, as the two must. The game-over menu then gets the
+per-axis pair of stick and d-pad, the menu keys, and the rule that a medipack bound to the
+d-pad rests while the d-pad steers a menu; its edge rule stays one step per press on
+`dbinput`. Tank, the title, the pause menu, the ring and the options pages read what they
+read before. `DeathLogStep` writes the line: `open` with `load=`, `scheme=` and
+`method=`, then one `step` line per press with `step=` (up, down or select), `row=` and
+`src=` (`key`, `pad` for the d-pad or a pad button, `stick`; `MenuStepSource` in
+`game/menu_nav.h`), for which `specific/input.cpp` keeps the pad pair's own direction
+bits of the last call (`InputPadDirection`). MenuTest's `death_menu_pad` holds the rule;
+`docs/Engine-Manual.md` says it.
+
+**Commits.** `94ef93a1`.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -15927,3 +15964,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #261 | The diving suits, their console and Lara in the suit |
 | #262 | The suit's console states and Lara's legs inside the suit |
 | #263 | Lara's legs inside the suit, on the classic path |
+| #271 | The Game Over menu takes the d-pad and the arrow keys |

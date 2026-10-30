@@ -83,6 +83,9 @@ struct HdMarkers
     std::vector<Cut> cuts;
     struct Donor { int slot, fromSlot; std::string level; };
     std::vector<Donor> donors;
+    // The items the run added, by their index in the level file. No
+    // version of its own: an older reader counts the lines as unknown.
+    std::vector<int> items;
     std::vector<std::string> unknown;      // lines a later version may add
 };
 
@@ -132,6 +135,12 @@ static bool readHdm(const std::string& path, HdMarkers& out, std::string& error)
             out.donors.push_back(d);
             continue;
         }
+        if (std::sscanf(line, "item %d", &a) == 1)
+        {
+            // A negative index names no item; the engine's reader drops it.
+            if (a >= 0) out.items.push_back(a);
+            continue;
+        }
         out.unknown.push_back(line);
     }
     std::fclose(f);
@@ -164,8 +173,10 @@ static std::string sidecarPath(const std::string& levelPath)
 
 static void report(const HdMarkers& m)
 {
-    std::printf("  sidecar     version %d, %zu rooms, %zu cut boxes, %zu donor slots\n",
-                m.version, m.rooms.size(), m.cuts.size(), m.donors.size());
+    std::printf("  sidecar     version %d, %zu rooms, %zu cut boxes, "
+                "%zu donor slots, %zu added items\n", m.version,
+                m.rooms.size(), m.cuts.size(), m.donors.size(),
+                m.items.size());
     if (m.outfit) std::printf("  outfit line %d\n", m.outfit);
 
     if (!m.rooms.empty())
@@ -196,6 +207,13 @@ static void report(const HdMarkers& m)
     for (size_t i = 0; i < m.donors.size(); ++i)
         std::printf("  donor       slot %d <- %s slot %d\n",
                     m.donors[i].slot, m.donors[i].level.c_str(), m.donors[i].fromSlot);
+    if (!m.items.empty())
+    {
+        std::printf("  items      ");
+        for (size_t i = 0; i < m.items.size(); ++i)
+            std::printf("%s%d", i ? ", " : " ", m.items[i]);
+        std::printf("   (added by the run - never baked into the art)\n");
+    }
     for (size_t i = 0; i < m.unknown.size(); ++i)
         std::printf("  UNKNOWN     %s\n", m.unknown[i].c_str());
 }

@@ -21954,9 +21954,10 @@ static int ProbeMain(int argc, char** argv)
 
 				/* -stand and -standlist: the boxes of the items whose slot
 				 * the level's .MAP calls DUMMY, as hd_level.cpp's
-				 * BuildBakedBoxes makes them (a donor slot and Lara's never
-				 * count). The map is read for this and given back when no
-				 * one had read it before. */
+				 * BuildBakedBoxes makes them (a donor slot, Lara's and an
+				 * item the sidecar names the run's own never count). The map
+				 * is read for this and given back when no one had read it
+				 * before. */
 				g_baked_boxes.clear();
 				g_baked_items.clear();
 				g_baked_slots.clear();
@@ -21983,6 +21984,7 @@ static int ProbeMain(int argc, char** argv)
 
 						if (kind != HD_BIND_DUMMY || !fromMap ||
 							HDSlotIsLara(slot) || HDMarkersDonorOfSlot(slot) ||
+							HDMarkersItemAdded(i) ||
 							!level.frameBounds(slot, bounds))
 							continue;
 

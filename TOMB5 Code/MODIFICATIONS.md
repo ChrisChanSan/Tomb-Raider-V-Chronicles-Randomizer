@@ -15685,6 +15685,58 @@ call (`TitleInputShadowed`). MenuTest's `slider_held_word` holds the rule;
 
 **Commits.** `f8b6a5a1`.
 
+### An item the randomizer adds is drawn, its slot baked or not (#265)
+
+2026-10-29.
+
+**What.** An item the randomizer puts into a level is drawn in an HD room whatever its
+slot: as every item of its slot draws - HD where the slot binds a model, classic where
+none binds - and classic where the level's `.MAP` calls the slot `DUMMY`. The shelf
+(SEARCH_OBJECT3) that the glitchless secret list adds to JOBY3's bunk room 52, around the
+secret it moves there, stood invisible in HD and now draws its classic mesh, with its
+search animation and the secret inside. The level's eight vanilla shelves still draw
+nothing, because the art carries them.
+
+**Why.** The `DUMMY` rule marks a slot baked, and `begin_decision` answered BEGIN_BAKED
+for every item of a baked slot in an HD room: right for the items Core placed, which the
+remaster baked into the room art, wrong for one the run added, which the art has not got.
+The mark is per slot, the art's copies are per place. Counted with `TrgProbe -boxes` in
+each item's classic box (its first frame's bounds at its place and yaw, as
+`HDStandItemBox` makes it): 34 of the remaster's triangles in the added shelf's box in
+room 52, a strip of the room's wall at 256-unit steps, against 5,435 to 5,469 in each of
+the eight vanilla boxes in rooms 26, 107, 139 and 164 - the shelf itself. No level's
+`.MAP` names a model for the slot (four call it `DUMMY`, eleven are silent) and neither
+model folder holds a SEARCH_OBJECT3.TRM, so classic is its only look and there is no
+donor road. A slot that binds a model drew every item already, added ones included:
+ANDY3's slot 284 binds `DOOR_TYPE3_ANDY2_ANDY3`, and both doors its secret list makes of
+it, item 13 retyped and one added, draw HD. Only the randomizer knows which items it
+added; a table by level or a box heuristic would not survive the next list.
+
+**How.** On the writing side, `TR5Randomizer/src/core/Tr5Level.cpp`/`.h` record every
+index `addItem` appends - the one way an item gets into a level, for the roll's extra
+enemies and pickups and a secret list's `add` lines alike; nothing is ever inserted before
+an item or removed, so the index is the item's index in the saved file - and
+`core/ApplyPatch.cpp` writes one `item <index>` line each, ascending, at the end of the
+`.hdm`. The line needs no version: an engine that predates it counts each as a line it
+has no rule for and draws the item as before. `specific/hd/hd_markers.cpp`/`.h` read it
+(`HDMarkersItemAdded`). `specific/hd/hd_object.cpp`: `begin_decision` no longer answers
+BEGIN_BAKED for an item the sidecar names (`item_run_added`, an index of `items[]` below
+`level_items`), so the item reaches the guard and draws as a slot without a model draws,
+classic; the objects' build writes an `HDLOG level=... added item=...` line for each
+added item of a baked slot, whether `hd_objects` is on or off. `specific/hd/hd_level.cpp`:
+`BuildBakedBoxes` leaves such an item out of the boxes of the art's objects, and the
+`markers` summary line ends in `items=`. `MapProbe -hdm` answers each `item` line with
+its slot, room and drawing, `HdmDump` lists them, and RoomProbe's copy of
+`BuildBakedBoxes` leaves them out too; `docs/Engine-Manual.md` and
+`docs/Randomizer-Manual.md` say it. The same seed 380 through the randomizer before and
+after, over the thirteen campaign levels plain and with `mix cross allsanity 8 weapons
+items20 weather` and the glitchless list: every `.trc` and log byte-identical, every
+`.hdm` the old file plus its `item` lines. The verdict census over the fifteen levels is
+unchanged. With `hd_build` 0 nothing of it runs - no HD room, no baked answer - and a
+level without a sidecar, or with one written before the line, draws as before.
+
+**Commits.** `c8cb7cd0`, `0ae57756`.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -15967,3 +16019,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #262 | The suit's console states and Lara's legs inside the suit |
 | #263 | Lara's legs inside the suit, on the classic path |
 | #264 | The title menu's sliders follow the pad |
+| #265 | An item the randomizer adds is drawn, its slot baked or not |

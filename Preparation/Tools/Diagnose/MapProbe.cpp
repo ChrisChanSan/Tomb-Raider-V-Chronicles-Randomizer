@@ -43,13 +43,16 @@
 //
 // -hdm proves what the HD room-cut and donor-slot machinery decided, without
 // starting the game. The sidecar beside a randomized level says which rooms
-// the run reshaped, which openings it cut and which slots hold a model from
-// another level file; this reads it with the engine's own reader
-// (specific\hd\hd_markers.cpp is compiled in) and answers each line the way
-// the engine will answer it - a room classic with the reason "marker", a cut
-// box with the volume it takes out of every room's art, a donor slot through
-// the donor's own .MAP, a Tomb Raider III guest through the four-line table
-// and the other bundle. Two things it cannot answer: the skeleton test, which needs
+// the run reshaped, which openings it cut, which slots hold a model from
+// another level file and which items the run added; this reads it with the
+// engine's own reader (specific\hd\hd_markers.cpp is compiled in) and
+// answers each line the way the engine will answer it - a room classic with
+// the reason "marker", a cut box with the volume it takes out of every
+// room's art, a donor slot through the donor's own .MAP, a Tomb Raider III
+// guest through the four-line table and the other bundle, an added item
+// through its slot's binding, and classic where the map calls the slot
+// DUMMY, since the art carries such a slot's objects where Core placed them
+// only. Two things it cannot answer: the skeleton test, which needs
 // the model on a card (ModelProbe's job, and it says so per line), and how
 // many triangles a cut box really catches, which needs the level built
 // (RoomProbe -hdm, and the engine's own "HDLOG ... cut N" line).
@@ -165,9 +168,9 @@ namespace
 		}
 
 		std::printf("  sidecar      %s\n", HDMarkersPath());
-		std::printf("  version      %d, %d rooms, %d cut boxes, %d donors\n",
-			HDMarkersVersion(), HDMarkersRoomCount(), HDMarkersCutCount(),
-			HDMarkersDonorCount());
+		std::printf("  version      %d, %d rooms, %d cut boxes, %d donors, "
+			"%d added items\n", HDMarkersVersion(), HDMarkersRoomCount(),
+			HDMarkersCutCount(), HDMarkersDonorCount(), HDMarkersItemCount());
 
 		/* THE OUTFIT. data[3] of the level header is what the engine reads;
 		 * the sidecar repeats it for a person, and a disagreement means one
@@ -261,6 +264,53 @@ namespace
 							: "classic - no such .TRM")
 						: "HD if the skeleton fits"),
 				how);
+		}
+
+		/* The items the run added, with the slot each holds in the level
+		 * file. Such an item draws as its slot draws every item - HD where
+		 * a model binds, classic where none does - and classic where the
+		 * map calls the slot DUMMY, because the art carries that slot's
+		 * objects where Core placed them only (hd_object.cpp,
+		 * begin_decision; the game's own line is "HDLOG level=... added
+		 * item=N"). A donor slot is never baked, so its line above
+		 * answers for it. */
+		for (int i = 0; i < HDMarkersItemCount(); i++)
+		{
+			const int index = HDMarkersItem(i);
+			Tr5Item it;
+
+			if (!level.getItem(index, it))
+			{
+				std::printf("  item %-5d not in the level file (%d items) - "
+					"no item to draw\n", index, (int)level.itemCount());
+				continue;
+			}
+
+			const int slot = it.objectNumber;
+			const char* slotName = HDSlotName(slot);
+			HDBindKind kind = HD_BIND_NONE;
+			bool fromMap = false;
+			const char* name = HDMarkersDonorOfSlot(slot) ? 0
+				: HDBindSlot(root.c_str(), slot, &kind, &fromMap, 0);
+			const char* answer;
+
+			if (HDMarkersDonorOfSlot(slot))
+				answer = "as the slot's donor line says";
+			else if (kind == HD_BIND_LARA)
+				answer = "Lara's composite";
+			else if (kind == HD_BIND_DUMMY && fromMap)
+				answer = "classic - the map calls the slot DUMMY and the art "
+					"carries it where Core placed it only";
+			else if (kind != HD_BIND_MODEL || !name)
+				answer = "classic";
+			else if (where_model(root, alt, tr3, name, false).empty())
+				answer = "classic - no such .TRM";
+			else
+				answer = "HD if the skeleton fits";
+
+			std::printf("  item %-5d %-24s slot %-4d room %-4d %-28s %s\n",
+				index, slotName ? slotName : "?", slot, (int)it.roomNumber,
+				kind == HD_BIND_MODEL && name ? name : "-", answer);
 		}
 
 		HDMarkersFree();

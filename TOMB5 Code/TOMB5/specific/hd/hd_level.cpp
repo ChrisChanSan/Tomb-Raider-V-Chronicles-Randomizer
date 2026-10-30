@@ -5083,9 +5083,12 @@ static void BuildStandFaces()
 /* The boxes of the level's items whose slot the level's .MAP calls DUMMY -
  * the objects the art carries (hd_cover.h, HDStandDrawBaked) - as
  * hd_object.cpp names those slots: the map's own word, never a donor slot,
- * never Lara's. Each box out of the object's first frame's bounds, at the
- * item's place and yaw (HDStandItemBox). The map is read for this and given
- * back when it was not read before; the objects' build reads it again. */
+ * never Lara's. Never an item the sidecar names the run's own either: the
+ * art carries such a slot's objects where Core placed them only, and
+ * begin_decision draws an added one classic. Each box out of the object's
+ * first frame's bounds, at the item's place and yaw (HDStandItemBox). The
+ * map is read for this and given back when it was not read before; the
+ * objects' build reads it again. */
 static void BuildBakedBoxes(std::vector<HDStandBox>& boxes)
 {
 	boxes.clear();
@@ -5101,7 +5104,8 @@ static void BuildBakedBoxes(std::vector<HDStandBox>& boxes)
 
 		if (slot < 0 || slot >= NUMBER_OBJECTS || !objects[slot].loaded ||
 			objects[slot].nmeshes <= 0 || !objects[slot].frame_base ||
-			HDSlotIsLara(slot) || HDMarkersDonorOfSlot(slot))
+			HDSlotIsLara(slot) || HDMarkersDonorOfSlot(slot) ||
+			HDMarkersItemAdded(i))
 			continue;
 
 		HDBindKind kind = HD_BIND_NONE;
@@ -8172,13 +8176,14 @@ static void HDLevelBuildHD()
 	 * and how many of those really had HD art to give up. The two differ
 	 * whenever the run reshaped a room the .TRG had nothing for anyway.
 	 * `cuts` are the openings, which cost a box of triangles each and no
-	 * room at all. */
+	 * room at all. `items` are the items the run added (the objects' build
+	 * names those of a baked slot, one `added` line each). */
 	if (HDMarkersPresent())
 		Log("HDLOG level=%s markers version=%d rooms=%d of them classic now=%d "
-			"cuts=%d cut_tris=%d in %d rooms donors=%d outfit=%d",
+			"cuts=%d cut_tris=%d in %d rooms donors=%d outfit=%d items=%d",
 			g_stem, HDMarkersVersion(), HDMarkersRoomCount(), marked_rooms,
 			HDMarkersCutCount(), stats.cutTris, stats.cutGroups,
-			HDMarkersDonorCount(), HDMarkersOutfit());
+			HDMarkersDonorCount(), HDMarkersOutfit(), HDMarkersItemCount());
 
 	/* The parts of `built ms`: the steps before HDRenderLevelBegin, then
 	 * the .TRG read and the build's own parts (HD_BEGIN_*), in the order

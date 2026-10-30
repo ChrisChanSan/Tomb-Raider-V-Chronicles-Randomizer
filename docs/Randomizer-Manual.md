@@ -498,7 +498,11 @@ into a level file, and the engine reads it where it lies while the game runs.
 That artwork describes the *original* level, so the
 randomizer has to say where it no longer fits: where a secret list opened a
 wall, which rooms it lifted or built from nothing, which object slots hold a
-model out of a different level, and which Tomb Raider III outfit you rolled.
+model out of a different level, which items it added, and which Tomb Raider
+III outfit you rolled. The added items matter for the objects the Remaster
+has baked into its room artwork, such as JOBY3's shelves: the artwork has
+them only where the original level has them, so a shelf a secret list adds
+is drawn the classic way instead of not at all.
 
 An **opening** — a wall cut through, a window, a floor or ceiling opened — is
 written down as the box it lives in, and the engine leaves out just the HD

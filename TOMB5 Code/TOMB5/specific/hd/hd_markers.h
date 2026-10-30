@@ -44,13 +44,23 @@
 //     donor 386 Andrea1 386      slot 386 of this level holds the model that
 //                                is slot 386 in Andrea1
 //     donor 31 TR3 31            ... or a guest out of Tomb Raider I-III
+//     item 279                   the item at that index of the level file
+//                                is the run's own -> never one the room art
+//                                carries (hd_object.cpp, begin_decision)
 //
 // `room` lines ascend, `cut` lines ascend by their six numbers, `donor` lines
-// ascend by slot, so the same seed gives the same file byte for byte. A line
-// this reader does not know is ignored and counted, so a later version of the
-// randomizer can add a fact without this engine refusing the file. A missing
-// file means "no markers" and is not an error - it is what a vanilla
-// installation looks like.
+// ascend by slot, `item` lines ascend by index and close the file, so the
+// same seed gives the same file byte for byte. A line this reader does not
+// know is ignored and counted, so a later version of the randomizer can add
+// a fact without this engine refusing the file. A missing file means "no
+// markers" and is not an error - it is what a vanilla installation looks
+// like.
+//
+// The `item` line came without a version of its own, as `sfximport` did:
+// it changes the meaning of no line that was there before. An engine older
+// than it counts each one as a line it has no rule for and draws the item
+// by its slot's rule alone, as it always did; a sidecar older than it has
+// none, and every item is then drawn by its slot's rule alone here too.
 //
 // The two versions, and why both are still here. Version 1 had only the
 // whole-room mark: an ANDY3 run whose secret list opens two doorways turned
@@ -184,6 +194,22 @@ int HDMarkersDonorCount();
 const HDMarkerDonor* HDMarkersDonor(int at);
 // The donor line for a slot of this level, or 0.
 const HDMarkerDonor* HDMarkersDonorOfSlot(int slot);
+
+/* The items the run added to the level, by their index in the level file,
+ * ascending.
+ *
+ * The remaster bakes the objects of some slots into the room art - the
+ * slots the level's .MAP calls DUMMY - and its art has them where Core
+ * placed them and nowhere else. An item the run added stands where the art
+ * has nothing of it, and the per-slot rule would draw it not at all; so
+ * the run names every item it appended, and an item named here is never
+ * one the art carries (hd_object.cpp, begin_decision; hd_level.cpp,
+ * BuildBakedBoxes). The index is the item's place in items[]: a level's
+ * items are loaded in file order, and the randomizer only ever appends. */
+int HDMarkersItemCount();
+int HDMarkersItem(int at);
+// Whether the sidecar names that item index, false without a sidecar.
+bool HDMarkersItemAdded(int item);
 
 // Lines the file held that this reader has no rule for - for the log, so that
 // a newer randomizer talking to an older engine is visible rather than silent.

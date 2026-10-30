@@ -2001,7 +2001,15 @@ static void ObjectLevelBuild(const char* installRoot, const char* stem,
 	 * A donor slot is never baked. Its model came out of another level file,
 	 * so whatever this level's map says about the slot's vanilla content says
 	 * nothing about what stands there now - and the art of this level has
-	 * never seen it. */
+	 * never seen it.
+	 *
+	 * The mark is per slot, the art's copies are per place. An item the
+	 * randomizer adds to such a slot stands where the art has nothing of
+	 * it, so the sidecar names every item the run added and begin_decision
+	 * draws those classic. Counted with TrgProbe -boxes for the shelf a
+	 * secret list adds to JOBY3: 34 of the remaster's triangles inside its
+	 * box, the wall behind it, against 5,435 to 5,469 inside the box of
+	 * each of the level's eight vanilla SEARCH_OBJECT3 items. */
 	g_baked_slots = 0;
 	g_baked_any = false;
 
@@ -2033,6 +2041,30 @@ static void ObjectLevelBuild(const char* installRoot, const char* stem,
 
 	Log("HDLOG level=%s map=%s lines=%d baked_slots=%d", g_stem,
 		haveMap ? "read" : "none", HDMapCount(), g_baked_slots);
+
+	/* The items the run added to a baked slot, a line each: the art carries
+	 * the slot's objects where Core placed them only, so begin_decision
+	 * draws these as a slot without a model draws, classic. Here and not
+	 * below the hd_objects return, because the baked rule runs either way. */
+	for (int i = 0; i < HDMarkersItemCount(); i++)
+	{
+		const int number = HDMarkersItem(i);
+
+		if (number < 0 || number >= level_items)
+			continue;
+
+		const int slot = (int)items[number].object_number;
+
+		if (slot < 0 || slot >= NUMBER_OBJECTS || !g_slot[slot].baked)
+			continue;
+
+		Log("HDLOG level=%s added item=%d slot=%d name=%s room=%d host=%d - "
+			"the .hdm names it the run's own and the art carries the slot "
+			"where Core placed it only: drawn classic", g_stem, number, slot,
+			HDSlotName(slot) ? HDSlotName(slot) : "?",
+			(int)items[number].room_number, g_slot[slot].host);
+	}
+
 	ObjectLoadStep(&loadlog_at, "obj_map");
 
 	/* The swap plans are filled further down, once the slot list exists; the
@@ -3412,6 +3444,20 @@ static bool baked_look_drawn(int host)
 		host < NUMBER_OBJECTS && g_slot[host].hd;
 }
 
+/* Whether the randomizer put this item into the level: the sidecar names it
+ * by its index in the level file (hd_markers.h, the `item` line). Only an
+ * item of the file has such an index - one the game spawns later stands
+ * past level_items, and a cutscene's actor or a copy outside items[] has
+ * none - so for every other item this is false, as it is without a
+ * sidecar. */
+static bool item_run_added(const ITEM_INFO* item)
+{
+	const long number = item - items;
+
+	return number >= 0 && number < level_items &&
+		HDMarkersItemAdded((int)number);
+}
+
 static int begin_decision(const ITEM_INFO* item, const OBJECT_INFO* obj)
 {
 	if (!item || !obj)
@@ -3427,6 +3473,13 @@ static int begin_decision(const ITEM_INFO* item, const OBJECT_INFO* obj)
 	 * is empty, still needs its lamp post drawn the old way. A room's static
 	 * meshes ask HDStaticDrawnClassic, which counts another group's art too.
 	 *
+	 * And never an item the run added. The art carries a DUMMY slot's
+	 * objects where Core placed them and nowhere else, so an added one - a
+	 * shelf a secret list puts into a room - would vanish. It goes on to the
+	 * guard and draws as every item of a slot without a model draws: the
+	 * slot has none, so classic, with its own animation, and whatever
+	 * pickup it carries is handed over as it always is.
+	 *
 	 * HDObjectBegin returning true with no node recorded is what makes it
 	 * vanish: DrawAnimatingItem then puts no classic polygon in, HDObjectNode is
 	 * never reached because g_open stays false, and HDObjectEnd sees nothing
@@ -3437,7 +3490,8 @@ static int begin_decision(const ITEM_INFO* item, const OBJECT_INFO* obj)
 
 		if (baked_slot >= 0 && baked_slot < NUMBER_OBJECTS &&
 			g_slot[baked_slot].baked && HDRoomIsHD(item->room_number) &&
-			baked_look_drawn(g_slot[baked_slot].host))
+			baked_look_drawn(g_slot[baked_slot].host) &&
+			!item_run_added(item))
 			return BEGIN_BAKED;
 	}
 

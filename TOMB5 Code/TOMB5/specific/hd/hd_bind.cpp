@@ -342,7 +342,28 @@ namespace
 		 *     face in its helmet is hers (hd_model.cpp, the face table). */
 		{ "GLADIATOR_MIP",           "EXTRA5_SUBSUIT_BOTTOM",          "JOBY3 JOBY5" },
 		{ "SWAT_PLUS_MIP",           "EXTRA5_SUBSUIT_FULL",            "JOBY3" },
-		{ "CROW_MIP",                "EXTRA5_SUBSUIT_FULL",            "JOBY4" }
+		{ "CROW_MIP",                "EXTRA5_SUBSUIT_FULL",            "JOBY4" },
+
+		/* The props four cutscenes put into Lara's hand (game\deltapak.cpp,
+		 * do_catapult_meshswap and its three siblings): her hand node takes
+		 * one node of a holder slot - a slot of her fifteen-node tree with
+		 * no item and no line in the .MAP (ItemCheck, MapProbe), whose mesh
+		 * there is the hand holding the thing (ModelProbe -meshes). The
+		 * install has each as a hand file of its own: CROW_MIP's mesh 13,
+		 * the catapult, in ANDY1's cutscene 14; MESHSWAP2's mesh 10, the
+		 * clanger, in its cutscene 9; MESHSWAP3's mesh 10, the hammer, in
+		 * RICH1's 20; MAFIA_MIP's mesh 10, the chalk, in ANDY3's 38. The
+		 * files and the four pairs are TROne's measurement (TROne-main, copy
+		 * of 2026-10-23, commit a3c0c633, games\tr5\glue\hostglue_file5.cpp,
+		 * TroneRegisterCutPropHands); each file's hand bone lies 10 to 25
+		 * units from the holder's mesh (ModelProbe -bones). Bound to the
+		 * holder, the hand is that slot's node, and hd_laradraw.cpp draws a
+		 * borrowed node from the slot's model (hd_object.cpp, "a cutscene's
+		 * borrowed meshes"). */
+		{ "CROW_MIP",                "HAND_BARE_CATAPULT",             "ANDY1" },
+		{ "MESHSWAP2",               "HAND_BARE_IRON_CLAPPER",         "ANDY1" },
+		{ "MESHSWAP3",               "HAND_BARE_HAMMER",               "RICH1" },
+		{ "MAFIA_MIP",               "HAND_BARE_CHALK",                "ANDY3" }
 	};
 
 	/* The DUMMY slots whose look another slot's model carries (hd_bind.h,

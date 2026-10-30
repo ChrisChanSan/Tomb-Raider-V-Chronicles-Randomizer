@@ -65,9 +65,7 @@
 #include <string>
 #include <vector>
 
-/* A classic TR5 moveable has at most 32 meshes and the joint palette in the
- * shader is 32 registers wide, so 32 is the number everywhere. */
-#define HD_OBJ_NODES	32
+/* HD_OBJ_NODES, the 32 nodes of a moveable, is in hd_object.h. */
 
 /* How many HD items one frame can hold. draw_rooms holds as many rooms as a
  * level may have (256) and every one of them can hold items, so this is not
@@ -753,6 +751,35 @@ namespace
 	 * hd_bind.cpp (HDBindGuestStates) and not out of this one, and the item
 	 * picks its file by its guests' object numbers (guest_state below).
 	 *
+	 * And one kind that is a cutscene's: an actor whose node a cutscene hands
+	 * another slot's mesh (game\deltapak.cpp), where the install draws the
+	 * actor in that state as a whole model of its own. Its rows name the nodes
+	 * and the file per set of borrowed nodes, measured per node with
+	 * ModelProbe -name ... -nodes against the classic meshes (-meshes):
+	 *
+	 *   PIERRE_SWAP.TRM   do_pierre_gun_meshswap puts MESHSWAP2's mesh 11, an
+	 *                     empty hand of 8 vertices, on Pierre's node 11, whose
+	 *                     own mesh holds a gun (24): ANDREA3's cutscene 41
+	 *                     from frame 3173. PIERRE has guns on nodes 11 and
+	 *                     14 (3205 and 3214 vertices), PIERRE_SWAP an empty
+	 *                     node 11 (1913) and nothing else changed.
+	 *   PATRICK_n_TORCH   setup_preist_meshswap puts MESHSWAP3's mesh 8, the
+	 *                     torch (32 vertices, 342 long), on the priest's
+	 *                     node 8: cutscene 19 in ANDY1 (PATRICK_1) and 33 in
+	 *                     ANDY2 (PATRICK_2). Node 8 is 396 vertices bare, 556
+	 *                     with the torch.
+	 *   TWOGUN_LEFT/EMPTY richcut4 puts MAFIA2_MIP's empty fists (8 vertices)
+	 *                     on the guard's nodes 5 and 8, whose own meshes hold
+	 *                     his guns (44): RICH1's cutscene 11 takes node 8 back
+	 *                     at frame 534 and node 5 at 557. TWOGUN has 3511 and
+	 *                     3510 vertices there, _LEFT 302 on node 5 alone and
+	 *                     _EMPTY 302 and 301 on both; node 8 alone has no file.
+	 *
+	 * This is TROne's rule for those actors (TROne-main, copy of 2026-10-23,
+	 * commit a3c0c633, host\render\game_renderer.cpp, hd_load's table of TR5
+	 * cut actor states and state_note): a node counts as swapped when any
+	 * mesh but its own arrives there. PIERRE_SWAP is not in TROne's table.
+	 *
 	 * The table is keyed on the model name, not on the slot: the randomizer's
 	 * MESHSWAP_CROSS_HITMAN and CYBORG both bind HITMAN.TRM, and a donor slot
 	 * carries its donor's model into a slot with any name at all. */
@@ -761,7 +788,8 @@ namespace
 		SWAP_NONE = 0,
 		SWAP_WHOLE,		// one alternative model, chosen by a bit
 		SWAP_HITMAN,		// the cyborg's eleven stages
-		SWAP_GUESTS		// the model of its DUMMY guests' state
+		SWAP_GUESTS,		// the model of its DUMMY guests' state
+		SWAP_BORROWED		// a model per set of borrowed nodes
 	};
 
 	/* The guests one host's model can follow (hd_bind.h, HDBindGuestStates):
@@ -772,14 +800,22 @@ namespace
 	{
 		const char* model;
 		SwapKind kind;
-		unsigned int bits;	// SWAP_WHOLE: the bit that picks the model
+		/* SWAP_WHOLE: the bit that picks the model. SWAP_BORROWED: the set of
+		 * borrowed nodes that picks it, out of the nodes every row of that
+		 * model names - one row per set. */
+		unsigned int bits;
 		const char* suffix;
 	};
 
 	const SwapRule kSwapRules[] =
 	{
 		{ "MAFIA2", SWAP_WHOLE, 0x80, "_SWAP" },
-		{ "HITMAN", SWAP_HITMAN, 0, 0 }
+		{ "HITMAN", SWAP_HITMAN, 0, 0 },
+		{ "PIERRE", SWAP_BORROWED, 1u << 11, "_SWAP" },
+		{ "PATRICK_1", SWAP_BORROWED, 1u << 8, "_TORCH" },
+		{ "PATRICK_2", SWAP_BORROWED, 1u << 8, "_TORCH" },
+		{ "TWOGUN", SWAP_BORROWED, 1u << 5, "_LEFT" },
+		{ "TWOGUN", SWAP_BORROWED, (1u << 5) | (1u << 8), "_EMPTY" }
 	};
 
 	/* One slot's swap plan: the pseudo slots its alternative models were
@@ -799,14 +835,159 @@ namespace
 		int guestDone[HD_GUESTS_MAX];
 		const char* guestModel[HD_GUESTS_MAX];
 		int stateSaid;
+		/* SWAP_BORROWED: model[k] is the look while exactly the nodes pick[k]
+		 * of the nodes `watch` carry a borrowed mesh. */
+		int picks;
+		unsigned int pick[HD_GUESTS_MAX];
+		unsigned int watch;
 	};
 
-	/* Eight leaves room to spare: the whole game needs MAFIA2, CYBORG and
-	 * JOBY3's suit top, and the randomizer's cross slots for the first
-	 * two. */
-	SwapPlanSlot g_swap_plan[8];
+	/* Twelve leaves room to spare: the whole game needs MAFIA2, CYBORG and
+	 * JOBY3's suit top, the randomizer's cross slots for the first two, and
+	 * the cutscene actors' PIERRE, PATRICK and TWOGUN. */
+	SwapPlanSlot g_swap_plan[12];
 	int g_swap_plans = 0;
 	int g_swap_models = 0;
+
+	/* ---------------------------------------- a cutscene's borrowed meshes --
+	 *
+	 * The classic engine gives a cutscene's actor, and Lara, a thing to hold
+	 * by writing another slot's mesh into a node (game\deltapak.cpp):
+	 *
+	 *   cranecut_init      ANIMATING4's mesh 13 becomes BLUE_GUARD's, the hand
+	 *                      with the pistol the crane guard shoots with in
+	 *                      JOBY2's cutscene 27 (craneguard_pistols_info)
+	 *   do_pierre_gun_..., setup_preist_..., richcut4_init  the three actors
+	 *                      of SWAP_BORROWED above
+	 *   do_catapult_meshswap  Lara's left hand and CROW_MIP's mesh 13 change
+	 *                      places (ANDY1's cutscene 14); the clanger
+	 *                      (MESHSWAP2's mesh 10, ANDY1's 9), the hammer
+	 *                      (MESHSWAP3's 10, RICH1's 20) and the chalk
+	 *                      (MAFIA_MIP's 10, ANDY3's 38) go into her right
+	 *   joby6_control      her hips take MESHSWAP3's mesh 0 at frame 542 of
+	 *                      JOBY3's cutscene 5 - the suit (hd_model.cpp)
+	 *
+	 * and the speech heads, a face onto a face. An HD model is drawn out of
+	 * its own file whatever the mesh table says, so every one of them stayed
+	 * the model's own bare hand. For a node whose mesh is not the one its
+	 * slot had when the level loaded (HDObjectMeshTableTake):
+	 *
+	 *   1. a file of the actor's model for that set of borrowed nodes
+	 *      (SWAP_BORROWED): that model is drawn;
+	 *   2. else, when the slot the mesh belongs to draws HD in this level and
+	 *      its model has geometry on the mesh's node: that node of that model
+	 *      at the actor's node matrix, with the actor's light, and the
+	 *      actor's own node left out;
+	 *   3. else the actor's own node, as before. The classic mesh is not
+	 *      drawn into the HD body: it is the whole node, the hand with the
+	 *      thing in it, a low-polygon patch on an HD arm - the patchwork the
+	 *      swap rule above refuses. The diving suit's thrusters are drawn
+	 *      classic (specific\drawlara.cpp) because they are an object of
+	 *      their own, not a node of her body.
+	 *
+	 * A mesh of one of Lara's slots (the speech heads, her scream) and a mesh
+	 * on the node a separate HD face rides on are faces, and the face speaks
+	 * its own lips; neither is borrowed.
+	 *
+	 * Rule 2 is TROne's for a mesh its table gives to another slot
+	 * (TROne-main, copy of 2026-10-23, commit a3c0c633,
+	 * host\render\game_renderer.cpp, draw_mesh): that slot's node, by that
+	 * slot's model. TROne takes such a mesh on the actor's own node number as
+	 * the actor's own node, for the speech heads - and with them every hand
+	 * above, which all keep their node number; this engine leaves the faces
+	 * out by what they are. The slot a mesh belongs to is the load-time
+	 * table's answer and not the live table's: the catapult changes places
+	 * with her hand, so after it CROW_MIP's own entry holds her hand. Lara's
+	 * props come out of holder slots without a model; hd_bind.cpp's hand
+	 * table binds the holders to the install's hand files, where rule 2
+	 * finds them. */
+	enum BorrowDrawn
+	{
+		BORROW_CLASSIC = 0,	// the item is drawn classic: the classic mesh
+		BORROW_STATE,		// rule 1
+		BORROW_NODE,		// rule 2
+		BORROW_OWN		// rule 3
+	};
+
+	struct Borrow
+	{
+		int node;		// the actor's node
+		int slot;		// the slot the mesh belongs to, -1 for none
+		int index;		// its node in that slot
+		int drawn;		// BorrowDrawn
+	};
+
+	/* One cut actor's answer, from HDObjectCutActor through HDObjectBegin to
+	 * HDObjectEnd. */
+	struct CutActor
+	{
+		const ITEM_INFO* item;	// whom it is for, 0 once taken
+		int actor;
+		int slot;
+		unsigned int borrowed;	// the nodes with a borrowed mesh
+		int state;		// rule 1's model, or -1
+		int count;
+		Borrow node[HD_OBJ_NODES];
+	};
+
+	/* The actors of a cutscene, as deltapak.cpp counts them (cutseq_meshbits,
+	 * duff_item). */
+	#define HD_CUT_ACTORS	10
+
+	std::vector<short*> g_mesh_load;	// meshes[] as the level loaded it
+	CutActor g_cut = {};			// armed by HDObjectCutActor
+	CutActor g_open_cut = {};		// the item HDObjectBegin opened
+
+	/* The slot a node's mesh belongs to, kept per actor while the mesh stays
+	 * there: a mesh is looked up once, when it arrives. */
+	struct OwnerMemo
+	{
+		const short* mesh;
+		int slot;
+		int index;
+	};
+
+	OwnerMemo g_cut_memo[HD_CUT_ACTORS][HD_OBJ_NODES];
+
+	/* What each actor's line said last (HDObjectCutActor), and of which
+	 * cutscene. */
+	unsigned int g_cut_said[HD_CUT_ACTORS];
+	long g_cut_said_cut = -1;
+	long g_cut_said_frame = 0;
+	char g_cut_text[320];
+
+	/* The slot and node whose own mesh `mesh` was when the level loaded:
+	 * Lara's slots first, which share their meshes among themselves, then
+	 * every loaded slot in slot order - the order SWAPLOG names them in. */
+	bool mesh_owner(const short* mesh, int* slot, int* index)
+	{
+		if (!mesh || g_mesh_load.empty())
+			return false;
+
+		for (int pass = 0; pass < 2; pass++)
+			for (int s = 0; s < NUMBER_OBJECTS; s++)
+			{
+				const OBJECT_INFO& object = objects[s];
+
+				if (!object.loaded || object.nmeshes <= 0 ||
+					HDSlotIsLara(s) != (pass == 0))
+					continue;
+
+				for (int m = 0; m < object.nmeshes; m++)
+				{
+					const size_t at = (size_t)object.mesh_index + 2 * (size_t)m;
+
+					if (at < g_mesh_load.size() && g_mesh_load[at] == mesh)
+					{
+						*slot = s;
+						*index = m;
+						return true;
+					}
+				}
+			}
+
+		return false;
+	}
 
 	const SwapPlanSlot* swap_plan_of(int slot)
 	{
@@ -891,6 +1072,11 @@ namespace
 
 			return state >= 0 ? plan->model[state] : -1;
 		}
+
+		/* A cutscene's actor, whose borrowed nodes HDObjectCutActor read
+		 * this frame; any other item of the slot draws the plain model. */
+		if (plan->kind == SWAP_BORROWED)
+			return g_open_cut.item == item ? g_open_cut.state : -1;
 
 		return -1;
 	}
@@ -2306,7 +2492,10 @@ static void ObjectLevelBuild(const char* installRoot, const char* stem,
 			if (items[k].object_number == slot)
 				anyItem = true;
 
-		if (!anyItem)
+		/* A cutscene's actor is no item - Pierre stands in no room of
+		 * ANDREA3 - so its states are loaded wherever the slot binds the
+		 * model: 0.2 to 0.6 MiB of vertices a file. */
+		if (!anyItem && !(rule && rule->kind == SWAP_BORROWED))
 			continue;
 
 		SwapPlanSlot& swap = g_swap_plan[g_swap_plans];
@@ -2316,6 +2505,8 @@ static void ObjectLevelBuild(const char* installRoot, const char* stem,
 		swap.bits = rule ? rule->bits : 0;
 		swap.guests = 0;
 		swap.stateSaid = -2;
+		swap.picks = 0;
+		swap.watch = 0;
 
 		for (int n = 0; n < HD_OBJ_NODES; n++)
 			swap.model[n] = -1;
@@ -2351,6 +2542,33 @@ static void ObjectLevelBuild(const char* installRoot, const char* stem,
 			swap.model[0] = alt.slot;
 			wanted.push_back(alt);
 			g_swap_models++;
+		}
+		else if (rule->kind == SWAP_BORROWED)
+		{
+			/* Every row of the model, in the table's order, each on a node
+			 * pseudo slot as the guests' models are - the host's own
+			 * skeleton and bind pose. */
+			for (size_t r = 0; r < sizeof(kSwapRules) / sizeof(kSwapRules[0]); r++)
+			{
+				const SwapRule& row = kSwapRules[r];
+
+				if (row.kind != SWAP_BORROWED || _stricmp(row.model, base) != 0 ||
+					swap.picks >= HD_GUESTS_MAX)
+					continue;
+
+				swapNames.push_back(std::string(base) + row.suffix);
+
+				HDModelSlot alt = one;
+
+				alt.slot = HD_SWAP_NODE_BASE + slot * HD_OBJ_NODES + swap.picks;
+				alt.name = swapNames.back().c_str();
+				swap.model[swap.picks] = alt.slot;
+				swap.pick[swap.picks] = row.bits;
+				swap.watch |= row.bits;
+				swap.picks++;
+				wanted.push_back(alt);
+				g_swap_models++;
+			}
 		}
 		else if (rule->kind == SWAP_HITMAN)
 		{
@@ -2795,7 +3013,8 @@ static void ObjectLevelBuild(const char* installRoot, const char* stem,
 			g_stem, swap.slot,
 			HDSlotName(swap.slot) ? HDSlotName(swap.slot) : "?",
 			swap.kind == SWAP_WHOLE ? "whole"
-				: swap.kind == SWAP_GUESTS ? "guest_states" : "hitman_stages",
+				: swap.kind == SWAP_GUESTS ? "guest_states"
+				: swap.kind == SWAP_BORROWED ? "borrowed_states" : "hitman_stages",
 			have, lost);
 	}
 
@@ -3513,6 +3732,322 @@ static int begin_decision(const ITEM_INFO* item, const OBJECT_INFO* obj)
 	return BEGIN_HD;
 }
 
+/* ---------------------------------------- a cutscene's borrowed meshes -- */
+
+/* Whether rule 2 can draw node `index` of `slot`'s model: the slot draws HD
+ * in this level by its own verdict, the skeleton test included, the node is
+ * inside its tree and the model has geometry there. */
+static bool borrowable(int slot, int index)
+{
+	return g_active && tomb5.hd_objects && HDDrawn() && slot >= 0 &&
+		slot < NUMBER_OBJECTS && g_slot[slot].hd && HDModelHas(slot) &&
+		index >= 0 && index < g_slot[slot].nodes && index < HD_OBJ_NODES &&
+		HDModelNodeCovered(slot, index);
+}
+
+/* Rule 2's matrices: `slot`'s model hung off the actor's node `at` by its
+ * node `node`, rigidly in its bind pose (hd_model.h, HDModelBorrowJoints) -
+ * with the bind pose its model was built with, the slot's own. */
+static void borrow_matrices(int slot, int node, const float* at, float* out,
+	int nodes)
+{
+	float bind[HD_OBJ_NODES * 3];
+
+	if (nodes > HD_OBJ_NODES)
+		nodes = HD_OBJ_NODES;
+
+	bind_pose_of(slot, bind, nodes);
+	HDModelBorrowJoints(bind, node, at, out, nodes);
+}
+
+/* Rule 2's draws: an entry per borrowed node, right after the actor's own,
+ * with everything of the actor's but the model, the node mask, the matrices
+ * and a face - its light, its room, its mirror, its clip, its shadow. */
+static void push_borrowed(int actorEntry)
+{
+	for (int i = 0; i < g_open_cut.count; i++)
+	{
+		const Borrow& b = g_open_cut.node[i];
+
+		if (b.drawn != BORROW_NODE)
+			continue;
+
+		if (g_count >= HD_OBJ_ITEMS)
+		{
+			g_dropped++;
+			return;
+		}
+
+		const FrameItem& actor = g_frame[actorEntry];
+		FrameItem& entry = g_frame[g_count];
+		const int nodes = g_slot[b.slot].nodes < HD_OBJ_NODES
+			? g_slot[b.slot].nodes : HD_OBJ_NODES;
+
+		entry = actor;
+		entry.slot = b.slot;
+		entry.drawSlot = b.slot;
+		entry.head = false;
+		entry.nodes = nodes;
+		entry.mask = 1u << b.index;
+		entry.cull = HD_MODEL_CULL_NONE;
+		entry.lipsTrack = -1;
+		entry.lipsFrame = -1;
+		entry.castMask = actor.cast != HD_OBJ_CAST_NONE ? entry.mask : 0;
+		borrow_matrices(b.slot, b.index, actor.matrix + b.node * 16,
+			entry.matrix, nodes);
+
+		for (int n = 0; n < nodes; n++)
+			memcpy(entry.light + n * 3, actor.light + b.node * 3,
+				sizeof(float) * 3);
+
+		g_count++;
+	}
+}
+
+void HDObjectMeshTableTake()
+{
+	g_mesh_load.clear();
+	memset(&g_cut, 0, sizeof(g_cut));
+	memset(&g_open_cut, 0, sizeof(g_open_cut));
+	memset(g_cut_memo, 0, sizeof(g_cut_memo));
+	memset(g_cut_said, 0, sizeof(g_cut_said));
+	g_cut_said_cut = -1;
+	g_cut_said_frame = 0;
+
+	if (!meshes)
+		return;
+
+	size_t end = 0;
+
+	for (int s = 0; s < NUMBER_OBJECTS; s++)
+	{
+		const OBJECT_INFO& object = objects[s];
+
+		if (!object.loaded || object.nmeshes <= 0 || object.mesh_index < 0)
+			continue;
+
+		const size_t to = (size_t)object.mesh_index + 2 * (size_t)object.nmeshes;
+
+		if (to > end)
+			end = to;
+	}
+
+	g_mesh_load.assign(meshes, meshes + end);
+}
+
+bool HDObjectMeshOwner(const short* mesh, int* slot, int* index)
+{
+	int s = -1, m = -1;
+
+	if (!mesh_owner(mesh, &s, &m))
+		return false;
+
+	if (slot)
+		*slot = s;
+
+	if (index)
+		*index = m;
+
+	return true;
+}
+
+/* The answer's text for the logs: "-", or per borrowed node
+ * node:SLOT(slot)/index>drawn, where drawn is the model that drew it (rule 1
+ * or 2), "own" (rule 3) or "classic" (the item drawn classic). */
+static const char* cut_text(const CutActor& cut)
+{
+	int at = 0;
+
+	g_cut_text[0] = 0;
+
+	for (int i = 0; i < cut.count && at >= 0 && at < (int)sizeof(g_cut_text); i++)
+	{
+		const Borrow& b = cut.node[i];
+		const char* drawn = "classic";
+
+		if (b.drawn == BORROW_STATE)
+			drawn = HDModelName(cut.state) ? HDModelName(cut.state) : "?";
+		else if (b.drawn == BORROW_NODE)
+			drawn = HDModelName(b.slot) ? HDModelName(b.slot) : "?";
+		else if (b.drawn == BORROW_OWN)
+			drawn = "own";
+
+		at += std::snprintf(g_cut_text + at, sizeof(g_cut_text) - at,
+			"%s%d:%s(%d)/%d>%s", i ? "," : "", b.node,
+			b.slot >= 0 && HDSlotName(b.slot) ? HDSlotName(b.slot) : "?",
+			b.slot, b.index, drawn);
+	}
+
+	return cut.count ? g_cut_text : "-";
+}
+
+void HDObjectCutActor(int actor, ITEM_INFO* item, bool fading, bool lineFollows)
+{
+	CutActor& cut = g_cut;
+
+	cut.item = 0;
+	cut.count = 0;
+	cut.borrowed = 0;
+	cut.state = -1;
+
+	if (!item || g_mesh_load.empty() || actor < 0 || actor >= HD_CUT_ACTORS)
+		return;
+
+	const int slot = (int)item->object_number;
+
+	if (slot < 0 || slot >= NUMBER_OBJECTS || !objects[slot].loaded ||
+		objects[slot].mesh_index < 0)
+		return;
+
+	const OBJECT_INFO& object = objects[slot];
+	const int nodes = object.nmeshes < HD_OBJ_NODES ? object.nmeshes : HD_OBJ_NODES;
+	const unsigned int swaps = (unsigned int)item->meshswap_meshbits;
+	/* The node a separate HD face rides on: a borrowed mesh there is a
+	 * speech head, and the face speaks for itself (HDObjectLips). */
+	const int face = HDModelHasHead(slot) ? HDModelHeadNode(slot) : -1;
+
+	cut.actor = actor;
+	cut.slot = slot;
+
+	/* Per node the one compare DrawCutSeqActors' own pick asks for: the
+	 * mesh it draws there - the pair's second while the swap bit is set -
+	 * against the same entry as the level loaded it. A node the mesh bits
+	 * hide draws no mesh at all. */
+	for (int n = 0; n < nodes; n++)
+	{
+		const size_t at = (size_t)object.mesh_index + 2 * (size_t)n +
+			((swaps >> n) & 1);
+
+		if (!((unsigned int)item->mesh_bits >> n & 1))
+			continue;
+
+		if (at >= g_mesh_load.size())
+			break;
+
+		const short* drawn = meshes[at];
+
+		if (drawn == g_mesh_load[at] || n == face)
+			continue;
+
+		OwnerMemo& memo = g_cut_memo[actor][n];
+
+		if (memo.mesh != drawn)
+		{
+			memo.mesh = drawn;
+			memo.slot = -1;
+			memo.index = -1;
+			mesh_owner(drawn, &memo.slot, &memo.index);
+		}
+
+		if (memo.slot >= 0 && HDSlotIsLara(memo.slot))
+			continue;
+
+		Borrow& b = cut.node[cut.count++];
+
+		b.node = n;
+		b.slot = memo.slot;
+		b.index = memo.index;
+		b.drawn = BORROW_CLASSIC;
+		cut.borrowed |= 1u << n;
+	}
+
+	cut.item = item;
+
+	/* What the HD path draws for them - the decision HDObjectBegin is about
+	 * to take for this item, asked the same way. */
+	if (cut.count && !fading && begin_decision(item, &object) == BEGIN_HD)
+	{
+		const SwapPlanSlot* plan = swap_plan_of(slot);
+		unsigned int stated = 0;
+
+		if (plan && plan->kind == SWAP_BORROWED)
+			for (int k = 0; k < plan->picks; k++)
+				if ((cut.borrowed & plan->watch) == plan->pick[k] &&
+					plan->model[k] >= 0)
+				{
+					cut.state = plan->model[k];
+					stated = plan->watch;
+					break;
+				}
+
+		for (int i = 0; i < cut.count; i++)
+		{
+			Borrow& b = cut.node[i];
+
+			b.drawn = (stated >> b.node) & 1 ? BORROW_STATE
+				: borrowable(b.slot, b.index) ? BORROW_NODE : BORROW_OWN;
+		}
+	}
+
+	/* The log: the actor's HDLOG cutseq line carries the answer when it is
+	 * written this frame (HDObjectCutActorSwaps), and every change after
+	 * that gets a line of its own - an actor first shown after the cut's
+	 * first frame has no cutseq line and gets its first answer here. A new
+	 * cut, or the same one again, starts with nothing said. */
+	if (!gLogEnabled)
+		return;
+
+	if (cutseq_num != g_cut_said_cut || GLOBAL_cutseq_frame < g_cut_said_frame)
+	{
+		memset(g_cut_said, 0, sizeof(g_cut_said));
+		g_cut_said_cut = cutseq_num;
+	}
+
+	g_cut_said_frame = GLOBAL_cutseq_frame;
+
+	unsigned int sig = 0;
+
+	for (int i = 0; i < cut.count; i++)
+	{
+		const Borrow& b = cut.node[i];
+
+		sig = sig * 16777619u ^ (unsigned int)(b.node | (b.slot & 0xFFFF) << 5 |
+			(b.index & 0x1F) << 21 | b.drawn << 26);
+	}
+
+	if (cut.count)
+		sig = (sig ^ (unsigned int)cut.state) | 1u;
+
+	if (lineFollows)
+		g_cut_said[actor] = sig;
+	else if (sig != g_cut_said[actor])
+	{
+		g_cut_said[actor] = sig;
+		Log("HDLOG level=%s cutswap cut=%ld frame=%ld actor=%d slot=%d name=%s "
+			"swap=%s", g_stem, cutseq_num,
+			GLOBAL_cutseq_frame > 0 ? GLOBAL_cutseq_frame - 1 : -1L, actor, slot,
+			HDSlotName(slot) ? HDSlotName(slot) : "?", cut_text(cut));
+	}
+}
+
+const char* HDObjectCutActorSwaps()
+{
+	return cut_text(g_cut);
+}
+
+bool HDObjectBorrowable(int slot, int node)
+{
+	return borrowable(slot, node);
+}
+
+int HDObjectSlotNodes(int slot)
+{
+	if (slot < 0 || slot >= NUMBER_OBJECTS)
+		return 0;
+
+	return g_slot[slot].nodes < HD_OBJ_NODES ? g_slot[slot].nodes : HD_OBJ_NODES;
+}
+
+void HDObjectBorrowMatrices(int slot, int node, const float* at, float* out,
+	int nodes)
+{
+	if (slot < 0 || slot >= NUMBER_OBJECTS || !at || !out || node < 0 ||
+		node >= HD_OBJ_NODES || nodes <= node)
+		return;
+
+	borrow_matrices(slot, node, at, out, nodes);
+}
+
 bool HDObjectBegin(ITEM_INFO* item, OBJECT_INFO* obj)
 {
 	// PROF_HD_OBJ is what this call, HDObjectNode and HDObjectEnd cost
@@ -3526,6 +4061,17 @@ bool HDObjectBegin(ITEM_INFO* item, OBJECT_INFO* obj)
 	g_open_casts = item && item == g_gave_way;
 	g_gave_way = 0;
 	g_open_unseen = false;
+
+	/* A cutscene's actor brings its borrowed nodes (HDObjectCutActor, armed
+	 * for this very item a moment ago); every other item none. Taken here
+	 * whatever is decided below, so the answer is never left for an item it
+	 * was not read for. */
+	const bool cutArmed = item && g_cut.item == item;
+
+	g_cut.item = 0;
+	g_open_cut.item = 0;
+	g_open_cut.count = 0;
+	g_open_cut.state = -1;
 
 	switch (begin_decision(item, obj))
 	{
@@ -3575,6 +4121,19 @@ bool HDObjectBegin(ITEM_INFO* item, OBJECT_INFO* obj)
 	g_seen = 0;
 	g_open_lips_track = -1;	// only a cutscene's actor speaks - HDObjectLips
 	g_open_lips_frame = -1;
+
+	/* The borrowed nodes (see "a cutscene's borrowed meshes"): rule 1's model
+	 * through swap_model_for below, and rule 2's nodes left out of the actor
+	 * - their entries follow its own in HDObjectEnd. */
+	if (cutArmed)
+	{
+		g_open_cut = g_cut;
+		g_open_cut.item = item;
+
+		for (int i = 0; i < g_open_cut.count; i++)
+			if (g_open_cut.node[i].drawn == BORROW_NODE)
+				g_open_mask &= ~(1u << g_open_cut.node[i].node);
+	}
 
 	/* The mesh swap.
 	 *
@@ -3910,6 +4469,9 @@ void HDObjectEnd()
 		g_reflected++;
 
 	g_count++;
+
+	if (g_open_cut.count)
+		push_borrowed(g_count - 1);
 }
 
 void HDObjectReflection(bool on, const float* planes, int mirror)

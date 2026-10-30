@@ -14,7 +14,13 @@
  * item's matrix with it and this engine may not, because its shader takes the
  * vertex normal through that matrix (see HDInvNode). The offset goes into the
  * projection instead, and the arithmetic is derived from TR5's own projection
- * line. See THIRD-PARTY.md.
+ * line. See THIRD-PARTY.md. The rules for a cutscene's borrowed meshes - a
+ * state of an actor as the install's whole model for it, a mesh of another
+ * slot drawn by that slot's model, a prop in Lara's hand as the install's
+ * hand file - are TROne's too (TROne-main, copy of 2026-10-23, commit
+ * a3c0c633: host\render\game_renderer.cpp, hd_load, state_note, draw_mesh
+ * and fill_unseen_joints_rigid; games\tr5\glue\hostglue_file5.cpp,
+ * TroneRegisterCutPropHands), the rules alone.
  *
  * Part of the TOMB5 native Windows 11 port (Direct3D 9 / XAudio2) and of the
  * TR5 Randomizer project. The individual changes are recorded in the git
@@ -31,6 +37,10 @@
 
 struct ITEM_INFO;
 struct OBJECT_INFO;
+
+/* A classic TR5 moveable has at most 32 meshes and the joint palette in the
+ * shader is 32 registers wide, so 32 is the number everywhere. */
+#define HD_OBJ_NODES	32
 
 // The seam between DrawAnimatingItem and the HD object path.
 //
@@ -107,6 +117,34 @@ void HDObjectNode(int node, bool interpolated);
 int HDObjectLips(long track, long frame);
 
 void HDObjectEnd();
+
+/* A cutscene's borrowed meshes: a node whose mesh game\deltapak.cpp took out
+ * of another slot - the rule and the list are at "a cutscene's borrowed
+ * meshes" in hd_object.cpp.
+ *
+ *   HDObjectMeshTableTake  at level load, once the slots are set up and
+ *                          before a cutscene can run (hd_level.cpp,
+ *                          HDLevelLoad, with the HD path on): the mesh table
+ *                          as the level loaded it, the meaning of a node's
+ *                          own mesh.
+ *   HDObjectMeshOwner      the slot and node whose own mesh `mesh` was then:
+ *                          Lara's slots first, then slot order. False for a
+ *                          mesh no slot had, and without the table.
+ *   HDObjectCutActor       in game\deltapak.cpp, DrawCutSeqActors, before
+ *                          HDObjectBegin for actor `actor`: which of its nodes
+ *                          draw a borrowed mesh and what the HD path draws for
+ *                          each, for HDObjectBegin to take. `fading` is that
+ *                          function's own (the actor stays classic);
+ *                          `lineFollows`, that its HDLOG cutseq line is written
+ *                          now and carries the answer - every later change of
+ *                          it gets an HDLOG cutswap line.
+ *   HDObjectCutActorSwaps  that answer for the end of the line: "-", or per
+ *                          node node:SLOT(slot)/index>drawn - the model that
+ *                          drew it, own or classic. */
+void HDObjectMeshTableTake();
+bool HDObjectMeshOwner(const short* mesh, int* slot, int* index);
+void HDObjectCutActor(int actor, ITEM_INFO* item, bool fading, bool lineFollows);
+const char* HDObjectCutActorSwaps();
 
 /* The items that follow are the reflection in a mirror, until it is called
  * with false (game\mirror.cpp, Draw_Mirror_Items). The mirror is in the view
@@ -324,6 +362,16 @@ bool HDObjectPush(int slot, const float* matrix, int nodes, const float* light,
 	float specStrength = 0.0f, float specPower = 1.0f,
 	int lipsTrack = -1, int lipsFrame = -1, const HDModelSoft* soft = 0,
 	int cast = HD_OBJ_CAST_NONE, unsigned int castMask = ~0u);
+
+/* Her borrowed meshes, the actors' rule 2 (hd_object.cpp): whether node
+ * `node` of `slot`'s model draws in this level - the slot's own verdict, the
+ * node inside its tree, geometry on it; the slot's node count; and the
+ * `nodes` matrices that hang that model off one node, `at` (row-major, view
+ * space), rigidly in its bind pose. */
+bool HDObjectBorrowable(int slot, int node);
+int HDObjectSlotNodes(int slot);
+void HDObjectBorrowMatrices(int slot, int node, const float* at, float* out,
+	int nodes);
 
 /* The projected shadow's cast pass over this frame's list: every entry
  * marked for the map, drawn with HDModelCastDraw - its body and, for a slot

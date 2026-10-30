@@ -632,9 +632,17 @@ namespace
 
 	/* The slot and the mesh number of a mesh pointer: Lara's own slots
 	 * first, which share their meshes among themselves, then every other
-	 * loaded slot in slot order. False for a pointer no slot holds. */
+	 * loaded slot in slot order. False for a pointer no slot holds.
+	 *
+	 * The table as the level loaded it where the HD path keeps one
+	 * (hd_object.h, HDObjectMeshOwner): the catapult changes places with her
+	 * hand, and the live table then gives CROW_MIP her hand and the catapult
+	 * to nobody. Without it - hd_build 0 - the live table, as before. */
 	bool owner_of_mesh(short* mesh, int* slot, int* index)
 	{
+		if (HDObjectMeshOwner(mesh, slot, index))
+			return true;
+
 		for (int pass = 0; pass < 2; pass++)
 			for (int s = 0; s < NUMBER_OBJECTS; s++)
 			{
@@ -656,7 +664,13 @@ namespace
 		return false;
 	}
 
-	void swap_log(unsigned int shown, const char* drawn)
+	/* `composite` says the HD composite draws her, and `borrowed` which of her
+	 * nodes it draws out of the slot the mesh belongs to (borrow_scan). The
+	 * line ends in what was drawn for the node: that slot's model, own - her
+	 * outfit's node, the slot having no model to draw it with - or classic,
+	 * the mesh itself, for a classic draw. */
+	void swap_log(unsigned int shown, const char* drawn, bool composite,
+		unsigned int borrowed)
 	{
 		if (!gLogEnabled || !meshes)
 			return;
@@ -691,15 +705,19 @@ namespace
 
 			const char* body = HDLaraPartModel(g_level.outfit,
 				HD_LARA_PART_BODY);
+			const char* shows = !composite ? "classic"
+				: foreign && (borrowed >> node & 1) && HDModelName(slot)
+					? HDModelName(slot) : "own";
 
 			Log("SWAPLOG level=%s cut=%d frame=%d node=%d from=%s(%d) "
-				"mesh=%d foreign=%d hd=%s:%d shown=%d hidden=%s drawn=%s",
+				"mesh=%d foreign=%d hd=%s:%d shown=%d hidden=%s drawn=%s "
+				"shows=%s",
 				stem, cut ? (int)cutseq_num : 0,
 				cut && GLOBAL_cutseq_frame > 0 ? (int)GLOBAL_cutseq_frame - 1
 					: -1, node,
 				known && HDSlotName(slot) ? HDSlotName(slot) : "?", slot,
 				index, (int)foreign, body ? body : "-", node,
-				(shown >> node) & 1 ? 1 : 0, hiddenList, drawn);
+				(shown >> node) & 1 ? 1 : 0, hiddenList, drawn, shows);
 			g_hide_said = hidden;
 		}
 
@@ -716,6 +734,64 @@ namespace
 			HDLaraPartModel(g_level.outfit, HD_LARA_PART_BODY)
 				? HDLaraPartModel(g_level.outfit, HD_LARA_PART_BODY) : "-",
 			drawn);
+	}
+
+	/* Her borrowed meshes - the actors' rule 2 (hd_object.cpp, "a cutscene's
+	 * borrowed meshes"): a node whose mesh belongs to a slot that is not hers
+	 * draws that slot's node, by that slot's model, where the model has one;
+	 * the hammer, the clanger, the catapult and the chalk come out of holder
+	 * slots the hand table binds to the install's hand files. The rest stays
+	 * her own: JOBY3's suit hips have their HD twin in the legs actor drawn
+	 * on her, and no model of their own.
+	 *
+	 * Asked while a cutscene plays and not otherwise: outside one a mesh of
+	 * another slot on her is a level's own dressing - the child torso of the
+	 * Ireland levels (game\laramisc.cpp) - which the wardrobe draws. Per node
+	 * the mesh last seen and the slot it belongs to, looked up once when a
+	 * mesh arrives; per frame fifteen pointer compares. */
+	struct Borrowed
+	{
+		short* mesh;
+		int slot;	// the slot the mesh belongs to, -1 for her own
+		int index;	// its node in that slot
+	};
+
+	Borrowed g_borrow[HD_LARA_NODES];
+
+	/* The nodes the composite draws out of another slot this frame. */
+	unsigned int borrow_scan()
+	{
+		unsigned int borrowed = 0;
+
+		if (!GLOBAL_playing_cutseq)
+			return 0;
+
+		for (int node = 0; node < HD_LARA_NODES; node++)
+		{
+			short* have = lara.mesh_ptrs[node];
+			Borrowed& b = g_borrow[node];
+
+			if (have != b.mesh)
+			{
+				int slot = -1, index = -1;
+
+				b.mesh = have;
+				b.slot = -1;
+				b.index = -1;
+
+				if (have && HDObjectMeshOwner(have, &slot, &index) &&
+					!HDSlotIsLara(slot))
+				{
+					b.slot = slot;
+					b.index = index;
+				}
+			}
+
+			if (b.mesh && b.slot >= 0 && HDObjectBorrowable(b.slot, b.index))
+				borrowed |= 1u << node;
+		}
+
+		return borrowed;
 	}
 
 	/* The braid's six matrices.
@@ -1560,6 +1636,7 @@ void HDLaraDrawEnd()
 	g_lights_logged = false;
 	g_swap_seeded = false;
 	g_hide_said = 0;
+	memset(g_borrow, 0, sizeof(g_borrow));
 	face_reset();
 
 	// A new level starts the chest's motion at rest, with fresh counters.
@@ -2097,9 +2174,16 @@ void HDLaraDrawFrame(long mirror)
 	 * own tests (specific\drawlara.cpp). */
 	unsigned int mask = HDLaraNodesShown((unsigned long)lara_item->mesh_bits);
 
+	/* The nodes a cutscene gave a mesh of another slot whose model draws it
+	 * (borrow_scan) - of those her mesh bits show. They are drawn after the
+	 * pieces, and every part of hers leaves them out. */
+	const unsigned int borrowed = borrow_scan() & mask;
+
 	// A cutscene's swap of her nodes, behind -log - see swap_log.
 	if (!mirror)
-		swap_log(mask, "hd");
+		swap_log(mask, "hd", true, borrowed);
+
+	mask &= ~borrowed;
 
 	/* First person. The classic path leaves the head mesh out and does not
 	 * call DrawHair, because both sit exactly where the camera does and blow
@@ -2464,6 +2548,37 @@ void HDLaraDrawFrame(long mirror)
 			drawn++;
 	}
 
+	/* The borrowed nodes: the slot's model hung off her node rigidly, in its
+	 * bind pose (HDObjectBorrowMatrices), with that node's light - a hand in
+	 * the hands' sheen, anything else in the body's. */
+	for (int node = 0; node < HD_LARA_NODES && borrowed; node++)
+	{
+		if (!(borrowed >> node & 1))
+			continue;
+
+		const Borrowed& b = g_borrow[node];
+		const int nodes = HDObjectSlotNodes(b.slot);
+		float borrowMatrices[HD_OBJ_NODES * 16];
+		float borrowLight[HD_OBJ_NODES * 3];
+
+		if (nodes <= b.index)
+			continue;
+
+		HDObjectBorrowMatrices(b.slot, b.index, matrices + node * 16,
+			borrowMatrices, nodes);
+
+		for (int n = 0; n < nodes; n++)
+			memcpy(borrowLight + n * 3, nodeLight + node * 3, sizeof(float) * 3);
+
+		HDLaraPartSheen(node == HD_LARA_RHAND || node == HD_LARA_LHAND
+			? HD_LARA_PART_HAND_REST : HD_LARA_PART_BODY, &sheen, &sheenPower);
+
+		if (HDObjectPush(b.slot, borrowMatrices, nodes, borrowLight,
+			1u << b.index, lights, lightCount, sunScale, 0, HD_MODEL_CULL_NONE,
+			sheen, sheenPower, -1, -1, 0, castWith, 1u << b.index))
+			drawn++;
+	}
+
 	/* The braid, on its own six link chain and its own matrices. It is lit
 	 * with the head's ambient, which is what the classic path does too -
 	 * DrawHair runs with bLaraUnderWater set from LaraNodeUnderwater[8], the
@@ -2555,5 +2670,6 @@ void HDLaraClassicLog(int variant)
 		return;
 
 	std::snprintf(drawn, sizeof(drawn), "DrawLara__%d", variant);
-	swap_log(HDLaraNodesShown((unsigned long)lara_item->mesh_bits), drawn);
+	swap_log(HDLaraNodesShown((unsigned long)lara_item->mesh_bits), drawn, false,
+		0);
 }

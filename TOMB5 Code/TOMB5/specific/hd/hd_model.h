@@ -880,6 +880,19 @@ int HDModelNodes(int slot);			// the classic node count handed in
 int HDModelNodeVertices(int slot, int node);	// weighted vertices on that node
 bool HDModelNodeCovered(int slot, int node);	// false -> nothing is drawn there
 
+/* A mesh a cutscene borrowed from another slot, drawn by that slot's model
+ * (hd_object.cpp, "a cutscene's borrowed meshes"): the `nodes` joints that
+ * hang the model off one node, `at`, rigidly in its bind pose - every joint
+ * `at` moved by its bind offset from node `node`, so the node's own vertices
+ * land where its classic mesh is drawn. `bind` is the bind pose the model
+ * was built with, three floats a node; the matrices are row-major with the
+ * translation in row 3, model space to view space. The engine's draw and
+ * ModelProbe -borrow both take it from here. TROne attaches a joint its walk
+ * never reached the same way (TROne-main, copy of 2026-10-23, commit
+ * a3c0c633, host\render\game_renderer.cpp, fill_unseen_joints_rigid). */
+void HDModelBorrowJoints(const float* bind, int node, const float* at,
+	float* out, int nodes);
+
 /* Whether the model fits the skeleton that is in the slot.
  *
  * A .TRM's bone numbers are the mesh tree numbers of the model it was made

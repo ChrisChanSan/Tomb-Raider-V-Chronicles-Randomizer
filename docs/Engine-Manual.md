@@ -3280,6 +3280,18 @@ in half. `ModelProbe -all` prints the whole table for any level.
   painting the classic swap mesh over the HD body — that is the road TROne
   took and reversed after its own users reported classic patches on an HD
   model.
+* **What a cutscene puts into a hand is drawn.** A cutscene gives an actor, or
+  Lara, a thing to hold by putting another slot's mesh on one of its nodes:
+  the crane guard's pistol in the Base, the priest's torch in Ireland,
+  Pierre's empty hand at the Colosseum, the guns the guard takes off the rack
+  on the 13th Floor, and in Lara's hand the catapult, the clanger, the hammer
+  and the chalk. The HD path draws what the classic one draws there: the
+  actor's whole model for that state where the remaster ships one (Pierre,
+  the priest, the guard at the rack), else that node of the model of the slot
+  the mesh belongs to, hung on the actor's node - the guards' pistol hand on
+  the crane guard. Lara's four props are the remaster's hand files, bound to
+  the slots the game keeps them in. Where neither exists the actor keeps its
+  own HD node; the classic mesh is never drawn into an HD body.
 * **A piece the model does not cover draws nothing** — not even its classic
   mesh. That is deliberate: a door's invisible root and a face that ships as
   its own `_HEAD.TRM` are *meant* to be empty, and drawing the classic mesh
@@ -4144,7 +4156,10 @@ cutscene takes from another slot - the cutscene, its frame, the node, the slot
 and its mesh, and the outfit node drawn there - and its return, and ends in the
 nodes the frame hides and the draw that drew her: `drawn=hd`, or
 `drawn=DrawLara__1`, `__4` or `__5` for the classic outfit, the catsuit and
-the diving suit drawn classic. A `HIDELOG` line names them on every other
+the diving suit drawn classic, and then in `shows=` what was drawn on the node:
+the model of the slot the mesh belongs to (the hammer's hand file in the 13th
+Floor's gate cutscene), `own` (her outfit's node, the slot having no model -
+the suit's hips) or `classic`. A `HIDELOG` line names them on every other
 change. With the HD path off and the catsuit worn, the Sinking Submarine's
 first cutscene opens with `HIDELOG level=JOBY5 cut=32 frame=…
 mesh_bits=0x81FF01FF hidden=1,2,3,4,5,6 hd=- drawn=DrawLara__4`, and a second
@@ -5016,6 +5031,7 @@ wrote it, and each seam answers a different question:
 | an enemy carries an item off, or does not | `CARRYLOG` — at the level start, one line per pickup within a carrier's reach: the carrier, the item, its OCB and offset, and whether it was carried or left on its wall |
 | the outfit looks wrong, a limb is misplaced | `SKINLOG` — the skin's bone stack |
 | the first person view sits wrong | `FPHEAD`, `ALTERFOV` — the head bone per frame, and the field of view |
+| a cutscene actor or Lara holds nothing where the classic game shows a thing in the hand | `swap=` at the end of `HDLOG cutseq actor` — every node carrying a mesh of another slot, that slot and mesh, and what drew it: a model, `own` or `classic`; `HDLOG cutswap` on every change later in the cutscene; `shows=` at the end of `SWAPLOG` for Lara |
 | a face in a cutscene does not move its lips, or moves them wrong | `HDLOG … lips` — at the level build, one line per face and per track file it has: which file, how many frames, how many of the face's joints it moves, and why it would not be used (`reason=`) - a mod's face ends them in `rig=`, whose track files it speaks: its own, the installed game's for a face on the same rig, or none (`own`, `install`, `differs`, `none`); `LIPLOG` — while a cutscene plays, one line each time a speaking face's frame changes: the frame, the track, whether the file, the settling back or the face at rest was shown (`src=`), how far the face moved from rest at its farthest point (`jaw=`) and the language; and `lips=` at the end of `HDLOG cutseq actor` and `HDLOG frame lara` |
 | Lara's face does not blink between her lines, or does not bare its teeth when she fires | `HDLOG … lips loop` — at the level build, one line per face: how many frames its joint block holds, where it loops, where it lies in the file, which of its joints the loop moves and how many blinks it has, and why it would not play (`reason=`); `LIPLOG … lara face=` — one line each time her face changes between the cutscene line, the firing face, the loop and rest, with what it was before and why; `LIPLOG … lara blink` — one line on the first frame of each blink, with how far the lids are closed; and `lips=loop` or `lips=fire` at the end of `HDLOG frame lara` |
 | in HD Lara's catsuit loses its shine after she walks from one room into another, and a save and a load bring it back | `HDLOG laralights` — one line on her first frame of a level and one whenever her room, the number of lights handed to the card or the number left out changes: `level=` the level, `room=` her room, `il_room=` the room her current light list was last built for, `cur=` and `prev=` the engine's current and previous light list as lights switched on / lights in it (shadow lights included), `dyn=` the dynamic lights (a flare, a torch, a muzzle flash) handed on, `handed=` every light handed to the card, `dark=` the lights of the two lists left out because they have faded to nothing, `eye=` 1 when nothing is handed on, so that the camera is the lamp of her shine, `max_dark=` the brightest colour channel among those left out and `min_lit=` the dimmest brightest channel among the room lights handed on, both on the engine's 0..1 scale (0 when there is none). Walking out of a lit room reads as a line with the old room's light in `prev=` and `dark=0`, and eight drawn frames later a second line: `dark=` counts the light where its fade left it switched on with nothing to give, `prev=` shows it switched off where the fade cleared it, and when nothing else lights her the line reads `handed=0 eye=1` either way |

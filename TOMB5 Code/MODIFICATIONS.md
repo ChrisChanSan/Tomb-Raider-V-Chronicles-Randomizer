@@ -15,15 +15,15 @@ commit made after this copy was taken (`setup.cpp`: Two Gun gains `undead = 1`) 
 small local fixes that predate this repository and are documented in the files themselves
 (`dxsound.cpp` LOCSOFTWARE, `function_stubs.cpp` DO_LOG).
 
-Measured on **2026-10-27** by comparing every file under `TOMB5/` against that first
-commit: **129 files changed, 187 entirely new - 316 in all**, none deleted,
-**267** of them carrying the modification notice at the top, which `grep -rl
+Measured on **2026-10-30** by comparing every file under `TOMB5/` against that first
+commit: **130 files changed, 188 entirely new - 318 in all**, none deleted,
+**268** of them carrying the modification notice at the top, which `grep -rl
 "Modified 2026 by ChrisChanSan" TOMB5/` lists. The project file `tomb5.vcxproj` carries
 the same notice as an XML comment.
 
-49 of the 316 do not carry the notice, and none of them should:
+50 of the 318 do not carry the notice, and none of them should:
 
-- the 39 `specific/hd/hd_shader/*.inc` (9 vertex and 30 pixel shaders) are compiler
+- the 40 `specific/hd/hd_shader/*.inc` (9 vertex and 31 pixel shaders) are compiler
   output (`fxc` bytecode as a C array), regenerated from the eleven `.hlsl` files beside
   them and carrying no source of this project at all;
 - `tomb5/libs/stb/stb_vorbis.c` and `tomb5/libs/discordRPC/LICENSE` are other people's

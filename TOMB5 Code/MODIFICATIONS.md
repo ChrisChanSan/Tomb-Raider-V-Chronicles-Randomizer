@@ -16074,6 +16074,48 @@ bits of the last call (`InputPadDirection`). MenuTest's `death_menu_pad` holds t
 
 **Commits.** `94ef93a1`.
 
+### The diving suit's thrusters on the HD body (#272)
+
+2026-10-29.
+
+**What.** In Deepsea Dive with the HD path, the diving suit's two propulsion units now
+keep the place they have on the classic suit against the back of whatever body the
+wardrobe or the outfit menu puts on her: 22 to 26 units nearer her on the bodies with a
+backpack (24 on the Antarctica outfit), 50 to 74 on those without one; on the HD diving
+suit they move 1 unit out, as far as its back lies behind the classic suit's. The mist
+out of their nozzles goes with them. The height on her back and the distance from her
+spine stay the classic ones.
+
+**Why.** DrawLara__5 hangs the units - LARA_EXTRA_MESH1, a separate object of the level,
+drawn twice on the torso's matrix at (-80, -192, -160) and (80, -192, -160) and turned
+about x by `subsuit.XRot` - with numbers made for the classic suit's hard shell. No .TRM
+of either install models the units on their own (the cutscenes' EXTRA5_SUBSUIT_FULL has
+them grown into its torso), so over the HD composite they stay the classic mesh, and on
+any outfit but the HD diving suit they floated a shell's thickness off her back.
+
+**How.** `specific/hd/hd_laradraw.cpp` hands the plan the level's classic LARA_EXTRA_MESH1
+mesh and the skin's torso mesh wherever DrawLara__5 draws her. `specific/hd/hd_lara.cpp`
+(`HDLaraThrusters`) measures both backs alike, in the torso node's frame with the units at
+rest: the most backward point under the units' box, leaving out what lies inside the box -
+on the classic suit the corners of the block between the units, whose sides they rest
+against. The classic back comes from the torso mesh at the plan, the worn one from the
+body file's node 7, each vertex on its heaviest bone, while the file is read; the level
+build keeps the difference, rounded. `specific/drawlara.cpp` adds it to both translations
+while the composite draws her (`HDLaraThrusterShift`), `game/subsuit.cpp` to the mist's
+origin. JOBY4 measures the classic back at -112, OUTFIT_TR3_ANTARC at -88 (shift 24),
+nineteen more bodies with a backpack at -86 to -90, the thirty-one without one at -38 to
+-62 and OUTFIT_SUBSUIT at -113 (shift -1). The difference and not the units set onto her
+back: they turn by up to 45 degrees, their corners then reach 43 units further forward,
+and the classic suit leaves them 15 units of air at rest - the difference keeps that
+relation in every pose. An `HDLOG lara thrusters` line per level build names the body,
+both backs, the shift and what was measured; ModelProbe `-thrusters` prints the same for
+every body of the wardrobe and draws the units, `-thrustersclassic` at the classic
+numbers. `docs/Engine-Manual.md` says it. With the HD path off, or `hd_build` 0, the shift
+is 0 and the units and their mist are the classic ones. The verdict census over the
+fifteen levels is unchanged.
+
+**Commits.** `e8a42c14`, `039f1121`, `d7317d1a`.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -16363,3 +16405,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #269 | Cut-out cards back to back are one-sided; a hanging guest is refused |
 | #270 | The game comes back after Ctrl+Alt+Del |
 | #271 | The Game Over menu takes the d-pad and the arrow keys |
+| #272 | The diving suit's thrusters on the HD body |

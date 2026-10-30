@@ -64,8 +64,11 @@
 //   the flare in flight   never part of the composite.
 //   the diving suit's     LARA_EXTRA_MESH1, twice, with subsuit.XRot - they
 //   two thrusters         are a separate OBJECT and not a node of her body,
-//                         so they keep being drawn classically ON TOP of the
-//                         HD suit. The wardrobe has no model for them.
+//                         and no .TRM is a model of them alone, so they stay
+//                         the classic mesh over whatever HD body she wears -
+//                         moved along her torso's z to keep the classic
+//                         suit's place against that body's back (hd_lara.h,
+//                         HDLaraThrusters; HDLaraThrusterShift below).
 //   the inventory         newinv2.cpp draws its own ring of objects with
 //                         DrawInventoryItem and never calls DrawLara.
 //
@@ -112,6 +115,14 @@ bool HDLaraDrawXray();
  * it (hd_feet.h): what she walks on follows the body she is wearing, and
  * only this call knows which body that is. */
 int HDLaraDrawOutfit();
+
+/* The diving suit's thrusters (hd_lara.h, HDLaraThrusters): how far along
+ * the torso's z DrawLara__5 moves its two units, and game\subsuit.cpp the
+ * mist out of their nozzles, to keep the classic suit's place against the
+ * back of the body she wears - the level build's measurement while the
+ * composite draws her (HDLaraDrawActive), and 0 whenever she is drawn
+ * classic, so the classic suit is drawn and blown exactly as before. */
+long HDLaraThrusterShift();
 
 /* The drawn braid's roll: six angles for hairs[0][0..5] - one per drawn bone,
  * about the bone's own axis, so no position and no direction changes at all.

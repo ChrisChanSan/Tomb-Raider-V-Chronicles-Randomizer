@@ -189,8 +189,9 @@
  * units to spare at either end.
  *
  * The diving suit is not in the list on purpose: it measures 165, because
- * what sits behind ITS torso is the two thrusters and not a pack, and it
- * wears a helmet rather than a braid, so no braid ever meets them.
+ * what sits behind ITS torso is the suit's own back block, 167 deep, and not
+ * a pack (the two thrusters are a separate object, HDLaraThrusters), and it
+ * wears a helmet rather than a braid, so no braid ever meets it.
  *
  * ModelProbe -braidsim, sixty steps in the bind pose: without the pack the
  * braid comes to rest 15 units inside it, with the two spheres 9, and the
@@ -233,7 +234,7 @@
  * nailed to radius 94 and covers it.
  *
  * The diving suit is left out as it is left out of the spheres: what stands
- * behind its torso is two thrusters, and it wears a helmet and no braid.
+ * behind its torso is its back block, and it wears a helmet and no braid.
  *
  * The margin is the plait's own radius. HairControl moves POINTS and the braid
  * is a solid; a point pushed exactly onto the pack's surface leaves half the
@@ -859,6 +860,17 @@ struct HDLaraLevel
 	 * already (HDLaraOutfitIsXray). False unless the caller says so: a tool
 	 * that builds her outfit alone, as RoomProbe does, plans no X-ray set. */
 	bool xray = false;
+
+	/* The diving suit's thrusters, in a level that hangs them on her
+	 * (HDLaraThrusters below): the classic LARA_EXTRA_MESH1 mesh the draw
+	 * puts on her torso twice, and the classic torso mesh they were placed
+	 * against, each `...Verts` points of x, y and z in its own frame - the
+	 * torso's is the torso node's, the frame the worn body's node 7 is
+	 * measured in. 0 and 0 everywhere else, and nothing is measured. */
+	const float* thruster = 0;
+	int thrusterVerts = 0;
+	const float* torso = 0;
+	int torsoVerts = 0;
 };
 
 struct HDLaraStats
@@ -1045,6 +1057,78 @@ int HDLaraPlan(const HDLaraLevel* level, HDModelSlot* out, int max);
  * Lara then stays classic and the reason is in the notes. */
 bool HDLaraLevelBuild(const HDLaraLevel* level, HDLaraStats* stats);
 void HDLaraLevelEnd();
+
+/* --- the diving suit's thrusters ------------------------------------------
+ *
+ * DrawLara__5 draws the diving suit as two objects: her body and the two
+ * propulsion units, LARA_EXTRA_MESH1 drawn twice on the torso's matrix at
+ * (-80, -192, -160) and (80, -192, -160) and turned about x by
+ * subsuit.XRot. No .TRM of either install models the units on their own -
+ * the cutscenes' EXTRA5_SUBSUIT_FULL has them grown into its torso - so
+ * over an HD body they stay the classic mesh, and the three numbers are the
+ * classic suit's, a hard shell whose back stands far behind a slim body's:
+ * on any other outfit they float off her back.
+ *
+ * The rule: the units keep the place they have against the classic suit's
+ * back, against the back of the body she wears. Both backs are measured
+ * alike, in the torso node's frame (y down, z forward), with the units at
+ * rest (subsuit.XRot 0) and each one's mesh box moved to its place:
+ *
+ *   under the units  a point whose x and y lie in a unit's box;
+ *   inside a unit    such a point whose z does as well - what the unit
+ *                    itself covers (the corners of the block between the
+ *                    units on the suit's back, whose sides they rest
+ *                    against), not a back in front of them;
+ *   the back         the most backward z (the least) of the points under
+ *                    the units and inside neither.
+ *
+ * The classic back is the level's own torso mesh's (HDLaraLevel::torso);
+ * the worn back is the body file's node 7, each vertex on its heaviest
+ * bone as the pack measurement takes it, read while the file is read. The
+ * shift is the worn back minus the classic one, rounded, along z alone: x
+ * and y stay, so the units hang at the classic height and keep their air.
+ *
+ * Measured (ModelProbe -lara JOBY4 -thrusters: the classic suit of
+ * JOBY4.TRC against the 52 bodies of a wardrobe scan of both installs):
+ *
+ *   body                      back    under  inside   shift
+ *   the classic suit          -112       54       8           its block
+ *   OUTFIT_SUBSUIT            -113     1794      46      -1   the same suit
+ *   OUTFIT_TR3_ANTARC          -88      837       0     +24
+ *   19 more with a backpack   -86 .. -90                +22 .. +26
+ *   31 with none              -38 .. -62                +50 .. +74
+ *
+ * Not onto her back: the units turn by up to 45 degrees (subsuit.dXRot is
+ * 8190) and their corners then reach 43 units further forward than at
+ * rest. The classic suit gives them 15 units of air at rest; moved by the
+ * difference of the backs they keep exactly that in every pose, where set
+ * onto her back they would cut 15 units deeper into her than they cut into
+ * the classic shell. */
+#define HD_LARA_THRUSTER_X	(80)	// DrawLara__5's numbers, each side
+#define HD_LARA_THRUSTER_Y	(-192)
+#define HD_LARA_THRUSTER_Z	(-160)
+
+struct HDLaraThrusters
+{
+	bool asked;		// the level hangs them on her: inputs given
+	float box[6];		// the right unit at rest: x0 x1 y0 y1 z0 z1
+	int classicUnder;	// points under the units, inside left out
+	int classicInside;
+	float classicBack;	// valid when classicUnder > 0
+	int hdUnder;		// the same for the worn body's node 7
+	int hdInside;
+	float hdBack;
+	bool applied;		// the composite is built and both backs exist
+	long shift;		// along the torso's z, 0 unless applied
+};
+
+/* The level's measurement, settled by HDLaraLevelBuild: never null, and
+ * `asked` false in a level without thrusters. HDLaraThrusterBack measures
+ * one more body file against the same units - ModelProbe's survey. */
+const HDLaraThrusters* HDLaraThrusterState();
+struct HDTrmModel;
+bool HDLaraThrusterBack(const HDTrmModel* body, const float* bind,
+	float* back, int* under, int* inside);
 
 bool HDLaraActive();
 int HDLaraOutfitNow();

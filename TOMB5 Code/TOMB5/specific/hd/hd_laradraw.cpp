@@ -51,8 +51,10 @@
 #include "hd_shadow.h"			// the projected shadow's arithmetic
 #include "hd_level.h"			// HDLevelActive, HDRoomShadowHD - its gate
 #include "hd_switch.h"			// HDDrawn - the world drawn HD or classic
+#include "../drawroom.h"		// mesh_vtxbuf - the thrusters' classic meshes
 
 #include <math.h>
+#include <vector>
 
 namespace
 {
@@ -847,6 +849,97 @@ namespace
 		}
 
 		return found;
+	}
+
+	/* The diving suit's thrusters (hd_lara.h, HDLaraThrusters): the two
+	 * classic meshes the measurement wants, out of mesh_vtxbuf - the
+	 * thrusters' LARA_EXTRA_MESH1 and the torso of the skin DrawLara__5
+	 * draws (game\laramisc.cpp, LaraInitialiseMeshes: LARA_SKIN's meshes),
+	 * each in its own frame. Only where DrawLara__5 draws her: everywhere
+	 * else nothing hangs on her torso. HDModelLevelBegin keeps the
+	 * pointers while it runs, so the points live here. */
+	std::vector<float> g_thruster_points;
+	std::vector<float> g_torso_points;
+
+	bool mesh_points(int slot, int node, std::vector<float>& out)
+	{
+		out.clear();
+
+		if (!mesh_vtxbuf || slot < 0 || slot >= NUMBER_OBJECTS ||
+			!objects[slot].loaded || node >= objects[slot].nmeshes)
+			return false;
+
+		const int at = objects[slot].mesh_index + node * 2;
+
+		if (at < 0 || at >= num_level_meshes || !mesh_vtxbuf[at] ||
+			!mesh_vtxbuf[at]->aVtx || mesh_vtxbuf[at]->nVerts <= 0)
+			return false;
+
+		const MESH_DATA* mesh = mesh_vtxbuf[at];
+
+		for (int v = 0; v < mesh->nVerts; v++)
+		{
+			out.push_back(mesh->aVtx[v].x);
+			out.push_back(mesh->aVtx[v].y);
+			out.push_back(mesh->aVtx[v].z);
+		}
+
+		return true;
+	}
+
+	bool thrusters_hang()
+	{
+		return LaraDrawType == LARA_DIVESUIT &&
+			objects[LARA_EXTRA_MESH1].loaded;
+	}
+
+	void thrusters_of_level()
+	{
+		const int skin = objects[LARA_SKIN].loaded ? LARA_SKIN : LARA;
+
+		g_level.thruster = 0;
+		g_level.thrusterVerts = 0;
+		g_level.torso = 0;
+		g_level.torsoVerts = 0;
+
+		if (!thrusters_hang() || !mesh_points(LARA_EXTRA_MESH1, 0,
+			g_thruster_points) || !mesh_points(skin, LM_TORSO, g_torso_points))
+			return;
+
+		g_level.thruster = &g_thruster_points[0];
+		g_level.thrusterVerts = (int)g_thruster_points.size() / 3;
+		g_level.torso = &g_torso_points[0];
+		g_level.torsoVerts = (int)g_torso_points.size() / 3;
+	}
+
+	/* HDLOG lara thrusters, once per level build in a level DrawLara__5
+	 * draws: the body they hang on, the two backs, the shift, whether the
+	 * composite draws her (hd) or the classic suit does (classic), the
+	 * points under the units and those inside them - classic/worn. */
+	void thrusters_log(const char* stem)
+	{
+		if (!thrusters_hang())
+			return;
+
+		/* What the plan measured, when this level's plan ran - a level that
+		 * stays classic before it has no measurement to show. */
+		const HDLaraThrusters none = HDLaraThrusters();
+		const HDLaraThrusters* t = g_planned ? HDLaraThrusterState() : &none;
+		const char* body = g_active
+			? HDLaraPartModel(g_level.outfit, HD_LARA_PART_BODY) : 0;
+		char classic[16] = "-", worn[16] = "-";
+
+		if (t->asked && t->classicUnder > 0)
+			snprintf(classic, sizeof(classic), "%.1f", t->classicBack);
+
+		if (t->asked && t->hdUnder > 0)
+			snprintf(worn, sizeof(worn), "%.1f", t->hdBack);
+
+		Log("HDLOG level=%s lara thrusters body=%s classic_back=%s hd_back=%s "
+			"shift=0,0,%ld drawn=%s under=%d/%d inside=%d/%d", stem,
+			body ? body : "-", classic, worn, t->applied ? t->shift : 0L,
+			g_active ? "hd" : "classic", t->classicUnder, t->hdUnder,
+			t->classicInside, t->hdInside);
 	}
 
 	/* The X-ray look, for the log (XRAYLOG).
@@ -1645,6 +1738,9 @@ int HDLaraDrawPlan(HDModelSlot* out, int max)
 	g_level.xray = g_xray_squares > 0;
 	g_planned = true;
 
+	// The diving suit's thrusters, where DrawLara__5 hangs them on her.
+	thrusters_of_level();
+
 	return HDLaraPlan(&g_level, out, max);
 }
 
@@ -1665,6 +1761,7 @@ void HDLaraDrawBuild(const char* stem)
 			((gfLevelFlags & GF_YOUNGLARA) != 0 || LaraDrawType == LARA_YOUNG) ? 1 : 0,
 			g_why && *g_why ? g_why : "the HD object path is off");
 		soft_log(0);
+		thrusters_log(stem);
 		return;
 	}
 
@@ -1725,6 +1822,8 @@ void HDLaraDrawBuild(const char* stem)
 
 	for (int i = 0; i < HDLaraNoteCount(); i++)
 		Log("HDLOG level=%s lara note: %s", stem, HDLaraNote(i));
+
+	thrusters_log(stem);
 
 	/* Part by part, so that a wrong picture in the game can be looked up
 	 * rather than guessed at - the same reason the objects get a line each.
@@ -1877,6 +1976,13 @@ bool HDLaraDrawXray()
 int HDLaraDrawOutfit()
 {
 	return g_level.outfit;
+}
+
+long HDLaraThrusterShift()
+{
+	const HDLaraThrusters* t = HDLaraThrusterState();
+
+	return HDLaraDrawActive() && t->applied ? t->shift : 0;
 }
 
 /* The drawn braid's roll. The reasoning and the measured values are at

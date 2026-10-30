@@ -1,3 +1,15 @@
+/*
+ * Modified 2026 by ChrisChanSan.
+ *
+ * Part of the TOMB5 native Windows 11 port (Direct3D 9 / XAudio2) and of the
+ * TR5 Randomizer project. The individual changes are recorded in the git
+ * history of this source tree.
+ *
+ * TOMB5 is free software: you can redistribute it and/or modify it under the
+ * terms of the GNU General Public License as published by the Free Software
+ * Foundation, either version 3 of the License, or (at your option) any later
+ * version. See the LICENSE file at the root of this source tree.
+ */
 #include "../tomb5/pch.h"
 #include "subsuit.h"
 #include "control.h"
@@ -14,6 +26,7 @@
 #include "tomb4fx.h"
 #include "../specific/input.h"
 #include "lara.h"
+#include "../specific/hd/hd_laradraw.h"	// HDLaraThrusterShift
 
 SUBSUIT_INFO subsuit;
 char SubHitCount = 0;
@@ -308,10 +321,16 @@ void TriggerEngineEffects()
 	PHD_VECTOR pos;
 	PHD_VECTOR pos2;
 	short x, lp, n;
+	long back;
 
 	if (lara.water_status == LW_FLYCHEAT)
 		return;
 
+	/* The mist leaves the nozzles where DrawLara__5 draws the two units:
+	 * moved along the torso's z onto the back of the HD body she wears, 0
+	 * for the classic suit (specific\hd\hd_laradraw.h,
+	 * HDLaraThrusterShift). */
+	back = HDLaraThrusterShift();
 	x = -80;
 
 	for (lp = 0; lp < 2; lp++)
@@ -320,7 +339,7 @@ void TriggerEngineEffects()
 		{
 			pos.x = x;
 			pos.y = -192;
-			pos.z = -160;
+			pos.z = -160 + back;
 			GetLaraJointPosRot(&pos, LMX_TORSO, subsuit.XRot, &Eng1);
 
 			Eng2.y = subsuit.Vel[lp];
@@ -328,7 +347,7 @@ void TriggerEngineEffects()
 
 			pos2.x = x;
 			pos2.y = -192;
-			pos2.z = -160;
+			pos2.z = -160 + back;
 
 			if (n)
 			{
@@ -341,7 +360,7 @@ void TriggerEngineEffects()
 
 			pos2.x = x;
 			pos2.y = -192;
-			pos2.z = -160;
+			pos2.z = -160 + back;
 
 			if (n)
 			{

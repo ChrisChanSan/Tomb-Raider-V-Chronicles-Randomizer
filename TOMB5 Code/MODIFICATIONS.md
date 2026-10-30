@@ -4,7 +4,7 @@
 
 This is a modified version of **TOMB5**, the PC Tomb Raider Chronicles decompilation
 project by Troye/Trxyebeep and contributors, <https://github.com/Trxyebeep/TOMB5>. It
-was modified between **2026-07-30 and 2026-10-25** (ongoing) for the *TR5 Randomizer*
+was modified between **2026-07-30 and 2026-10-30** (ongoing) for the *TR5 Randomizer*
 project.
 
 The upstream code as received is preserved as the first commit of this repository (no
@@ -16,12 +16,12 @@ small local fixes that predate this repository and are documented in the files t
 (`dxsound.cpp` LOCSOFTWARE, `function_stubs.cpp` DO_LOG).
 
 Measured on **2026-10-30** by comparing every file under `TOMB5/` against that first
-commit: **130 files changed, 188 entirely new - 318 in all**, none deleted,
-**268** of them carrying the modification notice at the top, which `grep -rl
+commit: **130 files changed, 189 entirely new - 319 in all**, none deleted,
+**269** of them carrying the modification notice at the top, which `grep -rl
 "Modified 2026 by ChrisChanSan" TOMB5/` lists. The project file `tomb5.vcxproj` carries
 the same notice as an XML comment.
 
-50 of the 318 do not carry the notice, and none of them should:
+50 of the 319 do not carry the notice, and none of them should:
 
 - the 40 `specific/hd/hd_shader/*.inc` (9 vertex and 31 pixel shaders) are compiler
   output (`fxc` bytecode as a C array), regenerated from the eleven `.hlsl` files beside

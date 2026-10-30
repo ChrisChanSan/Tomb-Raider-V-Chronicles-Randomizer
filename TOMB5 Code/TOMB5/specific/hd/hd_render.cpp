@@ -65,6 +65,7 @@
 #include "hd_water_under.h"		// the eye's depth under the water
 #include "hd_spring.h"			// a row's `spring` key
 #include "hd_sky_cap.h"			// the sky band's closed poles
+#include "hd_artcopy.h"			// a static's art carried to its twins
 #include "hd_fog.h"			// the fog bulbs' body
 #include "hd_shader/hd_fog_vs.inc"
 #include "hd_shader/hd_fog_ps.inc"
@@ -4211,6 +4212,19 @@ namespace
 
 	const HDStaticPlace* g_places = 0;
 	int g_place_count = 0;
+	/* The statics the art copies are asked of (HDRenderSetArtCopyStatics,
+	 * hd_artcopy.h), borrowed until HDRenderLevelBegin returns, the rule on
+	 * or off (HDRenderArtCopySet), its numbers (HDRenderArtCopyParams) and
+	 * the plan the level last read was built with, and its cost. */
+	const HDArtCopyStatic* g_copy_statics = 0;
+	int g_copy_static_count = 0;
+	const float* g_copy_verts = 0;
+	int g_copy_vert_count = 0;
+	bool g_copy_on = true;
+	HDArtCopyParams g_copy_params = { HD_ARTCOPY_MARGIN, HD_ARTCOPY_WALL,
+		HD_ARTCOPY_STANDS, HD_OVERHANG_SLACK, 0 };
+	HDArtCopyPlan g_copy_plan;
+	double g_copy_ms = 0.0;
 	std::vector<std::pair<unsigned int, int> > g_place_sectors;
 	std::vector<PlaceTri> g_place_tris;
 	std::vector<HDGroup> g_static_pieces;
@@ -7643,6 +7657,121 @@ void HDRenderSetStaticPlaces(const HDStaticPlace* places, int count)
 	std::sort(g_place_sectors.begin(), g_place_sectors.end());
 }
 
+void HDRenderSetArtCopyStatics(const HDArtCopyStatic* statics, int count,
+	const float* verts, int vertCount)
+{
+	const bool ok = statics && count > 0 && verts && vertCount > 0;
+
+	g_copy_statics = ok ? statics : 0;
+	g_copy_static_count = ok ? count : 0;
+	g_copy_verts = ok ? verts : 0;
+	g_copy_vert_count = ok ? vertCount : 0;
+}
+
+void HDRenderArtCopySet(bool on)
+{
+	g_copy_on = on;
+}
+
+void HDRenderArtCopyParamsSet(const HDArtCopyParams* params)
+{
+	const HDArtCopyParams standard = { HD_ARTCOPY_MARGIN, HD_ARTCOPY_WALL,
+		HD_ARTCOPY_STANDS, HD_OVERHANG_SLACK, 0 };
+
+	g_copy_params = params ? *params : standard;
+	g_copy_params.ownSlack = HD_OVERHANG_SLACK;
+}
+
+const HDArtCopyPlan* HDRenderArtCopyPlanNow(double* ms)
+{
+	if (ms)
+		*ms = g_copy_ms;
+
+	return &g_copy_plan;
+}
+
+const HDArtCopy* HDRenderArtCopies(int* count, int* tris, double* ms)
+{
+	if (count)
+		*count = (int)g_copy_plan.copies.size();
+
+	if (tris)
+		*tris = g_copy_plan.addedTris;
+
+	if (ms)
+		*ms = g_copy_ms;
+
+	return g_copy_plan.copies.empty() ? 0 : &g_copy_plan.copies[0];
+}
+
+/* The art copies of the level being read (hd_artcopy.h): planned over the
+ * .TRG as it was read - after the y shift's clamp and the sky's caps, before
+ * anything is counted - with the statics, the rooms' boxes and the classic
+ * faces handed in before the build, and put in. Nothing without the
+ * statics, the boxes or with the rule off. */
+static void ArtCopies(trf::remaster::Trg& trg, int numRooms, int threads)
+{
+	g_copy_plan = HDArtCopyPlan();
+	g_copy_ms = 0.0;
+
+	if (!g_copy_on || !g_copy_statics || !g_boxes || g_box_count <= 0)
+		return;
+
+	const double started = now_ms();
+	const int groups = numRooms > 0 && numRooms < (int)trg.groups.size()
+		? numRooms : (int)trg.groups.size();
+	const int count = groups < g_box_count ? groups : g_box_count;
+	std::vector<HDArtCopyRoom> rooms((size_t)count);
+
+	for (int r = 0; r < count; r++)
+	{
+		HDArtCopyRoom& one = rooms[(size_t)r];
+
+		one.originX = (int)g_boxes[r].originX;
+		one.originZ = (int)g_boxes[r].originZ;
+
+		for (int axis = 0; axis < 3; axis++)
+		{
+			one.mins[axis] = g_boxes[r].mins[axis];
+			one.maxs[axis] = g_boxes[r].maxs[axis];
+		}
+
+		one.box = 1;
+		one.twin = g_stand_rooms && r < g_stand_room_count
+			? g_stand_rooms[r].twin : -1;
+	}
+
+	// The room of every classic face handed in (HDRenderSetStandFaces).
+	std::vector<int> faceRooms((size_t)(g_stand_face_count > 0 ?
+		g_stand_face_count : 0), -1);
+
+	for (int k = 0; k < g_stand_holder_count; k++)
+		for (int f = 0; f < g_stand_holders[k].faceCount; f++)
+		{
+			const int at = g_stand_holders[k].firstFace + f;
+
+			if (at >= 0 && at < g_stand_face_count)
+				faceRooms[(size_t)at] = g_stand_holders[k].room;
+		}
+
+	if (count > 0)
+	{
+		HDArtCopyMake(trg, count, g_yshift.empty() ? 0 : &g_yshift[0],
+			(int)g_yshift.size(), &rooms[0], count, g_stand_faces,
+			faceRooms.empty() ? 0 : &faceRooms[0], g_stand_face_count,
+			g_copy_statics, g_copy_static_count, g_copy_verts,
+			g_copy_vert_count, g_copy_params, threads, &g_copy_plan);
+		HDArtCopyApply(trg, g_yshift.empty() ? 0 : &g_yshift[0],
+			(int)g_yshift.size(), &rooms[0], count, g_copy_statics,
+			&g_copy_plan);
+	}
+
+	g_copy_ms = now_ms() - started;
+
+	// Borrowed for the read alone.
+	HDRenderSetArtCopyStatics(0, 0, 0, 0);
+}
+
 void HDRenderSetCuts(const HDCut* list, int count)
 {
 	g_cuts = count > 0 ? list : 0;
@@ -8044,6 +8173,10 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 
 	// The sky band's poles closed (HDRenderSkyCaps, the sky dome below).
 	HDRenderSkyCaps(trg, numRooms);
+
+	/* A static the art leaves out, given its art where the art holds the
+	 * same static (hd_artcopy.h): in the .TRG before anything reads it. */
+	ArtCopies(trg, numRooms, threads);
 
 	g_vertex_count = (int)trg.vertices.size();
 	g_room_groups = numRooms > 0 && numRooms < (int)trg.groups.size()

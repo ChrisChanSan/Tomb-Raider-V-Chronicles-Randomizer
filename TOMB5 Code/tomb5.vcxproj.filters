@@ -901,6 +901,9 @@
     <ClInclude Include="TOMB5\specific\hdscreen.h">
       <Filter>TOMB5\specific</Filter>
     </ClInclude>
+    <ClInclude Include="TOMB5\specific\hd\hd_artcopy.h">
+      <Filter>TOMB5\specific\hd</Filter>
+    </ClInclude>
     <ClInclude Include="TOMB5\specific\hd\hd_bind.h">
       <Filter>TOMB5\specific\hd</Filter>
     </ClInclude>

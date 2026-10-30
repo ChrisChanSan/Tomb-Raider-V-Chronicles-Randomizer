@@ -3083,6 +3083,29 @@ struct HDStaticPlace
 
 void HDRenderSetStaticPlaces(const HDStaticPlace* places, int count);
 
+/* A static the art leaves out given the art of the same static where the
+ * art holds it (hd_artcopy.h, the rule; HDRenderLevelBegin puts the copies
+ * into the .TRG as it is read). Every static of the level with its slot,
+ * place, turn and own mesh's vertices where they stand (world units),
+ * handed before HDRenderLevelBegin and borrowed until it returns; without
+ * them, or with the rule off (HDRenderArtCopySet, on unless a tool says
+ * otherwise), nothing is copied. HDRenderArtCopyParamsSet gives the rule
+ * other numbers for a measurement (null: the rule's own).
+ * HDRenderArtCopyPlanNow is the plan the level last read was built with,
+ * and what it cost. */
+struct HDArtCopyParams;
+struct HDArtCopyPlan;
+
+void HDRenderSetArtCopyStatics(const HDArtCopyStatic* statics, int count,
+	const float* verts, int vertCount);
+void HDRenderArtCopySet(bool on);
+void HDRenderArtCopyParamsSet(const HDArtCopyParams* params);
+const HDArtCopyPlan* HDRenderArtCopyPlanNow(double* ms);
+/* The same copies as plain data (hd_cover.h) for a file that does not read
+ * the rule's header: their list and count, the triangles they put in and
+ * what the rule cost; the statics they name are the list handed in. */
+const HDArtCopy* HDRenderArtCopies(int* count, int* tris, double* ms);
+
 /* The answers of a level's statics, `rooms` their rooms: the statics of one
  * room held by one group are drawn as pieces all of them or none, so an
  * object the art models out of several statics - ANDY1's hut in room 225 -

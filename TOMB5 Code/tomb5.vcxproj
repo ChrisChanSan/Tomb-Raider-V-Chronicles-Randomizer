@@ -586,6 +586,7 @@
     <ClInclude Include="TOMB5\specific\gamemain.h" />
     <ClInclude Include="TOMB5\specific\bc7.h" />
     <ClInclude Include="TOMB5\specific\hdscreen.h" />
+    <ClInclude Include="TOMB5\specific\hd\hd_artcopy.h" />
     <ClInclude Include="TOMB5\specific\hd\hd_bind.h" />
     <ClInclude Include="TOMB5\specific\hd\hd_classic.h" />
     <ClInclude Include="TOMB5\specific\hd\hd_cover.h" />

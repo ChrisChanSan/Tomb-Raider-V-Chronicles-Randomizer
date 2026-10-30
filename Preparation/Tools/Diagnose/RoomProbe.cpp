@@ -428,6 +428,19 @@
  *     -skycap <0|1>   the sky band's poles closed as the game closes them
  *                     (1, the default; hd_sky_cap.h) or left open (0); the
  *                     count printed as `skycap:` after the build
+ *     -artcopy <0|1>  the art copies of the HD level build (hd_artcopy.h):
+ *                     a static the art does not hold takes its slot's art
+ *                     from another placement of the same group (1) or not
+ *                     (0); on by default with -vis 1, as the game copies
+ *                     on the visibility path only; with -roombox the
+ *                     `HDLOG artcopy` lines and the `artcopy:` count
+ *     -artcopytable   with -roombox: every static the rule asked, every
+ *                     donor each target was offered and what it would
+ *                     take, and per copy what it took and its light
+ *     -artcopymargin <units>, -artcopywall <units>, -artcopystands <units>
+ *                     the rule's three numbers for a measurement (32, 16
+ *                     and 16 in the game: HD_ARTCOPY_MARGIN, _WALL and
+ *                     _STANDS)
  *     -roomplane <y x0 z0 x1 z1>
  *                     the same, on the OTHER shimmer bit - the answer a
  *                     ROOM_REFLECT + ROOM_REFLECT_CEILING room gives, which
@@ -1056,6 +1069,7 @@
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_render.h"
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_water_under.h"
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_sky_cap.h"
+#include "../../../TOMB5 Code/TOMB5/specific/hd/hd_artcopy.h"
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_pagecache.h"
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_splash_math.h"
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_marble_math.h"
@@ -2962,6 +2976,16 @@ static bool g_surface_always = false;
 /* -skycap 0|1: the sky band's poles closed (hd_sky_cap.h) or left open, for
  * the pictures with and without; 1, as the game, unless given. */
 static bool g_sky_cap = true;
+/* -artcopy 0|1: the art copies (hd_artcopy.h) put into the .TRG as it is
+ * read, or left out, for the pictures with and without; on by default with
+ * -vis 1, as the engine copies on the visibility path only (ArtCopyOn).
+ * -artcopytable: every target with every donor it was
+ * offered and what each would take, then the copies with their light.
+ * -artcopymargin, -artcopywall, -artcopystands <units>: the rule's three
+ * numbers for a measurement (HD_ARTCOPY_MARGIN, _WALL, _STANDS). */
+static int g_art_copy = -1;
+static bool g_art_copy_table = false;
+static double g_art_copy_numbers[3] = { -1.0, -1.0, -1.0 };
 
 // The switches, out of ProbeMain's chain of else-ifs (C1061).
 static bool UnderArg(int argc, char** argv, int* at)
@@ -2970,6 +2994,30 @@ static bool UnderArg(int argc, char** argv, int* at)
 	{
 		g_sky_cap = atoi(argv[++*at]) != 0;
 		return true;
+	}
+
+	if (!strcmp(argv[*at], "-artcopy") && *at + 1 < argc)
+	{
+		g_art_copy = atoi(argv[++*at]) != 0 ? 1 : 0;
+		return true;
+	}
+
+	if (!strcmp(argv[*at], "-artcopytable"))
+	{
+		g_art_copy_table = true;
+		return true;
+	}
+
+	{
+		const char* names[3] = { "-artcopymargin", "-artcopywall",
+			"-artcopystands" };
+
+		for (int k = 0; k < 3; k++)
+			if (!strcmp(argv[*at], names[k]) && *at + 1 < argc)
+			{
+				g_art_copy_numbers[k] = atof(argv[++*at]);
+				return true;
+			}
 	}
 
 	if (!strcmp(argv[*at], "-underlook"))
@@ -4172,6 +4220,12 @@ static int g_yshift_option = -1;
 static bool YShiftOn()
 {
 	return g_yshift_option < 0 ? g_vis_option : g_yshift_option != 0;
+}
+
+// -artcopy as given, otherwise on with -vis 1, as the engine copies.
+static bool ArtCopyOn()
+{
+	return g_art_copy < 0 ? g_vis_option : g_art_copy != 0;
 }
 
 // The shifts of a level's room groups, one per group of `trg`, all 0 when
@@ -14179,8 +14233,11 @@ namespace probestatics
 
 	/* The places of the statics, handed to the build as hd_level.cpp's
 	 * BuildStaticPlaces hands them - the boxes moved to world x and z - in
-	 * the order of g_list, which is the place each static is asked with. */
+	 * the order of g_list, which is the place each static is asked with;
+	 * and the same statics for the art copies, with their vertices. */
 	static std::vector<HDStaticPlace> g_places;
+	static std::vector<HDArtCopyStatic> g_copies;
+	static std::vector<float> g_copy_verts;
 
 	static void HandPlaces(const char* stem)
 	{
@@ -14211,6 +14268,143 @@ namespace probestatics
 
 		HDRenderSetStaticPlaces(g_places.empty() ? 0 : &g_places[0],
 			(int)g_places.size());
+
+		/* And for the art copies (hd_artcopy.h), as hd_level.cpp's
+		 * BuildStaticPlaces hands them: every static in g_list's order
+		 * with its slot, place, turn and own vertices in world units. */
+		g_copies.clear();
+		g_copy_verts.clear();
+
+		std::vector<float> verts;
+
+		for (const Static& s : g_list)
+		{
+			HDArtCopyStatic one;
+			const Tr5Room& rm = g_level.rooms()[(size_t)s.room];
+
+			Verts(s, verts);
+			memset(&one, 0, sizeof(one));
+			one.room = s.room;
+			one.mesh = s.mesh;
+			one.slot = s.slot;
+			one.x = (int)s.x;
+			one.y = (int)s.y;
+			one.z = (int)s.z;
+			one.rot = (int)(unsigned short)s.rot;
+			one.firstVert = (int)g_copy_verts.size() / 3;
+			one.vertCount = (int)verts.size() / 3;
+
+			for (size_t v = 0; v + 2 < verts.size(); v += 3)
+			{
+				const float* o = g_stand_rooms_built[(size_t)s.room].origin;
+
+				g_copy_verts.push_back(verts[v] + o[0]);
+				g_copy_verts.push_back(verts[v + 1] + o[1]);
+				g_copy_verts.push_back(verts[v + 2] + o[2]);
+			}
+
+			for (int axis = 0; axis < 3; axis++)
+			{
+				one.mins[axis] = s.mins[axis];
+				one.maxs[axis] = s.maxs[axis];
+			}
+
+			one.mins[0] += (float)rm.originX;
+			one.maxs[0] += (float)rm.originX;
+			one.mins[2] += (float)rm.originZ;
+			one.maxs[2] += (float)rm.originZ;
+			g_copies.push_back(one);
+		}
+
+		HDRenderSetArtCopyStatics(g_copies.empty() ? 0 : &g_copies[0],
+			(int)g_copies.size(), g_copy_verts.empty() ? 0 : &g_copy_verts[0],
+			(int)g_copy_verts.size() / 3);
+	}
+
+	/* The art copies the build made (hd_artcopy.h): the engine's own
+	 * `HDLOG artcopy` line per copy and a level line; with -artcopytable
+	 * every static the rule asked (its drawing group, its points on that
+	 * art and its part), every donor each target was offered with what it
+	 * would take, and per copy what it took and its light. */
+	static void ArtCopyReport(const char* stem)
+	{
+		double ms = 0.0;
+		const HDArtCopyPlan* plan = HDRenderArtCopyPlanNow(&ms);
+
+		HDRenderSetArtCopyStatics(0, 0, 0, 0);
+
+		if (!plan)
+			return;
+
+		const auto at = [&](int s) -> const HDArtCopyStatic&
+		{
+			return g_copies[(size_t)s];
+		};
+
+		if (g_art_copy_table)
+		{
+			for (size_t s = 0; s < plan->role.size() && s < g_copies.size(); s++)
+			{
+				if (plan->group[s] < 0)
+					continue;
+
+				const HDArtCopyStatic& one = at((int)s);
+				static const char* roles[5] = { "-", "donor", "target",
+					"held_elsewhere", "unlike" };
+
+				printf("artcopytable: %s static room=%d mesh=%d slot=%d "
+					"place=%d,%d,%d rot=%d box=%.0f..%.0f,%.0f..%.0f,%.0f..%.0f "
+					"group=%d points=%d/%d %s\n", stem, one.room, one.mesh,
+					one.slot, one.x, one.y, one.z, one.rot, one.mins[0],
+					one.maxs[0], one.mins[1], one.maxs[1], one.mins[2],
+					one.maxs[2], plan->group[s], plan->held[s], one.vertCount,
+					roles[plan->role[s] <= 4 ? plan->role[s] : 0]);
+			}
+
+			for (const HDArtCopyAlike& w : plan->weighed)
+				printf("artcopytable: %s weighed group=%d slot=%d donors=%d "
+					"tris=%d..%d %s\n", stem, w.group, w.slot, w.donors,
+					w.fewest, w.most, w.alike ? "alike" : "unlike");
+
+			for (const HDArtCopyOffer& o : plan->offered)
+				printf("artcopytable: %s offer room=%d mesh=%d from_room=%d "
+					"from_mesh=%d group=%d shift=%d,%d,%d turn=%d inside=%d "
+					"crossing=%d walls=%d standing=%d%s\n", stem,
+					at(o.target).room, at(o.target).mesh, at(o.donor).room,
+					at(o.donor).mesh, o.group, o.dx, o.dy, o.dz, o.turn,
+					o.inside, o.crossing, o.walls, o.standing,
+					o.chosen ? " chosen" : "");
+
+			for (const HDArtCopy& c : plan->copies)
+				printf("artcopytable: %s copy room=%d mesh=%d slot=%d "
+					"from_room=%d from_mesh=%d inside=%d crossing=%d "
+					"walls=%d standing=%d tris=%d faces=%d face_tris=%d "
+					"points=%d->%d/%d light=%.0f,%.0f,%.0f/%.0f,%.0f,%.0f "
+					"around=%.0f,%.0f,%.0f/%.0f,%.0f,%.0f corners=%d\n", stem,
+					at(c.target).room, at(c.target).mesh, at(c.target).slot,
+					at(c.donor).room, at(c.donor).mesh, c.inside, c.crossing,
+					c.walls, c.standing, c.tris, c.faces, c.faceTris,
+					c.before, c.after,
+					c.verts, c.light[0][0], c.light[0][1], c.light[0][2],
+					c.light[1][0], c.light[1][1], c.light[1][2], c.around[0][0],
+					c.around[0][1], c.around[0][2], c.around[1][0],
+					c.around[1][1], c.around[1][2], c.aroundCorners);
+		}
+
+		for (const HDArtCopy& c : plan->copies)
+			printf("HDLOG artcopy level=%s room=%d mesh=%d slot=%d "
+				"from_room=%d from_mesh=%d tris=%d shift=%d,%d,%d turn=%d "
+				"faces=%d face_tris=%d\n", stem, at(c.target).room,
+				at(c.target).mesh, at(c.target).slot, at(c.donor).room,
+				at(c.donor).mesh, c.tris, c.dx, c.dy, c.dz, c.turn, c.faces,
+				c.faceTris);
+
+		printf("artcopy: %s %s statics=%d donors=%d targets=%d "
+			"held_elsewhere=%d no_donor=%d unlike=%d copies=%d tris=%d "
+			"verts=%d ms=%.1f\n", stem, ArtCopyOn() ? "on" : "off",
+			plan->statics, plan->donors, plan->targets, plan->heldElsewhere,
+			plan->noDonor, plan->unlike, (int)plan->copies.size(),
+			plan->addedTris, plan->addedVerts, ms);
 	}
 
 	/* The answers, as BuildStaticTables gets them: per group drawn HD or
@@ -22090,6 +22284,23 @@ static int ProbeMain(int argc, char** argv)
 	LoadTimeStep(stem, "places");
 
 	HDRenderSkyCapSet(g_sky_cap);
+	HDRenderArtCopySet(ArtCopyOn());
+
+	{
+		HDArtCopyParams copy = { HD_ARTCOPY_MARGIN, HD_ARTCOPY_WALL,
+			HD_ARTCOPY_STANDS, 0.0f, g_art_copy_table ? 1 : 0 };
+
+		if (g_art_copy_numbers[0] >= 0.0)
+			copy.margin = (float)g_art_copy_numbers[0];
+
+		if (g_art_copy_numbers[1] >= 0.0)
+			copy.wall = g_art_copy_numbers[1];
+
+		if (g_art_copy_numbers[2] >= 0.0)
+			copy.stands = g_art_copy_numbers[2];
+
+		HDRenderArtCopyParamsSet(&copy);
+	}
 
 	// -shell: the second shells' rooms, as BuildShellRooms hands them.
 	static std::vector<probeshell::Room> shellRead;
@@ -22257,6 +22468,9 @@ static int ProbeMain(int argc, char** argv)
 			g_sky_cap ? "on" : "off", cap.bands, cap.poles, cap.triangles,
 			cap.vertices);
 	}
+
+	if (!g_roombox.empty())
+		probestatics::ArtCopyReport(stem);
 
 	if (g_loadtime)
 	{

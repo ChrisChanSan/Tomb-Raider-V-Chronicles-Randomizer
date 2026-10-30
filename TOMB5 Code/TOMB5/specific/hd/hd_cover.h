@@ -1368,3 +1368,51 @@ inline int HDStaticDrawSource(int answer, bool holderListed, bool pieceDrawn)
 
 	return HD_STATIC_FROM_CLASSIC;
 }
+
+/* The art copies (hd_artcopy.h, the rule; HDRenderLevelBegin puts them into
+ * the .TRG as it is read): what the engine hands the build and what it
+ * reads back, plain data, so that a file that cannot read the .TRG's
+ * header can say what was copied.
+ *
+ * One static mesh of the level: its room and its index in the room's list,
+ * its slot, MESH_INFO's place and y_rot, its own mesh's vertices where they
+ * stand (world units, `vertCount` of them from `firstVert` in the list
+ * handed beside) and its box as hd_level.cpp's StaticBox makes it, moved to
+ * world x and z. */
+struct HDArtCopyStatic
+{
+	int room, mesh, slot;
+	int x, y, z;
+	int rot;
+	int firstVert, vertCount;
+	float mins[3], maxs[3];
+};
+
+// How far round the target's box the group's own light is averaged (the
+// tools' light measure, HDArtCopy::around).
+#define HD_ARTCOPY_AROUND	512.0f
+
+// One copy: the target and the donor (indices into the statics), the group,
+// the motion and what was taken.
+struct HDArtCopy
+{
+	int target, donor, group;
+	int dx, dy, dz;		// the donor's place to the target's, world units
+	int turn;			// quarter turns, 0 to 3
+	int inside;			// the group's triangles wholly inside the grown box
+	int crossing;		// with a corner inside it and one outside
+	int walls;			// of the rest, lying whole on a classic face
+	int standing;		// of the rest, whose image lies on art already there
+	int tris;			// copied
+	int before, after;	// the target's points on the group's art
+	int verts;			// of its mesh vertices
+	int firstTri;		// into HDArtCopyPlan::tris, `tris` of them
+	int faces;			// classic faces beside the target given their art
+	int faceTris;		// of `tris`, the faces' (HDArtCopyMake)
+	/* The means of the two colours of the copied corners, and of the
+	 * group's own corners round the target's place (its box grown by
+	 * HD_ARTCOPY_AROUND), for the light. */
+	float light[2][3];
+	float around[2][3];
+	int aroundCorners;
+};

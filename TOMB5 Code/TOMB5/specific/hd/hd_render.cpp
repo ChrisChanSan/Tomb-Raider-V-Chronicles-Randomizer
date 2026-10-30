@@ -3533,6 +3533,368 @@ namespace
 		}
 	}
 
+	/* The cut-out cards that lie back to back (HDCardLine in hd_render.h).
+	 * A cut-out - a grating, a net, foliage - is drawn two-sided, one card
+	 * seen from both sides (RangeCulls). Where the art carries each side as
+	 * a card of its own, the two lie in one plane facing away from each
+	 * other, and drawn two-sided both show from either side and tie in
+	 * depth: RICH1's catwalk grating is group 72's floor, facing up, and
+	 * group 70's ceiling under it, facing down, its bars turned the other
+	 * way (157,328 pixels of the two tying at one eye over the catwalk, at
+	 * 1,280 x 720). Such a card is drawn one-sided, culled as an opaque
+	 * range is, so that from either side the card facing that way shows.
+	 * `g_card_cull` marks one by its first index into the .TRG's index
+	 * list, empty when no scan ran (with g_shell_rooms, the visibility path
+	 * only). A card is paired only with cards of another group drawn with
+	 * it, never with its flipmap twin's: the two states are never drawn
+	 * together, and each keeps its two sides, as a flipmap pair keeps what
+	 * one state does not carry. */
+	std::vector<unsigned char> g_card_cull;
+	std::vector<HDCardLine> g_card_lines;
+	int g_card_counts[2] = { 0, 0 };	// cut-out triangles, drawn one-sided
+	double g_card_ms = 0.0;			// what the scan cost
+
+	/* The card's own plane and kShellPlane's reach: a point of the card
+	 * lies on another card when that card faces the other way within
+	 * kShellDot, stands within 16 units of the point and holds it, 1 unit
+	 * to spare at its edges. */
+	const float kCardPlane = 16.0f;
+	const float kCardEdge = 1.0f;
+
+	struct CardTri
+	{
+		unsigned int first;
+		int group;
+		float v[3][3], n[3], c[3];
+	};
+
+	/* Whether a part's run in a pass is drawn as a card seen from both
+	 * sides: the opaque pass with an alpha test, or the alpha pass but for
+	 * its glass, and never a water surface (RangeCulls, MaterialBlend). */
+	bool PartRunIsCard(const trf::remaster::TrgPart& part, int pass)
+	{
+		if (MaterialBase(part) == HD_TRG_MATERIAL_WATER)
+			return false;
+
+		if (pass == 0)
+			return MaterialAlphaRef(part) != 0.0f;
+
+		return pass == 1 && MaterialBlend(part, 1) == 0.0f;
+	}
+
+	// Whether a point in a card's plane stands inside it, `edge` to spare.
+	bool CardHolds(const CardTri& t, const float* p, float edge)
+	{
+		// The plane of the two axes the normal leans on least.
+		int a = 0, b = 1;
+
+		if (fabsf(t.n[0]) >= fabsf(t.n[1]) && fabsf(t.n[0]) >= fabsf(t.n[2]))
+			a = 1, b = 2;
+		else if (fabsf(t.n[1]) >= fabsf(t.n[2]))
+			a = 0, b = 2;
+
+		float side[3];
+
+		for (int k = 0; k < 3; k++)
+		{
+			const float* p0 = t.v[k];
+			const float* p1 = t.v[(k + 1) % 3];
+			const float ex = p1[a] - p0[a], ey = p1[b] - p0[b];
+			const float len = sqrtf(ex * ex + ey * ey);
+
+			if (!(len > 1e-6f))
+				return false;
+
+			side[k] = (ex * (p[b] - p0[b]) - ey * (p[a] - p0[a])) / len;
+		}
+
+		return (side[0] >= -edge && side[1] >= -edge && side[2] >= -edge) ||
+			(side[0] <= edge && side[1] <= edge && side[2] <= edge);
+	}
+
+	/* The cards of the level's room groups that stand where another group
+	 * drawn with theirs has cards, in 256-unit world cells, each in every
+	 * cell its box grown by kCardPlane meets (a sorted list of cell and
+	 * card); then per card the cards of the cells of its centroid and
+	 * corners. Before the fill, after the second shells, whose dropped
+	 * triangles are not asked. The scan's cost is in the `HDLOG cards`
+	 * level line: 108 ms at most over the fifteen levels (TITLE's 725,744
+	 * cut-out triangles), 22 ms or less in thirteen of them. */
+	void MarkBackToBackCards(const trf::remaster::Trg& trg)
+	{
+		g_card_cull.clear();
+		g_card_lines.clear();
+		g_card_counts[0] = g_card_counts[1] = 0;
+		g_card_ms = 0.0;
+
+		if (!g_shell_rooms || g_shell_room_count <= 0)
+			return;
+
+		LARGE_INTEGER from, to, rate;
+
+		QueryPerformanceCounter(&from);
+
+		const int groups = g_shell_room_count < (int)trg.groups.size() ?
+			g_shell_room_count : (int)trg.groups.size();
+
+		/* Whether a card of group b may lie behind one of group a: another
+		 * group, drawn with a - the rooms of the two linked by a portal or
+		 * a floor link (g_air_links, with the air on) -, never a flipmap
+		 * room and its twin. A group's own cards back to back are left
+		 * two-sided: at four eyes over the catwalk culling them as well
+		 * took 26 tie pixels at most off the 921,600, and only turned
+		 * which of the two cards' light shows (12,099 pixels at most). */
+		const auto together = [&](int a, int b)
+		{
+			if (a == b)
+				return false;
+
+			if (g_shell_rooms[a].twin == b || g_shell_rooms[b].twin == a ||
+				!g_air_links || a >= g_room_air_count || b >= g_room_air_count)
+				return false;
+
+			return g_air_links[(size_t)a * (size_t)g_room_air_count +
+				(size_t)b] != 0;
+		};
+
+		/* The cards per group and the box they fill, then per group where a
+		 * card of another group drawn with it can lie: the two groups' boxes
+		 * met, grown by kCardPlane. Only the cards in such a place are asked:
+		 * most cut-outs, foliage in the open, meet none. */
+		std::vector<int> count((size_t)groups, 0);
+		std::vector<std::array<float, 6> > box((size_t)groups);
+		std::vector<std::vector<std::array<float, 6> > > meet((size_t)groups);
+		const auto each_card = [&](int g, const auto& f)
+		{
+			for (const trf::remaster::TrgPart& part :
+				trg.groups[(size_t)g].parts)
+				for (int pass = 0; pass < 2; pass++)
+				{
+					const trf::remaster::TrgPart::Pass& run = part.pass[pass];
+
+					if (!run.count || !PartRunIsCard(part, pass))
+						continue;
+
+					for (unsigned int at = 0; at + 2 < run.count; at += 3)
+					{
+						const unsigned int first = run.start + at;
+						float v[3][3];
+
+						if ((!g_shell_drop.empty() && (size_t)first <
+							g_shell_drop.size() && g_shell_drop[first]) ||
+							!ShellCorners(trg, first, g_shell_rooms[g], v,
+							GroupDY((size_t)g)))
+							continue;
+
+						f(first, v);
+					}
+				}
+		};
+
+		for (int g = 0; g < groups; g++)
+		{
+			std::array<float, 6>& in = box[(size_t)g];
+
+			in = { 1e30f, 1e30f, 1e30f, -1e30f, -1e30f, -1e30f };
+			each_card(g, [&](unsigned int, const float (*v)[3])
+			{
+				count[(size_t)g]++;
+
+				for (int c = 0; c < 3; c++)
+					for (size_t k = 0; k < 3; k++)
+					{
+						if (v[c][k] < in[k])
+							in[k] = v[c][k];
+
+						if (v[c][k] > in[k + 3])
+							in[k + 3] = v[c][k];
+					}
+			});
+			g_card_counts[0] += count[(size_t)g];
+		}
+
+		for (int a = 0; a < groups; a++)
+			for (int b = 0; b < groups && count[(size_t)a]; b++)
+			{
+				if (!count[(size_t)b] || !together(a, b))
+					continue;
+
+				std::array<float, 6> both;
+				bool any = true;
+
+				for (int k = 0; k < 3; k++)
+				{
+					const float* x = &box[(size_t)a][0];
+					const float* y = &box[(size_t)b][0];
+
+					both[(size_t)k] = (x[k] > y[k] ? x[k] : y[k]) - kCardPlane;
+					both[(size_t)k + 3] = (x[k + 3] < y[k + 3] ? x[k + 3] :
+						y[k + 3]) + kCardPlane;
+					any = any && both[(size_t)k] <= both[(size_t)k + 3];
+				}
+
+				if (any)
+					meet[(size_t)a].push_back(both);
+			}
+
+		std::vector<CardTri> cards;
+		std::vector<std::pair<long long, int> > cells;
+
+		for (int g = 0; g < groups; g++)
+		{
+			if (meet[(size_t)g].empty())
+				continue;
+
+			each_card(g, [&](unsigned int first, const float (*v)[3])
+			{
+				CardTri t;
+				float lo[3], hi[3];
+
+				for (int k = 0; k < 3; k++)
+				{
+					lo[k] = hi[k] = v[0][k];
+
+					for (int c = 1; c < 3; c++)
+					{
+						if (v[c][k] < lo[k]) lo[k] = v[c][k];
+						if (v[c][k] > hi[k]) hi[k] = v[c][k];
+					}
+				}
+
+				bool meets = false;
+
+				for (const std::array<float, 6>& m : meet[(size_t)g])
+					meets = meets || (hi[0] >= m[0] && lo[0] <= m[3] &&
+						hi[1] >= m[1] && lo[1] <= m[4] && hi[2] >= m[2] &&
+						lo[2] <= m[5]);
+
+				std::memcpy(t.v, v, sizeof(t.v));
+
+				if (!meets || !ShellNormal(t.v, t.n))
+					return;
+
+				t.first = first;
+				t.group = g;
+
+				for (int k = 0; k < 3; k++)
+				{
+					t.c[k] = (v[0][k] + v[1][k] + v[2][k]) / 3.0f;
+					lo[k] -= kCardPlane;
+					hi[k] += kCardPlane;
+				}
+
+				const int at_card = (int)cards.size();
+
+				cards.push_back(t);
+
+				for (int x = ShellCellOf(lo[0]); x <= ShellCellOf(hi[0]);
+					x++)
+					for (int y = ShellCellOf(lo[1]);
+						y <= ShellCellOf(hi[1]); y++)
+						for (int z = ShellCellOf(lo[2]);
+							z <= ShellCellOf(hi[2]); z++)
+							cells.push_back(std::make_pair(
+								ShellCellKey(x, y, z), at_card));
+			});
+		}
+
+		std::sort(cells.begin(), cells.end());
+
+		if (!cards.empty())
+			g_card_cull.assign(trg.indices.size(), 0);
+
+		// Per (group, group with the card behind it): the cards culled.
+		std::map<std::pair<int, int>, int> pairs;
+
+		/* Whether a point of card t lies on a card facing the other way:
+		 * the first such card, or -1. */
+		const auto behind = [&](const CardTri& t, const float* q)
+		{
+			const long long key = ShellCellKey(ShellCellOf(q[0]),
+				ShellCellOf(q[1]), ShellCellOf(q[2]));
+			auto it = std::lower_bound(cells.begin(), cells.end(),
+				std::make_pair(key, -1));
+
+			for (; it != cells.end() && it->first == key; ++it)
+			{
+				const CardTri& o = cards[(size_t)it->second];
+
+				if (o.group == t.group || !together(t.group, o.group))
+					continue;
+
+				const float dot = t.n[0] * o.n[0] + t.n[1] * o.n[1] +
+					t.n[2] * o.n[2];
+
+				if (dot > -kShellDot)
+					continue;
+
+				const float d = (q[0] - o.v[0][0]) * o.n[0] +
+					(q[1] - o.v[0][1]) * o.n[1] + (q[2] - o.v[0][2]) * o.n[2];
+
+				if (fabsf(d) > kCardPlane)
+					continue;
+
+				// The point dropped into the other card's plane.
+				const float p[3] = { q[0] - d * o.n[0], q[1] - d * o.n[1],
+					q[2] - d * o.n[2] };
+
+				if (CardHolds(o, p, kCardEdge))
+					return it->second;
+			}
+
+			return -1;
+		};
+
+		/* A card is culled when its centroid and its three corners, each
+		 * pulled 1 unit towards the centroid, all lie on cards facing the
+		 * other way: the card lies wholly on the art of its back. */
+		for (const CardTri& t : cards)
+		{
+			const int at = behind(t, t.c);
+			bool whole = at >= 0;
+
+			for (int c = 0; c < 3 && whole; c++)
+			{
+				float q[3], len = 0.0f;
+
+				for (int k = 0; k < 3; k++)
+				{
+					q[k] = t.c[k] - t.v[c][k];
+					len += q[k] * q[k];
+				}
+
+				len = sqrtf(len);
+
+				for (int k = 0; k < 3; k++)
+					q[k] = t.v[c][k] + (len > 1.0f ? q[k] / len : 0.0f);
+
+				whole = behind(t, q) >= 0;
+			}
+
+			if (!whole)
+				continue;
+
+			g_card_cull[t.first] = 1;
+			g_card_counts[1]++;
+			pairs[std::make_pair(t.group, cards[(size_t)at].group)]++;
+		}
+
+		for (const auto& one : pairs)
+		{
+			HDCardLine line;
+
+			line.group = one.first.first;
+			line.with = one.first.second;
+			line.cards = one.second;
+			g_card_lines.push_back(line);
+		}
+
+		QueryPerformanceCounter(&to);
+		QueryPerformanceFrequency(&rate);
+		g_card_ms = rate.QuadPart ? (double)(to.QuadPart - from.QuadPart) *
+			1000.0 / (double)rate.QuadPart : 0.0;
+	}
+
 	/* Marks the hulls before the groups are filled: the art of every group
 	 * in world cells, then per group the triangles AirHostsOf finds that no
 	 * entry's box holds, as the fill asks a box (by the centroid, or by its
@@ -6970,6 +7332,27 @@ int HDRenderGroupShellDropped(int group)
 	return g_shell_group[(size_t)group];
 }
 
+int HDRenderCardLines()
+{
+	return (int)g_card_lines.size();
+}
+
+bool HDRenderCardLine(int index, HDCardLine* out)
+{
+	if (index < 0 || index >= (int)g_card_lines.size())
+		return false;
+
+	*out = g_card_lines[(size_t)index];
+	return true;
+}
+
+void HDRenderCardCounts(int* asked, int* culled, double* ms)
+{
+	*asked = g_card_counts[0];
+	*culled = g_card_counts[1];
+	*ms = g_card_ms;
+}
+
 bool HDRenderAirPair(int index, int* group, int* host, int* tris)
 {
 	if (index < 0 || index >= (int)g_air_pairs.size())
@@ -9840,7 +10223,9 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					tri.intruding = intruding;
 					tri.openAir = open_air || hull_air ? 1 : 0;
 					tri.stand = stand;
-					tri.cull = cull;
+					// A card lying back to back with another is one-sided.
+					tri.cull = cull || (!g_card_cull.empty() &&
+						g_card_cull[first]) ? 1 : 0;
 					tri.behind = hull_back ? 1 : 0;
 
 					if (hull_back)
@@ -10688,6 +11073,8 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 
 	// The second shells, before anything else asks the art.
 	MarkSecondShells(trg);
+	// And the cut-out cards that lie back to back (MarkBackToBackCards).
+	MarkBackToBackCards(trg);
 	// The hulls, asked of every group before any is filled (MarkAirHulls).
 	MarkAirHulls(trg);
 	// And the pair faces a larger face of the holder covers.

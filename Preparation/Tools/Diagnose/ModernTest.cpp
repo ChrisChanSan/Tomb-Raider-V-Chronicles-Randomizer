@@ -15224,6 +15224,123 @@ static void vis_tables()
 		"vis: an opening behind a flipmap twin names the main room",
 		t.openCount[0] ? t.openings[(size_t)t.openFirst[0]].behind : -1, 2);
 	rooms[2].twin = -1;
+	ok(t.guestsHanging == 0 && t.hanging.empty(),
+		"vis: C's art beside its own room hangs from nothing",
+		t.guestsHanging, 0);
+}
+
+/* The guests under the sky (hd_vis.cpp, guestRule 2) on a level of two
+ * rooms built by hand: H (0) under the sky, x and z 0..6144, y -4096..0,
+ * and G (1), an enclosed room over it with no link, x and z 1024..5120,
+ * y -8192..-4096, whose art hangs 2,000 units below its floor into H's
+ * inside, under G's own floor plan - RICH2's corridor room 55 over the
+ * stairwell's room 18. */
+static void vis_hanging()
+{
+	trf::remaster::Trg trg;
+	std::vector<HDVisRoom> rooms(2);
+	const long x[2] = { 0, 1024 };
+	const int xs[2] = { 6, 4 };
+
+	for (int r = 0; r < 2; r++)
+	{
+		HDVisRoom& one = rooms[(size_t)r];
+
+		std::memset(&one, 0, sizeof(one));
+		one.x = x[r];
+		one.z = x[r];
+		one.xs = one.zs = xs[r];
+		one.top = r ? -8192 : -4096;
+		one.bottom = r ? -4096 : 0;
+		one.flags = r ? 0 : 8;
+		one.twin = -1;
+	}
+
+	trg.groups.resize(2);
+
+	{
+		trf::remaster::TrgPart part;
+
+		part.pass[0].start = (uint32_t)trg.indices.size();
+
+		for (int k = 0; k < 8; k++)
+		{
+			const float a[3] = { 2000.0f, -2000.0f, 3000.0f + k * 16.0f };
+			const float b[3] = { 2008.0f, -2000.0f, 3000.0f + k * 16.0f };
+			const float c[3] = { 2000.0f, -2008.0f, 3008.0f + k * 16.0f };
+
+			vis_tri(trg, (float)x[1], 0, (float)x[1], a, b, c);
+		}
+
+		part.pass[0].count = (uint32_t)trg.indices.size() - part.pass[0].start;
+		trg.groups[1].parts.push_back(part);
+	}
+
+	HDVisTables t;
+	const HDVisParams p = HDVisDefaults();
+
+	HDVisBuild(trg, &rooms[0], 2, 0, 0, 0, 0, 0, 0, p, &t);
+	ok(t.guestCount[0] == 0 && t.guestsHanging == 1 &&
+		t.hanging.size() == 1 && t.hanging[0].holder == 0 &&
+		t.hanging[0].group == 1 && t.hanging[0].tris == 8,
+		"vis: art hanging from an enclosed room over a sky room is no guest",
+		t.guestsHanging, 1);
+
+	// G under the sky as well: its art is seen across the sky.
+	rooms[1].flags = 8;
+	HDVisBuild(trg, &rooms[0], 2, 0, 0, 0, 0, 0, 0, p, &t);
+	ok(t.guestCount[0] == 1 && t.guestsHanging == 0,
+		"vis: hanging from a room under the sky it is a guest",
+		t.guestCount[0], 1);
+	rooms[1].flags = 0;
+
+	// G's floor plan one sector deep in z, off the art: beside it, a guest.
+	rooms[1].zs = 1;
+	HDVisBuild(trg, &rooms[0], 2, 0, 0, 0, 0, 0, 0, p, &t);
+	ok(t.guestCount[0] == 1 && t.guestsHanging == 0,
+		"vis: art beside an enclosed room's floor plan is a guest",
+		t.guestCount[0], 1);
+	rooms[1].zs = 4;
+
+	// H not under the sky: the link rule refuses it first.
+	rooms[0].flags = 0;
+	HDVisBuild(trg, &rooms[0], 2, 0, 0, 0, 0, 0, 0, p, &t);
+	ok(t.guestCount[0] == 0 && t.guestsUnlinked == 1 && t.guestsHanging == 0,
+		"vis: under no sky the link rule refuses it", t.guestsUnlinked, 1);
+}
+
+/* The cut-out cards back to back (hd_render.cpp, MarkBackToBackCards), read
+ * from the engine's text: the numbers - a point of a card lies on another
+ * card within 16 units of its plane and 1 unit of its edges, the two
+ * facing apart within kShellDot -, the scan on the visibility path only
+ * (it returns without g_shell_rooms), a card never paired with one of its
+ * own group nor with its flipmap twin's, and the fill drawing a marked
+ * card culled. */
+static void card_rule()
+{
+	char* render = hd_switch_text("hd_render.cpp");
+	static char body[65536];
+	int right = 0;
+
+	right += fabs(shell_number(render, "const float kCardPlane = ") - 16.0) <
+		1e-6 ? 1 : 0;
+	right += fabs(shell_number(render, "const float kCardEdge = ") - 1.0) <
+		1e-6 ? 1 : 0;
+	ok(right == 2, "cards: the rule's two numbers", right, 2);
+
+	glass_body(render, "void MarkBackToBackCards(", body, sizeof(body));
+	ok(strstr(body, "if(!g_shell_rooms||g_shell_room_count<=0)return;") != 0,
+		"cards: scanned on the visibility path only", 0, 0);
+	ok(strstr(body, "if(a==b)returnfalse;if(g_shell_rooms[a].twin==b||"
+		"g_shell_rooms[b].twin==a||") != 0 &&
+		strstr(body, "if(dot>-kShellDot)continue;") != 0,
+		"cards: never its own group's, never a flipmap twin's, facing apart",
+		0, 0);
+	ok(hd_switch_count(render, "tri.cull = cull || (!g_card_cull.empty() &&")
+		== 1 && hd_switch_count(render, "g_card_cull[first]) ? 1 : 0;") == 1,
+		"cards: the fill draws a marked card culled", 0, 0);
+
+	free(render);
 }
 
 /* The plane of a claimed face (HDVisFacesShareAPlane) on the faces of
@@ -29922,6 +30039,7 @@ int main()
 	hd_feet();
 	glass_split();
 	shell_rule();
+	card_rule();
 	glass_hue();
 	glass_look();
 	hd_build_gate();
@@ -29940,6 +30058,7 @@ int main()
 	stand_draw();
 	stand_cover();
 	vis_tables();
+	vis_hanging();
 	vis_plane();
 	vis_wall();
 	vis_hidden_room();

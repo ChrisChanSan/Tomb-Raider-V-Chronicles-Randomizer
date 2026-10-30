@@ -220,7 +220,15 @@ bool HDVisBuild(const trf::remaster::Trg& trg, const HDVisRoom* rooms,
 	 * enclosed room it has no link with (400,730 pixels at one camera of
 	 * its courtyard), while ANDREA2's brick tower of room 222 stands over
 	 * room 232, a courtyard under the sky it has no link with either, and
-	 * is seen from it. */
+	 * is seen from it. The sky is above: art hanging down into a holder
+	 * under the sky from below an enclosed room, inside that room's floor
+	 * plan, comes from a room standing over the holder, not across its
+	 * sky, and still needs the link - RICH2's corridor room 55 runs
+	 * through the stairwell's column over room 18, its door frame's art
+	 * hanging 1,024 units into the stairwell (63 triangles), and listed
+	 * it drew that frame on the stairwell's wall with room 55's door and
+	 * the room behind it. Over the fifteen levels that pair is the one
+	 * the hanging test refuses. */
 	const size_t n = (size_t)roomCount;
 	std::vector<unsigned char> link(n * n, 0);
 	// Per room, the room of its flipmap pair the portals lead to.
@@ -581,14 +589,46 @@ bool HDVisBuild(const trf::remaster::Trg& trg, const HDVisRoom* rooms,
 		if (one.second.tris < params.guestTris)
 			continue;
 
-		if ((params.guestRule == 0 || (params.guestRule == 2 &&
-			!(rooms[h].flags & 8))) && !linked(h, (int)(one.first % 65536)))
+		const int g = (int)(one.first % 65536);
+		const bool sky = (rooms[h].flags & 8) != 0;
+
+		if ((params.guestRule == 0 || (params.guestRule == 2 && !sky)) &&
+			!linked(h, g))
 		{
 			t.guestsUnlinked++;
 			continue;
 		}
 
-		guest.group = (int)(one.first % 65536);
+		/* Under the sky, art hanging into the holder from an enclosed room
+		 * standing over it (see the link table). */
+		const HDVisRoom& own = rooms[g];
+		const GuestAcc& art = one.second;
+		const bool hangs = art.lo[1] >= (float)own.bottom &&
+			art.lo[0] >= (float)own.x && art.lo[2] >= (float)own.z &&
+			art.hi[0] <= (float)(own.x + ((long)own.xs << 10)) &&
+			art.hi[2] <= (float)(own.z + ((long)own.zs << 10));
+
+		if (params.guestRule == 2 && sky && !(own.flags & 8) && hangs &&
+			!linked(h, g))
+		{
+			HDVisRefused refused;
+
+			refused.holder = h;
+			refused.group = g;
+			refused.tris = one.second.tris;
+
+			for (int k = 0; k < 3; k++)
+			{
+				refused.lo[k] = one.second.lo[k];
+				refused.hi[k] = one.second.hi[k];
+			}
+
+			t.hanging.push_back(refused);
+			t.guestsHanging++;
+			continue;
+		}
+
+		guest.group = g;
 		guest.tris = one.second.tris;
 
 		for (int k = 0; k < 3; k++)

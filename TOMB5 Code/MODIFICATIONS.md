@@ -15911,6 +15911,73 @@ log, and the `XRAYLOG` line ends in `tone=`. Every model outside the set is lit 
 **Commits.** `a62561ea`, `753df221`, `0d6713d7`, `354cee0b`, `3c0c289b`, `03fa2e66`,
 `92cff2d9`.
 
+### Cut-out cards back to back are one-sided; a hanging guest is refused (#269)
+
+2026-10-29.
+
+**What.** Two rules of the HD level build on the visibility path (`hd_vis` 1). A cut-out
+card - a triangle of the opaque pass with an alpha test, or of the alpha pass but for its
+glass, never water - that lies wholly on cut-out cards of another group drawn with it,
+facing the other way, is drawn one-sided, culled as an opaque range is
+(`specific/hd/hd_render.cpp`: `MarkBackToBackCards`, run after `MarkSecondShells`;
+`g_card_cull`, read by the fill into `HDTri::cull`, so the marked cards get draw calls of
+their own). And a room under the sky no longer takes as its guest the art of a room it has
+no link with when that art hangs below the other room, inside its floor plan, and that
+room is not under the sky (`specific/hd/hd_vis.cpp`, `guestRule` 2;
+`HDVisTables::guestsHanging` and `hanging`). With `-log`, after the shell lines, one
+`HDLOG cards level= group= with= one_sided=` line per pair of groups and one `HDLOG cards
+level= cutout= one_sided= ms=` for the level; the `HDLOG level= vis=1` line ends in
+`guests_hanging=`, with one `HDLOG visguest level= room= group= tris= box=
+refused=hanging` line per refused guest; the `HDLOG flippair` line ends in `start=` (the
+group drawn at the pair's place when the level starts), `classic=` (per state, 1 where the
+state is drawn by its classic faces) and `kept=` (other groups' art the second shells keep
+in the pair's rooms because one state lacks it). RoomProbe prints the cards lines,
+`TrgProbe -vistable` ends in `guests_hanging=` with a `hanging` line per pair, and
+ModernTest checks both rules.
+
+**Why.** In RICH1 the catwalks showed two gratings at once, one shimmering through the
+other. In RICH2's stairwell a door frame with an orange-brown panel hung on the brick
+wall, with the door of the corridor it belongs to; beside the HD stairs stood a blue
+classic flight with its railing on a dark steel floor. No flipmap pair is involved:
+RICH1's room 72 and RICH2's rooms 14, 18 and 55 have no twin. The catwalk grating is group
+72's floor, facing up, and group 70's ceiling under it, facing down, its bars turned the
+other way; both are cut-outs, drawn two-sided, so both showed from either side and tied in
+depth (157,683 pixels at one eye over the catwalk at 1,280 x 720). The door frame is group
+55's art: room 55 is a corridor from room 49 to room 56 running through the stairwell's
+column over room 18, with no portal, door or floor link to it, and 63 triangles of its art
+hang 1,024 units below its floor into room 18's inside. Room 18 is under the sky - the
+stairwell's windows show the city - and the guest table took the art of an unlinked room
+for a room under the sky, as it must for ANDREA2's brick tower over room 232; listed, room
+55 drew its art and its door there and walked on into room 49 behind it. This is the kind
+of ghost the entry "Art in the air of an unlinked room draws inside its own window" (#181)
+handled for ANDREA1, come in by the guest table. The blue flight, its railing and the dark
+floor are room 18's and room 19's own classic stair and railing statics and floor faces,
+where group 14's art, which draws the whole stairwell, has no flight and no landing: no
+group's art lies on more than 14 of the flight's 39 points, and the classic floor there is
+the one Lara walks on, so the static and stand rules keep them classic, as they should.
+
+**How.** A card is asked when its group has cards and another group drawn with it - the
+rooms of the two linked by a portal or a floor link (`g_air_links`), never a flipmap room
+and its twin - has cards whose box meets its own, grown by 16 units; the cards then stand
+in 256-unit world cells. A card is culled when its centroid and its three corners, each
+pulled 1 unit inward, lie on such cards facing the other way (normals within `kShellDot`),
+within 16 units of their plane and inside them with 1 unit to spare. From either side the
+card facing the eye shows. Over the fifteen levels 1,138 triangles are drawn one-sided:
+RICH1 828 (the catwalks over rooms 69, 70 and 72, and the grating between rooms 14 and
+16), RICH3 216, TITLE 72, ANDY1 22; at the catwalk eye the tie falls from 157,683 pixels
+to 693. A group's own cards back to back stay two-sided: culled as well, the tie fell by
+26 pixels at most at four catwalk eyes and only the light of the card that shows changed.
+The scan costs 108 ms at most (TITLE, 725,744 cut-out triangles), 22 ms or less in
+thirteen levels. A flipmap room's card keeps its two sides, as a flipmap pair keeps what
+one state does not carry. The guest rule refuses one pair over the fifteen levels, RICH2's
+group 55 in room 18; every other guest stays, ANDREA2's tower among them. The second
+shells and their flipmap refusal are unchanged: RICH3 room 23's pictures, before and after
+its flip, are those of the base. `hd_build` 0 and `hd_vis` 0 are unchanged by
+construction: the card scan runs only with the shell rooms handed in and the guest table
+only on the visibility path; no classic path file changed.
+
+**Commits.** `e58151a3`.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -16197,3 +16264,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #266 | What a cutscene puts into a hand, in HD |
 | #267 | The classic holsters hide with her thighs, a left-out seam keeps its place |
 | #268 | Lara in the X-ray scanner and the X-ray outfit, in HD |
+| #269 | Cut-out cards back to back are one-sided; a hanging guest is refused |

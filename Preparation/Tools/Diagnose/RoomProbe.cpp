@@ -22203,6 +22203,24 @@ static int ProbeMain(int argc, char** argv)
 			&counts[4]);
 		printf("shell level=%s groups=%d pairs=%d dropped=%d rest=%d air=%d\n",
 			stem, counts[0], counts[1], counts[2], counts[3], counts[4]);
+
+		// And the engine's HDLOG cards lines: the cards drawn one-sided.
+		for (int i = 0; i < HDRenderCardLines(); i++)
+		{
+			HDCardLine card;
+
+			if (!HDRenderCardLine(i, &card))
+				break;
+
+			printf("cards level=%s group=%d with=%d one_sided=%d\n", stem,
+				card.group, card.with, card.cards);
+		}
+
+		double card_ms = 0.0;
+
+		HDRenderCardCounts(&counts[0], &counts[1], &card_ms);
+		printf("cards level=%s cutout=%d one_sided=%d ms=%.1f\n", stem,
+			counts[0], counts[1], card_ms);
 	}
 
 	HDRenderSetShellRooms(0, 0);

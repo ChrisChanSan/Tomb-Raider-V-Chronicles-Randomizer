@@ -87,6 +87,18 @@ struct HDVisGuest
 	float lo[3], hi[3];
 };
 
+/* A guest the sky's rule refused (HDVisTables::hanging): the holder, a room
+ * under the sky, and the group of a room not under the sky, with no link
+ * to it, whose art hangs below that room into the holder; the triangles it
+ * had in the holder's inside and their box. */
+struct HDVisRefused
+{
+	int holder;
+	int group;
+	int tris;
+	float lo[3], hi[3];
+};
+
 /* A classic wall face of a room its own art leaves bare, and the room behind
  * it. `n` points into the holder, the side the eye has to be on; `v` holds
  * the face's corners room-local (a triangle repeats its first). `bare` is
@@ -138,7 +150,8 @@ struct HDVisStatic
  *              guest must be linked with the holder; 1: only the art
  *              reaching out of its own room counts, linked or not; 2,
  *              the default: that art, and linked with a holder not under
- *              the sky
+ *              the sky, or with one under it where the art hangs below a
+ *              room not under the sky, inside that room's floor plan
  *   overhang   how far outside its own room's whole box art must stand
  *              to reach out of the room (rules 1 and 2)
  *   wideBare   the share of bare samples that lets a face beside a portal
@@ -216,6 +229,12 @@ struct HDVisTables
 	/* What the link rule took out: guests of a room not under the sky
 	 * with no link to it, and openings onto a room with none. */
 	int guestsUnlinked = 0;
+	/* And under the sky (guestRule 2): the guests with no link to their
+	 * holder whose art hangs into it from below a room not under the sky,
+	 * that room's own floor plan over the art - each pair in `hanging`,
+	 * for the log. */
+	int guestsHanging = 0;
+	std::vector<HDVisRefused> hanging;
 	int openingsUnlinked = 0;
 	/* Openings that named the other room of a flipmap pair, named by the
 	 * pair's main room instead. */

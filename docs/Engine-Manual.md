@@ -4212,8 +4212,8 @@ draws the remaster's X-ray set in her outfit's place: the X-ray body
 `OUTFIT_XRAY`, whose bones are solid and whose shell is translucent through the
 file's own additive material - the green figure is the art and the room's
 light, no shader of its own - with its own skull and headset; the X-ray hands
-`HAND_XRAY_*` with whatever she holds; the X-ray pistols on her thighs and the
-X-ray shotgun, HK or grappling gun on her back. No braid and no face. The
+`HAND_XRAY_*` with whatever she holds; nothing on her thighs and the X-ray
+shotgun, HK or grappling gun on her back. No braid and no face. The
 shell is drawn from the front only, as the classic game draws its X-ray body:
 every other HD model is drawn from both sides, and from both sides the closed
 shell lies on every pixel twice - the back half adds a second, whiter layer
@@ -4226,9 +4226,15 @@ green kept, so that the figure is the dark green of the remaster's own X-ray
 Lara in the same flooded tunnel and no piece looks like ordinary gear beside
 her. The tone is a choice made from those reference pictures (the shell's added
 light over the wall behind her belly, theirs against ours), and in a bright
-room she stays brighter than in a dark one, only greener. The install has no
-X-ray file for the uzis' holsters or the Desert Eagle's, and those draw nothing
-while she is X-rayed. The set, eight models in Escape with
+room she stays brighter than in a dark one, only greener. Nothing is drawn on
+her thighs at all: the install has no X-ray holster for the uzis or the Desert
+Eagle, and the pistols' X-ray holsters, which it has, would stand beside the
+bones in the air, so all three alike vanish when she puts a gun away. Every file
+of the set is read from the installation, never from a mod: a gun mod may ship
+its gun under the X-ray name too - *IMI Uzis* does - and that file is the mod's
+textured gun, not an X-ray hand. Should the installation lack the X-ray file
+for a hand, the X-ray empty hand's bones are drawn with the installation's own
+gun of that hand in the same tone, never no hand. The set, eight models in Escape with
 the Iris, is loaded only in a level whose floor carries such a trigger, and the
 frame she steps off the scanner draws her outfit again. A mirror shows her the
 same way. Where the set cannot be loaded, the classic X-ray figure is drawn as
@@ -4239,8 +4245,11 @@ draws it changes, and when it goes off - `XRAYLOG level=RICH2 cut=0 frame=-1
 room=… xray=on set=block body=OUTFIT_XRAY right=HAND_XRAY_REST
 left=HAND_XRAY_REST holsters=-/- back=HOLSTER_HK_XRAY drawn=hd
 tone=0.70/0.96,1.06,0.55`, then `xray=off set=- drawn=hd tone=-`; `set=worn`
-for the X-ray outfit, `set=classic` with `drawn=DrawLara__6 tone=-` for the
-classic figure. The level build writes
+for the X-ray outfit, which holds the look from the level's first frame, and
+`set=classic` with `drawn=DrawLara__6 tone=-` for the classic figure. Every
+line ends in `thighs=none` (`thighs=-` when off), and a hand of the set reads
+`HAND_XRAY_UZI:install`, or `HAND_XRAY_REST:install+HAND_BARE_UZI:gun` where
+the installation's own gun stands in. The level build writes
 `HDLOG level=RICH2 lara xray squares=36 ready=1 worn=0` and one
 `HDLOG … lara xray part=…` line per part.
 

@@ -956,16 +956,23 @@ namespace
 	 *              - when off
 	 *   body= right= left= holsters= back=
 	 *              the .TRM stems drawn as the body, in her hands, on her
-	 *              thighs and on her back, - for none
+	 *              thighs and on her back, - for none; a hand of the set
+	 *              is <stem>:install, read from the installs and never a
+	 *              mod, or <stem>:gun for the stand-in of a hand the
+	 *              installs have no X-ray file for, after the rest hands'
+	 *              (HDLaraXrayHand, #277)
 	 *   drawn=     hd or DrawLara__<n>, as on the SWAPLOG line
 	 *   tone=      the set's tone, level/red,green,blue (hd_lara.h,
 	 *              HDLaraXrayTone), - for the classic figure and when off
+	 *   thighs=    none: the look draws nothing at the thighs (#277,
+	 *              HDLaraXrayPick); - when off
 	 *
 	 * Written by whichever draw puts her on the screen, outside a mirror, as
 	 * SWAPLOG is. Level state, cleared in HDLaraDrawEnd: a level she is
-	 * never X-rayed in has no line at all. */
+	 * never X-rayed in has no line at all. An outfit that is the X-ray body
+	 * holds the look from the level's first frame, scanner or not. */
 	bool g_xray_on = false;
-	char g_xray_said[256] = { 0 };
+	char g_xray_said[384] = { 0 };
 
 	// The level's SKELETON squares, counted at the plan for the build's line.
 	int g_xray_squares = 0;
@@ -976,10 +983,10 @@ namespace
 		if (!gLogEnabled || (!on && !g_xray_on))
 			return;
 
-		char now[256];
+		char now[384];
 
-		std::snprintf(now, sizeof(now), "%s drawn=%s tone=%s",
-			on ? fields : "set=-", drawn, on ? tone : "-");
+		std::snprintf(now, sizeof(now), "%s drawn=%s tone=%s thighs=%s",
+			on ? fields : "set=-", drawn, on ? tone : "-", on ? "none" : "-");
 
 		if (on && g_xray_on && !strcmp(now, g_xray_said))
 			return;
@@ -1001,8 +1008,8 @@ namespace
 	void xray_fields(bool block, const HDLaraDraw* pieces, int count,
 		char* out, int size)
 	{
-		const char* right = "-";
-		const char* left = "-";
+		char right[96] = "-";
+		char left[96] = "-";
 		const char* thighL = "-";
 		const char* thighR = "-";
 		const char* back = "-";
@@ -1029,11 +1036,33 @@ namespace
 			}
 			else
 			{
-				if (nodes >> HD_LARA_RHAND & 1)
-					right = model;
+				/* The file built, which is the stand-in's for a stand-in,
+				 * and where it came from; a side with two pieces names
+				 * both, the rest hands first. */
+				const char* built = HDModelName(block
+					? HDLaraPartXraySlot(part) : HDLaraPartSlot(part));
+				char word[64];
 
-				if (nodes >> HD_LARA_LHAND & 1)
-					left = model;
+				std::snprintf(word, sizeof(word), "%s:%s",
+					built ? built : model,
+					HDLaraXrayStandIn(part) ? "gun" : "install");
+
+				for (int side = 0; side < 2; side++)
+				{
+					char* at = side ? left : right;
+
+					if (!(nodes >> (side ? HD_LARA_LHAND : HD_LARA_RHAND) & 1))
+						continue;
+
+					if (at[0] == '-')
+						std::snprintf(at, 96, "%s", word);
+					else
+					{
+						const size_t used = strlen(at);
+
+						std::snprintf(at + used, 96 - used, "+%s", word);
+					}
+				}
 			}
 		}
 
@@ -2662,10 +2691,11 @@ void HDLaraDrawFrame(long mirror)
 	const int pieceCount = HDLaraFrameParts(&now, pieces, 8, xray);
 
 	/* The X-ray look's line, on its edges (XRAYLOG). With the flag on and no
-	 * block of its own the outfit is the X-ray body, worn. */
-	if (!mirror)
+	 * block of its own the outfit is the X-ray body, worn - and an outfit
+	 * that is the X-ray body holds the look with the flag off as well. */
+	if (!mirror && gLogEnabled)
 	{
-		char fields[192];
+		char fields[288];
 		char tone[48];
 		float level = 1.0f, hue[3] = { 1.0f, 1.0f, 1.0f };
 
@@ -2673,7 +2703,8 @@ void HDLaraDrawFrame(long mirror)
 		std::snprintf(tone, sizeof(tone), "%.2f/%.2f,%.2f,%.2f", level,
 			hue[0], hue[1], hue[2]);
 		xray_fields(xray, pieces, pieceCount, fields, sizeof(fields));
-		xray_log(lara.skelebob != 0, fields, "hd", tone);
+		xray_log(lara.skelebob != 0 || HDLaraOutfitIsXray(g_level.outfit),
+			fields, "hd", tone);
 	}
 
 	/* --- the X-ray tone ------------------------------------------------- */

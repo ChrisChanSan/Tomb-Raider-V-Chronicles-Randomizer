@@ -676,9 +676,27 @@ namespace
 	 *
 	 * No X-ray head, braid or face: the skull is the body's own node 14, and
 	 * LARA_HEAD over it is an opaque face fighting the skull for the depth.
-	 * So the set has none of those parts and no holster rig either, and a
-	 * holster with no X-ray file draws nothing - a solid gun on the
-	 * translucent body is the fault the set is there to avoid.
+	 * So the set has none of those parts and no holster rig either.
+	 *
+	 * Nothing at the thighs (#277). The uzis and the Desert Eagle have no
+	 * X-ray holster, so they vanish when put away; the pistols' holsters
+	 * stood in the air beside the bones, and the look is cleaner with all
+	 * three alike. One rule, HDLaraXrayPick: whatever this table holds for
+	 * a thigh, the look draws nothing there. HOLSTER_PISTOL_XRAY stays in
+	 * the table as the file the remaster ships for the part; the weapon on
+	 * the back keeps its own.
+	 *
+	 * The set's own files (#277). Every file here is read from the
+	 * installs alone (xray_sources, HDModelSlot::installOnly): Guns\IMI
+	 * Uzis ships HAND_XRAY_UZI, and it is that mod's own gun - the same
+	 * 31,267 vertices on the same four pages as its HAND_BARE_UZI, the hands
+	 * painted with pages 8002 and 8010 of the Tomb Raider I-III bundle.
+	 * Taken, the twin rule cut those hands away and looked for them in the
+	 * install's HAND_XRAY_UZI on the rest hands' page 8001, where the X-ray
+	 * hand has nothing (page 8030 alone): the gun kept its texture and the
+	 * hands were gone. It is the one X-ray name the thirteen mods of the
+	 * measured Mods folder ship. A hand the installs have no X-ray file for
+	 * takes its bare file's gun beside the rest hands' bones instead.
 	 *
 	 * The hull is drawn from the front alone (HDModelSlot::additiveOneSided).
 	 * The classic adds every face of the X-ray body single sided
@@ -697,8 +715,8 @@ namespace
 	 * lara.skelebob holds, and lara_build_models and lara_head_for_outfit in
 	 * host\render\game_renderer.cpp give that body the same set, no braid and
 	 * no head, worn from the wardrobe as well. TROne keeps the plain holster
-	 * where the set has no X-ray one; this table draws none there. */
-	const struct { int part; const char* model; } kXray[] =
+	 * where the set has no X-ray one; this look draws none at the thighs. */
+	const HDLaraXrayRow kXray[] =
 	{
 		{ HD_LARA_PART_BODY,            "OUTFIT_XRAY" },
 		{ HD_LARA_PART_HAND_REST,       "HAND_XRAY_REST" },
@@ -742,13 +760,25 @@ namespace
 	const float kXrayToneLevel = 0.70f;
 	const float kXrayToneHue[3] = { 0.96f, 1.06f, 0.55f };
 
+	// The set's file for a part, nothing at the thighs (HDLaraXrayPick).
 	const char* xray_model(int part)
 	{
-		for (int i = 0; i < (int)(sizeof(kXray) / sizeof(kXray[0])); i++)
-			if (kXray[i].part == part)
-				return kXray[i].model;
+		return HDLaraXrayPick(kXray, (int)(sizeof(kXray) / sizeof(kXray[0])),
+			part);
+	}
 
-		return 0;
+	/* Where the set's files come from (#277): the installs alone, and for
+	 * a hand the installs have no X-ray file for, the install's bare file
+	 * without the rest hands' pages - its gun - as the stand-in. */
+	void xray_sources(HDModelSlot& one, int part)
+	{
+		one.installOnly = true;
+
+		if (kPart[part].kind == 1 && part != HD_LARA_PART_HAND_REST)
+		{
+			one.standIn = kPart[part].model;
+			one.standInDrop = kPart[HD_LARA_PART_HAND_REST].model;
+		}
 	}
 
 	// The X-ray body by its file name, so a mod's OUTFIT_XRAY is one too.
@@ -761,6 +791,8 @@ namespace
 	 * of its own wardrobe entry. Cleared with the level, like g_has. */
 	bool g_xray_planned[HD_LARA_PART_COUNT] = { false };
 	bool g_xray_has[HD_LARA_PART_COUNT] = { false };
+	// The hands of the set in use whose slot holds a stand-in (#277).
+	bool g_xray_standin[HD_LARA_PART_COUNT] = { false };
 	float g_xray_sheen[2] = { 0.0f, 1.0f };
 
 	/* Which parts this level can ask for. The body, the face, the braid, the
@@ -2146,6 +2178,10 @@ int HDLaraPlan(const HDLaraLevel* level, HDModelSlot* out, int max)
 		one.lightAsAdditive = one.additiveOneSided ||
 			(wears_xray(level->outfit) && part == HD_LARA_PART_NECK_CAP);
 
+		// Its files out of the installs alone (xray_sources).
+		if (one.additiveOneSided)
+			xray_sources(one, part);
+
 		/* The mirrored weights of a hand file. Every part
 		 * of kind 1 and no other: those are the files that cover nodes 9, 10,
 		 * 12 and 13, and a file drawn once and mirrored is the only place the
@@ -2236,6 +2272,7 @@ int HDLaraPlan(const HDLaraLevel* level, HDModelSlot* out, int max)
 			one.name = model;
 			one.additiveOneSided = true;
 			one.lightAsAdditive = true;
+			xray_sources(one, part);
 
 			if (kPart[part].kind == 1)
 			{
@@ -2722,6 +2759,42 @@ bool HDLaraLevelBuild(const HDLaraLevel* level, HDLaraStats* stats)
 				"is the X-ray body and wears it already");
 	}
 
+	/* The hands of the X-ray set in use (#277): read from the installs, and
+	 * where a slot holds its stand-in and not the X-ray file, that hand
+	 * draws the rest hands' bones beside it (HDLaraXrayHand). */
+	{
+		int hands = 0, standIns = 0;
+
+		for (int part = 0; part < HD_LARA_PART_COUNT; part++)
+		{
+			const char* planned = xray_model(part);
+			const int slot = wears_xray(level->outfit) ? HDLaraPartSlot(part)
+				: level->xray ? HDLaraPartXraySlot(part) : -1;
+
+			if (kPart[part].kind != 1 || !planned || slot < 0 ||
+				!HDModelHas(slot))
+				continue;
+
+			const char* built = HDModelName(slot);
+
+			hands++;
+			g_xray_standin[part] = built && !same(built, planned);
+
+			if (!g_xray_standin[part])
+				continue;
+
+			standIns++;
+			note("the X-ray look, %s: no %s.TRM in the installs - %s's gun "
+				"alone stands in, beside %s", HDLaraPartLabel(part), planned,
+				built, xray_model(HD_LARA_PART_HAND_REST));
+		}
+
+		if (hands)
+			note("the X-ray look: %d hand part%s out of the installs and "
+				"never a mod's, %d of them a stand-in; nothing at the "
+				"thighs", hands, hands == 1 ? "" : "s", standIns);
+	}
+
 	/* The diving suit's thrusters onto the body that arrived (hd_lara.h,
 	 * HDLaraThrusters): both backs measured, the difference rounded to the
 	 * whole units phd_TranslateRel takes. */
@@ -2759,6 +2832,7 @@ void HDLaraLevelEnd()
 		g_coverage[i] = 0;
 		g_xray_planned[i] = false;
 		g_xray_has[i] = false;
+		g_xray_standin[i] = false;
 	}
 
 	g_xray_sheen[0] = 0.0f;
@@ -2857,6 +2931,11 @@ bool HDLaraXrayPlanned(int part)
 bool HDLaraHasXrayPart(int part)
 {
 	return part >= 0 && part < HD_LARA_PART_COUNT && g_xray_has[part];
+}
+
+bool HDLaraXrayStandIn(int part)
+{
+	return part >= 0 && part < HD_LARA_PART_COUNT && g_xray_standin[part];
 }
 
 bool HDLaraXrayReady()
@@ -3106,13 +3185,33 @@ int HDLaraFrameParts(const HDLaraFrame* now, HDLaraDraw* out, int max,
 	if (left < 0)
 		left = HD_LARA_PART_HAND_REST;
 
+	/* In the X-ray look no hand is left out (HDLaraXrayHand, #277): the
+	 * rest hands' bones go on first for a part that holds its stand-in gun
+	 * or is not on the card at all. Every other look adds the part alone,
+	 * as before. */
+	const bool look = xray || wears_xray(g_outfit);
+
+	#define HD_LARA_HAND(which_, mask_) \
+		do { \
+			const int h_ = (which_); \
+			const int how_ = !look ? HD_LARA_XRAY_HAND_PART \
+				: HDLaraXrayHand(h_, xray ? HDLaraHasXrayPart(h_) \
+					: HDLaraHasPart(h_), HDLaraXrayStandIn(h_)); \
+			if (how_ & HD_LARA_XRAY_HAND_REST) \
+				HD_LARA_ADD(HD_LARA_PART_HAND_REST, (mask_)); \
+			if (how_ & HD_LARA_XRAY_HAND_PART) \
+				HD_LARA_ADD(h_, (mask_)); \
+		} while (0)
+
 	if (right == left)
-		HD_LARA_ADD(right, ~0u);
+		HD_LARA_HAND(right, ~0u);
 	else
 	{
-		HD_LARA_ADD(right, kRightArm);
-		HD_LARA_ADD(left, kLeftArm);
+		HD_LARA_HAND(right, kRightArm);
+		HD_LARA_HAND(left, kLeftArm);
 	}
+
+	#undef HD_LARA_HAND
 
 	/* The thigh holsters. Left is node 1, right is node 4 - the two slots the
 	 * engine keeps in LHolster and lara.holster, and DrawLara puts them on

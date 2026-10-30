@@ -306,6 +306,23 @@ struct HDModelSlot
 	 * opaque pieces stand inside a translucent shell, so that no piece is lit
 	 * as ordinary gear beside it. */
 	bool lightAsAdditive = false;
+
+	/* The installs' own file, never a mod's: the search below skips the
+	 * Mods folder for this slot. For a look that is the remaster's own -
+	 * the X-ray set (hd_lara.cpp, kXray) - where a mod's file of the same
+	 * name is not that look: Guns\IMI Uzis ships its one gun as
+	 * HAND_BARE_UZI, HAND_GLOVES_UZI and HAND_XRAY_UZI alike, 31,267
+	 * vertices on the same four pages. */
+	bool installOnly = false;
+
+	/* And a stand-in for a name the installs do not have. When `name` is
+	 * in no folder this slot may search, the installs' own `standIn` is
+	 * built in its place, with every page of the installs' `standInDrop`
+	 * dropped - a hand file's gun without the hands, beside the rest
+	 * hands of the set. HDModelName then names the stand-in, which is how
+	 * a caller tells the two apart. Null for none. */
+	const char* standIn = 0;
+	const char* standInDrop = 0;
 };
 
 /* What the classic pose did to one slot, for the caller's log line - the

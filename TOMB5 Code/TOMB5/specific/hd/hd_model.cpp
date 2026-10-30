@@ -3638,6 +3638,7 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 		HDModelOrigin origin = HD_MODEL_ORIGIN_NONE;
 		int mod = -1;
 		std::string path;
+		bool standIn = false;
 
 		/* A file the caller found itself - the wardrobe, and nothing else. No
 		 * search at all; see HDModelSlot::path for why the wardrobe cannot go
@@ -3657,7 +3658,28 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 			// two more places to walk.
 			const double find_began = now_ms();
 
-			path = find_model(model, tr3, &origin, &mod);
+			/* The installs alone for a slot that asks for them, and their
+			 * stand-in where they lack the name (HDModelSlot::installOnly,
+			 * ::standIn). From here on the stand-in's name is the model's,
+			 * so every note and HDModelName say which file was built. */
+			path = find_model(model, tr3, &origin, &mod,
+				slots[i].installOnly ? kModsNone : kModsAny);
+
+			if (path.empty() && slots[i].standIn && !tr3)
+			{
+				path = find_model(slots[i].standIn, false, &origin, &mod,
+					kModsNone);
+
+				if (!path.empty())
+				{
+					note("%s (slot %d): %s.TRM is in no install folder - the "
+						"install's own %s stands in", slot_label(slot, model),
+						slot, model, slots[i].standIn);
+					model = slots[i].standIn;
+					standIn = true;
+				}
+			}
+
 			find_ms += now_ms() - find_began;
 		}
 
@@ -3733,6 +3755,33 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 		if (slots[i].mirror && slots[i].mirrors > 0)
 			HDTrmFoldMirrored(&here.trm, slots[i].mirror, slots[i].mirrors,
 				slots[i].mirrorBar, &here.fold);
+
+		/* The stand-in without the pages of `standInDrop`, as a drop set:
+		 * a hand file's gun without the hands. A file that is nothing but
+		 * those pages keeps no triangle and is not built at all. */
+		if (standIn && slots[i].standInDrop && here.cutPage.empty())
+		{
+			const double drop_started = now_ms();
+			const std::string dropPath = find_model(slots[i].standInDrop,
+				false, 0, 0, kModsNone);
+			HDTrmModel drop;
+			const char* dropTrouble = "";
+
+			if (!dropPath.empty() &&
+				HDTrmLoad(dropPath.c_str(), &drop, &dropTrouble))
+			{
+				for (int t = 0; t < drop.textures; t++)
+					here.cutPage.push_back((int)drop.texture[t]);
+
+				HDTrmFree(&drop);
+				here.cutKeeps = false;
+			}
+
+			read_ms += now_ms() - drop_started;
+			note("%s (slot %d): %d page%s of %s dropped from it",
+				slot_label(slot, model), slot, (int)here.cutPage.size(),
+				here.cutPage.size() == 1 ? "" : "s", slots[i].standInDrop);
+		}
 
 		/* The donor game's own frame 0. What this is and
 		 * what it needs is written out at HDModelSlot::classicPose; this is

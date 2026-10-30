@@ -131,6 +131,8 @@
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_object_rules.h"
 // The glow's normal: the per-part choice and its two settings (glow_normal).
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_render.h"
+// The X-ray look's weapons: nothing at the thighs, a hand (xray_weapons).
+#include "../../../TOMB5 Code/TOMB5/specific/hd/hd_lara.h"
 /* The names of the installation search: the wide compare and the code page
  * test (install_names). Last, because it brings windows.h with it. */
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_install_names.h"
@@ -30303,6 +30305,82 @@ static void window_place()
 		WinPlaceStep(modes, 7, 9, 1280, 720, 2544, 1361, 1), -1);
 }
 
+/* The X-ray look's weapons (hd_lara.h, HDLaraXrayPick and HDLaraXrayHand)
+ * on a set built by hand: one that HAS a file for every thigh holster and
+ * one for the back. Then the hands, with the X-ray file on the card,
+ * without it and its stand-in in its place, and with neither. And out of
+ * the engine's text: the set is read from the installs alone, its
+ * stand-in is the bare file without the rest hands' pages, and the draw
+ * asks the hand rule. */
+static void xray_weapons()
+{
+	const HDLaraXrayRow rows[] =
+	{
+		{ HD_LARA_PART_HAND_UZI,       "HAND_XRAY_UZI" },
+		{ HD_LARA_PART_HOLSTER_PISTOL, "HOLSTER_PISTOL_XRAY" },
+		{ HD_LARA_PART_HOLSTER_UZI,    "HOLSTER_UZI_XRAY" },
+		{ HD_LARA_PART_HOLSTER_DEAGLE, "HOLSTER_DEAGLE_XRAY" },
+		{ HD_LARA_PART_BACK_SHOTGUN,   "HOLSTER_SHOTGUN_XRAY" }
+	};
+	const int n = (int)(sizeof(rows) / sizeof(rows[0]));
+	const char* back = HDLaraXrayPick(rows, n, HD_LARA_PART_BACK_SHOTGUN);
+	const char* uzi = HDLaraXrayPick(rows, n, HD_LARA_PART_HAND_UZI);
+	const int part = HD_LARA_XRAY_HAND_PART;
+	const int rest = HD_LARA_XRAY_HAND_REST;
+	long right = 0;
+
+	right += HDLaraXrayPick(rows, n, HD_LARA_PART_HOLSTER_PISTOL) == 0;
+	right += HDLaraXrayPick(rows, n, HD_LARA_PART_HOLSTER_UZI) == 0;
+	right += HDLaraXrayPick(rows, n, HD_LARA_PART_HOLSTER_DEAGLE) == 0;
+	ok(right == 3, "xray: a thigh holster with a file draws nothing", right,
+		3);
+	ok(back && !strcmp(back, "HOLSTER_SHOTGUN_XRAY"),
+		"xray: the weapon on the back keeps its file", back != 0, 1);
+	ok(uzi && !strcmp(uzi, "HAND_XRAY_UZI") &&
+		HDLaraXrayPick(rows, n, HD_LARA_PART_HAND_HK) == 0,
+		"xray: a hand takes its row, a part without one nothing",
+		uzi != 0, 1);
+
+	ok(HDLaraXrayHand(HD_LARA_PART_HAND_UZI, true, false) == part,
+		"xray: the uzis with their X-ray file: the file, bones and gun",
+		HDLaraXrayHand(HD_LARA_PART_HAND_UZI, true, false), part);
+	ok(HDLaraXrayHand(HD_LARA_PART_HAND_UZI, true, true) == (part | rest),
+		"xray: the uzis without it: the stand-in gun and the rest hands",
+		HDLaraXrayHand(HD_LARA_PART_HAND_UZI, true, true), part | rest);
+	ok(HDLaraXrayHand(HD_LARA_PART_HAND_UZI, false, false) == rest,
+		"xray: the uzis with neither: the rest hands, never no hand",
+		HDLaraXrayHand(HD_LARA_PART_HAND_UZI, false, false), rest);
+	ok(HDLaraXrayHand(HD_LARA_PART_HAND_REST, true, false) == rest,
+		"xray: the rest hands are the rest hands",
+		HDLaraXrayHand(HD_LARA_PART_HAND_REST, true, false), rest);
+
+	char* lara = hd_switch_text("hd_lara.cpp");
+	char* model = hd_switch_text("hd_model.cpp");
+	static char body[4096];
+
+	glass_body(lara, "void xray_sources(HDModelSlot& one, int part)", body,
+		sizeof(body));
+	right = (strstr(body, "one.installOnly=true;") != 0) +
+		(strstr(body, "one.standIn=kPart[part].model;one.standInDrop="
+			"kPart[HD_LARA_PART_HAND_REST].model;") != 0);
+	glass_body(lara, "const char* xray_model(int part)", body, sizeof(body));
+	right += strstr(body, "returnHDLaraXrayPick(kXray,") != 0;
+	right += hd_switch_count(lara, "HDLaraXrayHand(h_, xray ?") == 1;
+	ok(right == 4, "xray: the plan, the lookup and the draw take the rules",
+		right, 4);
+
+	right = hd_switch_count(model,
+		"slots[i].installOnly ? kModsNone : kModsAny") +
+		hd_switch_count(model, "find_model(slots[i].standIn, false, &origin, "
+			"&mod,") +
+		hd_switch_count(model, "find_model(slots[i].standInDrop,");
+	ok(right == 3, "xray: the set out of the installs, a stand-in as well",
+		right, 3);
+
+	free(lara);
+	free(model);
+}
+
 int main()
 {
 	printf("ModernTest - the arithmetic of the modern control\n");
@@ -30527,6 +30605,7 @@ int main()
 	yshift_rule();
 	lift_door_rule();
 	window_place();
+	xray_weapons();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

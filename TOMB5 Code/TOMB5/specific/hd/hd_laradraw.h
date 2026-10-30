@@ -146,12 +146,14 @@ void HDLaraDrawFrame(long mirror);
 
 /* The log of a frame that draws her classic. DrawLara__1, __4 and __5 call
  * it where they draw the classic composite, outside a mirror, with their own
- * number, and it writes the SWAPLOG and HIDELOG lines HDLaraDrawFrame writes
- * for the HD one: the same fields and the same state, the last field
- * drawn=DrawLara__<variant> where the HD lines say drawn=hd. Behind -log and
- * nothing else: it reads her mesh bits and mesh pointers and draws nothing,
- * so the classic picture is the same with or without it. */
-void HDLaraClassicLog(int variant);
+ * number and the thigh holsters they draw in the frame (1 the left one, 2 the
+ * right one), and it writes the SWAPLOG and HIDELOG lines HDLaraDrawFrame
+ * writes for the HD one: the same fields and the same state,
+ * drawn=DrawLara__<variant> where the HD lines say drawn=hd, and after it the
+ * last field, holsters=LR, L, R or none. Behind -log and nothing else: it
+ * reads her mesh bits and mesh pointers and draws nothing, so the classic
+ * picture is the same with or without it. */
+void HDLaraClassicLog(int variant, long holsters);
 
 // --- the projected shadow --------------------------------------------------
 

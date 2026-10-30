@@ -606,9 +606,10 @@ namespace
 	 *
 	 * Both lines are written by whichever draw puts her on the screen: the
 	 * composite here, and the classic variants through HDLaraClassicLog,
-	 * which draw the pointer's own mesh. Their last field says which -
-	 * drawn=hd or drawn=DrawLara__1, __4 or __5. The state is one for both,
-	 * so a change is named once, by the draw that meets it. */
+	 * which draw the pointer's own mesh. Their field drawn= says which -
+	 * drawn=hd or drawn=DrawLara__1, __4 or __5, the classic ones followed by
+	 * the thigh holsters they draw. The state is one for both, so a change is
+	 * named once, by the draw that meets it. */
 	short* g_swap_mesh[HD_LARA_NODES];
 	bool g_swap_foreign[HD_LARA_NODES];
 	bool g_swap_seeded = false;
@@ -2661,15 +2662,19 @@ void HDLaraDrawFrame(long mirror)
 
 /* The classic draw's share of SWAPLOG and HIDELOG (hd_laradraw.h). The mask
  * is the one the composite reads her bits into, so a line names the same
- * hidden nodes whichever draw wrote it. */
-void HDLaraClassicLog(int variant)
+ * hidden nodes whichever draw wrote it. The holsters ride on the draw's
+ * field and so end both lines: what that draw draws in the frame the line
+ * is written. */
+void HDLaraClassicLog(int variant, long holsters)
 {
-	char drawn[16];
+	static const char* const said[4] = { "none", "L", "R", "LR" };
+	char drawn[40];
 
 	if (!gLogEnabled)
 		return;
 
-	std::snprintf(drawn, sizeof(drawn), "DrawLara__%d", variant);
+	std::snprintf(drawn, sizeof(drawn), "DrawLara__%d holsters=%s", variant,
+		said[holsters & 3]);
 	swap_log(HDLaraNodesShown((unsigned long)lara_item->mesh_bits), drawn, false,
 		0);
 }

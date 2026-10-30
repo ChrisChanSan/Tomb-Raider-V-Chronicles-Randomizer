@@ -42,6 +42,7 @@ long JoyRole(long role);	// whether the active set's pad role fires this tick - 
 const short* KeyDefaultRow();	// the active scheme's default row - Key()'s fallback and CheckKeyConflicts()'s subject
 short* KeySchemeSet(long modern);	// one scheme's stored set, wherever it is sitting (specific\registry.cpp)
 long InputMouseButtons();	// the mouse's five buttons as the last S_UpdateInput took them, bit n = KEY_MOUSE_FIRST + n
+long InputPadDirection();	// the pad pair's own direction bits, last call
 long JoyBitConfirm();
 long JoyBitBack();
 long ModernLookTankActive();	// the look key is steering Lara as in the Tank scheme this tick

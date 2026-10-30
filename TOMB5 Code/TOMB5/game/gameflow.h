@@ -18,6 +18,7 @@ long SwitchLanguage(long idx);
 const char* LanguageName(long idx);
 const char* CustomText(const char* engl);
 long TitleOptions();
+bool TitleInputShadowed();	// this TitleOptions call got the zeroed input
 void DoTitle(uchar name, uchar audio);
 long do_dels_cutseq_selector();
 void DoLevel(uchar name, uchar audio);

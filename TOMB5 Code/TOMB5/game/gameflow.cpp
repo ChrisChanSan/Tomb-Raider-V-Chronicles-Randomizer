@@ -815,6 +815,16 @@ static bool TitleInputShadow()
 	return repeat && ActiveFpsMode() != 0;
 }
 
+/* Whether the TitleOptions call now running was handed the zeroed input, for
+ * the MENULOG slider line (game\menu_frame.cpp); 0 outside that call, so the
+ * pause menu's options page reads 0. */
+static bool title_input_shadowed;
+
+bool TitleInputShadowed()
+{
+	return title_input_shadowed;
+}
+
 /* An FMV's last picture stands on the screen after it: the movie clears
  * and draws every frame itself, so a fade to black before it does not
  * cover what it leaves. */
@@ -925,7 +935,9 @@ void DoTitle(uchar name, uchar audio)
 				dbinput = 0;
 			}
 
+			title_input_shadowed = shadow;
 			gfStatus = TitleOptions();
+			title_input_shadowed = 0;
 
 			if (shadow)
 			{

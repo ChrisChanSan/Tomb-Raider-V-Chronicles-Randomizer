@@ -4724,8 +4724,8 @@ static void slider_held_word()
 			"held word: its bits are kept before a key joins them");
 		check(tree_count(inp, "pad_dir_bits ="), 1,
 			"held word: and written nowhere else");
-		check(tree_count(inp, "return (InventoryActive || gfLevelId == "
-			"LVL5_TITLE) ? 1 : 0;"), 1,
+		check(tree_count(inp, "return (InventoryActive || DeathMenuActive || "
+			"gfLevelId == LVL5_TITLE) ? 1 : 0;"), 1,
 			"held word: the Modern menus' pair is the title's too");
 	}
 

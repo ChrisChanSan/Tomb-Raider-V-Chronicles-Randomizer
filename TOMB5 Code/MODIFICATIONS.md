@@ -15713,6 +15713,91 @@ only on the visibility path; no classic path file changed.
 
 **Commits.** `e58151a3`.
 
+### A static the art leaves out at one place takes the art it has at another (#274)
+
+2026-10-30.
+
+**What.** One rule of the HD level build on the visibility path (`hd_vis` 1), run as the
+`.TRG` is read and before anything is built from it (`specific/hd/hd_artcopy.h`, new:
+`HDArtCopyMake` plans, `HDArtCopyApply` puts in; `ArtCopies` in
+`specific/hd/hd_render.cpp`, called in `HDRenderLevelBegin` after the sky's caps; the
+statics handed in by `BuildStaticPlaces` in `specific/hd/hd_level.cpp`). A static mesh the
+art does not hold - by the statics' own measure, its points on the art of the group that
+draws its room (#194) - whose slot the art models at another placement in a room the same
+group draws, whole quarter turns from its own, takes a copy of that art: the group's own
+triangles round the other placement, turned and moved by the rigid motion between the two,
+put into the group's runs with the donor's material, texture, both vertex colours and
+sway. Every table built after it - the cells, the faces' coverage, the statics' answers,
+the second shells, the cards, the guests - sees the copy as ordinary art of its group, and
+the static is then answered by the statics' rule at its own points, as before. With
+`-log`, after the static lines, one `HDLOG artcopy level= room= mesh= slot= from_room=
+from_mesh= tris= shift= turn= faces= face_tris=` line per copy; the level's statics line
+ends in `copies= copied= copy_ms=`, the `HDLOG room=` line in `copied=` (the triangles
+copied into the room's place) and a copied static's line in `copied`. RoomProbe prints the
+same `artcopy` lines (`-artcopy`, `-artcopytable`), and ModernTest checks the rule, on
+RICH2's fifteen flights among others.
+
+**Why.** In RICH2's stairwell - rooms 14 to 19, all of their art in room 14's group - a
+flight in a blue classic texture, its blue railing and a dark classic plate floor at its
+foot stood among the art's steel flights. The stair (slot 60) has fifteen flights with
+railings (slot 66) and posts (slot 4), and the art models twelve of the flights: rooms 16,
+18 and 19 each have one it leaves out (12, 14 and 12 of 39 points on the art), with four
+railings and two posts - nine statics drawn classic, and the landing floors of rooms 18
+and 19 kept classic beside them (#194). The same slots stand at the same turn one turn of
+the stair (4,096 units) above or below, where the art models them: room 15's flights are
+what rooms 18 and 19 lack, 4,096 units lower, and room 14's what room 16 lacks, 4,096
+units higher - a shift, with no turn and no mirror.
+
+**How.** A static is a donor when every one of its points stands in a 256-unit cell
+holding a corner of its group's art, and a target when fewer than nine twentieths do (in a
+room drawn by its own art also fewer than a twentieth of its box's cells) and no other
+group's art holds it either. A target's donor is a donor of its slot in a room the same
+group draws, whole quarter turns from it: no turn first, then the nearest (the three
+distances summed), then the first in the level's order. The art must model the slot alike
+at its donors - the triangles wholly inside each donor's box grown by 32 units at most
+three halves of the fewest - or the slot gets no copy. The targets of one motion take
+together the group's triangles every corner of which lies in their donors' grown boxes, so
+that a handrail running on through the boxes of two flights and a post comes whole; less
+those that are a room's surface at the donor or at the target (lying whole on a classic
+face, or with every corner within 16 units of a face's plane and 512 of the face, facing
+its way within a cosine of 0.98) and less those whose image would stand on the group's art
+already there (more than half of its corners, centroid and samples within 16 units of a
+triangle facing its way). A classic face of the target's room touching its box, whose
+image at the donor is a face carrying the group's art - the landing at a flight's end -,
+takes that art too and then falls to the art as any covered face. The vertices go in after
+the group's last vertex and the triangles at the end of their run; every later index and
+run start moves up, as the sky's caps do. A copy keeps the donor's baked light and not its
+new place's: the flights come in at about 41 on the first colour, as at their donors,
+while the art round their new places reads 61 to 76, and warmer in rooms 18 and 19; the
+railings and posts land within about 20 of it either way.
+
+On RICH2: nine copies, 5,881 triangles and 8,192 vertices; the nine statics are answered
+by the art afterwards (seven `art`, two `groups`), every point of each on it. Room 18
+keeps no classic face (16 of 16 covered, its landing taking 58 triangles), room 19 one (14
+of 15, its landing taking 54). Where flights were copied the fight of group 14's art (the
+pixels that change when it is pushed by 1/2,000 of its distance either way) rises at two
+eyes from 3,672 to 3,962 and from 1,738 to 2,558 pixels; it stays with the art drawn
+alone, and leaving out the copied triangles that touch the art already there takes fewer
+than 90 of those pixels away: they lie on the copied gratings themselves, near-coincident
+surfaces of the art's own flight. The card census stays 1,138 one-sided triangles; RICH2's
+cut-out triangles grow from 60,123 to 64,991, none one-sided. Over the other fourteen
+levels nothing is copied and the build's fingerprint and every static's answer are the
+base's: their few targets have no donor, all but RICH3's room 79 mesh 2 (slot 46), which
+is refused: its three donors hold 260 to 15,290 triangles round them, the art models other
+objects there, and a copy would have put another object, in another light, into its niche.
+The rule costs 132 ms on RICH2, about 4 % of its build, and 5 to 56 ms elsewhere. Room
+16's sixteen kept ceiling faces at the top of the shaft stay classic and black by
+decision: the open top is meant to suggest that the shaft goes on into RICH3. Room 19's
+wall square (face 8) stays classic: the stair repeats every 4,096 units and the rooms
+every 1,536, so no face at the donor has its corners. Room 14's flat wall square (mesh 2,
+slot 7) is no copy's case: all nine of its points lie on the art, whose wall stands 1 to 8
+units from its plane, and the statics' rule draws it classic by its box's cells (1 of 25),
+a flat static on a cell boundary. `hd_build` 0 and `hd_vis` 0 are unchanged by
+construction: the statics are handed to the build on the visibility path only, and without
+them nothing is copied; no classic path file changed.
+
+**Commits.** `14b9afa5`.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -15995,3 +16080,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #262 | The suit's console states and Lara's legs inside the suit |
 | #263 | Lara's legs inside the suit, on the classic path |
 | #269 | Cut-out cards back to back are one-sided; a hanging guest is refused |
+| #274 | A static the art leaves out at one place takes the art it has at another |

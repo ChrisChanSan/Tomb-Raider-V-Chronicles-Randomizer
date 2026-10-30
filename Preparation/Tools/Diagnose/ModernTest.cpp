@@ -30382,6 +30382,46 @@ static void thruster_move()
 		"thrusters: no worn point under them, nothing moves", t.down, 0);
 }
 
+/* The thrusters' readers, in the engine's own text: the draw
+ * (specific\drawlara.cpp, DrawLara__5), the mist and the air bubbles
+ * (game\subsuit.cpp, TriggerEngineEffects and TriggerAirBubbles) need the
+ * game and are not linked here, so their lines are counted - each asks
+ * HDLaraThrusterShift for both moves, and every one of the suit's own
+ * numbers for the units' height (-192) and depth (-160) carries its move.
+ * None stands bare, so no reader takes the one and loses the other. */
+static void thruster_wiring()
+{
+	char* draw = hd_switch_text("../drawlara.cpp");
+	char* suit = hd_switch_text("../../game/subsuit.cpp");
+	int n;
+
+	ok(draw && suit, "thruster wiring: the two files are read",
+		!!draw + !!suit, 2);
+
+	n = hd_switch_count(draw, "HDLaraThrusterShift(&back, &down);");
+	ok(n == 1, "thruster wiring: DrawLara__5 asks for both moves", n, 1);
+	n = hd_switch_count(draw, "-192 + down, -160 + back);");
+	ok(n == 2 && hd_switch_count(draw, "-192") == 2 &&
+		hd_switch_count(draw, "-160") == 2,
+		"thruster wiring: both units drawn moved, no bare number", n, 2);
+
+	n = hd_switch_count(suit, "HDLaraThrusterShift(&back, &down);");
+	ok(n == 2, "thruster wiring: the mist and the bubbles ask for both",
+		n, 2);
+	n = hd_switch_count(suit, "-192 + down;");
+	ok(n == 5 && hd_switch_count(suit, "-192") == 5,
+		"thruster wiring: the five heights of subsuit.cpp moved", n, 5);
+	n = hd_switch_count(suit, "-160 + back;");
+	ok(n == 4 && hd_switch_count(suit, "-160") == 4,
+		"thruster wiring: the four depths of subsuit.cpp moved", n, 4);
+	n = hd_switch_count(suit, "-512 - (GetRandomControl() & 0x7F) + back;");
+	ok(n == 1, "thruster wiring: the bubbles' aim moves back with them", n,
+		1);
+
+	free(draw);
+	free(suit);
+}
+
 int main()
 {
 	printf("ModernTest - the arithmetic of the modern control\n");
@@ -30607,6 +30647,7 @@ int main()
 	lift_door_rule();
 	window_place();
 	thruster_move();
+	thruster_wiring();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

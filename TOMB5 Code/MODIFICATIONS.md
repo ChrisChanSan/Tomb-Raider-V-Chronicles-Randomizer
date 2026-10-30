@@ -16244,6 +16244,16 @@ and the units and their mist are the classic ones. A second height, the units' c
 third of the torso's height under its top (50 down on the Antarctica outfit), was drawn
 to compare and not built. The verdict census over the fifteen levels is unchanged.
 
+**Addendum.** The air bubbles the suit loses once JOBY4's cutscene 40 has played
+(`TriggerAirBubbles` in `game/subsuit.cpp`; `game/laramisc.cpp` drains her air from then
+on) leave it between the two units, at their height and depth - (0, -192, -160) on the
+torso, the midpoint of the units' own two points - and so are a third reader of the
+moves: their start and their aim move with the units as the mist does, and they keep
+their path but rise from between the units rather than from the water beside her head
+(on the Antarctica outfit 79 lower and 24 nearer her). ModernTest `thruster_wiring` (7
+checks) counts in the engine's text that all three readers ask for both moves and that
+none of the suit's numbers for the units' height and depth stands without its move.
+
 **Commits.** `3c4f255d`.
 
 ## 3. Randomizer changes since Beta 1.0

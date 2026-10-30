@@ -186,16 +186,23 @@ void TriggerAirBubbles()
 	SPARKS* sptr;
 	PHD_VECTOR pos1;
 	PHD_VECTOR pos2;
-	long size;
+	long size, back, down;
 
+	/* The air the suit loses once cutscene 40 has played (DoSubsuitStuff;
+	 * game\laramisc.cpp drains lara.air from then on) leaves it between
+	 * the two units, at their height and depth, and goes straight back.
+	 * It moves with them as their mist does - the start and the aim alike,
+	 * so its path keeps its direction and speed - and 0 and 0 for the
+	 * classic suit (specific\hd\hd_laradraw.h, HDLaraThrusterShift). */
+	HDLaraThrusterShift(&back, &down);
 	pos1.x = 0;
-	pos1.y = -192;
-	pos1.z = -160;
+	pos1.y = -192 + down;
+	pos1.z = -160 + back;
 	GetLaraJointPos(&pos1, LMX_TORSO);
 
 	pos2.x = 0;
-	pos2.y = -192;
-	pos2.z = -512 - (GetRandomControl() & 0x7F);
+	pos2.y = -192 + down;
+	pos2.z = -512 - (GetRandomControl() & 0x7F) + back;
 	GetLaraJointPos(&pos2, LMX_TORSO);
 
 	sptr = &spark[GetFreeSpark()];

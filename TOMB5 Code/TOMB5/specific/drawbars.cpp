@@ -129,9 +129,9 @@ static long loadbar_build_total;
 static long loadbar_build_done;
 
 /* From the loading thread's join to the tail (S_LoadScreenJoin,
- * S_LoadScreenEnd) the frames present held: a lost device is noted and
- * not reset (loadbar_lost), and no further frame is drawn until the
- * tail, whose present resets it as every other frame's does. */
+ * S_LoadScreenEnd) the frames present held: a lost device is noted
+ * (loadbar_lost), and no further frame is drawn until the tail, whose
+ * present reports it to the window as every other frame's does. */
 static long loadbar_held;
 static long loadbar_lost;
 
@@ -157,12 +157,13 @@ static double LoadScreenTickMs()
 }
 
 /* A frame's present between the join and the tail: what S_DumpScreenFrame
- * and DXShowFrame do, without the screenshot key, and without the reset
- * of a lost device. That reset releases the HD path's objects
- * (HDLevelDeviceLost) while the HD build, which these frames interleave,
- * still has steps to run on them; a lost device stays lost until reset,
- * so the tail's first present finds it again after the build and resets
- * it there. The tick was waited out by S_DrawLoadBar; Sync() hands it out
+ * and DXShowFrame do, without the screenshot key, and without the report
+ * of a lost device to the window. The new device the window makes for it
+ * releases the HD path's objects (HDLevelDeviceLost), and the HD build,
+ * which these frames interleave, still has steps to run on them; a lost
+ * device stays lost, so the tail's first present finds it again after the
+ * build and reports it there, and the window waits for the end of the
+ * load. The tick was waited out by S_DrawLoadBar; Sync() hands it out
  * here, as in S_DumpScreenFrame. The Gamma row's pass and its copy back go
  * around the present as in DXShowFrame, so that these frames carry the
  * curve as every other frame does. */

@@ -70,6 +70,26 @@ extern volatile long DXWindowBusy;
 /* The back buffer made the client's size, the window left as it is; `why`
  * names the cause in the -log line. The caller holds the game thread. */
 long DXResizeToClient(const char* why);
+
+/* A lost device: the present failed with D3DERR_DEVICELOST, as it does
+ * while the secure desktop of Ctrl+Alt+Del, the lock screen or a UAC prompt
+ * has the screen. DXShowFrame, on the game thread, sets DXDeviceLost and
+ * posts WM_APP_DEVICE to the window once per loss; the window thread, which
+ * made the device, makes a new one (winmain.cpp, WinDeviceRestore) through
+ * DXRestoreDevice, which clears the mark. WM_APP + 1 is winmain.cpp's
+ * WM_APP_MOUSE. */
+#define WM_APP_DEVICE	(WM_APP + 2)
+extern volatile long DXDeviceLost;
+
+// TestCooperativeLevel of the device that exists, D3D_OK without one, and
+// the short name the WINLOG lines give its answer.
+HRESULT DXDeviceCoop();
+const char* DXCoopName(HRESULT hr);
+
+/* A new device in place of a lost one, made as a new size makes it
+ * (DXResizeToClient); the caller holds the game thread. 1 when a device was
+ * made. */
+long DXRestoreDevice();
 long DXToggleFullScreen();
 void DXLogWindow(const char* when);
 long DXGetInfo(DXINFO* dxinfo, HWND hwnd);

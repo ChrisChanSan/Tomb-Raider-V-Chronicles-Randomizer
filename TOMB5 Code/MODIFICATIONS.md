@@ -15978,6 +15978,65 @@ only on the visibility path; no classic path file changed.
 
 **Commits.** `e58151a3`.
 
+### The game comes back after Ctrl+Alt+Del (#270)
+
+2026-10-29.
+
+**What.** After Ctrl+Alt+Del, the lock screen or a UAC prompt the game comes back when the
+player returns to its window, in the look it had, HD included. Before, the picture stood
+still with the sound playing on, and the process never recovered. A game parked behind
+another window also wakes when its window is in front again without an activation message.
+
+**Why.** A full dump of the frozen process showed the game thread parked at the start of
+its scene (`HWBeginScene`, `game_parked` 1), the window thread idle in `GetMessage`, the
+music stream and XAudio2 running. The secure desktop had lost the windowed D3D9 device. In
+two frames running the device-lost road in `DXShowFrame` released the HD level and called
+`Reset` on the game thread; the log's last lines, still in the dump's memory, give the
+answer: `D3DERR_INVALIDCALL`. D3D9 refuses a `Reset` on any thread but the one that made
+the device, the window's, and while any `D3DPOOL_DEFAULT` object lives; the second release
+also forgot that the level was to be built HD again. Within the same millisecond of the
+log `WM_ACTIVATE` (`WA_INACTIVE`) parked the game thread, and in the ten seconds to the
+dump neither `WM_ACTIVATE` nor `WM_SETFOCUS` came, only a mouse move. Woken, the thread
+would have met the refused `Reset` in every frame.
+
+**How.** `specific/dxshell.cpp`: `DXShowFrame` resets nothing; it marks the loss
+(`DXDeviceLost`) and posts `WM_APP_DEVICE` to the window once per loss. `DXRestoreDevice`
+makes a new device as a new size makes it (`DXResizeToClient`: the HD level released with
+the old device and built again on the new one); `DXDeviceCoop` and `DXCoopName` give
+`TestCooperativeLevel`'s answer. `specific/winmain.cpp`: `WIN_DEVICE_TIMER` asks four
+times a second whether the player is back in the window - the game thread not parked, the
+window in front and not minimised, no film, no level loading - and whether the device can
+be given back; then the game thread is held at the start of its scene, the device made
+anew, the render states and the projection set and the thread let go. The park has one
+partner, `WinWakeGame`, and every road back leads to it: `WA_ACTIVE` and `WA_CLICKACTIVE`,
+`WM_SETFOCUS` and `WM_ACTIVATEAPP` with the window in front, `WM_CLOSE`, and
+`WIN_PARK_TIMER`, which asks four times a second and wakes a parked thread as soon as its
+window is the foreground window and not minimised, whatever message did or did not come.
+The wake also comes past the film guard (a thread parked at a film's first frame would
+have waited for good), a second `WA_INACTIVE` leaves a parked thread alone instead of
+calling it stuck two seconds later, and Alt+Enter does nothing while the thread is parked
+(its hold would have waited for ever). New `-log` lines, family `WINLOG`, one per message
+or event: `activate`, `activateapp`, `focus set|kill`, `park result=`, `wake by=`,
+`front`, `device lost coop=`, `device waits why=` and `device restore coop= ok=`.
+`specific/drawbars.cpp`: its comments on the lost device. `MenuTest`'s gamma row checks
+that no `Reset` is left. `docs/Engine-Manual.md` says how the game comes back and what the
+lines show. Every mode takes the same road, the windowed state and full screen alike (full
+screen is a windowed device too); a classic level gets its pages moved as after Alt+Enter,
+an HD level its HD build again, with its seconds. No drawing code changed (`game/` and
+`specific/hd/` are untouched), so the pictures of `hd_build` 0 and 1 are the previous
+ones. The hang seam is unchanged: a parked thread ends its watch, and a thread that never
+reaches its frame wait is caught as before.
+
+**Decisions.** A new device rather than a `Reset` on the window thread: the reset needs
+every `D3DPOOL_DEFAULT` object released, which nothing here can prove, and its failure is
+the picture that never comes back; the new device is the road every Alt+Enter and new size
+has taken since #247. The window does not pull itself to the front when nobody has it
+after the secure desktop: a click into the picture or Alt+Tab is the player's way back,
+and the `WINLOG front` line says when nobody has it.
+
+**Commits.** `1ee2cc9a`, `c588b6f5` (the restore asks the window in front, not the mouse's
+term).
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -16265,3 +16324,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #267 | The classic holsters hide with her thighs, a left-out seam keeps its place |
 | #268 | Lara in the X-ray scanner and the X-ray outfit, in HD |
 | #269 | Cut-out cards back to back are one-sided; a hanging guest is refused |
+| #270 | The game comes back after Ctrl+Alt+Del |

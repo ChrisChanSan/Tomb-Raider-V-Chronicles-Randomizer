@@ -189,7 +189,10 @@ void WinProcessCommands(long cmd)
 {
 	if (cmd == KA_ALTENTER)
 	{
-		if (App.fmv || !G_dxinfo->DDInfo[G_dxinfo->nDD].bCanRenderWindowed || LevelLoadingThread.active)
+		/* A thread parked at the start of its scene (WM_ACTIVATE) never ends
+		 * the scene the hold below waits for: the key waits for the wake. */
+		if (App.fmv || !G_dxinfo->DDInfo[G_dxinfo->nDD].bCanRenderWindowed ||
+			LevelLoadingThread.active || App.dx.WaitAtBeginScene)
 			return;
 
 		Log("KA_ALTENTER");
@@ -703,6 +706,165 @@ static void WinFreeGame()
 	Log("Game Thread Resumed");
 }
 
+/* The park, its wake, and a lost device given back.
+ *
+ * WM_ACTIVATE parks the game thread when the window loses the activation:
+ * held at the start of its scene and suspended, as WinHoldGame holds it,
+ * so that a game in the background runs no logic and draws nothing. The
+ * park has one partner, WinWakeGame, and every road back leads to it:
+ * WA_ACTIVE and WA_CLICKACTIVE; WM_SETFOCUS and WM_ACTIVATEAPP with the
+ * window in front again; WM_CLOSE; and WIN_PARK_TIMER, which asks four
+ * times a second while the thread is parked whether the window is the
+ * foreground window and not minimised. The timer is the road back that
+ * needs no message at all: the dump of a game frozen behind Ctrl+Alt+Del
+ * shows the park on WA_INACTIVE and, in the ten seconds after it, no
+ * WM_ACTIVATE and no WM_SETFOCUS, only a mouse move over the window.
+ *
+ * A lost device (dxshell.cpp, DXShowFrame) is given back by this thread,
+ * which made it. WM_APP_DEVICE starts WIN_DEVICE_TIMER, and four times a
+ * second WinDeviceRestore asks whether the player is in the window again -
+ * the thread not parked, the window in front and not minimised, no film,
+ * no level loading - and whether the device can be given back
+ * (TestCooperativeLevel); then the game thread is held, the device made
+ * anew (DXRestoreDevice) and the thread let go. The first tick comes a
+ * quarter of a second after the loss, by when the secure desktop's
+ * WA_INACTIVE has parked the thread.
+ *   WINLOG activate state=<inactive|active|click> minimized=<0|1>
+ *     front=<ours|other|none> parked=<0|1> fmv=<0|1> closing=<0|1>
+ *     device=<ok|lost> - every WM_ACTIVATE
+ *   WINLOG activateapp active=<0|1> front= parked= - every WM_ACTIVATEAPP
+ *   WINLOG focus <set|kill> front= parked= - every WM_SETFOCUS, WM_KILLFOCUS
+ *   WINLOG park result=<parked|stuck|already|early> - every WA_INACTIVE
+ *   WINLOG wake by=<activate|focus|activateapp|front|close> parked_ms=<n>
+ *     device=<ok|lost>
+ *   WINLOG front <ours|other|none> parked_ms=<n> - while parked, each time
+ *     another window, or none, is in front
+ *   WINLOG device waits why=<setup|parked|front|film|loading|lost|hold>
+ *     coop=<ok|lost|notreset|internal|other> - once per reason
+ *   WINLOG device restore coop=<...> ok=<0|1> - before the new device's
+ *     render states; ok=0 is a device that could not be made */
+#define WIN_PARK_TIMER		2
+#define WIN_DEVICE_TIMER	3
+
+static DWORD park_since;		// GetTickCount at the park
+static long park_front = -1;		// the window in front the timer saw last
+static const char* device_waits;	// what the restore last waited for
+
+static const char* const kWinFront[3] = { "ours", "other", "none" };
+
+// Whose window is in front: 0 ours, 1 another's, 2 none - another desktop
+// has the screen, or no window is active.
+static long WinFront()
+{
+	const HWND front = GetForegroundWindow();
+
+	return !front ? 2 : front == App.hWnd ? 0 : 1;
+}
+
+// The park's one partner: the thread resumed, the timer gone. True when a
+// parked thread was woken.
+static bool WinWakeGame(const char* by)
+{
+	if (!game_parked)
+		return false;
+
+	KillTimer(App.hWnd, WIN_PARK_TIMER);
+	ResumeThread((HANDLE)MainThread.handle);
+	App.dx.WaitAtBeginScene = 0;
+	game_parked = 0;
+	Log("WINLOG wake by=%s parked_ms=%lu device=%s", by,
+		(unsigned long)(GetTickCount() - park_since),
+		DXDeviceLost ? "lost" : "ok");
+	return true;
+}
+
+// A road back that brings no WA_ACTIVE: the window in front and not
+// minimised is the player back in it - the test WM_SIZE takes for the
+// mouse's term. True when a parked thread was woken.
+static bool WinWakeIfFront(const char* by)
+{
+	if (!game_parked || WinFront() != 0 || IsIconic(App.hWnd) ||
+		!WinWakeGame(by))
+		return false;
+
+	Log("Game Thread Resumed");
+	return true;
+}
+
+static void WinDeviceRestore()
+{
+	const char* why = 0;
+
+	if (!DXDeviceLost || mouse_closing)
+	{
+		KillTimer(App.hWnd, WIN_DEVICE_TIMER);
+		device_waits = 0;
+		return;
+	}
+
+	const HRESULT coop = DXDeviceCoop();
+
+	// A new size or Alt+Enter made a new device meanwhile.
+	if (coop == D3D_OK)
+	{
+		InterlockedExchange(&DXDeviceLost, 0);
+		KillTimer(App.hWnd, WIN_DEVICE_TIMER);
+		device_waits = 0;
+		Log("WINLOG device restore coop=ok ok=1");
+		return;
+	}
+
+	if (!App.SetupComplete)
+		why = "setup";
+	else if (game_parked)
+		why = "parked";
+	else if (WinFront() != 0 || IsIconic(App.hWnd))
+		why = "front";		// another window, another desktop, minimised
+	else if (App.fmv)
+		why = "film";
+	else if (LevelLoadingThread.active || g_level_loading)
+		why = "loading";
+	else if (coop == D3DERR_DEVICELOST)
+		why = "lost";		// the device cannot be given back yet
+	else if (!WinHoldGame())
+		why = "hold";
+
+	if (why)
+	{
+		if (!device_waits || strcmp(device_waits, why))
+			Log("WINLOG device waits why=%s coop=%s", why, DXCoopName(coop));
+
+		device_waits = why;
+		SetTimer(App.hWnd, WIN_DEVICE_TIMER, 250, 0);
+		return;
+	}
+
+	KillTimer(App.hWnd, WIN_DEVICE_TIMER);
+	device_waits = 0;
+
+	const long made = DXRestoreDevice();
+
+	Log("WINLOG device restore coop=%s ok=%ld", DXCoopName(coop), made);
+	WinRenderSize();
+	WinFreeGame();
+	WinMouseCapture();
+}
+
+// The WINLOG activate line (the block above).
+static void WinLogActivate(WPARAM wParam, bool closing)
+{
+	if (!gLogEnabled)
+		return;
+
+	const long state = (long)(wParam & 0xFFFF);
+
+	Log("WINLOG activate state=%s minimized=%ld front=%s parked=%ld fmv=%ld "
+		"closing=%ld device=%s", state == WA_INACTIVE ? "inactive" :
+		state == WA_CLICKACTIVE ? "click" : "active",
+		HIWORD(wParam) ? 1L : 0L, kWinFront[WinFront()], game_parked,
+		App.fmv ? 1L : 0L, closing ? 1L : 0L, DXDeviceLost ? "lost" : "ok");
+}
+
 /* The projection and the 2D layout for the back buffer's size, after every
  * new device of Alt+Enter, a key or a resize: the render states, the
  * projection's window (InitWindow), whose field of view is worked out from
@@ -953,7 +1115,47 @@ LRESULT CALLBACK WinMainWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 			return 0;
 		}
 
+		// The park's road back without a message (the park block).
+		if (wParam == WIN_PARK_TIMER)
+		{
+			const long front = WinFront();
+
+			if (!game_parked)
+			{
+				KillTimer(hwnd, WIN_PARK_TIMER);
+				return 0;
+			}
+
+			if (front != park_front)
+			{
+				park_front = front;
+				Log("WINLOG front %s parked_ms=%lu", kWinFront[front],
+					(unsigned long)(GetTickCount() - park_since));
+			}
+
+			// No message has said so; the mouse's term follows the wake.
+			if (WinWakeIfFront("front"))
+				WinMouseActive(1);
+
+			return 0;
+		}
+
+		if (wParam == WIN_DEVICE_TIMER)
+		{
+			WinDeviceRestore();
+			return 0;
+		}
+
 		break;
+
+	case WM_APP_DEVICE:
+
+		// The game thread's present found the device lost (dxshell.cpp); the
+		// restore is tried from the timer's first tick on (the park block).
+		if (!mouse_closing)
+			SetTimer(hwnd, WIN_DEVICE_TIMER, 250, 0);
+
+		return 0;
 
 	case WM_GETMINMAXINFO:
 
@@ -1010,10 +1212,24 @@ LRESULT CALLBACK WinMainWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 
 	case WM_SETFOCUS:
 		WinMouseActive(IsIconic(hwnd) ? 0 : 1);
+		Log("WINLOG focus set front=%s parked=%ld", kWinFront[WinFront()],
+			game_parked);
+		WinWakeIfFront("focus");
 		break;
 
 	case WM_KILLFOCUS:
 		WinMouseActive(0);
+		Log("WINLOG focus kill front=%s parked=%ld", kWinFront[WinFront()],
+			game_parked);
+		break;
+
+	case WM_ACTIVATEAPP:
+		Log("WINLOG activateapp active=%ld front=%s parked=%ld",
+			wParam ? 1L : 0L, kWinFront[WinFront()], game_parked);
+
+		if (wParam)
+			WinWakeIfFront("activateapp");
+
 		break;
 
 	case WM_ACTIVATE:
@@ -1036,9 +1252,17 @@ LRESULT CALLBACK WinMainWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 			mouse_free = 0;
 
 		WinMouseActive((wParam & 0xFFFF) != WA_INACTIVE && !HIWORD(wParam));
+		WinLogActivate(wParam, closing);
 
 		if (!closing)
 		{
+			/* The wake comes before the film's guard: a thread the park held
+			 * at the first frame of a film that began during its wait would
+			 * otherwise wait for a WA_ACTIVE that the guard swallows. */
+			if (App.fmv && (wParam & 0xFFFF) != WA_INACTIVE &&
+				WinWakeGame("activate"))
+				Log("Game Thread Resumed");
+
 			if (App.fmv)
 				return 0;
 
@@ -1051,7 +1275,13 @@ LRESULT CALLBACK WinMainWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 				if (gLogEnabled)
 					InterlockedOr(&RoomListWindowEvents, 1);
 
-				if (App.SetupComplete)
+				/* Parked already, a second WA_INACTIVE without a WA_ACTIVE
+				 * between them: the thread stands at the start of its scene,
+				 * and the hold below would wait two seconds for an end of the
+				 * scene that cannot come and then call the thread stuck. */
+				if (game_parked)
+					Log("WINLOG park result=already");
+				else if (App.SetupComplete)
 				{
 					// Bounded wait: the game thread can occasionally stall for
 					// several seconds inside the graphics driver's Present()
@@ -1097,15 +1327,22 @@ LRESULT CALLBACK WinMainWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 					{
 						SuspendThread((HANDLE)MainThread.handle);
 						game_parked = 1;
+						park_since = GetTickCount();
+						park_front = -1;
+						SetTimer(hwnd, WIN_PARK_TIMER, 250, 0);
 						Log("Game Thread Suspended");
+						Log("WINLOG park result=parked");
 					}
 					else
 					{
 						App.dx.WaitAtBeginScene = 0;
 						Log("Game Thread appeared stuck, skipping suspend to avoid a deadlock");
+						Log("WINLOG park result=stuck");
 						WinHangWatchStart();
 					}
 				}
+				else
+					Log("WINLOG park result=early");
 
 				return 0;
 
@@ -1117,13 +1354,8 @@ LRESULT CALLBACK WinMainWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 				if (gLogEnabled)
 					InterlockedOr(&RoomListWindowEvents, 2);
 
-				if (App.SetupComplete)
-				{
-					ResumeThread((HANDLE)MainThread.handle);
-					App.dx.WaitAtBeginScene = 0;
-					game_parked = 0;
+				if (WinWakeGame("activate"))
 					Log("Game Thread Resumed");
-				}
 
 				return 0;
 			}
@@ -1135,19 +1367,15 @@ LRESULT CALLBACK WinMainWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 		closing = 1;
 		WinStorePlace();
 		WinMouseRelease();
+		KillTimer(hwnd, WIN_DEVICE_TIMER);	// no new device for a closing game
 
 		/* A window closed from the taskbar is inactive, and an inactive
 		 * window has the game thread parked (WM_ACTIVATE). It is woken here
 		 * so that it sees the end and leaves; otherwise the wait at the end
 		 * of WinMain never ends, and the music plays on in a process that
 		 * only the task manager can close. */
-		if (game_parked)
-		{
-			ResumeThread((HANDLE)MainThread.handle);
-			App.dx.WaitAtBeginScene = 0;
-			game_parked = 0;
+		if (WinWakeGame("close"))
 			Log("Game Thread Resumed for the close");
-		}
 
 		PostQuitMessage(0);
 		break;

@@ -1015,7 +1015,8 @@ const char* HDLaraPartModel(int outfit, int part);
  *   HAND_XRAY_*     the eleven hand parts, bones opaque, shell additive.
  *   HOLSTER_*_XRAY  the pistols on the thighs and the three weapons on the
  *                   back, opaque. The install has none for the uzis and the
- *                   Desert Eagle, and those holsters draw nothing.
+ *                   Desert Eagle. The look draws nothing at the thighs at
+ *                   all, the pistols' file left out (HDLaraXrayPick).
  *
  * No braid, no face, no borrowed head, no holster rig: the set has none.
  *
@@ -1027,6 +1028,63 @@ const char* HDLaraPartModel(int outfit, int part);
 const char* HDLaraPartXrayModel(int part);
 int HDLaraPartXraySlot(int part);
 bool HDLaraOutfitIsXray(int outfit);
+
+/* The X-ray look's two rules for her weapons, as pure functions, so that
+ * the engine, ModelProbe and ModernTest judge by the same lines.
+ *
+ * At the thighs: nothing. Whatever file the set has for a thigh holster -
+ * the pistols' and the uzis' on nodes 1 and 4, the Desert Eagle's on node
+ * 4 - the look draws nothing there; the weapon on the back, node 7, keeps
+ * its X-ray file. HDLaraXrayPick is the set's lookup in a table of part
+ * and file with that rule in front of it.
+ *
+ * In the hand: never no hand. A hand of the set is read from the installs
+ * alone (HDModelSlot::installOnly) and holds the bones and the gun. Where
+ * the installs have no X-ray file for it, the install's own bare file
+ * stands in without the rest hands' pages - the gun alone - and the rest
+ * hands' bones are drawn with it; with neither, the rest hands' bones
+ * alone (HDModelSlot::standIn). HDLaraXrayHand says which of the two a
+ * hand draws, out of whether its part is on the card and is a stand-in. */
+struct HDLaraXrayRow
+{
+	int part;
+	const char* model;
+};
+
+static inline bool HDLaraPartAtThighs(int part)
+{
+	return part >= HD_LARA_PART_HOLSTER_PISTOL &&
+		part <= HD_LARA_PART_HOLSTER_DEAGLE;
+}
+
+static inline const char* HDLaraXrayPick(const HDLaraXrayRow* rows,
+	int count, int part)
+{
+	if (HDLaraPartAtThighs(part))
+		return 0;
+
+	for (int i = 0; i < count; i++)
+		if (rows[i].part == part)
+			return rows[i].model;
+
+	return 0;
+}
+
+#define HD_LARA_XRAY_HAND_PART	1	// the part itself
+#define HD_LARA_XRAY_HAND_REST	2	// the rest hands' bones
+
+static inline int HDLaraXrayHand(int part, bool onCard, bool standIn)
+{
+	if (part == HD_LARA_PART_HAND_REST || !onCard)
+		return HD_LARA_XRAY_HAND_REST;
+
+	return standIn ? HD_LARA_XRAY_HAND_PART | HD_LARA_XRAY_HAND_REST
+		: HD_LARA_XRAY_HAND_PART;
+}
+
+/* Whether the X-ray set in use holds a stand-in for a hand part, settled
+ * at level build: the slot's model is not the part's X-ray file. */
+bool HDLaraXrayStandIn(int part);
 // A part's name for the log ("the right hand with the HK"), never 0.
 const char* HDLaraPartLabel(int part);
 

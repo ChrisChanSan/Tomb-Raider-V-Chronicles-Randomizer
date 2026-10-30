@@ -1534,8 +1534,9 @@ namespace
 	/* ------------------------------------------------ the thrusters -- */
 	/* The diving suit's two units against the back she wears (hd_lara.h,
 	 * HDLaraThrusters): the units' box and the classic back are settled at
-	 * the plan, the worn back while the body file is read, the shift at the
-	 * level build. Reset at every plan, like the chest's regions. */
+	 * the plan, the worn back and the worn top while the body file is read,
+	 * the shift and the move down at the level build. Reset at every plan,
+	 * like the chest's regions. */
 	HDLaraThrusters g_thrusters;
 
 	struct BackScan
@@ -1618,8 +1619,8 @@ namespace
 	}
 
 	/* The body's look at its own file: the throat texel, the chest's
-	 * regions and the back the thrusters hang on, all while the vertices
-	 * can still be read. */
+	 * regions and the back and the shoulders the thrusters hang by, all
+	 * while the vertices can still be read. */
 	void measure_body(const HDTrmModel* source)
 	{
 		measure_neck_skin(source);
@@ -1627,7 +1628,8 @@ namespace
 
 		if (g_neck_bind_ok)
 			HDLaraThrusterBack(source, g_neck_bind, &g_thrusters.hdBack,
-				&g_thrusters.hdUnder, &g_thrusters.hdInside);
+				&g_thrusters.hdUnder, &g_thrusters.hdInside,
+				&g_thrusters.hdTop);
 	}
 
 	/* ---------------------------------------------------- the lid ------ */
@@ -2723,16 +2725,8 @@ bool HDLaraLevelBuild(const HDLaraLevel* level, HDLaraStats* stats)
 	}
 
 	/* The diving suit's thrusters onto the body that arrived (hd_lara.h,
-	 * HDLaraThrusters): both backs measured, the difference rounded to the
-	 * whole units phd_TranslateRel takes. */
-	if (g_thrusters.asked && g_thrusters.classicUnder > 0 &&
-		g_thrusters.hdUnder > 0)
-	{
-		const float shift = g_thrusters.hdBack - g_thrusters.classicBack;
-
-		g_thrusters.applied = true;
-		g_thrusters.shift = (long)(shift < 0.0f ? shift - 0.5f : shift + 0.5f);
-	}
+	 * HDLaraThrusters): back to its back, down to its shoulders. */
+	HDLaraThrusterSettle(g_thrusters);
 
 	g_active = true;
 	return true;
@@ -2764,10 +2758,11 @@ void HDLaraLevelEnd()
 	g_xray_sheen[0] = 0.0f;
 	g_xray_sheen[1] = 1.0f;
 
-	/* The shift goes with the build; what the plan and the body file
+	/* The move goes with the build; what the plan and the body file
 	 * measured stays for the log, until the next plan resets it. */
 	g_thrusters.applied = false;
 	g_thrusters.shift = 0;
+	g_thrusters.down = 0;
 }
 
 const HDLaraThrusters* HDLaraThrusterState()
@@ -2776,9 +2771,11 @@ const HDLaraThrusters* HDLaraThrusterState()
 }
 
 bool HDLaraThrusterBack(const HDTrmModel* body, const float* bind,
-	float* back, int* under, int* inside)
+	float* back, int* under, int* inside, float* top)
 {
 	BackScan scan;
+	float least = 0.0f;
+	int points = 0;
 
 	if (body && bind && g_thrusters.asked)
 		for (int i = 0; i < body->vertices; i++)
@@ -2788,9 +2785,15 @@ bool HDLaraThrusterBack(const HDTrmModel* body, const float* bind,
 			if (dominant_node(v) != HD_LARA_TORSO)
 				continue;
 
-			back_scan(scan, v.x - bind[HD_LARA_TORSO * 3 + 0],
-				v.y - bind[HD_LARA_TORSO * 3 + 1],
+			const float y = v.y - bind[HD_LARA_TORSO * 3 + 1];
+
+			back_scan(scan, v.x - bind[HD_LARA_TORSO * 3 + 0], y,
 				v.z - bind[HD_LARA_TORSO * 3 + 2]);
+
+			// Her shoulders: the top of the whole torso, under the units or
+			// not.
+			if (!points++ || y < least)
+				least = y;
 		}
 
 	if (back)
@@ -2799,6 +2802,8 @@ bool HDLaraThrusterBack(const HDTrmModel* body, const float* bind,
 		*under = scan.under;
 	if (inside)
 		*inside = scan.inside;
+	if (top)
+		*top = least;
 
 	return scan.under > 0;
 }

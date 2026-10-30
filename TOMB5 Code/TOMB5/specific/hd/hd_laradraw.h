@@ -67,8 +67,10 @@
 //                         and no .TRM is a model of them alone, so they stay
 //                         the classic mesh over whatever HD body she wears -
 //                         moved along her torso's z to keep the classic
-//                         suit's place against that body's back (hd_lara.h,
-//                         HDLaraThrusters; HDLaraThrusterShift below).
+//                         suit's place against that body's back, and down
+//                         its y to hang from that body's shoulders
+//                         (hd_lara.h, HDLaraThrusters; HDLaraThrusterShift
+//                         below).
 //   the inventory         newinv2.cpp draws its own ring of objects with
 //                         DrawInventoryItem and never calls DrawLara.
 //
@@ -116,13 +118,16 @@ bool HDLaraDrawXray();
  * only this call knows which body that is. */
 int HDLaraDrawOutfit();
 
-/* The diving suit's thrusters (hd_lara.h, HDLaraThrusters): how far along
- * the torso's z DrawLara__5 moves its two units, and game\subsuit.cpp the
- * mist out of their nozzles, to keep the classic suit's place against the
- * back of the body she wears - the level build's measurement while the
- * composite draws her (HDLaraDrawActive), and 0 whenever she is drawn
- * classic, so the classic suit is drawn and blown exactly as before. */
-long HDLaraThrusterShift();
+/* The diving suit's thrusters (hd_lara.h, HDLaraThrusters): how far
+ * DrawLara__5 moves its two units, and game\subsuit.cpp the mist out of
+ * their nozzles - `back` along the torso's z, to keep the classic suit's
+ * place against the back of the body she wears, and `down` along its y, to
+ * hang them from that body's shoulders. Both at once and both required, so
+ * that no caller can take the one and lose the other. The level build's
+ * measurement while the composite draws her (HDLaraDrawActive), and 0 and
+ * 0 whenever she is drawn classic, so the classic suit is drawn and blown
+ * exactly as before. */
+void HDLaraThrusterShift(long* back, long* down);
 
 /* The drawn braid's roll: six angles for hairs[0][0..5] - one per drawn bone,
  * about the bone's own axis, so no position and no direction changes at all.

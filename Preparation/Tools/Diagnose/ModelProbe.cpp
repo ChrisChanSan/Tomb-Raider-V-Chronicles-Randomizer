@@ -636,11 +636,18 @@
  *     -thrusters          with -lara: the diving suit's two units against
  *                         the body she wears (hd_lara.h, HDLaraThrusters) -
  *                         the classic meshes out of the level, both backs,
- *                         the shift, the engine's HDLOG line and every body
- *                         of the wardrobe - and the units as yellow edges on
- *                         her torso where the shift puts them, at rest.
+ *                         the shift, both tops, the move down, the engine's
+ *                         HDLOG line and every body of the wardrobe - and
+ *                         the units as yellow edges on her torso where the
+ *                         rule puts them, at rest.
  *     -thrustersclassic   the same at DrawLara__5's own numbers: the picture
  *                         from before the rule.
+ *     -thrustersdown <units>
+ *                         -thrusters with the units drawn that far down her
+ *                         torso's y instead of the rule's move down, the
+ *                         shift kept: a picture to hold beside the rule's
+ *                         (_thrusters_down<units>). The printout stays the
+ *                         rule's.
  *     -pose <node> <yaw> <pitch>
  *                         turn that node of the mesh tree and everything
  *                         below it. Repeat the switch for more nodes.
@@ -8578,6 +8585,9 @@ struct LaraOptions
 	 * units measured against the body she wears and drawn on her torso,
 	 * where the rule puts them or where DrawLara__5's numbers do. 0 off. */
 	int thrusters = 0;
+	/* -thrustersdown: the move down the picture draws in place of the
+	 * rule's; -1 draws the rule's. */
+	long thrustersDown = -1;
 	/* The head rule forced for this picture - one of the
 	 * HD_WARDROBE_HEAD_*, or -1 to let the wardrobe decide, which is what
 	 * the engine always does. */
@@ -9228,11 +9238,13 @@ static void CountModelPixels(long width, long height, int models, int drawnAgain
  * as hd_laradraw.cpp hands it the level's - LARA_EXTRA_MESH1's mesh in its
  * own frame, the skin's node 7 in the torso's - and what the plan and the
  * body file measured comes back out of HDLaraThrusterState: the units' box,
- * both backs, the shift, the engine's HDLOG line word for word, and then
- * every body of the wardrobe scan against the same units
- * (HDLaraThrusterBack). The picture carries the two units as yellow edges on
- * her torso where the shift puts them; -thrustersclassic draws them at
- * DrawLara__5's own numbers, the picture from before the rule.
+ * both backs, the shift, both tops, the move down, the engine's HDLOG line
+ * word for word, and then every body of the wardrobe scan against the same
+ * units (HDLaraThrusterBack, HDLaraThrusterSettle) with its back at the
+ * units' new height, and the worn body against its pack. The picture
+ * carries the two units as yellow edges on her torso where the rule puts
+ * them; -thrustersclassic draws them at DrawLara__5's own numbers, the
+ * picture from before the rule, and -thrustersdown at another height.
  */
 struct ThrusterInput
 {
@@ -9316,9 +9328,107 @@ static bool ThrusterInputOf(const Tr5Level& level, const ClassicSlot& body,
 	return true;
 }
 
-static long ThrusterRound(float v)
+/* A body's node 7 against the units where the rule moves them, beyond what
+ * the engine measures: the node's box, its pack as -braid takes it (the
+ * points 30 or more behind the torso joint) and, with the units moved
+ * `shift` along z and `down` along y, the points under them, those inside
+ * them and the most backward z of the rest - her back at their new height.
+ * Each vertex on its heaviest bone, as hd_lara.cpp's dominant_node. */
+struct ThrusterFit
 {
-	return (long)(v < 0.0f ? v - 0.5f : v + 0.5f);
+	int points = 0;
+	float lo[3] = { 0.0f, 0.0f, 0.0f };
+	float hi[3] = { 0.0f, 0.0f, 0.0f };
+	int pack = 0;
+	float plo[3] = { 0.0f, 0.0f, 0.0f };
+	float phi[3] = { 0.0f, 0.0f, 0.0f };
+	int under = 0;
+	int inside = 0;
+	float back = 0.0f;
+};
+
+static void ThrusterGrow(float* lo, float* hi, const float* p, bool first)
+{
+	for (int k = 0; k < 3; k++)
+	{
+		if (first || p[k] < lo[k])
+			lo[k] = p[k];
+		if (first || p[k] > hi[k])
+			hi[k] = p[k];
+	}
+}
+
+static ThrusterFit ThrusterFitOf(const HDTrmModel& trm, const float* bind,
+	const float* box, long shift, long down)
+{
+	ThrusterFit fit;
+	const float over = 2.0f * HD_LARA_THRUSTER_X;
+
+	for (int i = 0; i < trm.vertices; i++)
+	{
+		const HDTrmVertex& v = trm.vertex[i];
+		int node = v.bone[0];
+
+		if (v.weight[1] > v.weight[0] && v.weight[1] >= v.weight[2])
+			node = v.bone[1];
+		else if (v.weight[2] > v.weight[0] && v.weight[2] > v.weight[1])
+			node = v.bone[2];
+
+		if (node != HD_LARA_TORSO)
+			continue;
+
+		const float p[3] =
+		{
+			v.x - bind[HD_LARA_TORSO * 3 + 0],
+			v.y - bind[HD_LARA_TORSO * 3 + 1],
+			v.z - bind[HD_LARA_TORSO * 3 + 2]
+		};
+
+		ThrusterGrow(fit.lo, fit.hi, p, !fit.points++);
+
+		if (p[2] <= -30.0f)
+			ThrusterGrow(fit.plo, fit.phi, p, !fit.pack++);
+
+		const bool right = p[0] >= box[0] && p[0] <= box[1];
+		const bool left = p[0] >= box[0] - over && p[0] <= box[1] - over;
+
+		if ((!right && !left) || p[1] < box[2] + down || p[1] > box[3] + down)
+			continue;
+
+		if (p[2] >= box[4] + shift && p[2] <= box[5] + shift)
+		{
+			fit.inside++;
+			continue;
+		}
+
+		if (!fit.under || p[2] < fit.back)
+			fit.back = p[2];
+
+		fit.under++;
+	}
+
+	return fit;
+}
+
+/* One unit's box against the pack's, axis by axis: how far apart they
+ * stand along each (less than 0: how far they overlap), and the distance
+ * between them, 0 where they meet. */
+static double ThrusterGap(const float* ulo, const float* uhi,
+	const float* plo, const float* phi, double gap[3])
+{
+	double d = 0.0;
+
+	for (int k = 0; k < 3; k++)
+	{
+		const double before = plo[k] - uhi[k], after = ulo[k] - phi[k];
+
+		gap[k] = before > after ? before : after;
+
+		if (gap[k] > 0.0)
+			d += gap[k] * gap[k];
+	}
+
+	return sqrt(d);
 }
 
 static void PrintThrusters(const std::string& stem, const ClassicSlot& body,
@@ -9353,9 +9463,10 @@ static void PrintThrusters(const std::string& stem, const ClassicSlot& body,
 
 	/* How far forward a corner reaches with the units turned, over the
 	 * whole of subsuit.XRot's range (game\laraswim.cpp: dXRot is 8190 at
-	 * most): phd_RotX takes a point's z to y sin + z cos. */
+	 * most): phd_RotX takes a point's z to y sin + z cos - and its y to
+	 * y cos - z sin, which is how high a corner rises. */
 	const double kPi = 3.14159265358979323846;
-	double reach = -1.0e9;
+	double reach = -1.0e9, rise = 1.0e9;
 
 	for (int a = -8190; a <= 8190; a += 91)
 	{
@@ -9363,13 +9474,23 @@ static void PrintThrusters(const std::string& stem, const ClassicSlot& body,
 
 		for (int v = 0; v < verts; v++)
 		{
-			const double z = in.mesh[(size_t)v * 3 + 1] * sin(r) +
-				in.mesh[(size_t)v * 3 + 2] * cos(r);
+			const double y = in.mesh[(size_t)v * 3 + 1];
+			const double z = in.mesh[(size_t)v * 3 + 2];
 
-			if (z > reach)
-				reach = z;
+			if (y * sin(r) + z * cos(r) > reach)
+				reach = y * sin(r) + z * cos(r);
+
+			if (y * cos(r) - z * sin(r) < rise)
+				rise = y * cos(r) - z * sin(r);
 		}
 	}
+
+	// The classic torso's own top, for the height the units hang at on it.
+	float classicTop = 0.0f;
+
+	for (size_t i = 1; i < in.torso.size(); i += 3)
+		if (i == 1 || in.torso[i] < classicTop)
+			classicTop = in.torso[i];
 
 	printf("the units   LARA_EXTRA_MESH1 (slot %d) mesh 0, %d points: "
 		"x %.0f..%.0f y %.0f..%.0f z %.0f..%.0f\n", in.slot, verts, lo[0],
@@ -9382,14 +9503,18 @@ static void PrintThrusters(const std::string& stem, const ClassicSlot& body,
 	printf("            the near face at rest z %.0f, turned up to 45 degrees "
 		"z %.0f (%.0f further forward)\n", t->box[5],
 		HD_LARA_THRUSTER_Z + reach, HD_LARA_THRUSTER_Z + reach - t->box[5]);
+	printf("            the top at rest y %.0f, turned up to 45 degrees y %.0f "
+		"(%.0f higher)\n", t->box[2], HD_LARA_THRUSTER_Y + rise,
+		t->box[2] - (HD_LARA_THRUSTER_Y + rise));
 	printf("the classic %s node 7, %d points: %d under the units, %d inside "
-		"them, back %.1f\n", HDSlotName(body.slot), (int)in.torso.size() / 3,
-		t->classicUnder, t->classicInside, t->classicBack);
+		"them, back %.1f, top %.1f (the units' %.0f under it)\n",
+		HDSlotName(body.slot), (int)in.torso.size() / 3, t->classicUnder,
+		t->classicInside, t->classicBack, classicTop, t->box[2] - classicTop);
 
 	if (t->hdUnder > 0)
 		printf("worn        %s node 7: %d under the units, %d inside them, "
-			"back %.1f\n", model ? model : "-", t->hdUnder, t->hdInside,
-			t->hdBack);
+			"back %.1f, top %.1f\n", model ? model : "-", t->hdUnder,
+			t->hdInside, t->hdBack, t->hdTop);
 	else
 		printf("worn        %s: no point of node 7 under the units\n",
 			model ? model : "-");
@@ -9398,26 +9523,58 @@ static void PrintThrusters(const std::string& stem, const ClassicSlot& body,
 		t->applied ? t->shift : 0L,
 		t->applied ? "the air before her back is the classic suit's"
 		: "not applied, the units stay at the classic numbers");
+	printf("down        %ld down the torso's y - %s\n",
+		t->applied ? t->down : 0L, !t->applied
+		? "not applied, the units stay at the classic numbers"
+		: t->down > 0 ? "the units' top at the top of the torso she wears"
+		: "that torso's top stands at or above the units' top: they stay");
 
-	char classic[16] = "-", worn[16] = "-";
+	if (t->applied)
+		printf("moved       right x %.0f..%.0f, left x %.0f..%.0f, "
+			"y %.0f..%.0f, z %.0f..%.0f\n", t->box[0], t->box[1],
+			t->box[0] - 2 * HD_LARA_THRUSTER_X,
+			t->box[1] - 2 * HD_LARA_THRUSTER_X, t->box[2] + t->down,
+			t->box[3] + t->down, t->box[4] + t->shift, t->box[5] + t->shift);
+
+	char classic[16] = "-", worn[16] = "-", top[16] = "-", units[16] = "-";
 
 	if (t->classicUnder > 0)
 		sprintf(classic, "%.1f", t->classicBack);
 
 	if (t->hdUnder > 0)
+	{
 		sprintf(worn, "%.1f", t->hdBack);
+		sprintf(top, "%.1f", t->hdTop);
+	}
+
+	sprintf(units, "%.1f", t->box[2]);
+
+	const long down = t->applied ? t->down : 0L;
 
 	// The engine's own line (hd_laradraw.cpp, thrusters_log), word for word.
 	printf("  HDLOG level=%s lara thrusters body=%s classic_back=%s hd_back=%s "
-		"shift=0,0,%ld drawn=%s under=%d/%d inside=%d/%d\n", stem.c_str(),
-		HDLaraActive() && model ? model : "-", classic, worn,
+		"shift=0,%ld,%ld drawn=%s under=%d/%d inside=%d/%d hd_top=%s "
+		"classic_top=%s down=%ld\n", stem.c_str(),
+		HDLaraActive() && model ? model : "-", classic, worn, down,
 		t->applied ? t->shift : 0L, HDLaraActive() ? "hd" : "classic",
-		t->classicUnder, t->hdUnder, t->classicInside, t->hdInside);
+		t->classicUnder, t->hdUnder, t->classicInside, t->hdInside, top, units,
+		down);
 
 	/* Every body this machine's wardrobe can put on her, against the same
-	 * units and the same classic back. */
-	printf("\n%-34s %6s %6s %8s %6s\n", "every body of the wardrobe", "under",
-		"inside", "back", "shift");
+	 * units and the same classic back, settled as the engine settles the
+	 * worn one; then node 7 at the units' new height - its back there and
+	 * the air before it, and the points inside the units. */
+	printf("\n%-34s %6s %6s %8s %6s %8s %6s %6s %4s\n",
+		"every body of the wardrobe", "under", "inside", "back", "shift", "top",
+		"down", "air", "in");
+
+	// The worn body's own row, for the lines under the table.
+	const char* wornStem = model ? strrchr(model, '/') : 0;
+	std::string wornKey;
+	ThrusterFit wornFit;
+	HDLaraThrusters wornOne = HDLaraThrusters();
+
+	wornStem = wornStem ? wornStem + 1 : model;
 
 	for (int i = 0; i < HDWardrobeCount(); i++)
 	{
@@ -9435,24 +9592,107 @@ static void PrintThrusters(const std::string& stem, const ClassicSlot& body,
 			continue;
 		}
 
-		float back = 0.0f;
-		int under = 0, inside = 0;
+		HDLaraThrusters one = *t;
 
-		if (HDLaraThrusterBack(&trm, &body.bind[0][0], &back, &under, &inside))
-			printf("%-34s %6d %6d %8.1f %+6ld\n", e->key, under, inside, back,
-				ThrusterRound(back - t->classicBack));
-		else
-			printf("%-34s %6d %6d %8s %6s\n", e->key, under, inside, "-", "-");
+		HDLaraThrusterBack(&trm, &body.bind[0][0], &one.hdBack, &one.hdUnder,
+			&one.hdInside, &one.hdTop);
+		HDLaraThrusterSettle(one);
+
+		if (!one.applied)
+		{
+			printf("%-34s %6d %6d %8s %6s\n", e->key, one.hdUnder,
+				one.hdInside, "-", "-");
+			HDTrmFree(&trm);
+			continue;
+		}
+
+		const ThrusterFit fit = ThrusterFitOf(trm, &body.bind[0][0], t->box,
+			one.shift, one.down);
+		char air[16] = "-";
+
+		if (fit.under > 0)
+			sprintf(air, "%.1f", fit.back - (t->box[5] + one.shift));
+
+		printf("%-34s %6d %6d %8.1f %+6ld %8.1f %+6ld %6s %4d\n", e->key,
+			one.hdUnder, one.hdInside, one.hdBack, one.shift, one.hdTop,
+			one.down, air, fit.inside);
+
+		const char* key = strrchr(e->key, '/');
+
+		if (wornKey.empty() && wornStem &&
+			!_stricmp(key ? key + 1 : e->key, wornStem))
+		{
+			wornKey = e->key;
+			wornFit = fit;
+			wornOne = one;
+		}
 
 		HDTrmFree(&trm);
 	}
+
+	if (wornKey.empty())
+		return;
+
+	/* The worn body against its pack: node 7's box, the pack's, and each
+	 * unit's box where the rule moves it against the pack's. */
+	const ThrusterFit& f = wornFit;
+
+	printf("\nthe worn %s (%s), node 7: x %.0f..%.0f, y %.2f..%.2f, "
+		"z %.0f..%.0f\n", wornStem, wornKey.c_str(), f.lo[0], f.hi[0], f.lo[1],
+		f.hi[1], f.lo[2], f.hi[2]);
+
+	if (!f.pack)
+	{
+		printf("  no point of node 7 stands 30 or more behind the joint: no "
+			"pack\n");
+		return;
+	}
+
+	printf("  its pack, the %d points 30 or more behind the joint: "
+		"x %.0f..%.0f, y %.0f..%.0f, z %.0f..%.0f\n", f.pack, f.plo[0],
+		f.phi[0], f.plo[1], f.phi[1], f.plo[2], f.phi[2]);
+
+	for (int side = 1; side >= -1; side -= 2)
+	{
+		const float over = side > 0 ? 0.0f : 2.0f * HD_LARA_THRUSTER_X;
+		const float ulo[3] =
+		{
+			t->box[0] - over, t->box[2] + wornOne.down,
+			t->box[4] + wornOne.shift
+		};
+		const float uhi[3] =
+		{
+			t->box[1] - over, t->box[3] + wornOne.down,
+			t->box[5] + wornOne.shift
+		};
+		double gap[3];
+		const double d = ThrusterGap(ulo, uhi, f.plo, f.phi, gap);
+
+		printf("  the %s unit x %.0f..%.0f, y %.0f..%.0f, z %.0f..%.0f against "
+			"it: apart x %.0f, y %.0f, z %.0f - %s",
+			side > 0 ? "right" : "left", ulo[0], uhi[0], ulo[1], uhi[1],
+			ulo[2], uhi[2], gap[0], gap[1], gap[2],
+			d > 0.0 ? "no intersection" : "the boxes intersect");
+
+		if (d > 0.0)
+			printf(", %.1f clear\n", d);
+		else
+			printf(" (%d points of node 7 inside the units)\n", f.inside);
+	}
+
+	printf("  the units' bottom %.0f: %.0f under the pack's own bottom %.0f, "
+		"%.0f under HD_LARA_PACK_BOX_Y_BOTTOM (%d)\n",
+		t->box[3] + wornOne.down, t->box[3] + wornOne.down - f.phi[1], f.phi[1],
+		t->box[3] + wornOne.down - HD_LARA_PACK_BOX_Y_BOTTOM,
+		HD_LARA_PACK_BOX_Y_BOTTOM);
 }
 
 /* The two units as edges on the picture, through her torso's own matrix -
  * the view the composite's node 7 was drawn with - at rest, moved `shift`
- * along the torso's z. Yellow, over the picture and not in its depth. */
+ * along the torso's z and `down` along its y. Yellow, over the picture and
+ * not in its depth. */
 static void ThrusterOverlay(const ThrusterInput& in, const float* torso,
-	double persp, long w, long h, long shift)
+	double persp, long w, long h, long shift, long down)
 {
 	const int verts = (int)in.mesh.size() / 3;
 	size_t at = 0;
@@ -9474,12 +9714,13 @@ static void ThrusterOverlay(const ThrusterInput& in, const float* torso,
 				const float* pa = &in.mesh[(size_t)a * 3];
 				const float* pb = &in.mesh[(size_t)b * 3];
 				const double dx = side * HD_LARA_THRUSTER_X;
+				const double dy = HD_LARA_THRUSTER_Y + down;
 				const double dz = HD_LARA_THRUSTER_Z + shift;
 
 				if (!OverlayProject(torso, persp, w, h, pa[0] + dx,
-					pa[1] + HD_LARA_THRUSTER_Y, pa[2] + dz, &ax, &ay) ||
+					pa[1] + dy, pa[2] + dz, &ax, &ay) ||
 					!OverlayProject(torso, persp, w, h, pb[0] + dx,
-					pb[1] + HD_LARA_THRUSTER_Y, pb[2] + dz, &bx, &by))
+					pb[1] + dy, pb[2] + dz, &bx, &by))
 					continue;
 
 				OverlayLine line;
@@ -12318,13 +12559,17 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 	printf("%d models drawn in %d draw calls\n", drawn, calls);
 
 	/* -thrusters: the two units on her torso, where the rule puts them or,
-	 * with -thrustersclassic, at DrawLara__5's own numbers. */
+	 * with -thrustersclassic, at DrawLara__5's own numbers; -thrustersdown
+	 * draws its own move down in place of the rule's. */
 	if (o.thrusters && HDLaraThrusterState()->asked)
 	{
 		const HDLaraThrusters* t = HDLaraThrusterState();
+		const bool rule = o.thrusters == 1 && t->applied;
+		const long down = o.thrusters != 1 ? 0 : o.thrustersDown >= 0
+			? o.thrustersDown : rule ? t->down : 0;
 
 		ThrusterOverlay(thrusters, &matrices[HD_LARA_TORSO * 16], persp,
-			o.width, o.height, o.thrusters == 1 && t->applied ? t->shift : 0);
+			o.width, o.height, rule ? t->shift : 0, down);
 	}
 
 	char path[512];
@@ -12343,11 +12588,20 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 	 * first, the last and the step. */
 	const std::string lipsName = LipsName(o.lips, lipsTrack, pictures > 1);
 
+	// The units' own move down, when the picture draws one of its own.
+	char thrusterName[48] = "";
+
+	if (o.thrusters == 1 && o.thrustersDown >= 0)
+		sprintf(thrusterName, "_thrusters_down%ld", o.thrustersDown);
+	else if (o.thrusters == 1)
+		strcpy(thrusterName, "_thrusters");
+	else if (o.thrusters == 2)
+		strcpy(thrusterName, "_thrustersclassic");
+
 	sprintf(path, "%s_lara_%s%s%s%s%s%s%s%s.png", o.out.c_str(),
 		HDLaraOutfitModel(outfit), o.firstPerson ? "_firstperson" : "", cut,
 		o.mirror ? "_mirror" : "", lipsName.c_str(), o.shadowCast ? "_cast" : "",
-		xrayDraw ? "_xray" : "", o.thrusters == 1 ? "_thrusters"
-		: o.thrusters == 2 ? "_thrustersclassic" : "");
+		xrayDraw ? "_xray" : "", thrusterName);
 
 	/* A picture with a room says which, and what the receive did to it. */
 	if (roomHas)
@@ -13629,6 +13883,7 @@ int main(int argc, char** argv)
 	bool laraXray = false;		// -xray: the X-ray look of the skeleton cheat
 	unsigned int laraPasses = HD_PASS_ALL;	// -passes solid|additive
 	int laraThrusters = 0;		// -thrusters 1, -thrustersclassic 2
+	long laraThrustersDown = -1;	// -thrustersdown: -1 the rule's
 	int laraHead = -1;		// -lara-head: -1 = the wardrobe's own answer
 	bool laraPoseRisk = false;	// -poserisk
 	std::vector<int> laraTween60;	// -tween60
@@ -13870,6 +14125,20 @@ int main(int argc, char** argv)
 		{
 			lara = true;
 			laraThrusters = !_stricmp(argv[i], "-thrusters") ? 1 : 2;
+		}
+		// The same with the units that far down, for the eye.
+		else if (!_stricmp(argv[i], "-thrustersdown") && i + 1 < argc)
+		{
+			lara = true;
+			laraThrusters = 1;
+			laraThrustersDown = atol(argv[++i]);
+
+			if (laraThrustersDown < 0)
+			{
+				printf("ModelProbe: -thrustersdown wants 0 or more - the "
+					"rule's move drawn\n");
+				laraThrustersDown = -1;
+			}
 		}
 		/* The head rule this picture is drawn with, whatever the
 		 * wardrobe says - "outfit" is the picture from before the head rule existed.
@@ -14723,6 +14992,7 @@ int main(int argc, char** argv)
 		o.xray = laraXray;
 		o.passes = laraPasses;
 		o.thrusters = laraThrusters;
+		o.thrustersDown = laraThrustersDown;
 		o.head = laraHead;
 		o.poseRisk = laraPoseRisk;
 		o.tween60 = laraTween60;

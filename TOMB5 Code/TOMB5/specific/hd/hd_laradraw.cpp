@@ -913,9 +913,11 @@ namespace
 	}
 
 	/* HDLOG lara thrusters, once per level build in a level DrawLara__5
-	 * draws: the body they hang on, the two backs, the shift, whether the
-	 * composite draws her (hd) or the classic suit does (classic), the
-	 * points under the units and those inside them - classic/worn. */
+	 * draws: the body they hang on, the two backs, the move as x,y,z,
+	 * whether the composite draws her (hd) or the classic suit does
+	 * (classic), the points under the units and those inside them -
+	 * classic/worn - and the worn torso's top against the units' top, which
+	 * give the move down. */
 	void thrusters_log(const char* stem)
 	{
 		if (!thrusters_hang())
@@ -928,18 +930,28 @@ namespace
 		const char* body = g_active
 			? HDLaraPartModel(g_level.outfit, HD_LARA_PART_BODY) : 0;
 		char classic[16] = "-", worn[16] = "-";
+		char top[16] = "-", units[16] = "-";
 
 		if (t->asked && t->classicUnder > 0)
 			snprintf(classic, sizeof(classic), "%.1f", t->classicBack);
 
 		if (t->asked && t->hdUnder > 0)
+		{
 			snprintf(worn, sizeof(worn), "%.1f", t->hdBack);
+			snprintf(top, sizeof(top), "%.1f", t->hdTop);
+		}
+
+		if (t->asked)
+			snprintf(units, sizeof(units), "%.1f", t->box[2]);
+
+		const long down = t->applied ? t->down : 0L;
 
 		Log("HDLOG level=%s lara thrusters body=%s classic_back=%s hd_back=%s "
-			"shift=0,0,%ld drawn=%s under=%d/%d inside=%d/%d", stem,
-			body ? body : "-", classic, worn, t->applied ? t->shift : 0L,
-			g_active ? "hd" : "classic", t->classicUnder, t->hdUnder,
-			t->classicInside, t->hdInside);
+			"shift=0,%ld,%ld drawn=%s under=%d/%d inside=%d/%d hd_top=%s "
+			"classic_top=%s down=%ld", stem, body ? body : "-", classic, worn,
+			down, t->applied ? t->shift : 0L, g_active ? "hd" : "classic",
+			t->classicUnder, t->hdUnder, t->classicInside, t->hdInside, top,
+			units, down);
 	}
 
 	/* The X-ray look, for the log (XRAYLOG).
@@ -1978,11 +1990,13 @@ int HDLaraDrawOutfit()
 	return g_level.outfit;
 }
 
-long HDLaraThrusterShift()
+void HDLaraThrusterShift(long* back, long* down)
 {
 	const HDLaraThrusters* t = HDLaraThrusterState();
+	const bool on = HDLaraDrawActive() && t->applied;
 
-	return HDLaraDrawActive() && t->applied ? t->shift : 0;
+	*back = on ? t->shift : 0;
+	*down = on ? t->down : 0;
 }
 
 /* The drawn braid's roll. The reasoning and the measured values are at

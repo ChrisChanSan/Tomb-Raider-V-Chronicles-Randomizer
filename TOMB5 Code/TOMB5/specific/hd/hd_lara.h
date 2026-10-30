@@ -1070,9 +1070,10 @@ void HDLaraLevelEnd();
  * on any other outfit they float off her back.
  *
  * The rule: the units keep the place they have against the classic suit's
- * back, against the back of the body she wears. Both backs are measured
- * alike, in the torso node's frame (y down, z forward), with the units at
- * rest (subsuit.XRot 0) and each one's mesh box moved to its place:
+ * back, against the back of the body she wears, and hang from that body's
+ * shoulders. Both backs are measured alike, in the torso node's frame (y
+ * down, z forward), with the units at rest (subsuit.XRot 0) and each one's
+ * mesh box moved to its place:
  *
  *   under the units  a point whose x and y lie in a unit's box;
  *   inside a unit    such a point whose z does as well - what the unit
@@ -1085,8 +1086,19 @@ void HDLaraLevelEnd();
  * The classic back is the level's own torso mesh's (HDLaraLevel::torso);
  * the worn back is the body file's node 7, each vertex on its heaviest
  * bone as the pack measurement takes it, read while the file is read. The
- * shift is the worn back minus the classic one, rounded, along z alone: x
- * and y stay, so the units hang at the classic height and keep their air.
+ * shift is the worn back minus the classic one, rounded, along z: x stays,
+ * so the units keep the classic width, and they keep their air.
+ *
+ * The height. On the classic suit the units' tops stand at -276, 55 units
+ * under the top of its torso (-331); a slim body's torso has its top 76 to
+ * 91 units under theirs, so at the classic height the units stood above
+ * her shoulders, beside her head. They come down until their top stands at
+ * the top of the torso she wears, her shoulder line - the least y of the
+ * same node 7, read with its back: the move down is that top minus the
+ * units' top at rest, rounded as the shift is, and never up, so that the
+ * HD diving suit, whose torso stands as high as the classic one, keeps
+ * them where they are. HDLaraThrusterSettle is the arithmetic of both
+ * moves.
  *
  * Measured (ModelProbe -lara JOBY4 -thrusters: the classic suit of
  * JOBY4.TRC against the 52 bodies of a wardrobe scan of both installs):
@@ -1097,6 +1109,21 @@ void HDLaraLevelEnd();
  *   OUTFIT_TR3_ANTARC          -88      837       0     +24
  *   19 more with a backpack   -86 .. -90                +22 .. +26
  *   31 with none              -38 .. -62                +50 .. +74
+ *
+ *   body                      top               down    the units' y
+ *   the classic suit          -331.0                    -276 .. -105
+ *   OUTFIT_SUBSUIT            -329.6              0     -276 .. -105
+ *   OUTFIT_TR3_ANTARC         -196.6            +79     -197 ..  -26
+ *   19 more with a backpack   -188.5 .. -199.6  +76 .. +87
+ *   31 with none              -185.2 .. -196.6  +79 .. +91
+ *
+ * The back stays the one measured at the classic height: at the new one
+ * every body has its most backward point under the units 14.5 to 15.5
+ * units before them - the classic suit's 15 - and no point inside them
+ * but the HD diving suit's block corners. On the Antarctica outfit the
+ * units now reach from her shoulders to 42 units under her pack's bottom
+ * (HD_LARA_PACK_BOX_Y_BOTTOM, -68), its rear face 11 units before them.
+ * Turned, a corner rises 4 units above the top at rest.
  *
  * Not onto her back: the units turn by up to 45 degrees (subsuit.dXRot is
  * 8190) and their corners then reach 43 units further forward than at
@@ -1118,17 +1145,42 @@ struct HDLaraThrusters
 	int hdUnder;		// the same for the worn body's node 7
 	int hdInside;
 	float hdBack;
+	float hdTop;		// the least y of that node 7, its shoulders
 	bool applied;		// the composite is built and both backs exist
 	long shift;		// along the torso's z, 0 unless applied
+	long down;		// along the torso's y, 0 unless applied
 };
+
+/* The level build's arithmetic on a measurement (HDLaraLevelBuild; and
+ * ModelProbe, ModernTest): applied when the units hang and both torsos have
+ * points under them, and then the shift is the worn back minus the classic
+ * one and the move down the worn top minus the units' top at rest - never
+ * up - each rounded half away from zero to the whole units phd_TranslateRel
+ * takes. Not applied, both are 0. */
+inline void HDLaraThrusterSettle(HDLaraThrusters& t)
+{
+	t.applied = t.asked && t.classicUnder > 0 && t.hdUnder > 0;
+	t.shift = 0;
+	t.down = 0;
+
+	if (!t.applied)
+		return;
+
+	const float shift = t.hdBack - t.classicBack;
+	const float down = t.hdTop - t.box[2];
+
+	t.shift = (long)(shift < 0.0f ? shift - 0.5f : shift + 0.5f);
+	t.down = down > 0.0f ? (long)(down + 0.5f) : 0;
+}
 
 /* The level's measurement, settled by HDLaraLevelBuild: never null, and
  * `asked` false in a level without thrusters. HDLaraThrusterBack measures
- * one more body file against the same units - ModelProbe's survey. */
+ * one more body file against the same units - ModelProbe's survey: the
+ * back and the counts, and the top of its node 7. */
 const HDLaraThrusters* HDLaraThrusterState();
 struct HDTrmModel;
 bool HDLaraThrusterBack(const HDTrmModel* body, const float* bind,
-	float* back, int* under, int* inside);
+	float* back, int* under, int* inside, float* top);
 
 bool HDLaraActive();
 int HDLaraOutfitNow();

@@ -131,6 +131,8 @@
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_object_rules.h"
 // The glow's normal: the per-part choice and its two settings (glow_normal).
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_render.h"
+// The diving suit's thrusters: the shift and the move down (thruster_move).
+#include "../../../TOMB5 Code/TOMB5/specific/hd/hd_lara.h"
 /* The names of the installation search: the wide compare and the code page
  * test (install_names). Last, because it brings windows.h with it. */
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_install_names.h"
@@ -30303,6 +30305,83 @@ static void window_place()
 		WinPlaceStep(modes, 7, 9, 1280, 720, 2544, 1361, 1), -1);
 }
 
+/* The diving suit's thrusters on an HD body (hd_lara.h,
+ * HDLaraThrusterSettle), with JOBY4's units - their top at rest -276 - and
+ * its classic back, -112. Applied only where the units hang and both
+ * torsos have points under them; then the shift along z is the worn back
+ * minus the classic one and the move down her torso's y the worn torso's
+ * top minus the units' top, never up, both rounded half away from zero.
+ * OUTFIT_TR3_ANTARC measures its top at -196.6 and its back at -88.4,
+ * OUTFIT_SUBSUIT -329.6 and -113.1. */
+static HDLaraThrusters thruster_case(float top, float back)
+{
+	HDLaraThrusters t = HDLaraThrusters();
+	const float box[6] = { 38.0f, 122.0f, -276.0f, -105.0f, -199.0f, -127.0f };
+
+	for (int k = 0; k < 6; k++)
+		t.box[k] = box[k];
+
+	t.asked = true;
+	t.classicUnder = 54;
+	t.classicInside = 8;
+	t.classicBack = -112.0f;
+	t.hdUnder = 837;
+	t.hdBack = back;
+	t.hdTop = top;
+	HDLaraThrusterSettle(t);
+	return t;
+}
+
+static void thruster_move()
+{
+	printf("the diving suit's thrusters: the shift and the move down\n");
+
+	HDLaraThrusters t = thruster_case(-196.6f, -88.4f);
+
+	ok(t.applied && t.shift == 24 && t.down == 79,
+		"thrusters: a slim torso, 24 onto her back and 79 down", t.down, 79);
+	t = thruster_case(-276.0f, -88.4f);
+	ok(t.applied && t.shift == 24 && t.down == 0,
+		"thrusters: a torso whose top is the units' top: not down",
+		t.down, 0);
+	t = thruster_case(-329.6f, -113.1f);
+	ok(t.applied && t.shift == -1 && t.down == 0,
+		"thrusters: a torso whose top stands above theirs: never up",
+		t.down, 0);
+
+	// The rounding, half away from zero as the shift's.
+	t = thruster_case(-197.5f, -88.4f);
+	ok(t.down == 79, "thrusters: down 78.5 rounds to 79", t.down, 79);
+	t = thruster_case(-197.6f, -88.4f);
+	ok(t.down == 78, "thrusters: down 78.4 rounds to 78", t.down, 78);
+	t = thruster_case(-275.5f, -88.4f);
+	ok(t.down == 1, "thrusters: down 0.5 rounds to 1", t.down, 1);
+	t = thruster_case(-275.6f, -88.4f);
+	ok(t.down == 0, "thrusters: down 0.4 rounds to 0", t.down, 0);
+	t = thruster_case(-196.6f, -112.5f);
+	ok(t.shift == -1, "thrusters: a shift of -0.5 rounds to -1", t.shift, -1);
+	t = thruster_case(-196.6f, -112.4f);
+	ok(t.shift == 0, "thrusters: a shift of -0.4 rounds to 0", t.shift, 0);
+
+	// The gate: a level without them, or no torso under them - nothing
+	// moves, and what an earlier settle moved goes back to 0.
+	t = thruster_case(-196.6f, -88.4f);
+	t.asked = false;
+	HDLaraThrusterSettle(t);
+	ok(!t.applied && t.shift == 0 && t.down == 0,
+		"thrusters: a level without thrusters moves nothing", t.down, 0);
+	t = thruster_case(-196.6f, -88.4f);
+	t.classicUnder = 0;
+	HDLaraThrusterSettle(t);
+	ok(!t.applied && t.shift == 0 && t.down == 0,
+		"thrusters: no classic point under them, nothing moves", t.down, 0);
+	t = thruster_case(-196.6f, -88.4f);
+	t.hdUnder = 0;
+	HDLaraThrusterSettle(t);
+	ok(!t.applied && t.shift == 0 && t.down == 0,
+		"thrusters: no worn point under them, nothing moves", t.down, 0);
+}
+
 int main()
 {
 	printf("ModernTest - the arithmetic of the modern control\n");
@@ -30527,6 +30606,7 @@ int main()
 	yshift_rule();
 	lift_door_rule();
 	window_place();
+	thruster_move();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

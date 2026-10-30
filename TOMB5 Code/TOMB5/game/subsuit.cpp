@@ -321,16 +321,16 @@ void TriggerEngineEffects()
 	PHD_VECTOR pos;
 	PHD_VECTOR pos2;
 	short x, lp, n;
-	long back;
+	long back, down;
 
 	if (lara.water_status == LW_FLYCHEAT)
 		return;
 
 	/* The mist leaves the nozzles where DrawLara__5 draws the two units:
-	 * moved along the torso's z onto the back of the HD body she wears, 0
-	 * for the classic suit (specific\hd\hd_laradraw.h,
-	 * HDLaraThrusterShift). */
-	back = HDLaraThrusterShift();
+	 * moved along the torso's z onto the back of the HD body she wears and
+	 * down its y to that body's shoulders, 0 and 0 for the classic suit
+	 * (specific\hd\hd_laradraw.h, HDLaraThrusterShift). */
+	HDLaraThrusterShift(&back, &down);
 	x = -80;
 
 	for (lp = 0; lp < 2; lp++)
@@ -338,7 +338,7 @@ void TriggerEngineEffects()
 		if (subsuit.Vel[lp])
 		{
 			pos.x = x;
-			pos.y = -192;
+			pos.y = -192 + down;
 			pos.z = -160 + back;
 			GetLaraJointPosRot(&pos, LMX_TORSO, subsuit.XRot, &Eng1);
 
@@ -346,7 +346,7 @@ void TriggerEngineEffects()
 			n = Eng2.y >> 2;
 
 			pos2.x = x;
-			pos2.y = -192;
+			pos2.y = -192 + down;
 			pos2.z = -160 + back;
 
 			if (n)
@@ -359,7 +359,7 @@ void TriggerEngineEffects()
 			TriggerSubMist(&pos, &pos2, Eng2.y >> 8);
 
 			pos2.x = x;
-			pos2.y = -192;
+			pos2.y = -192 + down;
 			pos2.z = -160 + back;
 
 			if (n)

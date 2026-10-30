@@ -3106,6 +3106,20 @@ const HDArtCopyPlan* HDRenderArtCopyPlanNow(double* ms);
  * what the rule cost; the statics they name are the list handed in. */
 const HDArtCopy* HDRenderArtCopies(int* count, int* tris, double* ms);
 
+/* The rule's item path: an item the run added to a slot the art carries
+ * (the .MAP calls it DUMMY) takes the art of another placement of its slot
+ * the same way. Every item of such a slot (hd_cover.h, HDArtCopyItem),
+ * handed in beside the statics and borrowed the same way. After the read:
+ * whether a copy holds item `item` of the level (kept until the level
+ * ends), the item copies as plain data (their target and donor index the
+ * list handed in; a copy of no triangles is one the .TRG's range refused)
+ * with the added items asked, and the answer of each item of that list
+ * (HD_ARTCOPY_ITEM_*). */
+void HDRenderSetArtCopyItems(const HDArtCopyItem* items, int count);
+bool HDRenderArtCopyItemHeld(int item);
+const HDArtCopy* HDRenderArtCopyItemCopies(int* count, int* asked);
+int HDRenderArtCopyItemAnswer(int index);
+
 /* The answers of a level's statics, `rooms` their rooms: the statics of one
  * room held by one group are drawn as pieces all of them or none, so an
  * object the art models out of several statics - ANDY1's hut in room 225 -

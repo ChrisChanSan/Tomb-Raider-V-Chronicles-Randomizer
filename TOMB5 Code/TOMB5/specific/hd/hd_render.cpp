@@ -4220,6 +4220,13 @@ namespace
 	int g_copy_static_count = 0;
 	const float* g_copy_verts = 0;
 	int g_copy_vert_count = 0;
+	/* The items of the slots the art carries (HDRenderSetArtCopyItems),
+	 * borrowed the same way, and the level item numbers of the added items
+	 * a copy holds, sorted, kept until the level ends
+	 * (HDRenderArtCopyItemHeld). */
+	const HDArtCopyItem* g_copy_items = 0;
+	int g_copy_item_count = 0;
+	std::vector<int> g_copy_items_held;
 	bool g_copy_on = true;
 	HDArtCopyParams g_copy_params = { HD_ARTCOPY_MARGIN, HD_ARTCOPY_WALL,
 		HD_ARTCOPY_STANDS, HD_OVERHANG_SLACK, 0 };
@@ -7668,6 +7675,37 @@ void HDRenderSetArtCopyStatics(const HDArtCopyStatic* statics, int count,
 	g_copy_vert_count = ok ? vertCount : 0;
 }
 
+void HDRenderSetArtCopyItems(const HDArtCopyItem* items, int count)
+{
+	const bool ok = items && count > 0;
+
+	g_copy_items = ok ? items : 0;
+	g_copy_item_count = ok ? count : 0;
+}
+
+bool HDRenderArtCopyItemHeld(int item)
+{
+	return std::binary_search(g_copy_items_held.begin(),
+		g_copy_items_held.end(), item);
+}
+
+const HDArtCopy* HDRenderArtCopyItemCopies(int* count, int* asked)
+{
+	if (count)
+		*count = (int)g_copy_plan.itemCopies.size();
+
+	if (asked)
+		*asked = g_copy_plan.items;
+
+	return g_copy_plan.itemCopies.empty() ? 0 : &g_copy_plan.itemCopies[0];
+}
+
+int HDRenderArtCopyItemAnswer(int index)
+{
+	return index >= 0 && index < (int)g_copy_plan.itemRole.size() ?
+		(int)g_copy_plan.itemRole[(size_t)index] : HD_ARTCOPY_ITEM_NONE;
+}
+
 void HDRenderArtCopySet(bool on)
 {
 	g_copy_on = on;
@@ -7706,16 +7744,23 @@ const HDArtCopy* HDRenderArtCopies(int* count, int* tris, double* ms)
 
 /* The art copies of the level being read (hd_artcopy.h): planned over the
  * .TRG as it was read - after the y shift's clamp and the sky's caps, before
- * anything is counted - with the statics, the rooms' boxes and the classic
- * faces handed in before the build, and put in. Nothing without the
- * statics, the boxes or with the rule off. */
+ * anything is counted - with the statics, the items of the slots the art
+ * carries, the rooms' boxes and the classic faces handed in before the
+ * build, and put in; the added items a copy holds are kept by their number.
+ * Nothing without the statics and the items, the boxes or with the rule
+ * off. */
 static void ArtCopies(trf::remaster::Trg& trg, int numRooms, int threads)
 {
 	g_copy_plan = HDArtCopyPlan();
 	g_copy_ms = 0.0;
+	g_copy_items_held.clear();
 
-	if (!g_copy_on || !g_copy_statics || !g_boxes || g_box_count <= 0)
+	if (!g_copy_on || (!g_copy_statics && !g_copy_items) || !g_boxes ||
+		g_box_count <= 0)
+	{
+		HDRenderSetArtCopyItems(0, 0);
 		return;
+	}
 
 	const double started = now_ms();
 	const int groups = numRooms > 0 && numRooms < (int)trg.groups.size()
@@ -7760,16 +7805,24 @@ static void ArtCopies(trf::remaster::Trg& trg, int numRooms, int threads)
 			(int)g_yshift.size(), &rooms[0], count, g_stand_faces,
 			faceRooms.empty() ? 0 : &faceRooms[0], g_stand_face_count,
 			g_copy_statics, g_copy_static_count, g_copy_verts,
-			g_copy_vert_count, g_copy_params, threads, &g_copy_plan);
+			g_copy_vert_count, g_copy_params, threads, &g_copy_plan,
+			g_copy_items, g_copy_item_count);
 		HDArtCopyApply(trg, g_yshift.empty() ? 0 : &g_yshift[0],
 			(int)g_yshift.size(), &rooms[0], count, g_copy_statics,
-			&g_copy_plan);
+			&g_copy_plan, g_copy_items);
 	}
 
+	for (const HDArtCopy& copy : g_copy_plan.itemCopies)
+		if (copy.tris > 0 && copy.target >= 0 &&
+			copy.target < g_copy_item_count)
+			g_copy_items_held.push_back(g_copy_items[copy.target].item);
+
+	std::sort(g_copy_items_held.begin(), g_copy_items_held.end());
 	g_copy_ms = now_ms() - started;
 
 	// Borrowed for the read alone.
 	HDRenderSetArtCopyStatics(0, 0, 0, 0);
+	HDRenderSetArtCopyItems(0, 0);
 }
 
 void HDRenderSetCuts(const HDCut* list, int count)
@@ -11770,6 +11823,8 @@ void HDRenderLevelEnd()
 	g_book_watch_group = -1;
 	g_book_watch_part = -1;
 	g_flow_feet.clear();
+	// And the added items the art copies held, with the level's art.
+	g_copy_items_held.clear();
 }
 
 /* ---------------------------------------------------------------- frame -- */

@@ -14238,6 +14238,7 @@ namespace probestatics
 	static std::vector<HDStaticPlace> g_places;
 	static std::vector<HDArtCopyStatic> g_copies;
 	static std::vector<float> g_copy_verts;
+	static std::vector<HDArtCopyItem> g_copy_items;
 
 	static void HandPlaces(const char* stem)
 	{
@@ -14319,6 +14320,68 @@ namespace probestatics
 		HDRenderSetArtCopyStatics(g_copies.empty() ? 0 : &g_copies[0],
 			(int)g_copies.size(), g_copy_verts.empty() ? 0 : &g_copy_verts[0],
 			(int)g_copy_verts.size() / 3);
+
+		/* And the items of the slots the art carries, as hd_level.cpp's
+		 * BuildStaticPlaces hands them for the rule's item path: every item
+		 * whose slot the level's .MAP calls DUMMY (never a donor slot or
+		 * Lara's), the run's own marked - the sidecar is read with -hdm,
+		 * before this -, its box out of the object's first frame at its
+		 * place and yaw. The map is read for this and given back when no
+		 * one had read it before. */
+		g_copy_items.clear();
+
+		const bool had = HDMapLevel() && !_stricmp(HDMapLevel(), stem);
+		const bool mapRead = had || HDMapLoadForLevel(g_root.c_str(), stem);
+
+		for (int i = 0; mapRead && i < g_level.itemCount(); i++)
+		{
+			Tr5Item it;
+			HDBindKind kind = HD_BIND_NONE;
+			bool fromMap = false;
+			int16_t bounds[6];
+
+			if (!g_level.getItem(i, it))
+				continue;
+
+			const int slot = it.objectNumber;
+
+			HDBindSlot(g_root.c_str(), slot, &kind, &fromMap, 0);
+
+			if (kind != HD_BIND_DUMMY || !fromMap || HDSlotIsLara(slot) ||
+				HDMarkersDonorOfSlot(slot) ||
+				!g_level.frameBounds(slot, bounds))
+				continue;
+
+			const short frame[6] = { bounds[0], bounds[1], bounds[2],
+				bounds[3], bounds[4], bounds[5] };
+			const HDStandBox box = HDStandItemBox(frame, it.x, it.y, it.z,
+				it.yRot);
+			HDArtCopyItem one;
+
+			memset(&one, 0, sizeof(one));
+			one.item = i;
+			one.room = it.roomNumber;
+			one.slot = slot;
+			one.x = it.x;
+			one.y = it.y;
+			one.z = it.z;
+			one.rot = (int)(unsigned short)it.yRot;
+			one.added = HDMarkersItemAdded(i) ? 1 : 0;
+
+			for (int k = 0; k < 3; k++)
+			{
+				one.mins[k] = (float)box.lo[k];
+				one.maxs[k] = (float)box.hi[k];
+			}
+
+			g_copy_items.push_back(one);
+		}
+
+		if (!had && mapRead)
+			HDMapFree();
+
+		HDRenderSetArtCopyItems(g_copy_items.empty() ? 0 : &g_copy_items[0],
+			(int)g_copy_items.size());
 	}
 
 	/* The art copies the build made (hd_artcopy.h): the engine's own
@@ -14332,6 +14395,7 @@ namespace probestatics
 		const HDArtCopyPlan* plan = HDRenderArtCopyPlanNow(&ms);
 
 		HDRenderSetArtCopyStatics(0, 0, 0, 0);
+		HDRenderSetArtCopyItems(0, 0);
 
 		if (!plan)
 			return;
@@ -14399,12 +14463,100 @@ namespace probestatics
 				at(c.donor).mesh, c.tris, c.dx, c.dy, c.dz, c.turn, c.faces,
 				c.faceTris);
 
+		/* The item path: with -artcopytable every item of the slots the art
+		 * carries the rule asked (its place, turn, box, drawing group, the
+		 * triangles of that group's art wholly inside its grown box,
+		 * whether the run added it and its answer), every slot whose donors
+		 * were weighed, every donor each added item was offered and per
+		 * copy what it took and its light; then the engine's line per item
+		 * copy, and per added item given none, the reason. */
+		const auto item = [&](int i) -> const HDArtCopyItem&
+		{
+			return g_copy_items[(size_t)i];
+		};
+		const size_t items = (std::min)(plan->itemRole.size(),
+			g_copy_items.size());
+
+		if (g_art_copy_table)
+		{
+			for (size_t i = 0; i < items; i++)
+			{
+				const HDArtCopyItem& one = item((int)i);
+
+				printf("artcopytable: %s item item=%d room=%d slot=%d "
+					"place=%d,%d,%d rot=%d box=%.0f..%.0f,%.0f..%.0f,"
+					"%.0f..%.0f group=%d inside=%d added=%d %s\n", stem,
+					one.item, one.room, one.slot, one.x, one.y, one.z, one.rot,
+					one.mins[0], one.maxs[0], one.mins[1], one.maxs[1],
+					one.mins[2], one.maxs[2], plan->itemGroup[i],
+					plan->itemInside[i], one.added,
+					HDArtCopyItemWord(plan->itemRole[i]));
+			}
+
+			for (const HDArtCopyAlike& w : plan->itemWeighed)
+				printf("artcopytable: %s weighed item slot=%d donors=%d "
+					"tris=%d..%d %s\n", stem, w.slot, w.donors, w.fewest,
+					w.most, w.alike ? "alike" : "unlike");
+
+			for (const HDArtCopyOffer& o : plan->itemOffered)
+				printf("artcopytable: %s offer item=%d from_item=%d "
+					"from_room=%d from_group=%d group=%d shift=%d,%d,%d "
+					"turn=%d inside=%d crossing=%d walls=%d standing=%d%s\n",
+					stem, item(o.target).item, item(o.donor).item,
+					item(o.donor).room, o.group, plan->itemGroup[(size_t)
+					o.target], o.dx, o.dy, o.dz, o.turn, o.inside, o.crossing,
+					o.walls, o.standing, o.chosen ? " chosen" : "");
+
+			for (const HDArtCopy& c : plan->itemCopies)
+				printf("artcopytable: %s copy item=%d slot=%d room=%d "
+					"from_item=%d from_room=%d from_group=%d group=%d "
+					"inside=%d crossing=%d walls=%d standing=%d tris=%d "
+					"faces=%d face_tris=%d light=%.0f,%.0f,%.0f/%.0f,%.0f,%.0f "
+					"around=%.0f,%.0f,%.0f/%.0f,%.0f,%.0f corners=%d\n", stem,
+					item(c.target).item, item(c.target).slot,
+					item(c.target).room, item(c.donor).item,
+					item(c.donor).room, c.fromGroup, c.group, c.inside,
+					c.crossing, c.walls, c.standing, c.tris, c.faces,
+					c.faceTris, c.light[0][0], c.light[0][1], c.light[0][2],
+					c.light[1][0], c.light[1][1], c.light[1][2], c.around[0][0],
+					c.around[0][1], c.around[0][2], c.around[1][0],
+					c.around[1][1], c.around[1][2], c.aroundCorners);
+
+			if (!plan->itemCopies.empty())
+				printf("artcopytable: %s item copies tris=%d verts=%d\n", stem,
+					plan->itemTris, plan->itemVerts);
+		}
+
+		int itemCopies = 0;
+
+		for (const HDArtCopy& c : plan->itemCopies)
+		{
+			if (c.tris <= 0)
+				continue;
+
+			itemCopies++;
+			printf("HDLOG artcopy level=%s item=%d slot=%d room=%d "
+				"from_item=%d from_room=%d tris=%d shift=%d,%d,%d turn=%d "
+				"faces=%d face_tris=%d\n", stem, item(c.target).item,
+				item(c.target).slot, item(c.target).room, item(c.donor).item,
+				item(c.donor).room, c.tris, c.dx, c.dy, c.dz, c.turn, c.faces,
+				c.faceTris);
+		}
+
+		for (size_t i = 0; i < items; i++)
+			if (item((int)i).added &&
+				plan->itemRole[i] != HD_ARTCOPY_ITEM_COPIED)
+				printf("HDLOG artcopy level=%s item=%d slot=%d room=%d "
+					"none=%s\n", stem, item((int)i).item, item((int)i).slot,
+					item((int)i).room, HDArtCopyItemWord(plan->itemRole[i]));
+
 		printf("artcopy: %s %s statics=%d donors=%d targets=%d "
 			"held_elsewhere=%d no_donor=%d unlike=%d copies=%d tris=%d "
-			"verts=%d ms=%.1f\n", stem, ArtCopyOn() ? "on" : "off",
-			plan->statics, plan->donors, plan->targets, plan->heldElsewhere,
-			plan->noDonor, plan->unlike, (int)plan->copies.size(),
-			plan->addedTris, plan->addedVerts, ms);
+			"verts=%d ms=%.1f items=%d item_copies=%d\n", stem,
+			ArtCopyOn() ? "on" : "off", plan->statics, plan->donors,
+			plan->targets, plan->heldElsewhere, plan->noDonor, plan->unlike,
+			(int)plan->copies.size(), plan->addedTris, plan->addedVerts, ms,
+			plan->items, itemCopies);
 	}
 
 	/* The answers, as BuildStaticTables gets them: per group drawn HD or

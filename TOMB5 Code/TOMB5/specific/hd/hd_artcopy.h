@@ -83,6 +83,42 @@
  *     later moves up, as the sky's caps do (hd_sky_cap.h). A copy one of
  *     whose corners would leave the .TRG's 16 bit range is left out.
  *
+ * The same rule for an item the run added (the sidecar's `item` line) to a
+ * slot the art carries - the .MAP calls it DUMMY, and the art models the
+ * slot where Core placed it and nowhere else (hd_object.cpp,
+ * begin_decision). The items of such slots are handed in beside the
+ * statics (HDArtCopyItem), each with its box out of its object's first
+ * frame at its place and yaw (HDStandItemBox), and asked only in a level
+ * where one of them is the run's own:
+ *
+ *   - A donor: an item of the slot Core placed, in a room a group draws
+ *     (as a static's), its yaw a whole number of quarter turns, the art in
+ *     its grown box lit: where fewer than HD_ARTCOPY_LIT of its corners
+ *     carry any light - one of JOBY3's store rooms has its cupboards so,
+ *     every colour byte zero but on the wall behind them - the copy would
+ *     be black (`unlit`).
+ *   - A target: an added item in a room drawn by its own art, where
+ *     begin_decision bakes the slot's items (elsewhere `no_group`); one
+ *     whose yaw is no whole number of quarter turns gets no copy
+ *     (`skewed`).
+ *   - Its donor: of the same slot anywhere in the level, the one with no
+ *     turn first, then the nearest, then the first in the level's order;
+ *     the art must model the slot alike at all of its donors, the level
+ *     over (HD_ARTCOPY_ALIKE).
+ *   - The copy: as a static's, out of the donor's group, less what lies on
+ *     a classic face at either place and what stands on the art of the
+ *     group that draws the target's room, which the copy goes into, read
+ *     in the frame of the one group and written in the frame of the other.
+ *     A triangle's page is its own - its first corner's layer byte,
+ *     one-based into the file's one texture list - and a part's material
+ *     and four numbers draw alike in every group: the triangle goes into
+ *     the run of its pass of the target group's first part with the same
+ *     material and numbers (hdartcopy::Level::RunIn); where that group has
+ *     no such part the item gets no copy (`no_part`).
+ *   - An added item a copy holds is drawn by the art as the slot's other
+ *     items are (hd_object.cpp, begin_decision, HDRenderArtCopyItemHeld);
+ *     its logic runs on, and the art stands still as theirs does.
+ *
  * The static the copy is for is still answered by the statics' rule, at its
  * own points: nothing of it is given to the art that the art does not draw.
  * No engine header, like hd_cover.h: the engine, RoomProbe and ModernTest
@@ -118,6 +154,10 @@
  * their grown boxes: the most at three halves of the fewest. */
 #define HD_ARTCOPY_ALIKE_NUM	3
 #define HD_ARTCOPY_ALIKE_DEN	2
+/* An item's donor carries light when at least a twentieth of the corners
+ * of the art in its grown box have a colour byte above zero. */
+#define HD_ARTCOPY_LIT_NUM	1
+#define HD_ARTCOPY_LIT_DEN	20
 
 // One room of the level as the rule asks it: its origin, its own box (room
 // local, HDRoomBox) where `box` says it has one, its flipmap twin or -1.
@@ -181,6 +221,21 @@ struct HDArtCopyPlan
 	int noDonor = 0;		// of the targets, with no donor
 	int unlike = 0;		// of the targets, whose donors' art differs
 	int addedTris = 0, addedVerts = 0;
+	/* The items of the slots the art carries (HDArtCopyItem), beside the
+	 * statics: per item the group that draws its room (-1 for none), its
+	 * drawing group's triangles wholly inside its grown box and its answer
+	 * (HD_ARTCOPY_ITEM_*); the copies (their target and donor index the
+	 * items, `fromGroup` the donor's group), every donor each added item
+	 * was offered and every slot whose donors were weighed (group -1: the
+	 * donors of the whole level). */
+	std::vector<HDArtCopy> itemCopies;
+	std::vector<int> itemGroup, itemInside;
+	std::vector<unsigned char> itemRole;
+	std::vector<HDArtCopyOffer> itemOffered;
+	std::vector<HDArtCopyAlike> itemWeighed;
+	int items = 0;			// the added items asked
+	int itemDonors = 0;		// the Core-placed items that may give theirs
+	int itemTris = 0, itemVerts = 0;
 };
 
 /* A point of the donor's art moved to the target: turned by `turn` quarter
@@ -720,6 +775,36 @@ namespace hdartcopy
 					return false;
 
 			return true;
+		}
+
+		/* The run of group `to` that a triangle of group `from`'s run
+		 * `run` goes into: the same pass of the first part of `to` whose
+		 * material and four numbers are those of the run's own part; -1
+		 * for none. A part draws alike in every group, and the page is the
+		 * triangle's own: its first corner's layer byte, one-based into
+		 * the file's one texture list (Trg.h, TrgVertex::layer; the
+		 * renderer's group build, HDRenderLevelBegin), so the triangle
+		 * wears the same picture in either group. */
+		int RunIn(int from, uint32_t run, int to) const
+		{
+			if (from == to)
+				return (int)run;
+
+			const std::vector<trf::remaster::TrgPart>& a =
+				trg->groups[(size_t)from].parts;
+			const std::vector<trf::remaster::TrgPart>& b =
+				trg->groups[(size_t)to].parts;
+			const size_t p = run / 3;
+
+			if (p >= a.size())
+				return -1;
+
+			for (size_t k = 0; k < b.size(); k++)
+				if (b[k].material == a[p].material &&
+					!memcmp(b[k].param, a[p].param, sizeof(a[p].param)))
+					return (int)(k * 3 + run % 3);
+
+			return -1;
 		}
 	};
 
@@ -1294,18 +1379,702 @@ namespace hdartcopy
 			into.run.push_back(art.run[t]);
 		}
 	}
+
+	/* The classic faces beside a copy: a face of the target's room that
+	 * touches its box, whose image by the copy's motion taken back is a
+	 * face of the level with the donor group's art lying on it - the landing
+	 * at the end of a flight, at the donor's. That art comes with the copy
+	 * (`first` and `run`, of group `dg`), less what stands at the target
+	 * already in group `tg` and what the copy's motion took (`seen`, sorted,
+	 * which grows by it), and the face then falls to the art like any face
+	 * the art covers (hd_cover.h). `beside` counts the faces. */
+	inline void FacesBeside(Level& level, int dg, int tg, int turn,
+		const int fromAt[3], const int toAt[3], int room, const float* mins,
+		const float* maxs, const HDCoverFace* faces, const int* faceRooms,
+		int faceCount, const HDArtCopyParams& p,
+		std::vector<unsigned char>& faceDone, std::vector<uint32_t>& seen,
+		std::vector<uint32_t>& first, std::vector<uint32_t>& run,
+		int* beside)
+	{
+		for (int f = 0; faceRooms && f < faceCount; f++)
+		{
+			if (faceRooms[f] != room || faceDone[(size_t)f] ||
+				!FaceMeets(faces[f], mins, maxs, 1.0))
+				continue;
+
+			HDCoverFace back = faces[f];
+
+			for (int c = 0; c < back.corners && c < 4; c++)
+			{
+				const int q[3] = { (int)floor(faces[f].v[c][0] + 0.5),
+					(int)floor(faces[f].v[c][1] + 0.5),
+					(int)floor(faces[f].v[c][2] + 0.5) };
+				int w[3];
+
+				HDArtCopyMove((4 - turn) & 3, toAt, fromAt, q, w);
+
+				for (int k = 0; k < 3; k++)
+					back.v[c][k] = (double)w[k];
+			}
+
+			const int donorFace = SameFace(faces, faceCount, back);
+			std::vector<size_t> there;
+
+			if (donorFace < 0)
+				continue;
+
+			OnFace(level, dg, faces[donorFace], there);
+
+			if (there.empty())
+				continue;
+
+			faceDone[(size_t)f] = 1;
+
+			const Art& art = level.Tris(dg);
+			const Art& own = level.Tris(tg);
+			Standing nearArt;
+			float lo[3], hi[3];
+
+			for (int k = 0; k < 3; k++)
+			{
+				double a = faces[f].v[0][k], b = faces[f].v[0][k];
+
+				for (int c = 1; c < faces[f].corners && c < 4; c++)
+				{
+					a = faces[f].v[c][k] < a ? faces[f].v[c][k] : a;
+					b = faces[f].v[c][k] > b ? faces[f].v[c][k] : b;
+				}
+
+				lo[k] = (float)(a - HD_COVER_REACH - p.stands);
+				hi[k] = (float)(b + HD_COVER_REACH + p.stands);
+			}
+
+			for (size_t t2 = 0; t2 < own.first.size(); t2++)
+			{
+				int v[3][3];
+				bool meets = true;
+
+				for (int c = 0; c < 3; c++)
+					level.Corner(tg, level.trg->indices[own.first[t2] +
+						(uint32_t)c], v[c]);
+
+				for (int k = 0; k < 3 && meets; k++)
+				{
+					const int a = (std::min)((std::min)(v[0][k], v[1][k]),
+						v[2][k]);
+					const int b = (std::max)((std::max)(v[0][k], v[1][k]),
+						v[2][k]);
+
+					meets = (float)b >= lo[k] && (float)a <= hi[k];
+				}
+
+				if (meets)
+					nearArt.Add(v, p.stands);
+			}
+
+			nearArt.Done();
+			(*beside)++;
+
+			for (size_t t2 : there)
+			{
+				const uint32_t at = art.first[t2];
+
+				if (std::binary_search(seen.begin(), seen.end(), at))
+					continue;
+
+				int v[3][3], w[3][3];
+
+				for (int c = 0; c < 3; c++)
+				{
+					level.Corner(dg, level.trg->indices[at + (uint32_t)c], v[c]);
+					HDArtCopyMove(turn, fromAt, toAt, v[c], w[c]);
+				}
+
+				HDCoverTri image;
+
+				if (!CoverTri(w, dg, &image) || OnArt(nearArt, w, image,
+					p.stands))
+					continue;
+
+				first.push_back(at);
+				run.push_back(art.run[t2]);
+				seen.insert(std::lower_bound(seen.begin(), seen.end(), at), at);
+			}
+		}
+	}
+
+	/* Group g's triangles every corner of which lies in a box grown by
+	 * `grow` (world units), and how many of their corners carry light: a
+	 * colour byte above zero in either triple. */
+	inline int Within(Level& level, int g, const float* mins,
+		const float* maxs, float grow, int* lit)
+	{
+		*lit = 0;
+
+		if (!level.BoxMeets(g, mins, maxs, grow))
+			return 0;
+
+		const Art& art = level.Tris(g);
+		int inside = 0;
+
+		for (size_t k = 0; k < art.first.size(); k++)
+		{
+			bool in = true;
+
+			for (int c = 0; c < 3 && in; c++)
+			{
+				int q[3];
+
+				level.Corner(g, level.trg->indices[art.first[k] + (uint32_t)c],
+					q);
+				in = Inside(q, mins, maxs, grow);
+			}
+
+			if (!in)
+				continue;
+
+			inside++;
+
+			for (int c = 0; c < 3; c++)
+			{
+				const trf::remaster::TrgVertex& v = level.trg->vertices[
+					level.trg->indices[art.first[k] + (uint32_t)c]];
+
+				*lit += (v.colour1[0] | v.colour1[1] | v.colour1[2] |
+					v.colour2[0] | v.colour2[1] | v.colour2[2]) != 0 ? 1 : 0;
+			}
+		}
+
+		return inside;
+	}
+
+	/* The item path of the rule (HDArtCopyMake, its last step; the rule's
+	 * description at the top of this file). `plan.drawn` names the group
+	 * of every item's room already. The items stand in as statics for Take
+	 * and Motion - their place, turn and box, no vertices -, and a copy's
+	 * triangles go into the runs of the target's group that RunIn names. */
+	inline void MakeItems(Level& level, HDArtCopyPlan& plan,
+		const std::vector<unsigned char>& paired, const HDArtCopyItem* items,
+		int itemCount, const HDCoverFace* faces, const int* faceRooms,
+		int faceCount, const HDArtCopyParams& p,
+		std::vector<unsigned char>& faceDone)
+	{
+		const int groups = level.groups;
+		const size_t n = (size_t)(items && itemCount > 0 ? itemCount : 0);
+
+		plan.itemGroup.assign(n, -1);
+		plan.itemInside.assign(n, 0);
+		plan.itemRole.assign(n, HD_ARTCOPY_ITEM_NONE);
+
+		std::vector<HDArtCopyStatic> as(n);
+		// An added item the rule looks for a donor for, in the level's order.
+		std::vector<unsigned char> wants(n, 0);
+
+		for (size_t i = 0; i < n; i++)
+		{
+			HDArtCopyStatic& one = as[i];
+
+			memset(&one, 0, sizeof(one));
+			one.room = items[i].room;
+			one.mesh = items[i].item;
+			one.slot = items[i].slot;
+			one.x = items[i].x;
+			one.y = items[i].y;
+			one.z = items[i].z;
+			one.rot = items[i].rot & 0xFFFF;
+
+			for (int k = 0; k < 3; k++)
+			{
+				one.mins[k] = items[i].mins[k];
+				one.maxs[k] = items[i].maxs[k];
+			}
+		}
+
+		/* The slots an added item asks: only their items' art is counted
+		 * (every item's, for a tool that asks every donor). */
+		std::vector<int> asked;
+
+		for (size_t i = 0; i < n; i++)
+			if (items[i].added || p.offered)
+				asked.push_back(items[i].slot);
+
+		std::sort(asked.begin(), asked.end());
+
+		// Each item's group and part.
+		for (size_t i = 0; i < n; i++)
+		{
+			const int r = items[i].room;
+			const bool added = items[i].added != 0;
+			const int g = r >= 0 && r < groups && !paired[(size_t)r] ?
+				plan.drawn[(size_t)r] : -1;
+
+			plan.items += added ? 1 : 0;
+
+			if (g < 0 || paired[(size_t)g])
+			{
+				plan.itemRole[i] = (unsigned char)(added ?
+					HD_ARTCOPY_ITEM_NO_GROUP : HD_ARTCOPY_ITEM_NONE);
+				continue;
+			}
+
+			plan.itemGroup[i] = g;
+
+			/* An added item in a room drawn by another group's art is drawn
+			 * classic there (begin_decision bakes an item in a room drawn
+			 * HD only): a copy would stand beside it. */
+			if (added && g != r)
+			{
+				plan.itemRole[i] = HD_ARTCOPY_ITEM_NO_GROUP;
+				continue;
+			}
+
+			if (as[i].rot % HD_ARTCOPY_QUARTER)
+			{
+				plan.itemRole[i] = HD_ARTCOPY_ITEM_SKEWED;
+				continue;
+			}
+
+			int lit = 0;
+
+			if (std::binary_search(asked.begin(), asked.end(), as[i].slot))
+				plan.itemInside[i] = Within(level, g, as[i].mins, as[i].maxs,
+					p.margin, &lit);
+
+			if (added)
+				wants[i] = 1;
+			else if ((long long)lit * HD_ARTCOPY_LIT_DEN <
+				(long long)plan.itemInside[i] * 3 * HD_ARTCOPY_LIT_NUM)
+				plan.itemRole[i] = HD_ARTCOPY_ITEM_UNLIT;
+			else
+			{
+				plan.itemRole[i] = HD_ARTCOPY_ITEM_DONOR;
+				plan.itemDonors++;
+			}
+		}
+
+		// Each added item's donor: its slot's, no turn first, then the
+		// nearest, then the first in the level's order.
+		std::vector<int> donorOf(n, -1), turnOf(n, 0);
+
+		for (size_t t = 0; t < n; t++)
+		{
+			if (!wants[t])
+				continue;
+
+			int best = -1, bestTurn = 0;
+			long long bestDistance = 0;
+
+			for (size_t s = 0; s < n; s++)
+			{
+				int turn = 0;
+
+				if (plan.itemRole[s] != HD_ARTCOPY_ITEM_DONOR ||
+					as[s].slot != as[t].slot || !Motion(as[s], as[t], &turn))
+					continue;
+
+				const long long distance = llabs((long long)as[t].x -
+					as[s].x) + llabs((long long)as[t].y - as[s].y) +
+					llabs((long long)as[t].z - as[s].z);
+				const int rank = turn ? 1 : 0;
+				const int bestRank = bestTurn ? 1 : 0;
+
+				if (best < 0 || rank < bestRank ||
+					(rank == bestRank && distance < bestDistance))
+				{
+					best = (int)s;
+					bestTurn = turn;
+					bestDistance = distance;
+				}
+			}
+
+			donorOf[t] = best;
+			turnOf[t] = bestTurn;
+
+			if (best < 0)
+				plan.itemRole[t] = HD_ARTCOPY_ITEM_NO_DONOR;
+		}
+
+		/* The art models the slot alike at its donors, the level over: the
+		 * triangles wholly inside each donor's grown box, the most at most
+		 * HD_ARTCOPY_ALIKE times the fewest. Asked once per slot. */
+		std::vector<int> alikeAsked;
+		std::vector<unsigned char> alikeSaid;
+
+		for (size_t t = 0; t < n; t++)
+		{
+			if (donorOf[t] < 0)
+				continue;
+
+			const int slot = as[t].slot;
+			size_t at = 0;
+
+			while (at < alikeAsked.size() && alikeAsked[at] != slot)
+				at++;
+
+			if (at == alikeAsked.size())
+			{
+				HDArtCopyAlike weighed;
+				int fewest = -1, most = 0, counted = 0;
+
+				for (size_t s = 0; s < n; s++)
+				{
+					if (plan.itemRole[s] != HD_ARTCOPY_ITEM_DONOR ||
+						as[s].slot != slot)
+						continue;
+
+					const int inside = plan.itemInside[s];
+
+					fewest = fewest < 0 || inside < fewest ? inside : fewest;
+					most = inside > most ? inside : most;
+					counted++;
+				}
+
+				weighed.group = -1;
+				weighed.slot = slot;
+				weighed.donors = counted;
+				weighed.fewest = fewest;
+				weighed.most = most;
+				weighed.alike = fewest > 0 && (long long)most *
+					HD_ARTCOPY_ALIKE_DEN <= (long long)fewest *
+					HD_ARTCOPY_ALIKE_NUM ? 1 : 0;
+				plan.itemWeighed.push_back(weighed);
+				alikeAsked.push_back(slot);
+				alikeSaid.push_back((unsigned char)weighed.alike);
+			}
+
+			if (!alikeSaid[at])
+			{
+				donorOf[t] = -1;
+				plan.itemRole[t] = HD_ARTCOPY_ITEM_UNLIKE;
+			}
+		}
+
+		/* Per target group, its own art standing round its targets'
+		 * places: the copy's image must not lie on it (OnArt). */
+		const float grow = p.margin + (float)p.stands;
+		std::vector<int> standingGroup;
+		std::vector<Standing> standing;
+
+		for (size_t t = 0; t < n; t++)
+		{
+			if (!(donorOf[t] >= 0 || (p.offered && wants[t])))
+				continue;
+
+			const int g = plan.itemGroup[t];
+
+			if (std::find(standingGroup.begin(), standingGroup.end(), g) !=
+				standingGroup.end())
+				continue;
+
+			standingGroup.push_back(g);
+			standing.push_back(Standing());
+
+			Standing& one = standing.back();
+			const Art& art = level.Tris(g);
+
+			for (size_t k = 0; k < art.first.size(); k++)
+			{
+				int v[3][3], lo[3], hi[3];
+
+				for (int c = 0; c < 3; c++)
+					level.Corner(g, level.trg->indices[art.first[k] +
+						(uint32_t)c], v[c]);
+
+				for (int a = 0; a < 3; a++)
+				{
+					lo[a] = (std::min)((std::min)(v[0][a], v[1][a]), v[2][a]);
+					hi[a] = (std::max)((std::max)(v[0][a], v[1][a]), v[2][a]);
+				}
+
+				for (size_t u = 0; u < n; u++)
+				{
+					if (!wants[u] || plan.itemGroup[u] != g)
+						continue;
+
+					bool in = true;
+
+					for (int a = 0; a < 3 && in; a++)
+						in = (float)hi[a] >= as[u].mins[a] - grow &&
+							(float)lo[a] <= as[u].maxs[a] + grow;
+
+					if (in)
+					{
+						one.Add(v, p.stands);
+						break;
+					}
+				}
+			}
+
+			one.Done();
+		}
+
+		const auto standingOf = [&](int g) -> const Standing&
+		{
+			const size_t at = (size_t)(std::find(standingGroup.begin(),
+				standingGroup.end(), g) - standingGroup.begin());
+
+			return standing[at];
+		};
+
+		/* The copies by motion, as the statics' (HDArtCopyMake): the
+		 * targets of one target group whose donors in one donor group one
+		 * rigid motion moves onto them take that art together. */
+		struct Move
+		{
+			int dg, tg, turn;
+			int from[3], to[3];
+			uint64_t key;
+			std::vector<int> targets, donors;
+			std::vector<Taken> taken;
+			std::vector<uint32_t> seen;
+		};
+
+		std::vector<Move> moves;
+		std::vector<int> moveOf(n, -1), slotOf(n, -1);
+
+		for (size_t t = 0; t < n; t++)
+		{
+			const int s = donorOf[t];
+
+			if (s < 0)
+				continue;
+
+			const int from[3] = { as[(size_t)s].x, as[(size_t)s].y,
+				as[(size_t)s].z };
+			const int to[3] = { as[t].x, as[t].y, as[t].z };
+			const int zero[3] = { 0, 0, 0 };
+			int origin[3];
+
+			HDArtCopyMove(turnOf[t], from, to, zero, origin);
+
+			const uint64_t key = HDArtCopyMotionKey(turnOf[t], origin[0],
+				origin[1], origin[2]);
+			const int dg = plan.itemGroup[(size_t)s];
+			const int tg = plan.itemGroup[t];
+			size_t m = 0;
+
+			while (m < moves.size() && (moves[m].dg != dg ||
+				moves[m].tg != tg || moves[m].key != key))
+				m++;
+
+			if (m == moves.size())
+			{
+				Move one;
+
+				one.dg = dg;
+				one.tg = tg;
+				one.turn = turnOf[t];
+				one.key = key;
+
+				for (int k = 0; k < 3; k++)
+				{
+					one.from[k] = from[k];
+					one.to[k] = to[k];
+				}
+
+				moves.push_back(one);
+			}
+
+			moveOf[t] = (int)m;
+			slotOf[t] = (int)moves[m].targets.size();
+			moves[m].targets.push_back((int)t);
+			moves[m].donors.push_back(s);
+		}
+
+		for (Move& m : moves)
+		{
+			Take(level, &as[0], m.donors, m.dg, m.turn, m.from, m.to, faces,
+				faceCount, p, standingOf(m.tg), m.taken);
+
+			for (const Taken& one : m.taken)
+				m.seen.insert(m.seen.end(), one.first.begin(), one.first.end());
+
+			std::sort(m.seen.begin(), m.seen.end());
+		}
+
+		// The copies, in the level's order; every donor offered, for a tool.
+		for (size_t t = 0; t < n; t++)
+		{
+			if (!wants[t])
+				continue;
+
+			const HDArtCopyStatic& goal = as[t];
+			const int tg = plan.itemGroup[t];
+			const int best = donorOf[t];
+			const int toAt[3] = { goal.x, goal.y, goal.z };
+
+			for (size_t s = 0; p.offered && s < n; s++)
+			{
+				int turn = 0;
+
+				if (plan.itemRole[s] != HD_ARTCOPY_ITEM_DONOR ||
+					as[s].slot != goal.slot || !Motion(as[s], goal, &turn))
+					continue;
+
+				const std::vector<int> alone(1, (int)s);
+				const int fromAt[3] = { as[s].x, as[s].y, as[s].z };
+				std::vector<Taken> taken;
+				HDArtCopyOffer offer;
+
+				Take(level, &as[0], alone, plan.itemGroup[s], turn, fromAt,
+					toAt, faces, faceCount, p, standingOf(tg), taken);
+				offer.target = (int)t;
+				offer.donor = (int)s;
+				offer.group = plan.itemGroup[s];
+				offer.dx = goal.x - as[s].x;
+				offer.dy = goal.y - as[s].y;
+				offer.dz = goal.z - as[s].z;
+				offer.turn = turn;
+				offer.inside = taken[0].inside;
+				offer.crossing = taken[0].crossing;
+				offer.walls = taken[0].walls;
+				offer.standing = taken[0].standing;
+				offer.chosen = (int)s == best ? 1 : 0;
+				plan.itemOffered.push_back(offer);
+			}
+
+			if (best < 0)
+				continue;
+
+			const HDArtCopyStatic& from = as[(size_t)best];
+			const int fromAt[3] = { from.x, from.y, from.z };
+			Move& move = moves[(size_t)moveOf[t]];
+			const Taken& taken = move.taken[(size_t)slotOf[t]];
+			std::vector<uint32_t> first(taken.first), run(taken.run);
+			HDArtCopy copy;
+			int beside = 0;
+
+			memset(&copy, 0, sizeof(copy));
+			copy.target = (int)t;
+			copy.donor = best;
+			copy.group = tg;
+			copy.fromGroup = move.dg;
+			copy.dx = goal.x - from.x;
+			copy.dy = goal.y - from.y;
+			copy.dz = goal.z - from.z;
+			copy.turn = turnOf[t];
+			copy.inside = taken.inside;
+			copy.crossing = taken.crossing;
+			copy.walls = taken.walls;
+			copy.standing = taken.standing;
+
+			FacesBeside(level, move.dg, tg, copy.turn, fromAt, toAt, goal.room,
+				goal.mins, goal.maxs, faces, faceRooms, faceCount, p, faceDone,
+				move.seen, first, run, &beside);
+			copy.faces = beside;
+			copy.faceTris = (int)(first.size() - taken.first.size());
+
+			// Each triangle into its part's twin in the target's group.
+			bool parts = true;
+
+			for (size_t k = 0; k < run.size() && parts; k++)
+			{
+				const int into = level.RunIn(move.dg, run[k], tg);
+
+				parts = into >= 0;
+				run[k] = (uint32_t)into;
+			}
+
+			if (!parts)
+			{
+				plan.itemRole[t] = HD_ARTCOPY_ITEM_NO_PART;
+				continue;
+			}
+
+			if (first.empty())
+			{
+				plan.itemRole[t] = HD_ARTCOPY_ITEM_EMPTY;
+				continue;
+			}
+
+			copy.tris = (int)first.size();
+			copy.firstTri = (int)plan.tris.size();
+			plan.tris.insert(plan.tris.end(), first.begin(), first.end());
+			plan.runs.insert(plan.runs.end(), run.begin(), run.end());
+			plan.itemRole[t] = HD_ARTCOPY_ITEM_COPIED;
+			plan.itemCopies.push_back(copy);
+			plan.itemTris += copy.tris;
+		}
+
+		/* Per copy, the light: the means of the copied corners' two colours
+		 * (the donor's), and of the target group's own corners round the
+		 * target's place. */
+		for (HDArtCopy& copy : plan.itemCopies)
+		{
+			const HDArtCopyStatic& goal = as[(size_t)copy.target];
+			double light[2][3] = { { 0, 0, 0 }, { 0, 0, 0 } };
+			double sum[2][3] = { { 0, 0, 0 }, { 0, 0, 0 } };
+			int corners = 0, around = 0;
+
+			for (int k = 0; k < copy.tris; k++)
+				for (int c = 0; c < 3; c++)
+				{
+					const trf::remaster::TrgVertex& v = level.trg->vertices[
+						level.trg->indices[plan.tris[(size_t)(copy.firstTri +
+						k)] + (uint32_t)c]];
+
+					for (int i = 0; i < 3; i++)
+					{
+						light[0][i] += v.colour1[i];
+						light[1][i] += v.colour2[i];
+					}
+
+					corners++;
+				}
+
+			const Art& art = level.Tris(copy.group);
+
+			for (size_t k = 0; k < art.first.size(); k++)
+				for (int c = 0; c < 3; c++)
+				{
+					const uint32_t index = level.trg->indices[art.first[k] +
+						(uint32_t)c];
+					int q[3];
+
+					level.Corner(copy.group, index, q);
+
+					if (!Inside(q, goal.mins, goal.maxs, HD_ARTCOPY_AROUND))
+						continue;
+
+					const trf::remaster::TrgVertex& v =
+						level.trg->vertices[index];
+
+					for (int i = 0; i < 3; i++)
+					{
+						sum[0][i] += v.colour1[i];
+						sum[1][i] += v.colour2[i];
+					}
+
+					around++;
+				}
+
+			for (int a = 0; a < 2; a++)
+				for (int i = 0; i < 3; i++)
+				{
+					copy.light[a][i] = corners ? (float)(light[a][i] /
+						corners) : 0.0f;
+					copy.around[a][i] = around ? (float)(sum[a][i] / around) :
+						0.0f;
+				}
+
+			copy.aroundCorners = around;
+		}
+	}
 }
 
 /* The rule's plan over one level: which statics get a copy from which
  * donor, and the triangles each takes. `faces` are the level's classic
  * faces in world units (the stand faces, hd_cover.h) and `faceRooms` the
  * room of each, `verts` the statics' vertices, `threads` the pool's
- * (HDPoolThreads). Nothing is changed; HDArtCopyApply puts the plan in. */
+ * (HDPoolThreads); `items` the items of the slots the art carries, asked
+ * only when one of them is the run's own (or the tools ask every donor).
+ * Nothing is changed; HDArtCopyApply puts the plan in. */
 inline void HDArtCopyMake(const trf::remaster::Trg& trg, int roomGroups,
 	const int* shift, int shifts, const HDArtCopyRoom* rooms, int roomCount,
 	const HDCoverFace* faces, const int* faceRooms, int faceCount,
 	const HDArtCopyStatic* statics, int staticCount, const float* verts,
-	int vertCount, const HDArtCopyParams& p, int threads, HDArtCopyPlan* out)
+	int vertCount, const HDArtCopyParams& p, int threads, HDArtCopyPlan* out,
+	const HDArtCopyItem* items = 0, int itemCount = 0)
 {
 	HDArtCopyPlan& plan = *out;
 
@@ -1313,8 +2082,18 @@ inline void HDArtCopyMake(const trf::remaster::Trg& trg, int roomGroups,
 
 	const int groups = (std::min)((std::min)(roomGroups,
 		(int)trg.groups.size()), roomCount);
+	bool askItems = false;
 
-	if (groups <= 0 || !rooms || !statics || staticCount <= 0 || !verts)
+	if (!statics || !verts)
+		staticCount = 0;
+
+	if (!items)
+		itemCount = 0;
+
+	for (int i = 0; i < itemCount && !askItems; i++)
+		askItems = items[i].added != 0 || p.offered != 0;
+
+	if (groups <= 0 || !rooms || (staticCount <= 0 && !askItems))
 		return;
 
 	hdartcopy::Level level;
@@ -1376,7 +2155,8 @@ inline void HDArtCopyMake(const trf::remaster::Trg& trg, int roomGroups,
 	/* The group that draws each room of a static, before the build: the
 	 * room's own where one of its triangles has its centroid in the room's
 	 * box grown by the slack, otherwise the group with the most corners in
-	 * the box, no group of a flipmap pair; -1 for none. */
+	 * the box, no group of a flipmap pair; -1 for none. The same for the
+	 * rooms of the items asked. */
 	plan.drawn.assign((size_t)groups, -1);
 
 	{
@@ -1384,13 +2164,8 @@ inline void HDArtCopyMake(const trf::remaster::Trg& trg, int roomGroups,
 		std::vector<int> classic;
 		std::vector<float> boxes;
 
-		for (int s = 0; s < staticCount; s++)
+		const auto see = [&](int r)
 		{
-			const int r = statics[s].room;
-
-			if (!valid[(size_t)s] || seenRoom[(size_t)r])
-				continue;
-
 			seenRoom[(size_t)r] = 1;
 
 			if (level.art[(size_t)r].own)
@@ -1407,6 +2182,27 @@ inline void HDArtCopyMake(const trf::remaster::Trg& trg, int roomGroups,
 				boxes.push_back(room.maxs[1]);
 				boxes.push_back(room.maxs[2] + (float)room.originZ);
 			}
+		};
+
+		for (int s = 0; s < staticCount; s++)
+		{
+			const int r = statics[s].room;
+
+			if (!valid[(size_t)s] || seenRoom[(size_t)r])
+				continue;
+
+			see(r);
+		}
+
+		for (int i = 0; askItems && i < itemCount; i++)
+		{
+			const int r = items[i].room;
+
+			if (r < 0 || r >= groups || paired[(size_t)r] ||
+				seenRoom[(size_t)r])
+				continue;
+
+			see(r);
 		}
 
 		if (!classic.empty())
@@ -1836,6 +2632,7 @@ inline void HDArtCopyMake(const trf::remaster::Trg& trg, int roomGroups,
 		copy.target = t;
 		copy.donor = best;
 		copy.group = g;
+		copy.fromGroup = g;
 		copy.dx = goal.x - from.x;
 		copy.dy = goal.y - from.y;
 		copy.dz = goal.z - from.z;
@@ -1852,120 +2649,19 @@ inline void HDArtCopyMake(const trf::remaster::Trg& trg, int roomGroups,
 			taken.first.end());
 		plan.runs.insert(plan.runs.end(), taken.run.begin(), taken.run.end());
 
-		/* The classic faces beside the copy: a face of the target's room
-		 * that touches its box, whose image by the copy's motion taken back
-		 * is a face of the level with the group's art lying on it - the
-		 * landing at the end of a flight, at the donor's. That art comes
-		 * with the copy, less what stands at the target already and what
-		 * the copy's motion took, and the face then falls to the art like
-		 * any face the art covers (hd_cover.h). */
-		for (int f = 0; faceRooms && f < faceCount; f++)
+		// The classic faces beside the copy (hdartcopy::FacesBeside).
 		{
-			if (faceRooms[f] != goal.room || faceDone[(size_t)f] ||
-				!hdartcopy::FaceMeets(faces[f], goal.mins, goal.maxs, 1.0))
-				continue;
+			std::vector<uint32_t> first, run;
+			int beside = 0;
 
-			HDCoverFace back = faces[f];
-
-			for (int c = 0; c < back.corners && c < 4; c++)
-			{
-				const int q[3] = { (int)floor(faces[f].v[c][0] + 0.5),
-					(int)floor(faces[f].v[c][1] + 0.5),
-					(int)floor(faces[f].v[c][2] + 0.5) };
-				int w[3];
-
-				HDArtCopyMove((4 - copy.turn) & 3, toAt, fromAt, q, w);
-
-				for (int k = 0; k < 3; k++)
-					back.v[c][k] = (double)w[k];
-			}
-
-			const int donorFace = hdartcopy::SameFace(faces, faceCount, back);
-			std::vector<size_t> there;
-
-			if (donorFace < 0)
-				continue;
-
-			hdartcopy::OnFace(level, g, faces[donorFace], there);
-
-			if (there.empty())
-				continue;
-
-			faceDone[(size_t)f] = 1;
-
-			const hdartcopy::Art& art = level.Tris(g);
-			hdartcopy::Standing nearArt;
-			float lo[3], hi[3];
-
-			for (int k = 0; k < 3; k++)
-			{
-				double a = faces[f].v[0][k], b = faces[f].v[0][k];
-
-				for (int c = 1; c < faces[f].corners && c < 4; c++)
-				{
-					a = faces[f].v[c][k] < a ? faces[f].v[c][k] : a;
-					b = faces[f].v[c][k] > b ? faces[f].v[c][k] : b;
-				}
-
-				lo[k] = (float)(a - HD_COVER_REACH - p.stands);
-				hi[k] = (float)(b + HD_COVER_REACH + p.stands);
-			}
-
-			for (size_t t2 = 0; t2 < art.first.size(); t2++)
-			{
-				int v[3][3];
-				bool meets = true;
-
-				for (int c = 0; c < 3; c++)
-					level.Corner(g, trg.indices[art.first[t2] + (uint32_t)c],
-						v[c]);
-
-				for (int k = 0; k < 3 && meets; k++)
-				{
-					const int a = (std::min)((std::min)(v[0][k], v[1][k]),
-						v[2][k]);
-					const int b = (std::max)((std::max)(v[0][k], v[1][k]),
-						v[2][k]);
-
-					meets = (float)b >= lo[k] && (float)a <= hi[k];
-				}
-
-				if (meets)
-					nearArt.Add(v, p.stands);
-			}
-
-			nearArt.Done();
-			copy.faces++;
-
-			for (size_t t2 : there)
-			{
-				const uint32_t first = art.first[t2];
-
-				if (std::binary_search(move.seen.begin(), move.seen.end(),
-					first))
-					continue;
-
-				int v[3][3], w[3][3];
-
-				for (int c = 0; c < 3; c++)
-				{
-					level.Corner(g, trg.indices[first + (uint32_t)c], v[c]);
-					HDArtCopyMove(copy.turn, fromAt, toAt, v[c], w[c]);
-				}
-
-				HDCoverTri image;
-
-				if (!hdartcopy::CoverTri(w, g, &image) ||
-					hdartcopy::OnArt(nearArt, w, image, p.stands))
-					continue;
-
-				plan.tris.push_back(first);
-				plan.runs.push_back(art.run[t2]);
-				move.seen.insert(std::lower_bound(move.seen.begin(),
-					move.seen.end(), first), first);
-				copy.tris++;
-				copy.faceTris++;
-			}
+			hdartcopy::FacesBeside(level, g, g, copy.turn, fromAt, toAt,
+				goal.room, goal.mins, goal.maxs, faces, faceRooms, faceCount, p,
+				faceDone, move.seen, first, run, &beside);
+			plan.tris.insert(plan.tris.end(), first.begin(), first.end());
+			plan.runs.insert(plan.runs.end(), run.begin(), run.end());
+			copy.faces += beside;
+			copy.tris += (int)first.size();
+			copy.faceTris += (int)first.size();
 		}
 
 		plan.copies.push_back(copy);
@@ -2062,19 +2758,29 @@ inline void HDArtCopyMake(const trf::remaster::Trg& trg, int roomGroups,
 
 		copy.aroundCorners = n;
 	}
+
+	// The items the run added to a slot the art carries (MakeItems).
+	if (askItems)
+		hdartcopy::MakeItems(level, plan, paired, items, itemCount, faces,
+			faceRooms, faceCount, p, faceDone);
 }
 
 /* The plan put into the .TRG: per group the copies' vertices, each donor
  * corner once per copy, turned and moved, inserted right after the group's
  * last vertex (every later index moves up), and per run the copies'
  * triangles right after the run's own (every run starting there or later
- * moves up). A copy one of whose corners would leave the 16 bit range is
- * left out whole. Returns the vertices added. */
+ * moves up). The statics' copies first, then the items' (`items`, the list
+ * the plan was made with), whose corners are read in the frame of the
+ * group they are taken from and written in the frame of the group they go
+ * into. A copy one of whose corners would leave the 16 bit range is left
+ * out whole. Returns the vertices added. */
 inline int HDArtCopyApply(trf::remaster::Trg& trg, const int* shift,
 	int shifts, const HDArtCopyRoom* rooms, int roomCount,
-	const HDArtCopyStatic* statics, HDArtCopyPlan* plan)
+	const HDArtCopyStatic* statics, HDArtCopyPlan* plan,
+	const HDArtCopyItem* items = 0)
 {
-	if (!plan || plan->copies.empty() || plan->tris.empty())
+	if (!plan || (plan->copies.empty() && plan->itemCopies.empty()) ||
+		plan->tris.empty())
 		return 0;
 
 	const auto shiftOf = [&](int g)
@@ -2102,18 +2808,38 @@ inline int HDArtCopyApply(trf::remaster::Trg& trg, const int* shift,
 
 	std::vector<Block> blocks;
 	std::vector<NewTri> made;
+	int movedVerts[2] = { 0, 0 };
 
-	for (HDArtCopy& copy : plan->copies)
+	for (int kind = 0; kind < 2; kind++)
+	for (HDArtCopy& copy : kind ? plan->itemCopies : plan->copies)
 	{
 		const int g = copy.group;
+		const int f = kind ? copy.fromGroup : g;
 
-		if (g < 0 || g >= roomCount || g >= (int)trg.groups.size())
+		if (g < 0 || g >= roomCount || g >= (int)trg.groups.size() ||
+			f < 0 || f >= roomCount || f >= (int)trg.groups.size() ||
+			(kind && !items) || (!kind && !statics))
 			continue;
 
-		const HDArtCopyStatic& from = statics[copy.donor];
-		const HDArtCopyStatic& to = statics[copy.target];
-		const int fromAt[3] = { from.x, from.y, from.z };
-		const int toAt[3] = { to.x, to.y, to.z };
+		int fromAt[3], toAt[3];
+
+		if (kind)
+		{
+			const HDArtCopyItem& from = items[copy.donor];
+			const HDArtCopyItem& to = items[copy.target];
+
+			fromAt[0] = from.x, fromAt[1] = from.y, fromAt[2] = from.z;
+			toAt[0] = to.x, toAt[1] = to.y, toAt[2] = to.z;
+		}
+		else
+		{
+			const HDArtCopyStatic& from = statics[copy.donor];
+			const HDArtCopyStatic& to = statics[copy.target];
+
+			fromAt[0] = from.x, fromAt[1] = from.y, fromAt[2] = from.z;
+			toAt[0] = to.x, toAt[1] = to.y, toAt[2] = to.z;
+		}
+
 		std::vector<trf::remaster::TrgVertex> moved;
 		std::unordered_map<uint32_t, uint32_t> slot;
 		bool fits = true;
@@ -2129,8 +2855,8 @@ inline int HDArtCopyApply(trf::remaster::Trg& trg, const int* shift,
 					continue;
 
 				trf::remaster::TrgVertex v = trg.vertices[index];
-				const int p[3] = { (int)v.x + rooms[g].originX,
-					(int)v.y + shiftOf(g), (int)v.z + rooms[g].originZ };
+				const int p[3] = { (int)v.x + rooms[f].originX,
+					(int)v.y + shiftOf(f), (int)v.z + rooms[f].originZ };
 				int q[3];
 
 				HDArtCopyMove(copy.turn, fromAt, toAt, p, q);
@@ -2151,10 +2877,22 @@ inline int HDArtCopyApply(trf::remaster::Trg& trg, const int* shift,
 
 		if (!fits)
 		{
-			plan->addedTris -= copy.tris;
+			if (kind)
+			{
+				plan->itemTris -= copy.tris;
+
+				if ((size_t)copy.target < plan->itemRole.size())
+					plan->itemRole[(size_t)copy.target] =
+						HD_ARTCOPY_ITEM_EMPTY;
+			}
+			else
+				plan->addedTris -= copy.tris;
+
 			copy.tris = 0;
 			continue;
 		}
+
+		movedVerts[kind] += (int)moved.size();
 
 		int b = -1;
 
@@ -2274,14 +3012,19 @@ inline int HDArtCopyApply(trf::remaster::Trg& trg, const int* shift,
 
 		all.insert(all.end(), trg.vertices.begin() + (std::ptrdiff_t)from,
 			trg.vertices.end());
-		plan->addedVerts = (int)more;
+		plan->addedVerts = movedVerts[0];
+		plan->itemVerts = movedVerts[1];
 		trg.vertices.swap(all);
 	}
 
-	// The triangles, per run of their group, right after the run's own.
+	/* The triangles, per run of their group, right after the run's own.
+	 * `start` is the run's own start: an empty run receiving a copy ends
+	 * where it starts, and where the run ending there before it receives
+	 * one too, the two go in in the file's order (Before). */
 	struct Insert
 	{
 		uint32_t at;
+		uint32_t start;
 		int group;
 		uint32_t run;
 		std::vector<uint32_t> indices;
@@ -2304,6 +3047,7 @@ inline int HDArtCopyApply(trf::remaster::Trg& trg, const int* shift,
 			Insert one;
 
 			one.at = run.start + run.count;
+			one.start = run.start;
 			one.group = tri.group;
 			one.run = tri.run;
 			inserts.push_back(one);
@@ -2314,8 +3058,27 @@ inline int HDArtCopyApply(trf::remaster::Trg& trg, const int* shift,
 				tri.corner[c]);
 	}
 
+	/* Whether insert a goes in before a run of group g, `self` its part
+	 * times three plus its pass, starting at `start`: in front of it, or
+	 * right at it for a run ending there or an empty run there earlier in
+	 * the file (group, part, pass). */
+	const auto before = [](const Insert& a, uint32_t start, int g,
+		uint32_t self)
+	{
+		if (a.at != start)
+			return a.at < start;
+
+		if (a.start != start)
+			return a.start < start;
+
+		return a.group != g ? a.group < g : a.run < self;
+	};
+
 	std::stable_sort(inserts.begin(), inserts.end(),
-		[](const Insert& a, const Insert& b) { return a.at < b.at; });
+		[&](const Insert& a, const Insert& b)
+	{
+		return a.at != b.at ? a.at < b.at : before(a, b.start, b.group, b.run);
+	});
 
 	std::vector<uint32_t> indices;
 	size_t from = 0, more = 0;
@@ -2338,8 +3101,8 @@ inline int HDArtCopyApply(trf::remaster::Trg& trg, const int* shift,
 	indices.insert(indices.end(), trg.indices.begin() + (std::ptrdiff_t)from,
 		trg.indices.end());
 
-	// Every run moved up by what went in at or before its start, the grown
-	// runs longer by their own.
+	// Every run moved up by what went in before it, the grown runs longer
+	// by their own.
 	for (size_t g = 0; g < trg.groups.size(); g++)
 		for (size_t p = 0; p < trg.groups[g].parts.size(); p++)
 			for (int pass = 0; pass < 3; pass++)
@@ -2355,7 +3118,7 @@ inline int HDArtCopyApply(trf::remaster::Trg& trg, const int* shift,
 
 					if (mine)
 						grow = (uint32_t)one.indices.size();
-					else if (one.at <= run.start)
+					else if (before(one, run.start, (int)g, self))
 						add += (uint32_t)one.indices.size();
 				}
 
@@ -2364,5 +3127,5 @@ inline int HDArtCopyApply(trf::remaster::Trg& trg, const int* shift,
 			}
 
 	trg.indices.swap(indices);
-	return plan->addedVerts;
+	return plan->addedVerts + plan->itemVerts;
 }

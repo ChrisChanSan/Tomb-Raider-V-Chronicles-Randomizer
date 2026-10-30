@@ -15635,6 +15635,267 @@ static void art_rich2()
 		right, 3);
 }
 
+/* The rule's item path (hd_artcopy.h, MakeItems) on a level of two rooms
+ * built by hand, each drawn by its own group: room 0 (origin 0, 0) holds
+ * two Core-placed items of one slot the art carries, A turned half round
+ * and C not, each a box of 1,000 x 500 x 1,000 its group models with twelve
+ * triangles (art_flight); room 1 (origin 8,192, 0) holds an added item of
+ * the slot, turned half round, with nothing of it in its art. A gives the
+ * copy - no turn first, though C stands nearer -, read in group 0's frame
+ * and written in group 1's, into its part of the same material. Then the
+ * answers that give none, or another donor: A's art unlit (C, a half turn),
+ * the donors' art unlike, no part of the material in room 1's group, the
+ * added item's yaw no whole quarter turn, and no added item at all. */
+static void art_item_level(trf::remaster::Trg& trg, bool twice,
+	uint32_t material, bool litA, bool foreign = false)
+{
+	trg = trf::remaster::Trg();
+	trg.groups.resize(2);
+
+	trf::remaster::TrgPart part;
+
+	part.pass[0].start = 0;
+	art_flight(trg, 0, -512, 0);			// A at 1024, 0, 1024, half round
+
+	const size_t afterA = trg.vertices.size();
+
+	art_flight(trg, 3072, -512, 1024);		// C at 3072, 0, 1024
+
+	if (twice)
+		art_flight(trg, 3072 + 8, -512, 1024 + 8);
+
+	// Each room's floor, its centroid in its room, away from the items.
+	const float a[3] = { 3000, -10, 3000 }, b[3] = { 4000, -10, 3000 },
+		c[3] = { 3000, -10, 4000 };
+
+	const float wa[3] = { 8192 + 3000, -10, 3000 },
+		wb[3] = { 8192 + 4000, -10, 3000 }, wc[3] = { 8192 + 3000, -10, 4000 };
+
+	vis_tri(trg, 0, 0, 0, a, b, c);
+
+	if (foreign)
+		vis_tri(trg, 0, 0, 0, wa, wb, wc);	// room 1's floor in group 0
+
+	part.pass[0].count = (uint32_t)trg.indices.size();
+	trg.groups[0].parts.push_back(part);
+
+	for (size_t v = 0; v < trg.vertices.size(); v++)
+		for (int k = 0; k < 3; k++)
+			trg.vertices[v].colour1[k] =
+				(uint8_t)(v < afterA && !litA ? 0 : 40);
+
+	trf::remaster::TrgPart own;
+
+	own.material = material;
+	own.pass[0].start = (uint32_t)trg.indices.size();
+
+	if (!foreign)
+		vis_tri(trg, 8192, 0, 0, wa, wb, wc);
+
+	own.pass[0].count = foreign ? 0 : 3;
+	own.pass[1].start = own.pass[2].start = own.pass[0].start +
+		own.pass[0].count;
+	trg.groups[1].parts.push_back(own);
+	trg.groups[0].parts[0].pass[1].start = part.pass[0].count;
+	trg.groups[0].parts[0].pass[2].start = part.pass[0].count;
+}
+
+static void art_item_place(int x, int z, int rot, int room, int added,
+	HDArtCopyItem& one)
+{
+	static const short bounds[6] = { 12, 1012, -506, -6, 12, 1012 };
+	const HDStandBox box = HDStandItemBox(bounds, x, 0, z, (short)rot);
+
+	std::memset(&one, 0, sizeof(one));
+	one.room = room;
+	one.slot = 168;
+	one.x = x;
+	one.z = z;
+	one.rot = rot & 0xFFFF;
+	one.added = added;
+
+	for (int k = 0; k < 3; k++)
+	{
+		one.mins[k] = (float)box.lo[k];
+		one.maxs[k] = (float)box.hi[k];
+	}
+}
+
+static void art_items()
+{
+	std::vector<HDArtCopyRoom> rooms(2);
+
+	for (int r = 0; r < 2; r++)
+	{
+		HDArtCopyRoom& one = rooms[(size_t)r];
+
+		one.originX = r ? 8192 : 0;
+		one.originZ = 0;
+		one.mins[0] = one.mins[2] = 0.0f;
+		one.maxs[0] = one.maxs[2] = 4096.0f;
+		one.mins[1] = -1536.0f;
+		one.maxs[1] = 0.0f;
+		one.box = 1;
+		one.twin = -1;
+	}
+
+	std::vector<HDArtCopyItem> items(3);
+
+	art_item_place(1024, 1024, 32768, 0, 0, items[0]);		// A
+	art_item_place(3072, 1024, 0, 0, 0, items[1]);			// C
+	art_item_place(10240, 2048, 32768, 1, 1, items[2]);		// the added one
+
+	for (int i = 0; i < 3; i++)
+		items[(size_t)i].item = 10 + i;
+
+	HDArtCopyParams p = { HD_ARTCOPY_MARGIN, HD_ARTCOPY_WALL, HD_ARTCOPY_STANDS,
+		128.0f, 0 };
+	HDArtCopyPlan plan;
+	trf::remaster::Trg trg;
+
+	art_item_level(trg, false, 0, true);
+	HDArtCopyMake(trg, 2, 0, 0, &rooms[0], 2, 0, 0, 0, 0, 0, 0, 0, p, 2,
+		&plan, &items[0], 3);
+	ok(plan.items == 1 && plan.itemDonors == 2 && plan.itemGroup.size() == 3 &&
+		plan.itemGroup[2] == 1 && plan.itemRole[2] == HD_ARTCOPY_ITEM_COPIED,
+		"artcopy: an added item of a slot the art carries, its two donors",
+		plan.itemRole.size() == 3 ? plan.itemRole[2] : -1,
+		HD_ARTCOPY_ITEM_COPIED);
+	ok(plan.itemCopies.size() == 1 && plan.itemCopies[0].donor == 0 &&
+		plan.itemCopies[0].turn == 0 && plan.itemCopies[0].dx == 9216 &&
+		plan.itemCopies[0].dz == 1024 && plan.itemCopies[0].fromGroup == 0 &&
+		plan.itemCopies[0].group == 1 && plan.itemCopies[0].tris == 12,
+		"artcopy: the donor with no turn first, from its group into the other",
+		plan.itemCopies.empty() ? -1 : plan.itemCopies[0].donor, 0);
+
+	const size_t verticesBefore = trg.vertices.size();
+	const uint32_t countBefore = trg.groups[1].parts[0].pass[0].count;
+
+	HDArtCopyApply(trg, 0, 0, &rooms[0], 2, 0, &plan, &items[0]);
+	ok(trg.groups[1].parts[0].pass[0].count == countBefore + 36 &&
+		trg.vertices.size() == verticesBefore + 36 && plan.itemVerts == 36 &&
+		plan.addedVerts == 0 && trg.groups[0].parts[0].pass[0].count == 75,
+		"artcopy: the item's copy in the run of its own group's part",
+		(long)(trg.groups[1].parts[0].pass[0].count - countBefore), 36);
+
+	{
+		const trf::remaster::TrgPart::Pass& run =
+			trg.groups[1].parts[0].pass[0];
+		int lo[3] = { 1 << 20, 1 << 20, 1 << 20 }, hi[3] = { -(1 << 20),
+			-(1 << 20), -(1 << 20) };
+
+		for (uint32_t k = run.start + 3; k < run.start + run.count; k++)
+		{
+			const trf::remaster::TrgVertex& v = trg.vertices[trg.indices[k]];
+			const int q[3] = { v.x, v.y, v.z };
+
+			for (int a = 0; a < 3; a++)
+			{
+				lo[a] = (std::min)(lo[a], q[a]);
+				hi[a] = (std::max)(hi[a], q[a]);
+			}
+		}
+
+		ok(lo[0] == 1036 && hi[0] == 2036 && lo[2] == 1036 && hi[2] == 2036 &&
+			lo[1] == -506 && hi[1] == -6,
+			"artcopy: its corners in the frame of the group it went into",
+			lo[0], 1036);
+	}
+
+	// A's art unlit: C gives it, turned half round about its own place.
+	art_item_level(trg, false, 0, false);
+	HDArtCopyMake(trg, 2, 0, 0, &rooms[0], 2, 0, 0, 0, 0, 0, 0, 0, p, 2,
+		&plan, &items[0], 3);
+	ok(plan.itemRole[0] == HD_ARTCOPY_ITEM_UNLIT &&
+		plan.itemCopies.size() == 1 &&
+		plan.itemCopies[0].donor == 1 && plan.itemCopies[0].turn == 2,
+		"artcopy: a donor whose art carries no light gives none",
+		plan.itemRole.empty() ? -1 : plan.itemRole[0], HD_ARTCOPY_ITEM_UNLIT);
+	HDArtCopyApply(trg, 0, 0, &rooms[0], 2, 0, &plan, &items[0]);
+
+	{
+		const trf::remaster::TrgPart::Pass& run =
+			trg.groups[1].parts[0].pass[0];
+		int lo = 1 << 20, hi = -(1 << 20);
+
+		for (uint32_t k = run.start + 3; k < run.start + run.count; k++)
+		{
+			lo = (std::min)(lo, (int)trg.vertices[trg.indices[k]].x);
+			hi = (std::max)(hi, (int)trg.vertices[trg.indices[k]].x);
+		}
+
+		ok(run.count == 39 && lo == 1036 && hi == 2036,
+			"artcopy: a half turn puts the turned donor's art on its box", lo,
+			1036);
+	}
+
+	// The donors' art differs past three halves: no copy.
+	art_item_level(trg, true, 0, true);
+	HDArtCopyMake(trg, 2, 0, 0, &rooms[0], 2, 0, 0, 0, 0, 0, 0, 0, p, 2,
+		&plan, &items[0], 3);
+	ok(plan.itemCopies.empty() && plan.itemRole[2] == HD_ARTCOPY_ITEM_UNLIKE &&
+		plan.itemWeighed.size() == 1 && plan.itemWeighed[0].most == 24,
+		"artcopy: an item's donors whose art differs give no copy",
+		plan.itemRole.empty() ? -1 : plan.itemRole[2], HD_ARTCOPY_ITEM_UNLIKE);
+
+	// Room 1's group has no part of the donor's material: no copy.
+	art_item_level(trg, false, 5, true);
+	HDArtCopyMake(trg, 2, 0, 0, &rooms[0], 2, 0, 0, 0, 0, 0, 0, 0, p, 2,
+		&plan, &items[0], 3);
+	ok(plan.itemCopies.empty() && plan.itemRole[2] == HD_ARTCOPY_ITEM_NO_PART,
+		"artcopy: no part of the donor's material in the target's group",
+		plan.itemRole.empty() ? -1 : plan.itemRole[2], HD_ARTCOPY_ITEM_NO_PART);
+
+	// The added item's yaw no whole quarter turn: no copy, and the word.
+	art_item_level(trg, false, 0, true);
+	items[2].rot = 32768 + 1024;
+	HDArtCopyMake(trg, 2, 0, 0, &rooms[0], 2, 0, 0, 0, 0, 0, 0, 0, p, 2,
+		&plan, &items[0], 3);
+	ok(plan.itemCopies.empty() && plan.itemRole[2] == HD_ARTCOPY_ITEM_SKEWED &&
+		!strcmp(HDArtCopyItemWord(plan.itemRole[2]), "skewed"),
+		"artcopy: an added item turned by no whole quarter takes no copy",
+		plan.itemRole.empty() ? -1 : plan.itemRole[2], HD_ARTCOPY_ITEM_SKEWED);
+	items[2].rot = 32768;
+
+	// Room 1 drawn by group 0's art: the item stays classic there, no copy.
+	art_item_level(trg, false, 0, true, true);
+	HDArtCopyMake(trg, 2, 0, 0, &rooms[0], 2, 0, 0, 0, 0, 0, 0, 0, p, 2,
+		&plan, &items[0], 3);
+	ok(plan.drawn.size() == 2 && plan.drawn[1] == 0 &&
+		plan.itemCopies.empty() && plan.itemRole[2] == HD_ARTCOPY_ITEM_NO_GROUP,
+		"artcopy: no copy for an item in a room another group's art draws",
+		plan.itemRole.empty() ? -1 : plan.itemRole[2],
+		HD_ARTCOPY_ITEM_NO_GROUP);
+
+	// No item the run's own: the item path is not asked at all.
+	items[2].added = 0;
+	HDArtCopyMake(trg, 2, 0, 0, &rooms[0], 2, 0, 0, 0, 0, 0, 0, 0, p, 2,
+		&plan, &items[0], 3);
+	ok(plan.items == 0 && plan.itemCopies.empty() && plan.itemRole.empty(),
+		"artcopy: a level without an added item asks no item", plan.items, 0);
+	items[2].added = 1;
+
+	// On the visibility path only: handed in behind the statics' gate.
+	char* level = hd_switch_text("hd_level.cpp");
+	const char* gate = level ? strstr(level,
+		"const int copyRooms = VisLevel() ? number_rooms : 0;") : 0;
+	const char* items_gate = gate ? strstr(gate, "if (copyRooms > 0)") : 0;
+	const char* handed = items_gate ? strstr(items_gate,
+		"HDRenderSetArtCopyItems(g_copy_items.empty()") : 0;
+
+	ok(gate && items_gate && handed,
+		"artcopy: the items handed in on the visibility path only", 0, 0);
+	free(level);
+
+	// An added item the copy holds is baked like the slot's other items.
+	char* object = hd_switch_text("hd_object.cpp");
+
+	ok(object && strstr(object, "HDMarkersItemAdded((int)number) &&") &&
+		strstr(object, "!HDRenderArtCopyItemHeld((int)number);"),
+		"artcopy: the copy's added item baked like the others", 0, 0);
+	free(object);
+}
+
 /* The cut-out cards back to back (hd_render.cpp, MarkBackToBackCards), read
  * from the engine's text: the numbers - a point of a card lies on another
  * card within 16 units of its plane and 1 unit of its edges, the two
@@ -30368,6 +30629,7 @@ int main()
 	card_rule();
 	art_copy();
 	art_rich2();
+	art_items();
 	glass_hue();
 	glass_look();
 	hd_build_gate();

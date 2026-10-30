@@ -1681,6 +1681,21 @@ see *Lara in HD* below for which of her stays classic and why.
   models differently at its places gets no copy, and art is never taken
   from another level. With `-log` one `HDLOG artcopy` line per copy names
   the static, the one it was copied from and the motion.
+  The same holds for an object the randomizer adds to a slot whose objects
+  the art carries where the original level placed them - the shelf the
+  glitchless secret list puts into the Submarine's bunk room, the secret
+  inside it: on the visibility path it takes a copy of the art of one of
+  the shelves the original level placed, from that shelf's room into its
+  own (a triangle's picture is named level-wide, so it draws the same in
+  any room), and is then drawn by the art as they are. Searching it works
+  as before; its doors stand still, as the original shelves' do in HD, whose
+  art does not move either. The donor is one of the same object turned by
+  whole quarter turns, the one not turned first, then the nearest; never one
+  whose art carries no light at all (one store room has its shelves so, and
+  the copy would be black). Without a fitting donor, and with `hd_vis` 0,
+  the added object draws classic as before. With `-log` one `HDLOG artcopy`
+  line per such copy names the item, its donor and the motion, and one per
+  added item given none says why.
 - **No room shows through another one's wall.** Tomb Raider levels are not
   built like buildings: two rooms can stand in exactly the same place in the
   world, and the game only ever shows you one of them at a time, because it
@@ -3150,7 +3165,7 @@ written into the log with the slot it applies to:
 | `skeleton_nodes` | The model names a mesh-tree node the slot does not have. `FIREROPE` in eleven of the fourteen levels: TR5's slot is a rope with one piece and the model comes from TR4, where it had seventeen. |
 | `skeleton_drift` | The model fits the node **count** but not the tree. This is the randomizer's case: it puts foreign creatures into slots, and `SAS` in ANDREA1 holds a twenty-five-piece body where `SAS.TRM` was drawn for fifteen. Skinning that would tear the model across the room. A model the drift refuses is asked a second question before it is turned away - see "the fit" below. |
 | `no_geometry` | A model with nothing in it at all. Has not been seen; the guard is there so that it cannot become a crash. |
-| `baked` | Not classic at all: **nothing** draws it. The level's own name table says `DUMMY` for that slot, which is the remaster saying it draws nothing there as an object — usually because it has baked the thing into the room's art instead. Rome's lamp posts and its wall lanterns are the clearest case: draw the classic mesh on top and the lamp stands twice, a hand's width apart. Only in a room that really draws HD; a room that stayed classic keeps its lamp post. And never for an item the randomizer added: the art carries a `DUMMY` slot's objects only where the original level has them, so an added one - the shelf the glitchless secret list puts into the Submarine's bunk room, whose slot has no model anywhere in the installation - draws its classic mesh, with its search animation and the pickup inside, as a slot without a model draws every item (the `.hdm` names the items a run added; with `-log` one `HDLOG level=… added item=…` line per such item). A `DUMMY` slot whose look is part of another object's model rather than of the room's art draws nothing only while that object is drawn HD, and its classic mesh otherwise: the two puzzle holes on the chest of the diving suit's top in the Submarine's room 40, whose console is the top's own model (with `-log` one `HDLOG dummy` line per such slot, naming the object and whether it is drawn HD). And the top's model follows the two holes as the player's items go in, as the classic holes turn into their done states: the empty bezel with its plate while both wait, the console with the battery's slot empty once the console is in, the whole console once the battery is - three files, one per state, chosen as the top is drawn by what stands at its place (the dummy lines end in the slot each hole becomes and the top's model then, the `HDLOG bind` line of the top in its states, and an `HDLOG level=… guests` line names the state at the top's first draw and on every change). |
+| `baked` | Not classic at all: **nothing** draws it. The level's own name table says `DUMMY` for that slot, which is the remaster saying it draws nothing there as an object — usually because it has baked the thing into the room's art instead. Rome's lamp posts and its wall lanterns are the clearest case: draw the classic mesh on top and the lamp stands twice, a hand's width apart. Only in a room that really draws HD; a room that stayed classic keeps its lamp post. And an item the randomizer added only where the art copies gave it the art of one of the slot's original places (on the visibility path; see the static the art leaves out at one place under *HD from the Remaster — what it is so far*): the art carries a `DUMMY` slot's objects only where the original level has them, so an added one - the shelf the glitchless secret list puts into the Submarine's bunk room, whose slot has no model anywhere in the installation - takes a copy of the art of an original shelf, and without one draws its classic mesh, with its search animation and the pickup inside, as a slot without a model draws every item (the `.hdm` names the items a run added; with `-log` one `HDLOG level=… added item=…` line per such item, its last word `copied` or `classic`). A `DUMMY` slot whose look is part of another object's model rather than of the room's art draws nothing only while that object is drawn HD, and its classic mesh otherwise: the two puzzle holes on the chest of the diving suit's top in the Submarine's room 40, whose console is the top's own model (with `-log` one `HDLOG dummy` line per such slot, naming the object and whether it is drawn HD). And the top's model follows the two holes as the player's items go in, as the classic holes turn into their done states: the empty bezel with its plate while both wait, the console with the battery's slot empty once the console is in, the whole console once the battery is - three files, one per state, chosen as the top is drawn by what stands at its place (the dummy lines end in the slot each hole becomes and the top's model then, the `HDLOG bind` line of the top in its states, and an `HDLOG level=… guests` line names the state at the top's first draw and on every change). |
 
 **The fit.** The drift compares the distances between the model's pieces
 with the distances between the slot's joints, and that misreads one kind of
@@ -3607,9 +3622,11 @@ them, and classic where it has none. The one exception is a slot the level's
 `.MAP` calls `DUMMY`, whose objects the remaster has baked into the room art:
 the art has them where the original level placed them and nowhere else, so
 such a slot's own items draw nothing in an HD room - and an added one, which
-the art does not have, draws classic. Without the line, as in a sidecar an
-older randomizer wrote, an added item of such a slot draws nothing; an
-engine older than the line counts it as a line it has no rule for.
+the art does not have, takes a copy of the art of one of the slot's original
+places on the visibility path and draws classic where it finds none. Without
+the line, as in a sidecar an older randomizer wrote, an added item of such a
+slot draws nothing; an engine older than the line counts it as a line it has
+no rule for.
 
 The file is written on every run for every level, even when it has nothing to
 say, and "restore original" deletes it again; a level with no such file has

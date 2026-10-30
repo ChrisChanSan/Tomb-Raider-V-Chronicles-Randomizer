@@ -16201,6 +16201,51 @@ them nothing is copied; no classic path file changed.
 
 **Commits.** `14b9afa5`.
 
+### The diving suit's thrusters hang from her shoulders on the HD body (#276)
+
+2026-10-30.
+
+**What.** In Deepsea Dive with the HD path, the diving suit's two propulsion units now
+hang from the shoulders of the body she wears: their top stands at the top of its torso,
+where it stood 76 to 91 units higher before, beside her head. On the Antarctica outfit
+they come down 79 units and reach from her shoulders to 42 units under the bottom of her
+backpack (-68 in the torso's frame), so they now cover its lower half as well, which they
+left free before; the backpack's rear face stays 11 units before them. On the HD diving
+suit they stay where they were. The mist out of their nozzles goes with them. The move
+onto her back of #272, their distance from her spine and their depth stay as they were.
+
+**Why.** #272 kept the classic suit's height. On the classic suit the units' tops stand at
+-276, 55 units under the top of its torso (-331), a shell that reaches far over the
+shoulders of a slim body: the top of a slim body's torso lies at -185 to -200, so the
+units stood above her shoulders, beside her head, and not at her shoulder blades.
+
+**How.** `specific/hd/hd_lara.cpp` reads the top of the worn torso with its back
+(`HDLaraThrusterBack`: the least y of the body file's node 7, each vertex on its heaviest
+bone), and the level build settles both moves in one place (`HDLaraThrusterSettle` in
+`specific/hd/hd_lara.h`): the move down is that top minus the units' top at rest, rounded
+half away from zero as the shift is, and never up - a torso whose top stands above the
+units' keeps them where they are, which is the HD diving suit's (-330).
+`HDLaraThrusterShift` (`specific/hd/hd_laradraw.cpp`) hands back both moves at once, so
+that no caller can take the one and lose the other: `specific/drawlara.cpp` adds the move
+down to both units' y, `game/subsuit.cpp` to the mist's origin and its two targets. JOBY4
+measures OUTFIT_TR3_ANTARC's top at -196.6 (down 79), the nineteen other bodies with a
+backpack at -188.5 to -199.6 (76 to 87), the thirty-one without one at -185.2 to -196.6
+(79 to 91) and OUTFIT_SUBSUIT at -329.6 (0). The back the shift was measured against at
+the classic height holds at the new one: every body keeps 14.5 to 15.5 units of air
+before the units, the classic suit's 15, and no point of any torso lies inside them but
+the HD diving suit's block corners, as before. Turned by up to 45 degrees, a corner rises
+4 units over the top at rest. The `HDLOG lara thrusters` line carries the move as
+`shift=0,<down>,<back>` and ends on `hd_top=`, `classic_top=` and `down=`; ModelProbe
+`-thrusters` prints both tops and the move down for every body of the wardrobe, the air
+at the new height and the worn body against its pack, and `-thrustersdown <units>` draws
+the units at another height. ModernTest `thruster_move` (12 checks) holds the arithmetic;
+`docs/Engine-Manual.md` says it. With the HD path off, or `hd_build` 0, both moves are 0
+and the units and their mist are the classic ones. A second height, the units' centre a
+third of the torso's height under its top (50 down on the Antarctica outfit), was drawn
+to compare and not built. The verdict census over the fifteen levels is unchanged.
+
+**Commits.** `3c4f255d`.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -16492,3 +16537,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #271 | The Game Over menu takes the d-pad and the arrow keys |
 | #272 | The diving suit's thrusters on the HD body |
 | #274 | A static the art leaves out at one place takes the art it has at another |
+| #276 | The diving suit's thrusters hang from her shoulders on the HD body |

@@ -1666,6 +1666,21 @@ see *Lara in HD* below for which of her stays classic and why.
   palm crowns stand in the room above the palm and are modelled with the
   trunk. The classic object is drawn where none of it is there, and where only
   another room's art holds it, only while that room is on the screen.
+- **A static the art leaves out at one place takes the art it has at
+  another.** The Remaster bakes the static objects into the rooms' art, but
+  not always at every place an object stands: RICH2's stairwell has fifteen
+  flights of one stair, and its art models twelve of them, so three flights
+  with their railings and two posts were drawn the classic way, blue among
+  the steel. When a level is built for the visibility path (`hd_vis` 1,
+  the default), a static no art holds takes a copy of the art of the same
+  object at another place in the same room's art, moved by the whole
+  quarter turns and the shift between the two places: only the object's
+  own triangles - never the wall or the floor behind it, never where the
+  art already stands - and the landing at a flight's end with it. The copy
+  keeps the light it was baked with at the other place. An object the art
+  models differently at its places gets no copy, and art is never taken
+  from another level. With `-log` one `HDLOG artcopy` line per copy names
+  the static, the one it was copied from and the motion.
 - **No room shows through another one's wall.** Tomb Raider levels are not
   built like buildings: two rooms can stand in exactly the same place in the
   world, and the game only ever shows you one of them at a time, because it

@@ -3697,6 +3697,12 @@ static std::vector<HDStaticPair> g_destruct_pairs;
  * (HDRenderSetStaticPlaces) and given back once BuildStaticTables has made
  * the pieces. */
 static std::vector<HDStaticPlace> g_static_places;
+/* The same statics for the art copies (hd_artcopy.h): every static with a
+ * slot, its place, turn and own mesh's vertices where they stand, handed
+ * to the build beside the places (HDRenderSetArtCopyStatics) and kept
+ * until BuildStaticTables has written the copies' lines. */
+static std::vector<HDArtCopyStatic> g_copy_statics;
+static std::vector<float> g_copy_verts;
 
 static void StaticBox(const MESH_INFO* mesh, const ROOM_INFO* r,
 	float* mins, float* maxs)
@@ -3771,6 +3777,113 @@ static void BuildStaticPlaces()
 
 	HDRenderSetStaticPlaces(g_static_places.empty() ? 0 : &g_static_places[0],
 		(int)g_static_places.size());
+
+	/* And for the art copies: the vertices out of MESH_DATA::aVtx turned
+	 * by y_rot through the engine's sine table and moved to the static's
+	 * place, as BuildStaticTables reads them - in world units here. Only
+	 * on the visibility path, as the shells' rooms: with tomb5.hd_vis 0
+	 * nothing is handed in, nothing is copied and the build is the one it
+	 * was. */
+	g_copy_statics.clear();
+	g_copy_verts.clear();
+
+	const int copyRooms = VisLevel() ? number_rooms : 0;
+
+	for (int r = 0; r < copyRooms; r++)
+	{
+		const ROOM_INFO* info = &room[r];
+
+		for (int i = 0; i < info->num_meshes; i++)
+		{
+			const MESH_INFO* mesh = &info->mesh[i];
+
+			if (mesh->static_number < 0 || mesh->static_number >= 70)
+				continue;
+
+			const STATIC_INFO* sinfo = &static_objects[mesh->static_number];
+			const MESH_DATA* data = (const MESH_DATA*)meshes[sinfo->mesh_number];
+			const int nv = data && data->aVtx ? data->nVerts : 0;
+			const float c = (float)phd_cos(mesh->y_rot) * (1.0f / 16384.0f);
+			const float sn = (float)phd_sin(mesh->y_rot) * (1.0f / 16384.0f);
+			HDArtCopyStatic one;
+
+			memset(&one, 0, sizeof(one));
+			one.room = r;
+			one.mesh = i;
+			one.slot = mesh->static_number;
+			one.x = (int)mesh->x;
+			one.y = (int)mesh->y;
+			one.z = (int)mesh->z;
+			one.rot = (int)(unsigned short)mesh->y_rot;
+			one.firstVert = (int)g_copy_verts.size() / 3;
+			one.vertCount = nv;
+
+			for (int v = 0; v < nv; v++)
+			{
+				const ACMESHVERTEX& at = data->aVtx[v];
+
+				g_copy_verts.push_back((float)(mesh->x - info->x) +
+					at.x * c + at.z * sn + (float)info->x);
+				g_copy_verts.push_back((float)(mesh->y - info->y) + at.y);
+				g_copy_verts.push_back((float)(mesh->z - info->z) +
+					at.z * c - at.x * sn + (float)info->z);
+			}
+
+			StaticBox(mesh, info, one.mins, one.maxs);
+			one.mins[0] += (float)info->x;
+			one.maxs[0] += (float)info->x;
+			one.mins[2] += (float)info->z;
+			one.maxs[2] += (float)info->z;
+			g_copy_statics.push_back(one);
+		}
+	}
+
+	HDRenderSetArtCopyStatics(g_copy_statics.empty() ? 0 : &g_copy_statics[0],
+		(int)g_copy_statics.size(), g_copy_verts.empty() ? 0 : &g_copy_verts[0],
+		(int)g_copy_verts.size() / 3);
+}
+
+/* Per room, the triangles the art copies put into its place (hd_artcopy.h,
+ * the copies the level was built with): its statics' and its faces'. */
+static std::vector<int> ArtCopiedPerRoom()
+{
+	std::vector<int> out((size_t)(number_rooms > 0 ? number_rooms : 0), 0);
+	int count = 0;
+	const HDArtCopy* copies = HDRenderArtCopies(&count, 0, 0);
+
+	for (int k = 0; copies && k < count; k++)
+	{
+		const HDArtCopy& copy = copies[k];
+
+		if (copy.target < 0 || copy.target >= (int)g_copy_statics.size())
+			continue;
+
+		const int r = g_copy_statics[(size_t)copy.target].room;
+
+		if (r >= 0 && r < (int)out.size())
+			out[(size_t)r] += copy.tris;
+	}
+
+	return out;
+}
+
+// Whether the art copies gave a static of the level art (its target).
+static bool ArtCopiedStatic(int roomIndex, int meshIndex)
+{
+	int count = 0;
+	const HDArtCopy* copies = HDRenderArtCopies(&count, 0, 0);
+
+	for (int k = 0; copies && k < count; k++)
+	{
+		const int t = copies[k].target;
+
+		if (t >= 0 && t < (int)g_copy_statics.size() &&
+			g_copy_statics[(size_t)t].room == roomIndex &&
+			g_copy_statics[(size_t)t].mesh == meshIndex)
+			return true;
+	}
+
+	return false;
 }
 
 /* The visibility path (tomb5.hd_vis, hd_vis.h), taken at the start of the
@@ -6413,20 +6526,27 @@ static void BuildStaticTables()
 			else
 				snprintf(piece, sizeof(piece), "-");
 
-			if (gLogEnabled && hd && !HDStaticCellsHold(art.own, art.boxCells))
+			/* A static the art copies gave its art (hd_artcopy.h) says so at
+			 * the end of its line, and has its line in a room drawn HD as
+			 * well when its own art holds it now. */
+			const bool copiedTo = gLogEnabled && ArtCopiedStatic(r, i);
+
+			if (gLogEnabled && hd && (copiedTo ||
+				!HDStaticCellsHold(art.own, art.boxCells)))
 				Log("HDLOG static room=%d mesh=%d slot=%d classic "
 					"cells=%d of %d box=%.0f..%.0f,%.0f..%.0f,%.0f..%.0f "
-					"verts=%d groups=%s answer=%s piece=%s",
+					"verts=%d groups=%s answer=%s piece=%s%s",
 					r, i, (int)mesh->static_number, art.own, art.boxCells,
 					mins[0], maxs[0], mins[1], maxs[1], mins[2], maxs[2],
-					art.verts, at ? named : "-", said, piece);
+					art.verts, at ? named : "-", said, piece,
+					copiedTo ? " copied" : "");
 			else if (gLogEnabled && !hd)
 				Log("HDLOG static room=%d mesh=%d slot=%d classic_room "
 					"box=%.0f..%.0f,%.0f..%.0f,%.0f..%.0f verts=%d carrier=%d "
-					"sure=%d groups=%s answer=%s piece=%s",
+					"sure=%d groups=%s answer=%s piece=%s%s",
 					r, i, (int)mesh->static_number, mins[0], maxs[0], mins[1],
 					maxs[1], mins[2], maxs[2], art.verts, art.carrier, art.sure,
-					at ? named : "-", said, piece);
+					at ? named : "-", said, piece, copiedTo ? " copied" : "");
 
 			/* 2. And if the engine can destroy it, which piece of the art is
 			 * it? Slots 50 to 59 are the ones the engine takes out of the
@@ -6482,16 +6602,46 @@ static void BuildStaticTables()
 		}
 	}
 
+	/* The art copies the level was built with (hd_artcopy.h), counted at
+	 * the end of the statics line: the copies, the triangles they put in
+	 * and what the rule cost; then a line per copy - its static, its
+	 * donor, the triangles, the motion (the shift from the donor's place to
+	 * its own and the quarter turns) and the classic faces beside it that
+	 * took the art of their donor's face. */
+	double copyMs = 0.0;
+	int copies = 0, copiedTris = 0;
+	const HDArtCopy* copyList = HDRenderArtCopies(&copies, &copiedTris,
+		&copyMs);
+
 	Log("HDLOG level=%s statics classic=%d of %d, destructible pieces=%d "
 		"shatterable=%d paired=%d classic_room_art=%d classic_room_group=%d "
-		"paired_other=%d",
+		"paired_other=%d copies=%d copied=%d copy_ms=%.1f",
 		g_stem, orphans, total, pieces, shatterable, paired, classic_room_art,
-		classic_room_group, paired_other);
+		classic_room_group, paired_other, copies, copiedTris, copyMs);
+
+	for (int k = 0; gLogEnabled && copyList && k < copies; k++)
+	{
+		const HDArtCopy& c = copyList[k];
+
+		if (c.target < 0 || c.target >= (int)g_copy_statics.size() ||
+			c.donor < 0 || c.donor >= (int)g_copy_statics.size())
+			continue;
+
+		const HDArtCopyStatic& to = g_copy_statics[(size_t)c.target];
+		const HDArtCopyStatic& from = g_copy_statics[(size_t)c.donor];
+
+		Log("HDLOG artcopy level=%s room=%d mesh=%d slot=%d from_room=%d "
+			"from_mesh=%d tris=%d shift=%d,%d,%d turn=%d faces=%d face_tris=%d",
+			g_stem, to.room, to.mesh, to.slot, from.room, from.mesh, c.tris,
+			c.dx, c.dy, c.dz, c.turn, c.faces, c.faceTris);
+	}
 
 	// The pieces' index buffer; the places were borrowed until now.
 	HDRenderStaticPiecesUpload();
 	HDRenderSetStaticPlaces(0, 0);
 	std::vector<HDStaticPlace>().swap(g_static_places);
+	std::vector<HDArtCopyStatic>().swap(g_copy_statics);
+	std::vector<float>().swap(g_copy_verts);
 
 	/* The destructible parts' own triangles, for the pieces their statics
 	 * break into (hd_debris.h): read only in a level where a static pairs
@@ -7707,6 +7857,7 @@ static void HDLevelBuildHD()
 	{
 		Log("HDLOG level=%s build failed reason=%s", g_stem, why);
 		HDRenderSetStaticPlaces(0, 0);
+		HDRenderSetArtCopyStatics(0, 0, 0, 0);
 
 		/* The page cache's own notes before it is emptied - on the way out
 		 * they are the only place that says which page the card gave up on.
@@ -8108,7 +8259,11 @@ static void HDLevelBuildHD()
 	 * classic (HDCoverFaceFloor), `shadow` 1 when the room counts as HD
 	 * for her projected shadow (HDRoomShadowHD), and `drawn` 1 when the
 	 * room's own art is drawn where the walk lists it: a room drawn HD, or
-	 * one whose hollow art is drawn beside it (g_group_hollow). */
+	 * one whose hollow art is drawn beside it (g_group_hollow), and
+	 * `copied` the triangles the art copies put into the room's place
+	 * (hd_artcopy.h), its statics' and its faces'. */
+	const std::vector<int> copied = ArtCopiedPerRoom();
+
 	for (int r = 0; r < g_room_count; r++)
 	{
 		const int on = (size_t)r < stand_on.size() ? stand_on[(size_t)r] : 0;
@@ -8131,7 +8286,7 @@ static void HDLevelBuildHD()
 		Log("HDLOG room=%d group=%d tris=%d/%d/%d overhang=%d cut=%d "
 			"ranges=%d statics=%d hd=%d reason=%s stand=%d covered=%d "
 			"carrier=%d faces=%d faces_covered=%d floors_kept=%d shadow=%d "
-			"drawn=%d",
+			"drawn=%d copied=%d",
 			r, r, HDRenderGroupTriangles(r, 0), HDRenderGroupTriangles(r, 1),
 			HDRenderGroupTriangles(r, 2), HDRenderGroupOverhangTriangles(r),
 			cuts[(size_t)r], HDRenderGroupRanges(r, -1),
@@ -8140,7 +8295,8 @@ static void HDLevelBuildHD()
 			here ? (int)g_group_stand_faces_covered[r] : 0,
 			here ? (int)g_group_stand_floors_kept[r] : 0,
 			here && (g_group_hd[r] || g_group_stand_shadow[r]) ? 1 : 0,
-			here && (g_group_hd[r] || g_group_hollow[r]) ? 1 : 0);
+			here && (g_group_hd[r] || g_group_hollow[r]) ? 1 : 0,
+			(size_t)r < copied.size() ? copied[(size_t)r] : 0);
 	}
 
 	/* The hollow groups (HDRenderHollowText): where their art stands and

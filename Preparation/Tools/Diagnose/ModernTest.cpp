@@ -91,6 +91,8 @@
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_debris_rules.h"
 // The visibility path's tables (hd_vis.cpp is linked by bmt.bat).
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_vis.h"
+// A static's art carried to another placement of its slot (artcopy).
+#include "../../../TOMB5 Code/TOMB5/specific/hd/hd_artcopy.h"
 #include "../../../TOMB5 Code/TOMB5/vendor/trforge/src/trf_remaster/Trg.h"
 /* The water's life: the drift, the bank, the spawn, the flight and the
  * bob - pure again (life_* below). */
@@ -15309,6 +15311,330 @@ static void vis_hanging()
 		"vis: under no sky the link rule refuses it", t.guestsUnlinked, 1);
 }
 
+/* The art of a static carried to another placement of its slot
+ * (hd_artcopy.h) on a level of two rooms built by hand, RICH2's stairwell
+ * cut down: room 0 drawn by its own art, x and z 0..6144, y -1536..0, and
+ * room 1 over it, an empty group, y -3072..-1536, its art in group 0 - the
+ * storeys of rooms 14 and 18. Three flights of one slot, each a box of
+ * 1024 x 512 x 1024: two in room 0 that group 0 models with twelve
+ * triangles each, one in room 1 it does not; the third gets the first's
+ * art moved up a storey. The motion's arithmetic, a quarter turn, the
+ * donors that disagree and the copy put into the .TRG are asked as well. */
+static void art_flight(trf::remaster::Trg& trg, float x0, float y0, float z0)
+{
+	// Twelve triangles: a box 1000 x 500 x 1000 inside the flight's box.
+	const float lo[3] = { x0 + 12, y0 + 6, z0 + 12 };
+	const float hi[3] = { x0 + 1012, y0 + 506, z0 + 1012 };
+
+	for (int f = 0; f < 6; f++)
+	{
+		const int axis = f / 2;
+		const int u = (axis + 1) % 3, v = (axis + 2) % 3;
+		float p[4][3];
+
+		for (int c = 0; c < 4; c++)
+		{
+			p[c][axis] = f & 1 ? hi[axis] : lo[axis];
+			p[c][u] = c == 1 || c == 2 ? hi[u] : lo[u];
+			p[c][v] = c >= 2 ? hi[v] : lo[v];
+		}
+
+		vis_tri(trg, 0, 0, 0, p[0], p[1], p[2]);
+		vis_tri(trg, 0, 0, 0, p[0], p[2], p[3]);
+	}
+}
+
+static void art_copy()
+{
+	// The motion: a quarter turn takes x to z the way y_rot turns a mesh.
+	{
+		const int from[3] = { 100, 0, 100 }, to[3] = { 1000, -512, 1000 };
+		const int p[3] = { 200, -10, 100 };
+		int q[3];
+
+		HDArtCopyMove(1, from, to, p, q);
+		ok(q[0] == 1000 && q[1] == -522 && q[2] == 900,
+			"artcopy: a quarter turn, x' = z, z' = -x, then the shift", q[2],
+			900);
+		HDArtCopyMove(0, from, to, p, q);
+		ok(q[0] == 1100 && q[1] == -522 && q[2] == 1000,
+			"artcopy: no turn is the shift alone", q[0], 1100);
+
+		trf::remaster::TrgVertex v;
+
+		v.nx = 255;
+		v.nz = 127;
+		HDArtCopyTurnNormal(1, v);
+		ok(v.nx == 127 && v.nz == 0,
+			"artcopy: the normal turns with it, clamped at the byte", v.nz, 0);
+	}
+
+	trf::remaster::Trg trg;
+
+	trg.groups.resize(2);
+
+	{
+		trf::remaster::TrgPart part;
+
+		part.pass[0].start = 0;
+		art_flight(trg, 1024, -512, 1024);	// donor in room 0
+		art_flight(trg, 3072, -1024, 1024);	// donor in room 0, higher
+		// Room 1's walls in group 0: a triangle standing in its box.
+		const float a[3] = { 100, -2500, 100 }, b[3] = { 6000, -2500, 100 },
+			c[3] = { 100, -2000, 100 };
+
+		vis_tri(trg, 0, 0, 0, a, b, c);
+		part.pass[0].count = (uint32_t)trg.indices.size();
+		trg.groups[0].parts.push_back(part);
+	}
+
+	std::vector<HDArtCopyRoom> rooms(2);
+
+	for (int r = 0; r < 2; r++)
+	{
+		HDArtCopyRoom& one = rooms[(size_t)r];
+
+		one.originX = one.originZ = 0;
+		one.mins[0] = one.mins[2] = 0.0f;
+		one.maxs[0] = one.maxs[2] = 6144.0f;
+		one.mins[1] = r ? -3072.0f : -1536.0f;
+		one.maxs[1] = r ? -1536.0f : 0.0f;
+		one.box = 1;
+		one.twin = -1;
+	}
+
+	// The three statics: their boxes' corners are their vertices.
+	std::vector<HDArtCopyStatic> statics(3);
+	std::vector<float> verts;
+	const int place[3][4] = { { 0, 1024, -512, 1024 }, { 0, 3072, -1024, 1024 },
+		{ 1, 1024, -2048, 1024 } };
+
+	for (int s = 0; s < 3; s++)
+	{
+		HDArtCopyStatic& one = statics[(size_t)s];
+
+		std::memset(&one, 0, sizeof(one));
+		one.room = place[s][0];
+		one.mesh = s;
+		one.slot = 60;
+		one.x = place[s][1];
+		one.y = place[s][2];
+		one.z = place[s][3];
+		one.firstVert = (int)verts.size() / 3;
+		one.vertCount = 8;
+
+		for (int k = 0; k < 3; k++)
+		{
+			one.mins[k] = (float)(k == 0 ? one.x : k == 1 ? one.y : one.z);
+			one.maxs[k] = one.mins[k] + (k == 1 ? 512.0f : 1024.0f);
+		}
+
+		for (int c = 0; c < 8; c++)
+			for (int k = 0; k < 3; k++)
+				verts.push_back(c & (1 << k) ? one.maxs[k] : one.mins[k]);
+	}
+
+	HDArtCopyParams p = { HD_ARTCOPY_MARGIN, HD_ARTCOPY_WALL, HD_ARTCOPY_STANDS,
+		128.0f, 0 };
+	HDArtCopyPlan plan;
+
+	HDArtCopyMake(trg, 2, 0, 0, &rooms[0], 2, 0, 0, 0, &statics[0], 3,
+		&verts[0], (int)verts.size() / 3, p, 2, &plan);
+	ok(plan.drawn.size() == 2 && plan.drawn[0] == 0 && plan.drawn[1] == 0,
+		"artcopy: an empty room is drawn by the group with art in its box",
+		plan.drawn.size() == 2 ? plan.drawn[1] : -2, 0);
+	ok(plan.role[0] == 1 && plan.role[1] == 1 && plan.role[2] == 2,
+		"artcopy: two donors and a target", plan.role[2], 2);
+	ok(plan.copies.size() == 1 && plan.copies[0].donor == 0 &&
+		plan.copies[0].turn == 0 && plan.copies[0].dy == -1536 &&
+		plan.copies[0].tris == 12 && plan.copies[0].after == 8,
+		"artcopy: the nearer donor's twelve triangles a storey up",
+		plan.copies.empty() ? -1 : plan.copies[0].tris, 12);
+
+	const size_t verticesBefore = trg.vertices.size();
+	const uint32_t countBefore = trg.groups[0].parts[0].pass[0].count;
+
+	HDArtCopyApply(trg, 0, 0, &rooms[0], 2, &statics[0], &plan);
+	ok(trg.groups[0].parts[0].pass[0].count == countBefore + 36 &&
+		trg.vertices.size() == verticesBefore + 36,
+		"artcopy: the copy is in the donor's run, each corner once",
+		(long)(trg.vertices.size() - verticesBefore), 36);
+
+	int lowest = 0;
+
+	for (uint32_t k = countBefore; k < countBefore + 36; k++)
+		lowest = (std::min)(lowest, (int)trg.vertices[trg.indices[k]].y);
+
+	ok(lowest == -2042 && trg.indices[countBefore] == 75,
+		"artcopy: its corners moved, after the group's last vertex", lowest,
+		-2042);
+
+	// Donors whose art differs past three halves: no copy.
+	trf::remaster::Trg odd;
+
+	odd.groups.resize(2);
+
+	{
+		trf::remaster::TrgPart part;
+
+		part.pass[0].start = 0;
+		art_flight(odd, 1024, -512, 1024);
+		art_flight(odd, 1024 + 8, -512, 1024 + 8);	// twice the art here
+		art_flight(odd, 3072, -1024, 1024);
+		const float a[3] = { 100, -2500, 100 }, b[3] = { 6000, -2500, 100 },
+			c[3] = { 100, -2000, 100 };
+
+		vis_tri(odd, 0, 0, 0, a, b, c);
+		part.pass[0].count = (uint32_t)odd.indices.size();
+		odd.groups[0].parts.push_back(part);
+	}
+
+	HDArtCopyMake(odd, 2, 0, 0, &rooms[0], 2, 0, 0, 0, &statics[0], 3,
+		&verts[0], (int)verts.size() / 3, p, 1, &plan);
+	ok(plan.copies.empty() && plan.unlike == 1 && plan.role[2] == 4,
+		"artcopy: donors whose art differs give no copy", plan.unlike, 1);
+
+	// The engine reads the .TRG into the plan before anything counts it.
+	char* render = hd_switch_text("hd_render.cpp");
+	const char* call = render ? strstr(render, "ArtCopies(trg, numRooms, threads);")
+		: 0;
+	const char* count = render ? strstr(render,
+		"g_vertex_count = (int)trg.vertices.size();") : 0;
+
+	ok(call && count && call < count,
+		"artcopy: the copies go in before the build counts the vertices", 0, 0);
+	free(render);
+
+	// On the visibility path only: hd_level.cpp hands the statics in there.
+	char* level = hd_switch_text("hd_level.cpp");
+
+	ok(level && strstr(level,
+		"const int copyRooms = VisLevel() ? number_rooms : 0;") != 0,
+		"artcopy: the statics handed in on the visibility path only", 0, 0);
+	free(level);
+}
+
+/* The rule on RICH2's own numbers: the stairwell's rooms 14, 15, 16, 18
+ * and 19 (one origin, storeys 1,536 high), all of the art in room 14's
+ * group, and the fifteen flights of slot 60 where the level places them -
+ * twelve with the art's flight in their box (twelve triangles, as
+ * art_flight), three without. Each of the three takes the flight of its
+ * own turn nearest to it, a turn of the stair (4,096 units) above or below,
+ * as the engine's HDLOG artcopy lines on RICH2 name them: room 16's mesh 7
+ * from room 14's mesh 0, room 18's mesh 0 from room 15's mesh 8, room 19's
+ * mesh 14 from room 15's mesh 7. */
+static void art_rich2()
+{
+	// Room (0 = 14, 1 = 15, 2 = 16, 3 = 18, 4 = 19), mesh, place, y_rot,
+	// the box's lowest corner (1,024 x 512 x 1,024), the art's flight.
+	static const int flight[15][10] = {
+		{ 0, 0, 29184, -24064, 72192, 32768, 28672, -24576, 72704, 1 },
+		{ 0, 8, 29184, -24576, 73216, 32768, 28672, -25088, 73728, 1 },
+		{ 0, 9, 29184, -25088, 75264, 49152, 29696, -25600, 74752, 1 },
+		{ 1, 0, 30208, -25600, 75264, 49152, 30720, -26112, 74752, 1 },
+		{ 1, 7, 32256, -26112, 75264, 0, 31744, -26624, 73728, 1 },
+		{ 1, 8, 32256, -26624, 74240, 0, 31744, -27136, 72704, 1 },
+		{ 2, 0, 32256, -27136, 72192, 16384, 30720, -27648, 71680, 1 },
+		{ 2, 6, 31232, -27648, 72192, 16384, 29696, -28160, 71680, 1 },
+		{ 2, 7, 29184, -28160, 72192, 32768, 28672, -28672, 72704, 0 },
+		{ 3, 0, 32256, -22528, 74240, 0, 31744, -23040, 72704, 0 },
+		{ 3, 8, 32256, -23040, 72192, 16384, 30720, -23552, 71680, 1 },
+		{ 3, 9, 31232, -23552, 72192, 16384, 29696, -24064, 71680, 1 },
+		{ 4, 0, 29184, -20992, 75264, 49152, 29696, -21504, 74752, 1 },
+		{ 4, 13, 30208, -21504, 75264, 49152, 30720, -22016, 74752, 1 },
+		{ 4, 14, 32256, -22016, 75264, 0, 31744, -22528, 73728, 0 } };
+	static const float top[5] = { -25600, -27136, -28672, -24064, -22528 };
+	const int originX = 27648, originZ = 70656;
+	trf::remaster::Trg trg;
+
+	trg.groups.resize(5);
+
+	{
+		trf::remaster::TrgPart part;
+
+		part.pass[0].start = 0;
+
+		for (int f = 0; f < 15; f++)
+			if (flight[f][9])
+				art_flight(trg, (float)(flight[f][6] - originX),
+					(float)flight[f][7], (float)(flight[f][8] - originZ));
+
+		part.pass[0].count = (uint32_t)trg.indices.size();
+		trg.groups[0].parts.push_back(part);
+	}
+
+	std::vector<HDArtCopyRoom> rooms(5);
+
+	for (int r = 0; r < 5; r++)
+	{
+		HDArtCopyRoom& one = rooms[(size_t)r];
+
+		one.originX = originX;
+		one.originZ = originZ;
+		one.mins[0] = one.mins[2] = 0.0f;
+		one.maxs[0] = one.maxs[2] = 6144.0f;
+		one.mins[1] = top[r];
+		one.maxs[1] = top[r] + 1536.0f;
+		one.box = 1;
+		one.twin = -1;
+	}
+
+	// The flights: their boxes' corners are their vertices.
+	std::vector<HDArtCopyStatic> statics(15);
+	std::vector<float> verts;
+
+	for (int s = 0; s < 15; s++)
+	{
+		HDArtCopyStatic& one = statics[(size_t)s];
+
+		std::memset(&one, 0, sizeof(one));
+		one.room = flight[s][0];
+		one.mesh = flight[s][1];
+		one.slot = 60;
+		one.x = flight[s][2];
+		one.y = flight[s][3];
+		one.z = flight[s][4];
+		one.rot = flight[s][5];
+		one.firstVert = (int)verts.size() / 3;
+		one.vertCount = 8;
+
+		for (int k = 0; k < 3; k++)
+		{
+			one.mins[k] = (float)flight[s][6 + k];
+			one.maxs[k] = one.mins[k] + (k == 1 ? 512.0f : 1024.0f);
+		}
+
+		for (int c = 0; c < 8; c++)
+			for (int k = 0; k < 3; k++)
+				verts.push_back(c & (1 << k) ? one.maxs[k] : one.mins[k]);
+	}
+
+	HDArtCopyParams p = { HD_ARTCOPY_MARGIN, HD_ARTCOPY_WALL, HD_ARTCOPY_STANDS,
+		128.0f, 0 };
+	HDArtCopyPlan plan;
+
+	HDArtCopyMake(trg, 5, 0, 0, &rooms[0], 5, 0, 0, 0, &statics[0], 15,
+		&verts[0], (int)verts.size() / 3, p, 2, &plan);
+
+	// Target, donor and the shift's y, as the engine's lines on RICH2.
+	static const int want[3][3] = { { 8, 0, -4096 }, { 9, 5, 4096 },
+		{ 14, 4, 4096 } };
+	int right = 0;
+
+	for (size_t c = 0; c < plan.copies.size(); c++)
+		for (int w = 0; w < 3; w++)
+			if (plan.copies[c].target == want[w][0] &&
+				plan.copies[c].donor == want[w][1] &&
+				plan.copies[c].turn == 0 && plan.copies[c].dx == 0 &&
+				plan.copies[c].dy == want[w][2] && plan.copies[c].dz == 0 &&
+				plan.copies[c].tris == 12)
+				right++;
+
+	ok(plan.copies.size() == 3 && right == 3,
+		"artcopy: RICH2's three flights, each from a turn of the stair away",
+		right, 3);
+}
+
 /* The cut-out cards back to back (hd_render.cpp, MarkBackToBackCards), read
  * from the engine's text: the numbers - a point of a card lies on another
  * card within 16 units of its plane and 1 unit of its edges, the two
@@ -30040,6 +30366,8 @@ int main()
 	glass_split();
 	shell_rule();
 	card_rule();
+	art_copy();
+	art_rich2();
 	glass_hue();
 	glass_look();
 	hd_build_gate();

@@ -3703,6 +3703,56 @@ static std::vector<HDStaticPlace> g_static_places;
  * until BuildStaticTables has written the copies' lines. */
 static std::vector<HDArtCopyStatic> g_copy_statics;
 static std::vector<float> g_copy_verts;
+/* And the items of the slots the art carries for the rule's item path
+ * (HDRenderSetArtCopyItems), kept as long. */
+static std::vector<HDArtCopyItem> g_copy_items;
+
+/* The level's .MAP for the items of the slots it calls DUMMY: read here and
+ * given back afterwards (BakedMapDone) when no one had read it before. */
+static bool BakedMapRead(bool* kept)
+{
+	const char* had = HDMapLevel();
+
+	*kept = had && !_stricmp(had, g_stem);
+	return *kept || HDMapLoadForLevel(HDInstallRoot(), g_stem);
+}
+
+static void BakedMapDone(bool read, bool kept)
+{
+	if (read && !kept)
+		HDMapFree();
+}
+
+/* Whether item i is one the art carries where Core placed it: its slot
+ * the map calls DUMMY - the map's own word, as hd_object.cpp names those
+ * slots, never a donor slot, never Lara's - with a first frame to make its
+ * box of (HDStandItemBox). The map must be read (BakedMapRead). */
+static bool BakedItem(int i)
+{
+	const ITEM_INFO* item = &items[i];
+	const int slot = item->object_number;
+
+	if (slot < 0 || slot >= NUMBER_OBJECTS || !objects[slot].loaded ||
+		objects[slot].nmeshes <= 0 || !objects[slot].frame_base ||
+		HDSlotIsLara(slot) || HDMarkersDonorOfSlot(slot))
+		return false;
+
+	HDBindKind kind = HD_BIND_NONE;
+	bool fromMap = false;
+
+	HDBindSlot(HDInstallRoot(), slot, &kind, &fromMap, 0);
+	return kind == HD_BIND_DUMMY && fromMap;
+}
+
+// Item i's box out of its object's first frame (HDStandItemBox).
+static HDStandBox BakedItemBox(int i)
+{
+	const ITEM_INFO* item = &items[i];
+	const PHD_3DPOS& at = item->pos;
+
+	return HDStandItemBox(objects[item->object_number].frame_base, at.x_pos,
+		at.y_pos, at.z_pos, at.y_rot);
+}
 
 static void StaticBox(const MESH_INFO* mesh, const ROOM_INFO* r,
 	float* mins, float* maxs)
@@ -3841,6 +3891,51 @@ static void BuildStaticPlaces()
 	HDRenderSetArtCopyStatics(g_copy_statics.empty() ? 0 : &g_copy_statics[0],
 		(int)g_copy_statics.size(), g_copy_verts.empty() ? 0 : &g_copy_verts[0],
 		(int)g_copy_verts.size() / 3);
+
+	/* And the items of the slots the art carries, for the rule's item path:
+	 * every one, the run's own marked (the sidecar's `item` line), its box
+	 * out of its first frame at its place and yaw. On the visibility path
+	 * only, as the statics. */
+	g_copy_items.clear();
+
+	if (copyRooms > 0)
+	{
+		bool kept = false;
+		const bool read = BakedMapRead(&kept);
+
+		for (int i = 0; read && i < level_items; i++)
+		{
+			if (!BakedItem(i))
+				continue;
+
+			const ITEM_INFO* item = &items[i];
+			const HDStandBox box = BakedItemBox(i);
+			HDArtCopyItem one;
+
+			memset(&one, 0, sizeof(one));
+			one.item = i;
+			one.room = (int)item->room_number;
+			one.slot = (int)item->object_number;
+			one.x = (int)item->pos.x_pos;
+			one.y = (int)item->pos.y_pos;
+			one.z = (int)item->pos.z_pos;
+			one.rot = (int)(unsigned short)item->pos.y_rot;
+			one.added = HDMarkersItemAdded(i) ? 1 : 0;
+
+			for (int k = 0; k < 3; k++)
+			{
+				one.mins[k] = (float)box.lo[k];
+				one.maxs[k] = (float)box.hi[k];
+			}
+
+			g_copy_items.push_back(one);
+		}
+
+		BakedMapDone(read, kept);
+	}
+
+	HDRenderSetArtCopyItems(g_copy_items.empty() ? 0 : &g_copy_items[0],
+		(int)g_copy_items.size());
 }
 
 /* Per room, the triangles the art copies put into its place (hd_artcopy.h,
@@ -5219,47 +5314,31 @@ static void BuildStandFaces()
 /* The boxes of the level's items whose slot the level's .MAP calls DUMMY -
  * the objects the art carries (hd_cover.h, HDStandDrawBaked) - as
  * hd_object.cpp names those slots: the map's own word, never a donor slot,
- * never Lara's. Never an item the sidecar names the run's own either: the
- * art carries such a slot's objects where Core placed them only, and
- * begin_decision draws an added one classic. Each box out of the object's
- * first frame's bounds, at the item's place and yaw (HDStandItemBox). The
- * map is read for this and given back when it was not read before; the
- * objects' build reads it again. */
+ * never Lara's (BakedItem). An item the sidecar names the run's own only
+ * where the art copies gave it the art of another placement of its slot
+ * (hd_artcopy.h, HDRenderArtCopyItemHeld): the art carries such a slot's
+ * objects where Core placed them only, and begin_decision draws an added
+ * one the copy does not hold classic. Each box out of the object's first
+ * frame's bounds, at the item's place and yaw (HDStandItemBox). The map is
+ * read for this and given back when it was not read before; the objects'
+ * build reads it again. */
 static void BuildBakedBoxes(std::vector<HDStandBox>& boxes)
 {
 	boxes.clear();
 
-	const char* had = HDMapLevel();
-	const bool kept = had && !_stricmp(had, g_stem);
-	const bool read = kept || HDMapLoadForLevel(HDInstallRoot(), g_stem);
+	bool kept = false;
+	const bool read = BakedMapRead(&kept);
 
 	for (int i = 0; read && i < level_items; i++)
 	{
-		const ITEM_INFO* item = &items[i];
-		const int slot = item->object_number;
-
-		if (slot < 0 || slot >= NUMBER_OBJECTS || !objects[slot].loaded ||
-			objects[slot].nmeshes <= 0 || !objects[slot].frame_base ||
-			HDSlotIsLara(slot) || HDMarkersDonorOfSlot(slot) ||
-			HDMarkersItemAdded(i))
+		if (!BakedItem(i) ||
+			(HDMarkersItemAdded(i) && !HDRenderArtCopyItemHeld(i)))
 			continue;
 
-		HDBindKind kind = HD_BIND_NONE;
-		bool fromMap = false;
-
-		HDBindSlot(HDInstallRoot(), slot, &kind, &fromMap, 0);
-
-		if (kind != HD_BIND_DUMMY || !fromMap)
-			continue;
-
-		const PHD_3DPOS& at = item->pos;
-
-		boxes.push_back(HDStandItemBox(objects[slot].frame_base, at.x_pos,
-			at.y_pos, at.z_pos, at.y_rot));
+		boxes.push_back(BakedItemBox(i));
 	}
 
-	if (read && !kept)
-		HDMapFree();
+	BakedMapDone(read, kept);
 }
 
 /* Which rooms the stand art covers, and which of their faces, once the build
@@ -6604,20 +6683,30 @@ static void BuildStaticTables()
 
 	/* The art copies the level was built with (hd_artcopy.h), counted at
 	 * the end of the statics line: the copies, the triangles they put in
-	 * and what the rule cost; then a line per copy - its static, its
-	 * donor, the triangles, the motion (the shift from the donor's place to
-	 * its own and the quarter turns) and the classic faces beside it that
-	 * took the art of their donor's face. */
+	 * and what the rule cost, then the added items of the slots the art
+	 * carries it asked and the copies it gave them; then a line per copy -
+	 * its static, its donor, the triangles, the motion (the shift from the
+	 * donor's place to its own and the quarter turns) and the classic faces
+	 * beside it that took the art of their donor's face -, and the same
+	 * per item copy, and per added item given none, the reason. */
 	double copyMs = 0.0;
-	int copies = 0, copiedTris = 0;
+	int copies = 0, copiedTris = 0, itemCopies = 0, itemsAsked = 0;
+	int itemsCopied = 0;
 	const HDArtCopy* copyList = HDRenderArtCopies(&copies, &copiedTris,
 		&copyMs);
+	const HDArtCopy* itemList = HDRenderArtCopyItemCopies(&itemCopies,
+		&itemsAsked);
+
+	for (int k = 0; itemList && k < itemCopies; k++)
+		itemsCopied += itemList[k].tris > 0 ? 1 : 0;
 
 	Log("HDLOG level=%s statics classic=%d of %d, destructible pieces=%d "
 		"shatterable=%d paired=%d classic_room_art=%d classic_room_group=%d "
-		"paired_other=%d copies=%d copied=%d copy_ms=%.1f",
+		"paired_other=%d copies=%d copied=%d copy_ms=%.1f items=%d "
+		"item_copies=%d",
 		g_stem, orphans, total, pieces, shatterable, paired, classic_room_art,
-		classic_room_group, paired_other, copies, copiedTris, copyMs);
+		classic_room_group, paired_other, copies, copiedTris, copyMs,
+		itemsAsked, itemsCopied);
 
 	for (int k = 0; gLogEnabled && copyList && k < copies; k++)
 	{
@@ -6636,12 +6725,42 @@ static void BuildStaticTables()
 			c.dx, c.dy, c.dz, c.turn, c.faces, c.faceTris);
 	}
 
+	for (int k = 0; gLogEnabled && itemList && k < itemCopies; k++)
+	{
+		const HDArtCopy& c = itemList[k];
+
+		if (c.tris <= 0 || c.target < 0 ||
+			c.target >= (int)g_copy_items.size() || c.donor < 0 ||
+			c.donor >= (int)g_copy_items.size())
+			continue;
+
+		const HDArtCopyItem& to = g_copy_items[(size_t)c.target];
+		const HDArtCopyItem& from = g_copy_items[(size_t)c.donor];
+
+		Log("HDLOG artcopy level=%s item=%d slot=%d room=%d from_item=%d "
+			"from_room=%d tris=%d shift=%d,%d,%d turn=%d faces=%d face_tris=%d",
+			g_stem, to.item, to.slot, to.room, from.item, from.room, c.tris,
+			c.dx, c.dy, c.dz, c.turn, c.faces, c.faceTris);
+	}
+
+	for (size_t k = 0; gLogEnabled && k < g_copy_items.size(); k++)
+	{
+		const HDArtCopyItem& one = g_copy_items[k];
+		const int answer = HDRenderArtCopyItemAnswer((int)k);
+
+		if (one.added && answer != HD_ARTCOPY_ITEM_COPIED)
+			Log("HDLOG artcopy level=%s item=%d slot=%d room=%d none=%s",
+				g_stem, one.item, one.slot, one.room,
+				HDArtCopyItemWord(answer));
+	}
+
 	// The pieces' index buffer; the places were borrowed until now.
 	HDRenderStaticPiecesUpload();
 	HDRenderSetStaticPlaces(0, 0);
 	std::vector<HDStaticPlace>().swap(g_static_places);
 	std::vector<HDArtCopyStatic>().swap(g_copy_statics);
 	std::vector<float>().swap(g_copy_verts);
+	std::vector<HDArtCopyItem>().swap(g_copy_items);
 
 	/* The destructible parts' own triangles, for the pieces their statics
 	 * break into (hd_debris.h): read only in a level where a static pairs
@@ -7858,6 +7977,7 @@ static void HDLevelBuildHD()
 		Log("HDLOG level=%s build failed reason=%s", g_stem, why);
 		HDRenderSetStaticPlaces(0, 0);
 		HDRenderSetArtCopyStatics(0, 0, 0, 0);
+		HDRenderSetArtCopyItems(0, 0);
 
 		/* The page cache's own notes before it is emptied - on the way out
 		 * they are the only place that says which page the card gave up on.

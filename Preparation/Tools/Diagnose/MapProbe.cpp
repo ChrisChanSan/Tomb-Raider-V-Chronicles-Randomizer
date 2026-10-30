@@ -50,9 +50,10 @@
 // the reason "marker", a cut box with the volume it takes out of every
 // room's art, a donor slot through the donor's own .MAP, a Tomb Raider III
 // guest through the four-line table and the other bundle, an added item
-// through its slot's binding, and classic where the map calls the slot
-// DUMMY, since the art carries such a slot's objects where Core placed them
-// only. Two things it cannot answer: the skeleton test, which needs
+// through its slot's binding, and the art of another placement where the
+// map calls the slot DUMMY, since the art carries such a slot's objects
+// where Core placed them only and the build copies it (classic where no
+// donor fits). Two things it cannot answer: the skeleton test, which needs
 // the model on a card (ModelProbe's job, and it says so per line), and how
 // many triangles a cut box really catches, which needs the level built
 // (RoomProbe -hdm, and the engine's own "HDLOG ... cut N" line).
@@ -268,12 +269,15 @@ namespace
 
 		/* The items the run added, with the slot each holds in the level
 		 * file. Such an item draws as its slot draws every item - HD where
-		 * a model binds, classic where none does - and classic where the
-		 * map calls the slot DUMMY, because the art carries that slot's
-		 * objects where Core placed them only (hd_object.cpp,
-		 * begin_decision; the game's own line is "HDLOG level=... added
-		 * item=N"). A donor slot is never baked, so its line above
-		 * answers for it. */
+		 * a model binds, classic where none does - and where the map calls
+		 * the slot DUMMY, the art carries that slot's objects where Core
+		 * placed them only: on the visibility path the build gives the item
+		 * a copy of the art of a Core placement (hd_artcopy.h, the item
+		 * path), classic where no donor fits (hd_object.cpp,
+		 * begin_decision; the game's own lines are "HDLOG level=... added
+		 * item=N" and "HDLOG artcopy level=... item=N"). Which donor, and
+		 * whether one fits, needs the level built: RoomProbe -artcopytable.
+		 * A donor slot is never baked, so its line above answers for it. */
 		for (int i = 0; i < HDMarkersItemCount(); i++)
 		{
 			const int index = HDMarkersItem(i);
@@ -299,8 +303,11 @@ namespace
 			else if (kind == HD_BIND_LARA)
 				answer = "Lara's composite";
 			else if (kind == HD_BIND_DUMMY && fromMap)
-				answer = "classic - the map calls the slot DUMMY and the art "
-					"carries it where Core placed it only";
+				answer = "the art of another placement - the map calls the "
+					"slot DUMMY and the art carries it where Core placed it "
+					"only; on the visibility path the build copies a Core "
+					"placement's art to it (RoomProbe -artcopytable says "
+					"which), classic where it finds none";
 			else if (kind != HD_BIND_MODEL || !name)
 				answer = "classic";
 			else if (where_model(root, alt, tr3, name, false).empty())

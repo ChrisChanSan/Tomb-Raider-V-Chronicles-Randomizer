@@ -16201,6 +16201,108 @@ them nothing is copied; no classic path file changed.
 
 **Commits.** `14b9afa5`.
 
+### An item the run added to a baked slot takes the art of another placement (#275)
+
+2026-10-30.
+
+**What.** The art copies of #274 gain an item path (`specific/hd/hd_artcopy.h`,
+`hdartcopy::MakeItems`, the last step of `HDArtCopyMake`; the item copies go into the
+`.TRG` with the statics' in `HDArtCopyApply`). At the HD level build on the visibility
+path (`hd_vis` 1), an item the run added - the sidecar's `item` line (#265) - to a slot
+the level's `.MAP` calls DUMMY, whose objects the art carries where Core placed them and
+nowhere else, takes a copy of the art of a Core placement of its slot, moved by the rigid
+motion between the two places, and is then baked like the slot's other items:
+`begin_decision` (`specific/hd/hd_object.cpp`) gives it `BEGIN_BAKED` in a room drawn HD,
+and its classic mesh is not drawn. Its logic is untouched - a cupboard is searched and
+hands over what it holds as before - and its art stands still while it is searched, as
+the art of the slot's Core placements does: they do not move in HD either. Every item of
+such a slot is handed in beside the statics by `BuildStaticPlaces`
+(`specific/hd/hd_level.cpp`), its box out of its object's first frame at its place and yaw
+(`HDStandItemBox`), the run's own marked; `ArtCopies` (`specific/hd/hd_render.cpp`) keeps
+the numbers of the added items a copy holds (`HDRenderArtCopyItemHeld`), which
+`begin_decision`, the added item's log line and `BuildBakedBoxes` ask. With `-log`: one
+`HDLOG artcopy level= item= slot= room= from_item= from_room= tris= shift= turn= faces=
+face_tris=` line per item copy, one `HDLOG artcopy level= item= slot= room= none=` line
+per added item given none, with the reason (`skewed`, `no_donor`, `unlike`, `no_part`,
+`empty`, `no_group`); the statics line ends in `items= item_copies=`, and #265's
+`HDLOG level=... added item=` line keeps its form with `copied` for its last word where a
+copy holds the item. RoomProbe lists the item rows in `-artcopytable` and ends its
+`artcopy:` line in `items= item_copies=`; MapProbe `-hdm` names the copy as the answer for
+such an item; ModernTest checks the item path on a level of two rooms built by hand.
+
+**Why.** JOBY3's shelf (slot 168, SEARCH_OBJECT3) that the glitchless secret list adds to
+the bunk room - item 299 in room 52 at 64000, 6912, 55808, turned half round, the level's
+secret inside - was drawn classic among HD art since #265: flat cans and classic textures,
+while the slot's Core shelves are drawn by the art with its cans and boxes. The slot has
+no model file to draw it with (#265); the art is the only HD look there is, and it stands
+at the slot's other placements.
+
+**How.** The donors stand in other rooms, so in other room groups than the added item: a
+copy leaves its group. It may, because a triangle's picture is named level-wide: its first
+corner's layer byte, one-based into the `.TRG`'s one texture list (`Trg.h`,
+`TrgVertex::layer`; the group build of `HDRenderLevelBegin` takes the page that way), and
+a part's material and four numbers mean the same in every group. The copy is read in the
+donor group's frame (its room's origin and y shift) and written in the target group's, and
+each triangle goes into the run of its pass of the target group's first part with the same
+material and numbers (`hdartcopy::Level::RunIn`); a target group with no such part gives
+no copy (`no_part`). A donor is an item of the slot Core placed in a room a group draws,
+its yaw whole quarter turns, the art in its box grown by 32 units lit: at least a
+twentieth of its corners with a colour byte above zero (`HD_ARTCOPY_LIT`; else `unlit`).
+A target is an added item in a room drawn by its own art - where `begin_decision` bakes
+the slot's items; elsewhere a copy would stand beside the classic mesh (`no_group`) - and
+of a yaw of whole quarter turns (else `skewed`). Its donor is one of its slot anywhere in
+the level: no turn first, then the nearest, then the level's order; the slot's art must be
+alike at its donors the level over (the most at three halves of the fewest, as #274). What
+is taken is the statics' rule: the donor group's triangles wholly inside the donor's grown
+box, less what lies on a classic face at either place (the wall behind a shelf, the floor)
+and what would stand on the target group's art already; the targets one motion moves from
+one donor group into one target group take together. The vertices go in after the target
+group's last vertex and the triangles at the end of their run; where two receiving runs
+end at one index - an empty run of the target group's part - they go in in the file's
+order.
+
+On JOBY3 (the game folder's level, re-rolled: 307 items, its sidecar 59 item lines) one
+added item is asked, item 299. Of the eight Core shelves, 53 and 54 in room 26 carry no
+light: 228 of 16,992 and 210 of 16,974 corners lit, the wall behind them; the shelves are
+black in their own room as well. The six others are 70 to 82 per cent lit and hold 5,634
+to 5,718 triangles, alike. Without the light test room 26's shelf 53 would give the copy
+(no turn, nearest: 5,120 units against 9,216) and it would be black. Taken is item 227 in
+room 164, no turn, shift 0, 3072, -6144: 5,718 triangles inside its grown box, 152 across
+its border (the neighbouring shelf 226), 70 on the wall or the floor, 36 on group 52's art
+already; the copy is 5,612 triangles and 6,254 vertices, no face beside it. It keeps its
+donor's light, 9,10,10 and 7,7,7 on the two colours against 12,14,15 and 18,20,20 round
+its new place: darker than the bunk room, as the Core shelves are darker than theirs.
+
+In RoomProbe's pictures (the engine's renderer) at the trview camera of the picture that
+showed the shelf and at the game's eye down the bunk room's aisle the shelf stands with
+the art's cans and boxes where the base drew the bare wall (RoomProbe draws no item, so
+the classic shelf is not in the base either): 259,357 and 116,772 pixels changed. On the
+vanilla JOBY3, which has no such item, 0 and 0 pixels change, in rooms 164 (the donor's)
+and 26 0 each. The depth fight - the pixels that change when group 52 is pushed by 1/2,000
+of its distance either way - is the base's to the pixel outside the shelf's pixels, the
+wall seen through and round it and the room (4,503 against 4,504 and 1,447 against 1,447;
+at 1/500, 6,890 against 6,891 and 6,275 against 6,276): the copy fights neither the wall
+behind it nor the room. Inside them it is about what the wall there had (739 against 680
+and 372 against 267; at 1/500, 745 against 1,100 and 1,269 against 1,271), speckles on the
+shelf's own boards, boxes and can bottoms, near-coincident surfaces of the art's shelf,
+which its donor shows as well (865 and 77 pixels in the same screen region at the eye
+moved back to the donor).
+
+Over the fifteen levels only JOBY3 copies an item: no other randomized level of the game
+folder has an added item of a DUMMY slot (`items=0`), the vanilla levels none. The build's
+fingerprint is the base's in all fifteen levels with `hd_vis` 0 and with `hd_fog` 0,
+vanilla and randomized, and with `hd_vis` 1 on the vanilla levels; with `hd_vis` 1 on the
+randomized ones only JOBY3's changes. Every static's answer is the base's in each of these
+runs, JOBY3's with the copy too; against #274's base the nine RICH2 answers of #274 and
+nothing else, and RICH2's nine `HDLOG artcopy` lines are #274's to the letter. The card
+census stays 1,138 one-sided triangles. The rule costs 124 ms on the randomized JOBY3 -
+60 ms of it the wall and standing tests over the donor's 5,718 triangles, 11 ms putting
+the copy in -, 21 ms on the vanilla JOBY3, and 6 to 134 ms elsewhere as before. With
+`hd_build` 0 nothing is built, and with `hd_vis` 0 no item is handed in: the shelf stays
+classic, as #265 left it.
+
+**Commits.** `41f24b2b`.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -16492,3 +16594,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #271 | The Game Over menu takes the d-pad and the arrow keys |
 | #272 | The diving suit's thrusters on the HD body |
 | #274 | A static the art leaves out at one place takes the art it has at another |
+| #275 | An item the run added to a baked slot takes the art of another placement |

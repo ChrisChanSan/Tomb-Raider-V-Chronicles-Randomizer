@@ -2195,7 +2195,10 @@ static void ObjectLevelBuild(const char* installRoot, const char* stem,
 	 * draws those classic. Counted with TrgProbe -boxes for the shelf a
 	 * secret list adds to JOBY3: 34 of the remaster's triangles inside its
 	 * box, the wall behind it, against 5,435 to 5,469 inside the box of
-	 * each of the level's eight vanilla SEARCH_OBJECT3 items. */
+	 * each of the level's eight vanilla SEARCH_OBJECT3 items. On the
+	 * visibility path the art copies give such an item the art of another
+	 * placement of its slot (hd_artcopy.h, the item path), and the item is
+	 * baked like the others then (item_run_added). */
 	g_baked_slots = 0;
 	g_baked_any = false;
 
@@ -2230,8 +2233,11 @@ static void ObjectLevelBuild(const char* installRoot, const char* stem,
 
 	/* The items the run added to a baked slot, a line each: the art carries
 	 * the slot's objects where Core placed them only, so begin_decision
-	 * draws these as a slot without a model draws, classic. Here and not
-	 * below the hd_objects return, because the baked rule runs either way. */
+	 * draws these as a slot without a model draws, classic - unless the art
+	 * copies gave the item the art of another placement of its slot
+	 * (hd_artcopy.h, on the visibility path), which the last word says.
+	 * Here and not below the hd_objects return, because the baked rule runs
+	 * either way. */
 	for (int i = 0; i < HDMarkersItemCount(); i++)
 	{
 		const int number = HDMarkersItem(i);
@@ -2246,9 +2252,10 @@ static void ObjectLevelBuild(const char* installRoot, const char* stem,
 
 		Log("HDLOG level=%s added item=%d slot=%d name=%s room=%d host=%d - "
 			"the .hdm names it the run's own and the art carries the slot "
-			"where Core placed it only: drawn classic", g_stem, number, slot,
+			"where Core placed it only: drawn %s", g_stem, number, slot,
 			HDSlotName(slot) ? HDSlotName(slot) : "?",
-			(int)items[number].room_number, g_slot[slot].host);
+			(int)items[number].room_number, g_slot[slot].host,
+			HDRenderArtCopyItemHeld(number) ? "copied" : "classic");
 	}
 
 	ObjectLoadStep(&loadlog_at, "obj_map");
@@ -3668,13 +3675,16 @@ static bool baked_look_drawn(int host)
  * item of the file has such an index - one the game spawns later stands
  * past level_items, and a cutscene's actor or a copy outside items[] has
  * none - so for every other item this is false, as it is without a
- * sidecar. */
+ * sidecar. And not when the art copies gave it the art of another
+ * placement of its slot (hd_artcopy.h, HDRenderArtCopyItemHeld): the art
+ * carries it then as it carries the slot's other items. */
 static bool item_run_added(const ITEM_INFO* item)
 {
 	const long number = item - items;
 
 	return number >= 0 && number < level_items &&
-		HDMarkersItemAdded((int)number);
+		HDMarkersItemAdded((int)number) &&
+		!HDRenderArtCopyItemHeld((int)number);
 }
 
 static int begin_decision(const ITEM_INFO* item, const OBJECT_INFO* obj)
@@ -3692,12 +3702,16 @@ static int begin_decision(const ITEM_INFO* item, const OBJECT_INFO* obj)
 	 * is empty, still needs its lamp post drawn the old way. A room's static
 	 * meshes ask HDStaticDrawnClassic, which counts another group's art too.
 	 *
-	 * And never an item the run added. The art carries a DUMMY slot's
-	 * objects where Core placed them and nowhere else, so an added one - a
-	 * shelf a secret list puts into a room - would vanish. It goes on to the
-	 * guard and draws as every item of a slot without a model draws: the
-	 * slot has none, so classic, with its own animation, and whatever
-	 * pickup it carries is handed over as it always is.
+	 * And never an item the run added, unless the art copies gave it the
+	 * art of another placement of its slot (hd_artcopy.h; item_run_added
+	 * answers false then). The art carries a DUMMY slot's objects where
+	 * Core placed them and nowhere else, so an added one - a shelf a secret
+	 * list puts into a room - would vanish. It goes on to the guard and
+	 * draws as every item of a slot without a model draws: the slot has
+	 * none, so classic, with its own animation, and whatever pickup it
+	 * carries is handed over as it always is. One the copy holds is not
+	 * drawn, as the slot's other items; its logic runs on (a cupboard is
+	 * searched as before), and its art stands still, as theirs.
 	 *
 	 * HDObjectBegin returning true with no node recorded is what makes it
 	 * vanish: DrawAnimatingItem then puts no classic polygon in, HDObjectNode is

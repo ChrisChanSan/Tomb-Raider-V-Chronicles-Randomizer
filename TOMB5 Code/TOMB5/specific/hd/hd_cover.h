@@ -1415,4 +1415,54 @@ struct HDArtCopy
 	float light[2][3];
 	float around[2][3];
 	int aroundCorners;
+	/* The group the copy's triangles are taken from: `group` for a
+	 * static's, the group that draws the donor's room for an item's. */
+	int fromGroup;
 };
+
+/* One item of a slot the art carries - the .MAP calls it DUMMY, as
+ * hd_level.cpp's BuildBakedBoxes takes the slots -, for the art copies'
+ * item path: its index in the level's item list, its room and slot,
+ * ITEM_INFO's place and y_rot, whether the run added it (the sidecar's
+ * `item` line, HDMarkersItemAdded) and its box as HDStandItemBox makes it
+ * out of the object's first frame, in world units. */
+struct HDArtCopyItem
+{
+	int item, room, slot;
+	int x, y, z;
+	int rot;
+	int added;
+	float mins[3], maxs[3];
+};
+
+/* What the rule answered an item (HDArtCopyPlan::itemRole): not asked (no
+ * group draws its room, or the room is one of a flipmap pair), a donor (a
+ * Core-placed item), an added item a copy holds, and the added items it
+ * gave none, with the reason: a yaw of no whole quarter turn, no donor of
+ * its slot, donors whose art differs, a donor material its room's group has
+ * no part of, nothing to take, its room not drawn by its own art. And a
+ * Core-placed item whose art carries no light at all, which is no donor. */
+#define HD_ARTCOPY_ITEM_NONE		0
+#define HD_ARTCOPY_ITEM_DONOR		1
+#define HD_ARTCOPY_ITEM_COPIED		2
+#define HD_ARTCOPY_ITEM_SKEWED		3
+#define HD_ARTCOPY_ITEM_NO_DONOR	4
+#define HD_ARTCOPY_ITEM_UNLIKE		5
+#define HD_ARTCOPY_ITEM_NO_PART		6
+#define HD_ARTCOPY_ITEM_EMPTY		7
+#define HD_ARTCOPY_ITEM_NO_GROUP	8
+#define HD_ARTCOPY_ITEM_UNLIT		9
+#define HD_ARTCOPY_ITEM_ANSWERS		10
+
+// The answer's word in the log and the tools' tables.
+inline const char* HDArtCopyItemWord(int answer)
+{
+	static const char* const words[HD_ARTCOPY_ITEM_ANSWERS] =
+	{
+		"-", "donor", "copied", "skewed", "no_donor", "unlike", "no_part",
+		"empty", "no_group", "unlit"
+	};
+
+	return answer >= 0 && answer < HD_ARTCOPY_ITEM_ANSWERS ? words[answer] :
+		"-";
+}

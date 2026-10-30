@@ -511,6 +511,9 @@
     <ClInclude Include="TOMB5\game\camera.h">
       <Filter>TOMB5\game</Filter>
     </ClInclude>
+    <ClInclude Include="TOMB5\game\carrier_rule.h">
+      <Filter>TOMB5\game</Filter>
+    </ClInclude>
     <ClInclude Include="TOMB5\game\collide.h">
       <Filter>TOMB5\game</Filter>
     </ClInclude>

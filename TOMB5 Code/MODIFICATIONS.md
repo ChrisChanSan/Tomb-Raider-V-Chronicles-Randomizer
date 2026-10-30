@@ -4,7 +4,7 @@
 
 This is a modified version of **TOMB5**, the PC Tomb Raider Chronicles decompilation
 project by Troye/Trxyebeep and contributors, <https://github.com/Trxyebeep/TOMB5>. It
-was modified between **2026-07-30 and 2026-10-30** (ongoing) for the *TR5 Randomizer*
+was modified between **2026-07-30 and 2026-10-31** (ongoing) for the *TR5 Randomizer*
 project.
 
 The upstream code as received is preserved as the first commit of this repository (no
@@ -15,13 +15,13 @@ commit made after this copy was taken (`setup.cpp`: Two Gun gains `undead = 1`) 
 small local fixes that predate this repository and are documented in the files themselves
 (`dxsound.cpp` LOCSOFTWARE, `function_stubs.cpp` DO_LOG).
 
-Measured on **2026-10-30** by comparing every file under `TOMB5/` against that first
-commit: **130 files changed, 189 entirely new - 319 in all**, none deleted,
-**269** of them carrying the modification notice at the top, which `grep -rl
+Measured on **2026-10-31** by comparing every file under `TOMB5/` against that first
+commit: **130 files changed, 190 entirely new - 320 in all**, none deleted,
+**270** of them carrying the modification notice at the top, which `grep -rl
 "Modified 2026 by ChrisChanSan" TOMB5/` lists. The project file `tomb5.vcxproj` carries
 the same notice as an XML comment.
 
-50 of the 319 do not carry the notice, and none of them should:
+50 of the 320 do not carry the notice, and none of them should:
 
 - the 40 `specific/hd/hd_shader/*.inc` (9 vertex and 31 pixel shaders) are compiler
   output (`fxc` bytecode as a C array), regenerated from the eleven `.hlsl` files beside
@@ -16425,6 +16425,70 @@ Eagle in hand, 0. The census of the fifteen levels is the head's (1,791 rows). M
 
 **Commits.** `0f28d980`.
 
+### A search object keeps the pickup in its reach from any enemy (#278)
+
+2026-10-31.
+
+**What.** At level start a pickup that lies in reach of a search object goes to the search
+object, whatever enemy stands in reach as well and wherever either stands in the item
+table; an enemy gets only what no search object holds. The rest of the hand-over stays:
+the reach, the wall grabs left on their walls, the pool cyborg carrying nothing, a pickup
+in reach of two carriers of one kind going to the lower index, and the chains' readers -
+the search, the drop at an enemy's death and the savegame. With `-log` the `CARRYLOG` line
+ends on `pass=search` or `pass=enemy`.
+
+**Why.** `GetCarriedItems` walked the items once in index order, and the first carrier
+that reached a pickup took it out of its room. The two kinds do not give it back alike: a
+search object hands its chain over where the item was placed, when Lara searches it
+(`CollectCarriedItems`, `game/pickup.cpp`); an enemy only where he dies
+(`DropBaddyPickups`, `game/box.cpp`), and an enemy that leaves the map takes the chain
+with him. Core placed no pickup in reach of both kinds. The randomizer puts items into
+search objects on purpose and its enemies wherever the roll lands: in the randomized JOBY3
+the secret (item 29, `PICKUP_ITEM4`) lies in the cupboard the secret list adds at its
+place (item 299, `SEARCH_OBJECT3`), and the roll stood a husky (item 296) on the same
+spot. With the lower index the dog took the secret, and a husky can clip out of the map
+through thin geometry.
+
+**How.** `game/carrier_rule.h`, new and with no engine header: `CarrierPass` gives the
+pass a slot carries in - `CARRIER_PASS_SEARCH` (0) for `SEARCH_OBJECT1` to
+`SEARCH_OBJECT3`, the two MIP slots between included as the range test always read them;
+`CARRIER_PASS_ENEMY` (1) for a slot the engine marks `intelligent`; -1 for `CYBORG` (469,
+its comment moved along) and every other slot - and `CarrierPassName` gives the line its
+word. `SEARCH_OBJECT4` is no carrier, as before: it hands over the one item at its own
+place through `item_flags[1]` (`InitialiseSearchObject`), never a chain. `game/setup.cpp`:
+`GetCarriedItems` runs the two passes around the index loop and skips every item whose
+`CarrierPass` is not the pass; the room walk inside is unchanged, and a `static_assert`
+holds the header's three slot numbers (164, 168, 469) to the enum. The savegame's own test
+of the kinds (`game/savegame.cpp`, which chains it writes) still reads `intelligent` or
+`SEARCH_OBJECT1..3`, the same set. The `setup.cpp` lines the wall-grab entry (2.2) names
+have moved, and the line it gives now ends on ` pass=<pass>` after `<verdict>`.
+
+A census over the level files reads the items as the load leaves them before
+`GetCarriedItems` - every initialise call that moves a pickup or a carrier replayed - and
+walks both orders. The vanilla files, the thirteen levels with the title, `del` and
+`richcut2`: 59 pickups in a carrier's reach, none in reach of both kinds, no carrier
+changed. The sixteen of the randomized game folder: five, one in reach of both - the JOBY3
+secret, which goes from the husky to the cupboard. Its line, derived from the code (the
+game not started), before
+
+    CARRYLOG baddy=296/HUSKIE item=29/PICKUP_ITEM4 ocb=0 d=0,0 carried
+
+and after
+
+    CARRYLOG baddy=299/SEARCH_OBJECT3 item=29/PICKUP_ITEM4 ocb=0 d=0,0 carried pass=search
+
+and the husky writes no line any more; the level's two other lines, the pistols in a
+`SEARCH_OBJECT2` and the chef's key, keep their carriers. The change is game logic in
+every build path, so there is no `hd_build` 0 byte identity to claim. ModernTest
+`carrier_pass` (23 checks).
+
+**Decisions.** The kind decides, not the distance: a pickup in reach of a search object is
+its whatever enemy stands closer, because the search object stands where the item was put
+and the enemy where the roll put him. Two passes over the whole table, not a sorted list
+of carriers, keep the index order within each pass and with it every chain as it was.
+
+**Commits.** `85c32cf8`.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -16719,3 +16783,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #275 | An item the run added to a baked slot takes the art of another placement |
 | #276 | The diving suit's thrusters hang from her shoulders on the HD body |
 | #277 | The X-ray look holsters nothing at the thighs, its Uzis like its other guns |
+| #278 | A search object keeps the pickup in its reach from any enemy |

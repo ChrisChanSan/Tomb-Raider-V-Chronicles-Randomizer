@@ -82,6 +82,7 @@
 #include "savegame.h"
 #include "lara2gun.h"
 #include "../specific/hd/hd_bind.h"	// slot names for the diagnostic log
+#include "carrier_rule.h"	// CarrierPass - search objects before enemies
 
 void InitialiseLara(long restore)
 {
@@ -2243,12 +2244,19 @@ void InitialiseObjects()
 		Spiders = (SPIDER_STRUCT*)game_malloc(1664);
 }
 
+// The rule's own copy of the three slots it names.
+static_assert(CARRIER_SEARCH_OBJECT1 == SEARCH_OBJECT1 &&
+	CARRIER_SEARCH_OBJECT3 == SEARCH_OBJECT3 && CARRIER_CYBORG == CYBORG,
+	"carrier_rule.h disagrees");
+
 void GetCarriedItems()
 {
 	ITEM_INFO* baddy;
 	ITEM_INFO* pickup;
+	OBJECT_INFO* obj;
 	ROOM_INFO* r;
 	long lp;
+	int pass;
 	short item_num, ocb;
 
 	for (lp = 0; lp < level_items; lp++)
@@ -2257,27 +2265,19 @@ void GetCarriedItems()
 		baddy->carried_item = NO_ITEM;
 	}
 
-	for (lp = 0; lp < level_items; lp++)
+	// The search objects take the pickups in their reach first, the enemies
+	// then what is left, each pass in index order, the cyborg in neither
+	// (CarrierPass, carrier_rule.h, which says why).
+	for (pass = 0; pass < CARRIER_PASSES; pass++)
 	{
-		baddy = &items[lp];
-
-		// The pool cyborg carries nothing. This routine hands an enemy
-		// every pickup but a wall grab within half a sector of him at
-		// level start and takes it off the floor again only when he dies.
-		// Slot 67 stays in that list - Core placed both him and those
-		// pickups by hand.
-		// Slot 469 is placed by the roll instead, so the pickup he
-		// swallows is one the randomizer put somewhere on purpose and the
-		// enemy standing on it is a coincidence; he would give it back
-		// only where he dies, not where the item was meant to be, and
-		// while the slot was still undead it never came back at all -
-		// a softlock. Cheaper to keep him out of the list than to depend
-		// on his death.
-		if (baddy->object_number == CYBORG)
-			continue;
-
-		if (objects[baddy->object_number].intelligent || (baddy->object_number >= SEARCH_OBJECT1 && baddy->object_number <= SEARCH_OBJECT3))
+		for (lp = 0; lp < level_items; lp++)
 		{
+			baddy = &items[lp];
+			obj = &objects[baddy->object_number];
+
+			if (CarrierPass(baddy->object_number, obj->intelligent) != pass)
+				continue;
+
 			r = &room[baddy->room_number];
 			item_num = r->item_number;
 
@@ -2301,12 +2301,13 @@ void GetCarriedItems()
 
 					// CARRYLOG (-log only): one line per pickup in a
 					// carrier's reach at level start, with the offset from
-					// the carrier to the item.
-					Log("CARRYLOG baddy=%d/%s item=%d/%s ocb=%d d=%d,%d %s",
+					// the carrier to the item and the carrier's pass.
+					Log("CARRYLOG baddy=%d/%s item=%d/%s ocb=%d d=%d,%d %s pass=%s",
 						lp, HDSlotName(baddy->object_number) ? HDSlotName(baddy->object_number) : "?",
 						item_num, HDSlotName(pickup->object_number) ? HDSlotName(pickup->object_number) : "?",
 						ocb, pickup->pos.x_pos - baddy->pos.x_pos, pickup->pos.z_pos - baddy->pos.z_pos,
-						(ocb == 2 || ocb == 9) ? "skipped wall grab" : "carried");
+						(ocb == 2 || ocb == 9) ? "skipped wall grab" : "carried",
+						CarrierPassName(pass));
 
 					if (ocb != 2 && ocb != 9)
 					{

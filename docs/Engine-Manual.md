@@ -5138,7 +5138,7 @@ wrote it, and each seam answers a different question:
 | …and if it was clipped | `CLIPDETAIL` — the actual window and the camera it was measured against |
 | an item is in the wrong place, or vanishes | `ITEMLOG` — slot, room, OCB and flags per item at load |
 | …and something moved it later | `ITEMWATCH` — who wrote which room number, and when |
-| an enemy carries an item off, or does not | `CARRYLOG` — at the level start, one line per pickup within a carrier's reach: the carrier, the item, its OCB and offset, and whether it was carried or left on its wall |
+| an enemy carries an item off, or does not | `CARRYLOG` — at the level start, one line per pickup within a carrier's reach: the carrier, the item, its OCB and offset, whether it was carried or left on its wall, and the carrier's pass: `pass=search` for a search object, `pass=enemy` for an enemy - the search objects take what is in their reach first, so an enemy gets only what no search object holds |
 | the outfit looks wrong, a limb is misplaced | `SKINLOG` — the skin's bone stack; `OBJLOG skinning done` ends in the seam pieces sewn and, by joint number, those left out (`joints_used=`, `left_out=`) |
 | the first person view sits wrong | `FPHEAD`, `ALTERFOV` — the head bone per frame, and the field of view |
 | a cutscene actor or Lara holds nothing where the classic game shows a thing in the hand | `swap=` at the end of `HDLOG cutseq actor` — every node carrying a mesh of another slot, that slot and mesh, and what drew it: a model, `own` or `classic`; `HDLOG cutswap` on every change later in the cutscene; `shows=` at the end of `SWAPLOG` for Lara |

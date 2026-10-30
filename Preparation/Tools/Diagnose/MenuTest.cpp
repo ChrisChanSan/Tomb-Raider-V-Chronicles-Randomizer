@@ -3164,6 +3164,174 @@ static void graphics_build_row()
 	free(outfit);
 }
 
+/* ------------------------------------------------- the game-over menu -- */
+
+/* The game-over menu takes the d-pad, the stick and the keyboard as every
+ * other menu does. game\menu_nav.h's MenuStepSource, the hand its MENULOG
+ * line names, is swept. Then the tree, as text: specific\input.cpp's
+ * ModernMenuReadsPad names the game-over menu's flag beside InventoryActive
+ * and the title, and the movement seam carries the same three terms with
+ * the opposite sign; the play pair, the menu keys and the d-pad's medipack
+ * guard all ask that one predicate; the flag is only read there. In
+ * game\control.cpp the flag is defined once and declared in control.h;
+ * S_Death raises it before its loop - its rows and the load list it opens,
+ * whose call raises no InventoryActive of its own (game\newinv2.cpp,
+ * specific\LoadSave.cpp) - lowers it on both of its ways out, raises no
+ * InventoryActive, and still steps on dbinput's edges; the seam writes an
+ * open line and one line per press, behind -log, with the d-pad's own two
+ * buttons as specific\dxshell.cpp sets them on both of the pad's paths. */
+static const char* death_body_end(const char* body)
+{
+	return body ? strstr(body, "\r\n}\r\n") : 0;
+}
+
+static int death_count(const char* from, const char* to, const char* what)
+{
+	int n = 0;
+
+	if (!from || !to)
+		return -1;
+
+	for (const char* p = strstr(from, what); p && p < to; p = strstr(p + 1, what))
+		n++;
+
+	return n;
+}
+
+static void death_menu_pad()
+{
+	char* ctrl = tree_file("../../../TOMB5 Code/TOMB5/game/control.cpp");
+	char* head = tree_file("../../../TOMB5 Code/TOMB5/game/control.h");
+	char* inp = tree_file("../../../TOMB5 Code/TOMB5/specific/input.cpp");
+	char* dx = tree_file("../../../TOMB5 Code/TOMB5/specific/dxshell.cpp");
+	char* inv = tree_file("../../../TOMB5 Code/TOMB5/game/newinv2.cpp");
+	char* save = tree_file("../../../TOMB5 Code/TOMB5/specific/LoadSave.cpp");
+
+	check(MenuStepSource(0, 0), MENU_SRC_KEY,
+		"death menu: a step the pad pair lacks is the keyboard's");
+	check(MenuStepSource(0, 1), MENU_SRC_KEY,
+		"death menu: even with a d-pad button down");
+	check(MenuStepSource(1, 0), MENU_SRC_STICK,
+		"death menu: the pair without its button is the stick");
+	check(MenuStepSource(1, 1), MENU_SRC_PAD,
+		"death menu: the pair with its button is the d-pad");
+	check(MENU_SRC_KEY == 0 && MENU_SRC_STICK == 1 && MENU_SRC_PAD == 2, 1,
+		"death menu: the sources index the line's three names");
+
+	check(ctrl && head && inp && dx && inv && save, 1,
+		"death menu: the six engine files are readable from here");
+
+	if (!ctrl || !head || !inp || !dx || !inv || !save)
+	{
+		free(ctrl);
+		free(head);
+		free(inp);
+		free(dx);
+		free(inv);
+		free(save);
+		return;
+	}
+
+	check(tree_count(inp, "return (InventoryActive || DeathMenuActive || "
+		"gfLevelId == LVL5_TITLE) ? 1 : 0;"), 1,
+		"death menu: ModernMenuReadsPad names its flag");
+	check(tree_count(inp, "\t\t!InventoryActive && !DeathMenuActive && "
+		"gfLevelId != LVL5_TITLE;"), 1,
+		"death menu: the movement seam carries it, the other sign");
+	check(tree_count(inp, "if (tomb5.control_modern && !ModernMenuReadsPad())"),
+		1, "death menu: the play pair only outside a menu");
+	check(tree_count(inp, "if (tomb5.control_modern && ModernMenuReadsPad())"
+		"\r\n\t{\r\n\t\tif (keymap[DIK_UP])"), 1,
+		"death menu: the arrow keys and Return in every menu");
+	check(tree_count(inp, "const long medi_dpad = tomb5.control_modern && "
+		"ModernMenuReadsPad();"), 1,
+		"death menu: the d-pad's medipacks rest in every menu");
+	check(tree_count(inp, "DeathMenuActive ="), 0,
+		"death menu: input.cpp only reads the flag");
+	check(tree_count(inp, "#include \"../game/control.h\""), 1,
+		"death menu: and sees its declaration");
+	check(tree_count(inp, "\t\telse if (tank_y < -8)\r\n\t\t\tlinput |= "
+		"IN_FORWARD;\r\n\t}\r\n\r\n\tpad_dir_bits = linput;\t// the pad's "
+		"own four, before the keys join them\r\n\r\n\tif (Key(0))"), 1,
+		"death menu: the pad pair's bits are kept before the keys");
+
+	check(tree_count(ctrl, "\r\nlong DeathMenuActive;\r\n"), 1,
+		"death menu: the flag is defined once");
+	check(tree_count(head, "extern long DeathMenuActive;"), 1,
+		"death menu: and declared in control.h");
+	check(tree_count(ctrl, "\t\t\t\treturn S_Death();"), 1,
+		"death menu: ControlPhase still opens it in one place");
+
+	{
+		const char* body = strstr(ctrl, "static long S_Death()");
+		const char* end = death_body_end(body);
+		const char* up = body ? strstr(body, "\tDeathMenuActive = 1;") : 0;
+		const char* loop = body ? strstr(body, "\twhile (!ret)") : 0;
+
+		check(up && loop && up < loop && loop < end, 1,
+			"death menu: S_Death raises the flag before its loop");
+		check(death_count(body, end, "DeathMenuActive = 0;"), 2,
+			"death menu: and lowers it twice");
+		check(death_count(body, end, "\t\t\t\tDeathMenuActive = 0;\r\n"
+			"\t\t\t\treturn 1;") + death_count(body, end,
+			"\tDeathMenuActive = 0;\r\n\treturn ret;"), 2,
+			"death menu: on both of its ways out");
+		check(death_count(body, end, "return "), 2,
+			"death menu: which are the only two");
+		check(death_count(body, end, "InventoryActive"), 0,
+			"death menu: S_Death raises no InventoryActive");
+		check(death_count(body, end, "dbinput & IN_FORWARD") +
+			death_count(body, end, "dbinput & IN_BACK") +
+			death_count(body, end, "dbinput & IN_SELECT"), 4,
+			"death menu: its rows still step on dbinput's edges");
+		check(death_count(body, end, "ret = go_and_load_game();"), 1,
+			"death menu: the load list opens inside the loop");
+		check(death_count(body, end, "\t\t\t{\r\n\t\t\t\tDeathLogStep("
+			"selection);"), 1,
+			"death menu: the rows' page writes the step line");
+		check(death_count(body, end, "\tif (gLogEnabled)\r\n\t\tLog(\"MENULOG "
+			"death open load=%d scheme=%s method=%ld\""), 1,
+			"death menu: and the open line, behind -log");
+	}
+
+	check(tree_count(inv, "return S_LoadSave(IN_LOAD, 1, 1) < 0 ? -1 : 1;"),
+		1, "death menu: its load list asks for no InventoryActive");
+	check(tree_count(save, "\tif (!inv_active)\r\n\t\tInventoryActive = 1;"),
+		1, "death menu: which the load list raises only when asked");
+
+	{
+		const char* body = strstr(ctrl, "static void DeathLogStep(");
+		const char* end = death_body_end(body);
+
+		check(death_count(body, end, "\tif (!gLogEnabled)\r\n\t\treturn;"), 1,
+			"death menu: the step line is behind -log");
+		check(death_count(body, end, "if (!(dbinput & bit[i]))\r\n\t\t\t"
+			"continue;"), 1, "death menu: one line per press, not per frame");
+		check(death_count(body, end, "\"MENULOG death step=%s row=%ld "
+			"src=%s\""), 1, "death menu: the step line");
+		check(death_count(body, end, "{ \"key\", \"stick\", \"pad\" }"), 1,
+			"death menu: its three names in the sources' order");
+		check(death_count(body, end, "{ IN_FORWARD, IN_BACK, IN_SELECT }"), 1,
+			"death menu: the three bits its rows read");
+		check(death_count(body, end, "MenuStepSource((InputPadDirection() & "
+			"bit[i]) != 0,"), 1, "death menu: the pair's bits name the pad");
+		check(death_count(body, end, "{ 1L << 20, 1L << 21 }"), 1,
+			"death menu: the d-pad's up and down buttons");
+	}
+
+	check(tree_count(dx, "fire |= 1 << 20;\t// D-Pad Up"), 2,
+		"death menu: bit 20 is D-Pad Up on both of the pad's paths");
+	check(tree_count(dx, "fire |= 1 << 21;\t// D-Pad Down"), 2,
+		"death menu: bit 21 is D-Pad Down on both");
+
+	free(ctrl);
+	free(head);
+	free(inp);
+	free(dx);
+	free(inv);
+	free(save);
+}
+
 /* ------------------------------------------------------- the Gamma row -- */
 
 /* The Gamma row on the Display page, read from the tree as the mouse's rows
@@ -4629,6 +4797,7 @@ int main()
 	graphics_hd_row();
 	graphics_build_row();
 	display_gamma_row();
+	death_menu_pad();
 	slider_numbers();
 	slider_reads();
 	slider_held_word();

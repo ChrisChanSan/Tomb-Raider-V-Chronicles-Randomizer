@@ -16201,6 +16201,73 @@ them nothing is copied; no classic path file changed.
 
 **Commits.** `14b9afa5`.
 
+### The X-ray look holsters nothing at the thighs, its Uzis like its other guns (#277)
+
+2026-10-30.
+
+**What.** In the X-ray look - the X-ray outfit of the outfit menu, and the scanner's set
+in Escape with the Iris - nothing is drawn on Lara's thighs any more. The pistols' X-ray
+holsters, which stood in the air beside her bones, go the way the Uzi and Desert Eagle
+holsters went, so a pistol, the Uzis and the Desert Eagle all simply vanish when she puts
+them away; the shotgun, HK or grappling gun on her back stays. And the Uzis in her hands
+are drawn like every other gun of the look - the X-ray hand's bones at both grips with the
+X-ray Uzi, in the one tone - where they showed a mod's textured Uzi and no hand at all.
+This supersedes what the #268 entry says about the Uzi and Desert Eagle holsters (nothing
+drawn because the install has no file): the thighs now draw nothing for all three by one
+rule.
+
+**Why.** Measured with ModelProbe (`-lara JOBY5 -outfit 46/OUTFIT_XRAY -guns uzi`, the
+game's `Mods` folder and the Tomb Raider I-III game 3 folder - the engine's own two
+roots). The model resolver asks the active mods before the installs, and the IMI Uzis mod
+ships `HAND_XRAY_UZI.TRM`: its one gun under all three hand names, `HAND_BARE_UZI`,
+`HAND_GLOVES_UZI` and `HAND_XRAY_UZI` alike - 31,267 vertices and 106,164 indices, the
+hands on pages 8002 and 8010 of the I-III bundle (its `origin=tr1`), the gun on its own
+6111 and 6112. The rule for a mod gun painted with another bundle's skin
+(`HDModelSlot::twinSlot`) then dropped those hands and cut the install's own
+`HAND_XRAY_UZI` to the pages it shares with the rest hands `HAND_BARE_REST` - page 8001 -
+and the X-ray hand has page 8030 alone: no triangle survived, no twin was built, and
+nothing was left at the grips but the mod's gun on nodes 10 and 13, in its own texture
+under the tone. Of the set's sixteen names and the two thigh holsters the install lacks,
+`HAND_XRAY_UZI` is the only one any of the thirteen mods of that folder ships; the HK USP,
+MP5 and Spas-12 mods ship bare hands and holsters only, which is why every other gun
+already fell back to the install's X-ray file.
+
+**How.** `specific/hd/hd_lara.h`: `HDLaraXrayPick`, the set's lookup in a table of part
+and file with one rule in front of it - a thigh holster (`HD_LARA_PART_HOLSTER_PISTOL` to
+`_DEAGLE`) gets no file whatever the table holds. `HOLSTER_PISTOL_XRAY` stays in `kXray`
+as the file the remaster ships for the part; `xray_model` asks the rule, so neither the
+worn outfit nor the scanner's block plans, loads or draws a thigh holster, and the weapons
+on node 7 keep theirs. `specific/hd/hd_model.h`: `HDModelSlot::installOnly` - `find_model`
+skips the `Mods` folder for that slot - and `standIn`/`standInDrop`: where the name is in
+no install folder, the installs' own stand-in is built in its place with every page of
+`standInDrop` dropped. `xray_sources` (hd_lara.cpp) sets them on every part of the set,
+worn and in the block: a hand's stand-in is its `HAND_BARE_<x>` without the pages of
+`HAND_BARE_REST` - its gun alone - and `HDLaraXrayHand` has `HDLaraFrameParts` put the
+rest hands' X-ray bones beside it, or the rest hands' bones alone where neither is on the
+card: never no hand, never a mod's gun. The installation measured has `HAND_XRAY_UZI`
+(4\ITEM, 8,705 vertices, page 8030), so its Uzis take that file. The other case was drawn
+once with a throwaway build whose table asked for a name no folder has: `HAND_BARE_UZI`
+stood in, one page of `HAND_BARE_REST` dropped, the install's Uzi on nodes 10 and 13
+beside `HAND_XRAY_REST`.
+
+With `-log` the `XRAYLOG` line ends in `thighs=none` (`thighs=-` when off), a hand of the
+set reads `<stem>:install`, or `HAND_XRAY_REST:install+<stem>:gun` for a stand-in, and the
+X-ray outfit writes the line from the level's first frame, scanner or not; it had none
+outside the scanner. The level build notes `the X-ray look: N hand parts out of the
+installs and never a mod's, M of them a stand-in; nothing at the thighs` and one line per
+stand-in, hd_model the stand-in and its dropped pages. The composite's `SWAPLOG` lines
+carry no holster field and are unchanged. `DrawLara__6` is untouched and `hd_build` 0
+unchanged by construction.
+
+Pictures, ModelProbe before (90b4c21a) and after, JOBY5, the X-ray outfit, with the mods
+and the I-III root, 768 by 768: pistols holstered from behind, 1,806 pixels changed (the
+two holsters gone); Desert Eagle holstered, Uzis holstered and the shotgun on the back, 0;
+the Uzis in hand from behind with the arms raised, 39,219; the pistols and the Desert
+Eagle in hand, 0. The census of the fifteen levels is the head's (1,791 rows). ModernTest
+`xray_weapons` (9 checks).
+
+**Commits.** `0f28d980`.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -16492,3 +16559,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #271 | The Game Over menu takes the d-pad and the arrow keys |
 | #272 | The diving suit's thrusters on the HD body |
 | #274 | A static the art leaves out at one place takes the art it has at another |
+| #277 | The X-ray look holsters nothing at the thighs, its Uzis like its other guns |

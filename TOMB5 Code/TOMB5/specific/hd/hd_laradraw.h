@@ -56,8 +56,9 @@
 //                         is added to the level header, such a level draws
 //                         the classic Lara - a right classic body beats a
 //                         wrong HD one.
-//   the skeleton cheat    lara.skelebob goes through DrawLara__6, which this
-//                         file does not touch at all.
+//   the skeleton cheat    lara.skelebob goes through DrawLara__6, which draws
+//                         the classic X-ray body only where the composite
+//                         has no X-ray set to draw - see HDLaraDrawXray.
 //   the muzzle flash,     drawn by their own routines outside DrawLara
 //   the gunshells,        (game\draw.cpp, SetGunFlash / DrawGunshells) and
 //   the flare in flight   never part of the composite.
@@ -92,6 +93,17 @@ void HDLaraDrawEnd();
 // Whether Lara is drawn HD at all. DrawLara asks this once per call and then
 // either draws the whole composite or the whole classic body - never a mix.
 bool HDLaraDrawActive();
+
+/* Whether the skeleton cheat's frame is drawn HD: HDLaraDrawActive, and the
+ * composite has the X-ray set - her outfit is the X-ray body, or the level's
+ * floor carries a SKELETON trigger and the set's body is on the card
+ * (hd_lara.h, HDLaraXrayReady). DrawLara__6 asks it once per call, as the
+ * other three ask HDLaraDrawActive: either the composite draws the X-ray
+ * set through HDLaraDrawFrame, or the classic X-ray body is drawn whole.
+ *
+ * The set is read only in a level whose floor can X-ray her, so a level
+ * without a SKELETON trigger loads nothing more than before. */
+bool HDLaraDrawXray();
 
 /* Which outfit this level ended up in, as the
  * HD_LARA_OUTFIT_* number outfit_of_level worked out - the registry key
@@ -132,6 +144,12 @@ void HDLaraDrawFrameReset();
  * It puts Lara's parts on the frame list hd_object.cpp keeps, and they are
  * drawn where every HD model is drawn.
  *
+ * And from DrawLara__6 while lara.skelebob holds (HDLaraDrawXray): then the
+ * parts are the X-ray set's - out of the level's own block, or the outfit's
+ * own when she wears the X-ray body - and the borrowed head, the face, the
+ * lid, the rig and the braid are not drawn at all. The caller hands her own
+ * hands and back gun over, not the classic X-ray swap's.
+ *
  *   mirror           DrawLara's own argument. The mirrored Lara is a second
  *                    call with a second set of matrices, exactly as it is for
  *                    the classic path; see the .cpp for why the winding does
@@ -144,15 +162,16 @@ void HDLaraDrawFrameReset();
  */
 void HDLaraDrawFrame(long mirror);
 
-/* The log of a frame that draws her classic. DrawLara__1, __4 and __5 call
- * it where they draw the classic composite, outside a mirror, with their own
- * number and the thigh holsters they draw in the frame (1 the left one, 2 the
- * right one), and it writes the SWAPLOG and HIDELOG lines HDLaraDrawFrame
- * writes for the HD one: the same fields and the same state,
- * drawn=DrawLara__<variant> where the HD lines say drawn=hd, and after it the
- * last field, holsters=LR, L, R or none. Behind -log and nothing else: it
- * reads her mesh bits and mesh pointers and draws nothing, so the classic
- * picture is the same with or without it. */
+/* The log of a frame that draws her classic. DrawLara__1, __4, __5 and __6
+ * call it where they draw the classic composite, outside a mirror, with
+ * their own number and the thigh holsters they draw in the frame (1 the left
+ * one, 2 the right one), and it writes the SWAPLOG and HIDELOG lines
+ * HDLaraDrawFrame writes for the HD one: the same fields and the same state,
+ * drawn=DrawLara__<variant> where the HD lines say drawn=hd, followed by
+ * holsters=LR, L, R or none. The XRAYLOG line as well, on the X-ray look's
+ * edges: on with set=classic from __6, off from the others. Behind -log and
+ * nothing else: it reads her mesh bits and mesh pointers and draws nothing,
+ * so the classic picture is the same with or without it. */
 void HDLaraClassicLog(int variant, long holsters);
 
 // --- the projected shadow --------------------------------------------------

@@ -15830,6 +15830,87 @@ skinned. `docs/Engine-Manual.md` says it.
 
 **Commits.** `94c99b8c`, `190cc510`.
 
+### Lara in the X-ray scanner and the X-ray outfit, in HD (#268)
+
+2026-10-29 to 2026-10-30.
+
+**What.** The scanner in Escape with the Iris X-rays Lara, and with the HD path she is now
+drawn there in the remaster's X-ray set: a translucent green body over solid bones, its
+own skull and headset, X-ray hands, no braid and no face. The X-ray outfit of the outfit
+menu wears the same set wherever it is worn; it showed her braid, her face, her bare hands
+and solid black guns on the translucent body. The body's shell is drawn from the front
+alone: the figure is green with its bones readable where it was white, and in a bright
+room it stays a pale green over visible bones instead of a white outline. Every part of
+the set - the shell, the bones, the hands with what they hold, the holsters and the weapon
+on the back - takes one darker, greener tone, and no piece of it looks like ordinary gear
+beside the body.
+
+**Why.** The scanner's 36 squares, in rooms 11 and 151 of RICH2 and nowhere else in the
+fifteen levels, set `lara.skelebob` for every frame she stands on one, and DrawLara hands
+such a frame to DrawLara__6, which the HD seam did not touch: the classic X-ray body - her
+skin translucent, LARA_EXTRA_MESH1's bones solid, the HK and the grappling gun as the
+level's own X-ray meshes (game\draw.cpp, SetupSkelebobMeshswaps) - stood in the HD world.
+The remaster ships the look as files of its own in 4\ITEM: OUTFIT_XRAY, fifteen nodes, its
+bones in the opaque run and the body's shell in the additive run (material 6), its skull
+on node 14; thirty HAND_XRAY_ files, one for every HAND_BARE_ one; seven HOLSTER_*_XRAY
+files, none for the uzis or the Desert Eagle; no X-ray head and no X-ray braid. Worn from
+the outfit menu, OUTFIT_XRAY took the outfit's other parts: LARA_HEAD's face over its
+skull, HAIR_OG, the bare hands and the plain holsters. Drawn from both sides like every HD
+model, the closed shell lay on every pixel twice, and the back half added a second, whiter
+layer - at full light 121/86/127 over the front layer's 112/163/117 on the abdomen - which
+turned the figure white in a bright room and hid the bones. The classic adds every face of
+its X-ray body single sided (specific\output.cpp, phd_PutPolygonsSpcXLU, double_sided 0).
+Page 8030's alpha is 240 or more on every texel, so the additive pass's weight by alpha
+changes nothing, and the part's param[0] of 0.5 is the alpha reference of material 6, not
+a weight. Beside the shell the opaque parts were lit as ordinary gear, up to twice the
+light where the shell stops at its full value and the holsters with a gunmetal sheen, and
+the figure added more light than the reference: in the same flooded tunnel the shell adds
+61.6/82.2/83.9 to the wall behind her belly, the reference pictures of the remaster's
+X-ray Lara 41.2/60.7/32.3 (the mean of a front and a side view).
+
+**How.** `specific/hd/hd_lara.cpp`: a table names the X-ray set part by part (`kXray`) -
+OUTFIT_XRAY, the eleven HAND_XRAY_ parts, HOLSTER_PISTOL_XRAY and the three weapons on the
+back - and a part without a row draws nothing in the X-ray look: no face, braid, borrowed
+head or holster rig, no uzi or Desert Eagle holster. An outfit whose body is OUTFIT_XRAY
+takes the set as its own parts. In a level whose floor carries a SKELETON trigger the set
+is planned beside the outfit in a block of slots of its own, on the same slot list and
+bind pose (eight models in RICH2), and `HDLaraFrameParts` lists its parts on request.
+`specific/hd/hd_laradraw.cpp` counts the trigger's squares at the level build and, while
+`lara.skelebob` holds, draws the body and what she holds and wears out of that block, the
+body with its own sheen and its own node 14; an `XRAYLOG` line names the look's edges and
+the models it put on, `HDLOG lara xray` lines the set. `specific/drawlara.cpp`:
+DrawLara__6 hands the frame to the composite when it has the set (`HDLaraDrawXray`), with
+her blob and her light as DrawLara__1 has them and her own hands and back gun put back for
+the length of the draw, and otherwise draws the classic figure as before. The translucency
+is the file's own additive run through `hd_model`'s additive pass, as every additive part
+is drawn (one plus one, no depth write, weighed by the texel's alpha): the green of the
+figure is the art's own and the room's light, and no shader changed.
+`specific/hd/hd_object.cpp` makes room for the block in the plan. The rule is TROne's
+(TROne-main, copy of 2026-10-23, commit a3c0c633: S_InitialisePolyList in
+`hostglue_draw5.cpp`, `lara_build_models` and `lara_head_for_outfit` in
+`game_renderer.cpp`); no code was taken. `docs/Engine-Manual.md` says it. With `hd_build`
+0 none of it runs: the X-ray set exists only inside the HD draw of Lara. The verdict
+census over the fifteen levels is unchanged. `specific/hd/hd_model.cpp`: a model whose
+plan entry asks for it (`HDModelSlot::additiveOneSided`) draws its additive run from the
+front alone - the winding turned away from the eye culled, the other one under a mirrored
+matrix, as the glass does - and its other runs from both sides; `hd_lara.cpp` asks for it
+for every part of the X-ray set, in the level's block and on an outfit that is the X-ray
+body. The bones stay two-sided, because their right half is wound the other way round.
+Every other model keeps both sides, its additive runs included: the classic draws those by
+each face's own double-sided flag, which a .TRM does not carry.
+`specific/hd/hd_model.cpp`: a model whose plan entry asks for it
+(`HDModelSlot::lightAsAdditive`) draws its other runs with the pixel shader's own additive
+switches - the light held under 1.0, no sheen, weighed by the alpha, a glow under the
+water; `hd_lara.cpp` asks for it for every part of the X-ray set. `hd_lara.cpp` keeps the
+set's tone, a choice made from the reference pictures and written down there with its
+measurement: the level 0.70, the ratio of the two lumas, and the hue 0.96/1.06/0.55, the
+ratio of each channel over it. `hd_laradraw.cpp` multiplies the light it hands the set by
+it, the ambient of every node and every light, after the shadow's decision and the light
+log, and the `XRAYLOG` line ends in `tone=`. Every model outside the set is lit as before.
+
+**Commits.** `a62561ea`, `753df221`, `0d6713d7`, `354cee0b`, `3c0c289b`, `03fa2e66`,
+`92cff2d9`.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -16115,3 +16196,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #265 | An item the randomizer adds is drawn, its slot baked or not |
 | #266 | What a cutscene puts into a hand, in HD |
 | #267 | The classic holsters hide with her thighs, a left-out seam keeps its place |
+| #268 | Lara in the X-ray scanner and the X-ray outfit, in HD |

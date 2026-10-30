@@ -648,6 +648,121 @@ namespace
 		return !*a && !*b;
 	}
 
+	/* The X-ray set (hd_lara.h, HDLaraPartXrayModel).
+	 *
+	 * What DrawLara__6 shows while lara.skelebob holds. The classic draw puts
+	 * the level's own X-ray meshes on her (game\draw.cpp,
+	 * SetupSkelebobMeshswaps: LARA_EXTRA_MESH2's head, torso and hands, and
+	 * the HK and the grappling gun as the level's X-ray content of
+	 * PISTOLS_ANIM and UZI_ANIM), draws her skin translucent with
+	 * LARA_EXTRA_MESH1's bones solid inside it, and draws no braid and no
+	 * thigh holster. The remaster ships the look as a set of files in 4\ITEM,
+	 * measured with ModelProbe -name and -bones:
+	 *
+	 *   OUTFIT_XRAY        15 nodes, 21,545 vertices, all on page 8030.
+	 *                      Part 0 is the bones, material 0, opaque, on every
+	 *                      node but the hands (10, 13); part 1 is the shell
+	 *                      of her body, material 6 in the ADDITIVE run, on
+	 *                      all fifteen. Its bones lie 2 to 24 units off the
+	 *                      classic node meshes of RICH2's LARA_SKIN, and the
+	 *                      skull is node 14.
+	 *   HAND_XRAY_<x>      30 files, one for every HAND_BARE_<x>; the eleven
+	 *                      below cover the nodes their bare twins cover,
+	 *                      bones opaque and shell additive, page 8030.
+	 *   HOLSTER_<x>_XRAY   7 files, opaque, page 8030: PISTOL, SHOTGUN, HK
+	 *                      and GRAPPLE are this table's, CROSSBOW,
+	 *                      CROSSBOW_LASER and GRENADE Tomb Raider IV's. None
+	 *                      for the uzis and none for the Desert Eagle.
+	 *
+	 * No X-ray head, braid or face: the skull is the body's own node 14, and
+	 * LARA_HEAD over it is an opaque face fighting the skull for the depth.
+	 * So the set has none of those parts and no holster rig either, and a
+	 * holster with no X-ray file draws nothing - a solid gun on the
+	 * translucent body is the fault the set is there to avoid.
+	 *
+	 * The hull is drawn from the front alone (HDModelSlot::additiveOneSided).
+	 * The classic adds every face of the X-ray body single sided
+	 * (specific\output.cpp, phd_PutPolygonsSpcXLU, double_sided 0, and
+	 * specific\polyinsert.cpp drops the face turned away), while the HD
+	 * path draws every model from both sides - and the hull is a closed
+	 * shell, so both sides put it on every pixel twice. Measured on page
+	 * 8030 at full light: the front layer adds 112/163/117 over the abdomen,
+	 * the back layer a whiter 121/86/127 on top of it. The bones stay double
+	 * sided: their right half is wound the other way round (culled, 8 % of
+	 * their pixels change, the hull's outline loses 0.5 %).
+	 *
+	 * The rule is TROne's (TROne-main, copy of 2026-10-23, commit a3c0c633):
+	 * S_InitialisePolyList in games\tr5\glue\hostglue_draw5.cpp puts
+	 * OUTFIT_XRAY with the XRAY hand and holster set on her while
+	 * lara.skelebob holds, and lara_build_models and lara_head_for_outfit in
+	 * host\render\game_renderer.cpp give that body the same set, no braid and
+	 * no head, worn from the wardrobe as well. TROne keeps the plain holster
+	 * where the set has no X-ray one; this table draws none there. */
+	const struct { int part; const char* model; } kXray[] =
+	{
+		{ HD_LARA_PART_BODY,            "OUTFIT_XRAY" },
+		{ HD_LARA_PART_HAND_REST,       "HAND_XRAY_REST" },
+		{ HD_LARA_PART_HAND_PISTOL,     "HAND_XRAY_PISTOL" },
+		{ HD_LARA_PART_HAND_UZI,        "HAND_XRAY_UZI" },
+		{ HD_LARA_PART_HAND_SHOTGUN,    "HAND_XRAY_SHOTGUN" },
+		{ HD_LARA_PART_HAND_HK,         "HAND_XRAY_HK" },
+		{ HD_LARA_PART_HAND_DEAGLE,     "HAND_XRAY_DEAGLE" },
+		{ HD_LARA_PART_HAND_DEAGLE_LASER, "HAND_XRAY_DEAGLE_LASER" },
+		{ HD_LARA_PART_HAND_GRAPPLE,    "HAND_XRAY_GRAPPLE" },
+		{ HD_LARA_PART_HAND_FLARE,      "HAND_XRAY_FLARE" },
+		{ HD_LARA_PART_HAND_TORCH,      "HAND_XRAY_TORCH" },
+		{ HD_LARA_PART_HAND_CROWBAR,    "HAND_XRAY_CROWBAR" },
+		{ HD_LARA_PART_HOLSTER_PISTOL,  "HOLSTER_PISTOL_XRAY" },
+		{ HD_LARA_PART_BACK_SHOTGUN,    "HOLSTER_SHOTGUN_XRAY" },
+		{ HD_LARA_PART_BACK_HK,         "HOLSTER_HK_XRAY" },
+		{ HD_LARA_PART_BACK_GRAPPLE,    "HOLSTER_GRAPPLE_XRAY" }
+	};
+
+	/* The X-ray tone: what the set's light is multiplied by, channel by
+	 * channel, for every part of it - the hull, the bones, the hands with
+	 * their weapons, the holsters and the weapon on the back alike, each of
+	 * them lit as the hull is (HDModelSlot::lightAsAdditive), so that no
+	 * piece reads as ordinary gear beside the body.
+	 *
+	 * A CHOICE, made from the reference pictures and nothing else: the
+	 * remaster's X-ray Lara in a flooded brick tunnel (front and side) and
+	 * this composite in the same tunnel, its hull drawn one sided. What the
+	 * hull adds to the wall behind the belly, measured as the patch's mean
+	 * less the wall's beside it, in 0..255:
+	 *
+	 *   the remaster, front    47.5 / 63.4 / 33.6
+	 *   the remaster, side     34.9 / 57.9 / 31.0
+	 *   their mean             41.2 / 60.7 / 32.3   luma 54.5
+	 *   this composite         61.6 / 82.2 / 83.9   luma 77.9
+	 *
+	 * The level is the luma ratio, 0.70; the hue the channel ratios over it,
+	 * 0.96 / 1.06 / 0.55 - the green kept, the blue cut. One tone for every
+	 * level and every room: the light it multiplies is the room's own, so a
+	 * bright room stays brighter than a dark one, only greener and lower. */
+	const float kXrayToneLevel = 0.70f;
+	const float kXrayToneHue[3] = { 0.96f, 1.06f, 0.55f };
+
+	const char* xray_model(int part)
+	{
+		for (int i = 0; i < (int)(sizeof(kXray) / sizeof(kXray[0])); i++)
+			if (kXray[i].part == part)
+				return kXray[i].model;
+
+		return 0;
+	}
+
+	// The X-ray body by its file name, so a mod's OUTFIT_XRAY is one too.
+	bool wears_xray(int outfit)
+	{
+		return same(model_of(outfit), xray_model(HD_LARA_PART_BODY));
+	}
+
+	/* The level's X-ray set: planned, on the card, and the body's sheen out
+	 * of its own wardrobe entry. Cleared with the level, like g_has. */
+	bool g_xray_planned[HD_LARA_PART_COUNT] = { false };
+	bool g_xray_has[HD_LARA_PART_COUNT] = { false };
+	float g_xray_sheen[2] = { 0.0f, 1.0f };
+
 	/* Which parts this level can ask for. The body, the face, the braid, the
 	 * rest hands and everything worn always; a hand part only when the level
 	 * really loaded the slot it hangs off. Without a slot list everything the
@@ -978,6 +1093,24 @@ int HDLaraPartTwinSlot(int part)
 	return HD_LARA_TWIN_SLOT_BASE + part;
 }
 
+const char* HDLaraPartXrayModel(int part)
+{
+	return xray_model(part);
+}
+
+int HDLaraPartXraySlot(int part)
+{
+	if (!xray_model(part))
+		return -1;
+
+	return HD_LARA_XRAY_SLOT_BASE + part;
+}
+
+bool HDLaraOutfitIsXray(int outfit)
+{
+	return wears_xray(outfit);
+}
+
 /* The two sides of a hand file. The right arm's two bones against the left
  * arm's two, in that order, because hd_trm breaks an exact tie by the sign of
  * the vertex's x and side `a` is the positive one - measured: the install's
@@ -1020,6 +1153,13 @@ const char* HDLaraPartModel(int outfit, int part)
 
 	if (part == HD_LARA_PART_BODY)
 		return model_of(outfit);
+
+	/* The X-ray body worn from the wardrobe wears the X-ray set as its own
+	 * parts (kXray): its hands and holsters, and no braid, no face and no
+	 * rig, whatever its wardrobe flags say. The lid is built on its own
+	 * neck like any body's. */
+	if (wears_xray(outfit) && part != HD_LARA_PART_NECK_CAP)
+		return xray_model(part);
 
 	/* The gloved twin, and why it is never taken. takes_gloves answers false
 	 * for every outfit, because the wardrobe wears the bare hands in every
@@ -1905,6 +2045,12 @@ int HDLaraPlan(const HDLaraLevel* level, HDModelSlot* out, int max)
 		one.onlyPage = kPart[part].onlyPage;
 		one.onlyNode = kPart[part].onlyNode;
 
+		// The X-ray body worn from the wardrobe: its hull one sided and every
+		// part lit as the hull, the lid on its neck as well (kXray).
+		one.additiveOneSided = wears_xray(level->outfit) && xray_model(part);
+		one.lightAsAdditive = one.additiveOneSided ||
+			(wears_xray(level->outfit) && part == HD_LARA_PART_NECK_CAP);
+
 		/* The mirrored weights of a hand file. Every part
 		 * of kind 1 and no other: those are the files that cover nodes 9, 10,
 		 * 12 and 13, and a file drawn once and mirrored is the only place the
@@ -1969,6 +2115,52 @@ int HDLaraPlan(const HDLaraLevel* level, HDModelSlot* out, int max)
 		 * hd_lara.h. */
 		if (part == HD_LARA_PART_FACE)
 			one.neckNode = HD_LARA_TORSO;
+	}
+
+	/* The X-ray set, in a level that can X-ray her, in its own block of
+	 * slots: the same mask as the outfit's parts - a hand only for a slot
+	 * the level loaded, the worn parts always - and the same bind pose, but
+	 * not the outfit's flags, because the classic X-ray body has its hands
+	 * and its weapons whatever she wears. Nothing is measured on it: the
+	 * throat, the lid and the chest belong to the body she wears. An outfit
+	 * that is the X-ray body has the set on its own slots already. */
+	if (level->xray && !wears_xray(level->outfit))
+	{
+		for (int part = 0; part < HD_LARA_PART_COUNT && written < max; part++)
+		{
+			const char* model = xray_model(part);
+
+			if (!model || !useful[part])
+				continue;
+
+			HDModelSlot& one = out[written++];
+
+			one.slot = HDLaraPartXraySlot(part);
+			one.nodes = HD_LARA_NODES;
+			one.bind = level->bodyBind;
+			one.name = model;
+			one.additiveOneSided = true;
+			one.lightAsAdditive = true;
+
+			if (kPart[part].kind == 1)
+			{
+				one.mirror = HDLaraHandMirror(&one.mirrors);
+				one.mirrorBar = g_fold_bar;
+			}
+
+			// The body where the scan found it, as for the outfit's body.
+			if (part == HD_LARA_PART_BODY)
+			{
+				const int at = HDWardrobeFindFile(model, HD_WARDROBE_SOURCE_46);
+				const HDWardrobeEntry* e = HDWardrobeAt(at);
+
+				if (e)
+				{
+					one.path = HDWardrobePath(at);
+					one.mod = e->mod;
+				}
+			}
+		}
 	}
 
 	return written;
@@ -2373,6 +2565,68 @@ bool HDLaraLevelBuild(const HDLaraLevel* level, HDLaraStats* stats)
 			HDWardrobeFromWord(e ? e->fromSkinSheen : HD_WARDROBE_FROM_DEFAULT));
 	}
 
+	/* The X-ray set (HDLaraPlan): what of it is on the card, in one line,
+	 * and the body's sheen out of its own wardrobe entry - the outfit's,
+	 * when the outfit is the X-ray body. Nothing of it counts in `stats`,
+	 * which is the outfit's; the line carries its own numbers. */
+	{
+		const bool worn = wears_xray(level->outfit);
+		const HDWardrobeEntry* e = worn ? props_of(level->outfit)
+			: HDWardrobeAt(HDWardrobeFindFile(xray_model(HD_LARA_PART_BODY),
+				HD_WARDROBE_SOURCE_46));
+
+		g_xray_sheen[0] = e ? e->sheen : 0.0f;
+		g_xray_sheen[1] = e ? e->sheenPower : 1.0f;
+
+		if (level->xray && !worn)
+		{
+			bool useful[HD_LARA_PART_COUNT];
+			int planned = 0, loaded = 0, vertices = 0;
+			float worst = 0.0f;
+
+			plan_mask(level, useful);
+
+			for (int part = 0; part < HD_LARA_PART_COUNT; part++)
+			{
+				const char* model = xray_model(part);
+
+				if (!model || !useful[part])
+					continue;
+
+				const int slot = HDLaraPartXraySlot(part);
+
+				g_xray_planned[part] = true;
+				planned++;
+
+				if (!HDModelHas(slot))
+				{
+					note("the X-ray set: %s.TRM did not load - %s stays out "
+						"of the X-ray look", model, HDLaraPartLabel(part));
+					continue;
+				}
+
+				float mean = 0.0f, most = 0.0f;
+
+				g_xray_has[part] = true;
+				loaded++;
+				vertices += HDModelVertices(slot);
+
+				if (HDModelBindDrift(slot, &mean, &most) && most > worst)
+					worst = most;
+			}
+
+			note("the X-ray set for this level's SKELETON triggers: %d of %d "
+				"parts on the card, %d vertices, worst drift %.0f, body "
+				"sheen %.2f/%.0f%s", loaded, planned, vertices, worst,
+				g_xray_sheen[0], g_xray_sheen[1],
+				g_xray_has[HD_LARA_PART_BODY] ? "" : " - no X-ray body, so "
+				"the X-ray look stays DrawLara__6's");
+		}
+		else if (level->xray)
+			note("the X-ray set for this level's SKELETON triggers: the outfit "
+				"is the X-ray body and wears it already");
+	}
+
 	g_active = true;
 	return true;
 }
@@ -2396,7 +2650,12 @@ void HDLaraLevelEnd()
 		g_twin[i] = false;
 		g_planned[i] = false;
 		g_coverage[i] = 0;
+		g_xray_planned[i] = false;
+		g_xray_has[i] = false;
 	}
+
+	g_xray_sheen[0] = 0.0f;
+	g_xray_sheen[1] = 1.0f;
 }
 
 bool HDLaraActive()
@@ -2443,6 +2702,43 @@ bool HDLaraHasPartTwin(int part)
 bool HDLaraPartPlanned(int part)
 {
 	return part >= 0 && part < HD_LARA_PART_COUNT && g_planned[part];
+}
+
+bool HDLaraXrayPlanned(int part)
+{
+	return part >= 0 && part < HD_LARA_PART_COUNT && g_xray_planned[part];
+}
+
+bool HDLaraHasXrayPart(int part)
+{
+	return part >= 0 && part < HD_LARA_PART_COUNT && g_xray_has[part];
+}
+
+bool HDLaraXrayReady()
+{
+	if (!g_active)
+		return false;
+
+	return wears_xray(g_outfit) ? g_has[HD_LARA_PART_BODY]
+		: g_xray_has[HD_LARA_PART_BODY];
+}
+
+void HDLaraXrayTone(float* level, float* hue)
+{
+	if (level)
+		*level = kXrayToneLevel;
+
+	for (int k = 0; hue && k < 3; k++)
+		hue[k] = kXrayToneHue[k];
+}
+
+void HDLaraXraySheen(float* strength, float* power)
+{
+	if (strength)
+		*strength = g_xray_sheen[0];
+
+	if (power)
+		*power = g_xray_sheen[1];
 }
 
 void HDLaraPartSheen(int part, float* strength, float* power)
@@ -2623,7 +2919,8 @@ bool HDLaraPartSoft(int part, const char** name)
 
 /* --------------------------------------------------------- the frame -- */
 
-int HDLaraFrameParts(const HDLaraFrame* now, HDLaraDraw* out, int max)
+int HDLaraFrameParts(const HDLaraFrame* now, HDLaraDraw* out, int max,
+	bool xray)
 {
 	if (!now || !out || max <= 0 || !g_active)
 		return 0;
@@ -2635,14 +2932,15 @@ int HDLaraFrameParts(const HDLaraFrame* now, HDLaraDraw* out, int max)
 
 	int written = 0;
 
-	/* One entry, if the part is on the card at all. A macro rather than a
-	 * lambda so that the file keeps the plain C shape the rest of
-	 * specific\hd is in. */
+	/* One entry, if the part is on the card at all - in the X-ray look, if
+	 * its X-ray twin is. A macro rather than a lambda so that the file keeps
+	 * the plain C shape the rest of specific\hd is in. */
 	#define HD_LARA_ADD(which_, mask_) \
 		do { \
 			const int p_ = (which_); \
 			const unsigned int m_ = (mask_); \
-			if (p_ >= 0 && written < max && HDLaraHasPart(p_)) \
+			if (p_ >= 0 && written < max && (xray ? HDLaraHasXrayPart(p_) \
+				: HDLaraHasPart(p_))) \
 			{ \
 				out[written].part = p_; \
 				out[written].nodeMask = m_; \

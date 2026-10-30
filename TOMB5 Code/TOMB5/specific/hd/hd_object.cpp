@@ -2690,8 +2690,8 @@ static void ObjectLevelBuild(const char* installRoot, const char* stem,
 	 * really loaded, and after the ordinary slots so that a reader of the
 	 * verdict table finds the objects where they were. */
 	{
-		HDModelSlot wardrobe[HD_LARA_PART_COUNT];
-		const int parts = HDLaraDrawPlan(wardrobe, HD_LARA_PART_COUNT);
+		HDModelSlot wardrobe[HD_LARA_PLAN_MAX];
+		const int parts = HDLaraDrawPlan(wardrobe, HD_LARA_PLAN_MAX);
 
 		for (int i = 0; i < parts; i++)
 			wanted.push_back(wardrobe[i]);

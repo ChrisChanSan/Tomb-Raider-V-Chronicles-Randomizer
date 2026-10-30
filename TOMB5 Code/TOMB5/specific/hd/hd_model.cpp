@@ -308,6 +308,12 @@ namespace
 		int pointsBlended = 0;
 		bool keepPoints = false;
 
+		// The additive run from the front alone (HDModelSlot).
+		bool additiveOneSided = false;
+
+		// Every run lit as the additive run is (HDModelSlot).
+		bool lightAsAdditive = false;
+
 		/* A face's lips, or null - see Lips above. Owned by the model and
 		 * given back by free_model. */
 		Lips* lips = 0;
@@ -3051,6 +3057,17 @@ namespace
 				constants[3] = 0.0f;
 			}
 
+			/* A model lit as its additive run is (HDModelSlot::
+			 * lightAsAdditive) takes the same two switches in its other runs:
+			 * the light under 1.0, no sheen, weighed by the alpha, a glow
+			 * under the water and no overbright add. The alpha test of the
+			 * alpha run stays its own. */
+			if (model.lightAsAdditive && !glassStep)
+			{
+				constants[1] = 1.0f;
+				constants[3] = 0.0f;
+			}
+
 			g_device->SetPixelShaderConstantF(4, constants, 1);
 
 			/* The cut-out alpha test in the opaque pass runs on the ranges
@@ -3072,6 +3089,13 @@ namespace
 			 * sorts those parts into the opaque run, and drawn without the
 			 * test their holes are a solid dark plate. Everything in the
 			 * alpha run is tested at the same 0.5. */
+			/* An additive run drawn from the front alone
+			 * (HDModelSlot::additiveOneSided) culls the winding turned away
+			 * from the eye for this pass, as the glass below does, unless the
+			 * draw culls already; the end of the step puts both sides back. */
+			const bool oneSided = pass == 2 && model.additiveOneSided &&
+				cull == HD_MODEL_CULL_NONE;
+
 			if (pass == 2)
 			{
 				g_device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
@@ -3079,6 +3103,10 @@ namespace
 				g_device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ONE);
 				g_device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ONE);
 			}
+
+			if (oneSided)
+				g_device->SetRenderState(D3DRS_CULLMODE,
+					HDMatrixMirrors(nodeMatrix) ? D3DCULL_CW : D3DCULL_CCW);
 
 			/* The glass, added as the classic adds its see-through faces
 			 * (ONE / ONE, specific/polyinsert.cpp, case 2), with no depth
@@ -3244,6 +3272,9 @@ namespace
 				g_device->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
 				g_device->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
 			}
+
+			if (oneSided)
+				g_device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
 
 			// The blend factors and the cull as the step found them.
 			if (glassStep)
@@ -4224,6 +4255,8 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 				// A twin inherits it with the rest of the row - it is drawn
 				// beside the model that asked.
 				model.keepPoints = slots[k].keepPoints;
+				model.additiveOneSided = slots[k].additiveOneSided;
+				model.lightAsAdditive = slots[k].lightAsAdditive;
 
 				if (slots[k].bind)
 				{

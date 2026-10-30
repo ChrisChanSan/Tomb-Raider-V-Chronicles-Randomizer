@@ -286,6 +286,26 @@ struct HDModelSlot
 	 * sends the bind-pose box corners where no vertex of the model is, and a
 	 * box-based rule would lift a model by the corner's number. */
 	bool keepPoints = false;
+
+	/* The additive run drawn from the front alone.
+	 *
+	 * Every model of the HD path is double sided, and for an additive layer
+	 * that is a closed shell the back half is added a second time over the
+	 * front: the X-ray body's hull, drawn from both sides, puts two layers on
+	 * every pixel it covers. With this set the additive pass culls the
+	 * winding turned away from the eye - the other one under a mirrored
+	 * matrix, as the glass does - and the opaque and alpha-tested runs stay
+	 * double sided. A draw that culls already keeps its own cull. */
+	bool additiveOneSided = false;
+
+	/* Every run of the model lit as its additive run is lit: the light held
+	 * under 1.0 where the opaque and alpha-tested runs take up to twice it,
+	 * no sheen, the texel weighed by its alpha, and under the water dimmed as
+	 * a glow - the pixel shader's own additive branch (hd_model.hlsl, gPass.y
+	 * and gPass.w), switched on for the model's other runs. For a set whose
+	 * opaque pieces stand inside a translucent shell, so that no piece is lit
+	 * as ordinary gear beside it. */
+	bool lightAsAdditive = false;
 };
 
 /* What the classic pose did to one slot, for the caller's log line - the

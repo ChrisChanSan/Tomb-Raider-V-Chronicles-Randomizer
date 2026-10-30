@@ -4126,7 +4126,7 @@ laratype=… data3=…` line.
 | What | Why |
 |---|---|
 | Young Lara | a decision, not a limit. The models exist in the remaster. |
-| The skeleton cheat (`skelebob`) | its own draw path and its own overlay meshes; the wardrobe has neither. |
+| The X-ray scanner's figure (`skelebob`), only where the remaster's X-ray set cannot be loaded | see *The X-ray scanner* below - with the set on the card it is drawn HD. |
 | The muzzle flash, the gun shells, the flare in flight | drawn by their own routines outside `DrawLara` and never part of the composite. |
 | The diving suit's two thrusters | they are a separate object on her torso, not a part of her body, and the remaster's wardrobe has no model for them. They keep being drawn the classic way **on top of** the HD suit — two small low-resolution pieces, against a diving suit with nothing on its back. |
 | The catsuit's environment map | the classic catsuit is drawn through the engine's environment map, a second view-dependent pass an HD model does not have. The HD catsuit shines instead through the outfit sheen described above - a latex highlight from the engine's own lights, out of a table named per material, because the wardrobe's pages carry no gloss mask to read - so it glints, but not with the classic reflection. |
@@ -4169,6 +4169,48 @@ opens with `HIDELOG level=JOBY5 cut=32 frame=… mesh_bits=0x81FF01FF
 hidden=1,2,3,4,5,6 hd=- drawn=DrawLara__4 holsters=none`, and a second line
 with `hidden=none` and `holsters=LR` follows when frame 440 or a skip gives
 her legs back.
+
+**The X-ray scanner.** In Escape with the Iris the scanner X-rays Lara while
+she walks through it: 36 squares in two of its rooms carry a trigger that sets
+the engine's X-ray state for every frame she stands on one. The classic
+game then draws her through a draw path of its own - her skin translucent, the
+level's own bone meshes solid inside it, no braid and no thigh holsters, the HK
+and the grappling gun as the level's own X-ray meshes. In HD the composite
+draws the remaster's X-ray set in her outfit's place: the X-ray body
+`OUTFIT_XRAY`, whose bones are solid and whose shell is translucent through the
+file's own additive material - the green figure is the art and the room's
+light, no shader of its own - with its own skull and headset; the X-ray hands
+`HAND_XRAY_*` with whatever she holds; the X-ray pistols on her thighs and the
+X-ray shotgun, HK or grappling gun on her back. No braid and no face. The
+shell is drawn from the front only, as the classic game draws its X-ray body:
+every other HD model is drawn from both sides, and from both sides the closed
+shell lies on every pixel twice - the back half adds a second, whiter layer
+that turned the figure white in a bright room and hid the bones. The bones
+themselves stay two-sided. Every part of the set - the shell, the bones, the
+hands with what they hold, the holsters and the weapon on her back - is lit as
+the shell is, never over the light's full value and without a sheen, and takes
+one tone: the room's light at seven tenths, its blue cut to about half and its
+green kept, so that the figure is the dark green of the remaster's own X-ray
+Lara in the same flooded tunnel and no piece looks like ordinary gear beside
+her. The tone is a choice made from those reference pictures (the shell's added
+light over the wall behind her belly, theirs against ours), and in a bright
+room she stays brighter than in a dark one, only greener. The install has no
+X-ray file for the uzis' holsters or the Desert Eagle's, and those draw nothing
+while she is X-rayed. The set, eight models in Escape with
+the Iris, is loaded only in a level whose floor carries such a trigger, and the
+frame she steps off the scanner draws her outfit again. A mirror shows her the
+same way. Where the set cannot be loaded, the classic X-ray figure is drawn as
+before. The X-ray outfit of the outfit changer (*Xray*) wears the same set
+wherever it is worn: X-ray hands and holsters, its own skull, no braid and no
+face. With `-log` an `XRAYLOG` line says when the look comes on, whenever what
+draws it changes, and when it goes off - `XRAYLOG level=RICH2 cut=0 frame=-1
+room=… xray=on set=block body=OUTFIT_XRAY right=HAND_XRAY_REST
+left=HAND_XRAY_REST holsters=-/- back=HOLSTER_HK_XRAY drawn=hd
+tone=0.70/0.96,1.06,0.55`, then `xray=off set=- drawn=hd tone=-`; `set=worn`
+for the X-ray outfit, `set=classic` with `drawn=DrawLara__6 tone=-` for the
+classic figure. The level build writes
+`HDLOG level=RICH2 lara xray squares=36 ready=1 worn=0` and one
+`HDLOG … lara xray part=…` line per part.
 
 **First person** drops the same three things from the HD Lara that it
 drops from the classic one: the head, the face and the braid, all three of

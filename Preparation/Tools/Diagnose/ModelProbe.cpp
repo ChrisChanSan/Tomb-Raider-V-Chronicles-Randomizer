@@ -13372,6 +13372,12 @@ int main(int argc, char** argv)
 
 	for (int i = 2; i < argc; i++)
 	{
+		/* Two chains of else-ifs, not one: a single chain of all the options
+		 * passes the compiler's limit of nested blocks (C1061). The second
+		 * starts with the shadow's options and is asked only for an argument
+		 * the first does not take; the order of the tests is the old one. */
+		bool taken = true;
+
 		if (!_stricmp(argv[i], "-name") && i + 1 < argc)
 			name = argv[++i];
 		else if (!_stricmp(argv[i], "-lips") && i + 2 < argc)
@@ -13643,7 +13649,13 @@ int main(int argc, char** argv)
 			softOffset[1] = (float)atof(argv[++i]);
 			softOffset[2] = (float)atof(argv[++i]);
 		}
-		else if (!_stricmp(argv[i], "-shadowmap"))
+		else
+			taken = false;
+
+		if (taken)
+			continue;
+
+		if (!_stricmp(argv[i], "-shadowmap"))
 			shadowMap = true;
 		else if (!_stricmp(argv[i], "-shadowcast"))
 			shadowCast = true;

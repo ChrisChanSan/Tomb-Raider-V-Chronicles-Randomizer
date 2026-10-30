@@ -475,6 +475,7 @@
     <ClInclude Include="TOMB5\game\bat.h" />
     <ClInclude Include="TOMB5\game\box.h" />
     <ClInclude Include="TOMB5\game\camera.h" />
+    <ClInclude Include="TOMB5\game\carrier_rule.h" />
     <ClInclude Include="TOMB5\game\chef.h" />
     <ClInclude Include="TOMB5\game\collide.h" />
     <ClInclude Include="TOMB5\game\control.h" />

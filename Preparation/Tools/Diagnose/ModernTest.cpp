@@ -110,6 +110,9 @@
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_sky_cap.h"
 // A lift door's delay kept while its pad is held (lift_door_rule).
 #include "../../../TOMB5 Code/TOMB5/game/lift_door_rule.h"
+// Who takes a pickup in reach at level start: the search objects before the
+// enemies (carrier_pass).
+#include "../../../TOMB5 Code/TOMB5/game/carrier_rule.h"
 // A room group stored off its height: the count, the pick (yshift_rule).
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_scan.h"
 // The fog bulbs' body: the span, the column, the veil, the breath (fog_body),
@@ -30760,6 +30763,174 @@ static void xray_weapons()
 	free(model);
 }
 
+// One item of a made-up level for carrier_walk.
+struct CarrierTestItem
+{
+	int object;
+	bool intelligent;
+	bool pickup;		// a slot with PickUpCollision
+	int ocb;
+	int room, x, y, z;
+};
+
+/* GetCarriedItems (game\setup.cpp) over a made-up level, in its order: the
+ * passes from the first, each over the items in index order; a carrier
+ * takes every pickup in its own room and reach that no carrier before it
+ * took, a wall grab (OCB 2 or 9) never. holder[i] receives the carrier of
+ * item i, -1 for none. */
+static void carrier_walk(const CarrierTestItem* t, int n, int* holder)
+{
+	for (int i = 0; i < n; i++)
+		holder[i] = -1;
+
+	for (int pass = 0; pass < CARRIER_PASSES; pass++)
+		for (int c = 0; c < n; c++)
+		{
+			if (CarrierPass(t[c].object, t[c].intelligent) != pass)
+				continue;
+
+			for (int i = 0; i < n; i++)
+			{
+				const CarrierTestItem& p = t[i];
+
+				if (p.pickup && holder[i] < 0 && p.room == t[c].room &&
+					abs(t[c].x - p.x) < 512 && abs(t[c].y - p.y) < 256 &&
+					abs(t[c].z - p.z) < 512 && p.ocb != 2 && p.ocb != 9)
+					holder[i] = c;
+			}
+		}
+}
+
+/* Who takes a pickup in reach at level start (game\carrier_rule.h): the
+ * pass of each kind of slot; made-up levels walked the way GetCarriedItems
+ * walks them; and the engine's own text, which runs the passes outside the
+ * index loop and asks CarrierPass. */
+static void carrier_pass()
+{
+	printf("who takes a pickup in reach at level start\n");
+
+	// The slots by number (game\objects.h).
+	const int dog = 85, hitman = 67, guardian = 65, search4 = 170;
+	const int secret = 223, imp_rock = 163, laser_sight = 351;
+	long right = 0;
+
+	for (int s = CARRIER_SEARCH_OBJECT1; s <= CARRIER_SEARCH_OBJECT3; s++)
+		right += CarrierPass(s, false) == CARRIER_PASS_SEARCH;
+	ok(right == 5, "carrier: SEARCH_OBJECT1 to 3 and the MIPs between, pass 0",
+		right, 5);
+	ok(CarrierPass(search4, false) == -1 && CarrierPass(imp_rock, false) == -1,
+		"carrier: SEARCH_OBJECT4 and the slot before the range carry nothing",
+		CarrierPass(search4, false), -1);
+	ok(CarrierPass(dog, true) == CARRIER_PASS_ENEMY,
+		"carrier: an intelligent slot, pass 1", CarrierPass(dog, true), 1);
+	ok(CarrierPass(hitman, true) == CARRIER_PASS_ENEMY,
+		"carrier: slot 67 stays an enemy", CarrierPass(hitman, true), 1);
+	ok(CarrierPass(CARRIER_CYBORG, true) == -1,
+		"carrier: the pool cyborg carries nothing",
+		CarrierPass(CARRIER_CYBORG, true), -1);
+	ok(CarrierPass(dog, false) == -1 && CarrierPass(guardian, false) == -1,
+		"carrier: a slot not marked intelligent carries nothing",
+		CarrierPass(dog, false), -1);
+	ok(CarrierPass(secret, false) == -1 &&
+		CarrierPass(laser_sight, false) == -1,
+		"carrier: a pickup carries nothing", CarrierPass(secret, false), -1);
+	ok(CARRIER_PASS_SEARCH < CARRIER_PASS_ENEMY && CARRIER_PASSES == 2,
+		"carrier: the search objects' pass runs first", CARRIER_PASSES, 2);
+	ok(!strcmp(CarrierPassName(CARRIER_PASS_SEARCH), "search") &&
+		!strcmp(CarrierPassName(CARRIER_PASS_ENEMY), "enemy"),
+		"carrier: the passes' words in the CARRYLOG line", 0, 0);
+
+	// A dog first in the table, in front of a cupboard that holds a secret.
+	const int shelf = CARRIER_SEARCH_OBJECT3;
+	const CarrierTestItem cupboard[] =
+	{
+		{ dog,    true,  false, 0, 52, 64000, 6912, 55400 },
+		{ secret, false, true,  0, 52, 64000, 6912, 55808 },
+		{ shelf,  false, false, 0, 52, 64000, 6912, 55808 },
+		{ 349,    false, true,  0, 52, 64000, 6912, 55000 }	// a medipack
+	};
+	int holder[8];
+
+	carrier_walk(cupboard, 4, holder);
+	ok(holder[1] == 2, "carrier: the cupboard keeps its secret from the dog",
+		holder[1], 2);
+	ok(holder[3] == 0, "carrier: the dog takes what no search object reaches",
+		holder[3], 0);
+
+	// Two of one kind: the lower index, as before; a wall grab stays.
+	const CarrierTestItem pairs[] =
+	{
+		{ shelf,  false, false, 0, 1, 0, 0, 0 },
+		{ dog,    true,  false, 0, 1, 0, 0, 0 },
+		{ shelf,  false, false, 0, 1, 100, 0, 0 },
+		{ secret, false, true,  0, 1, 50, 0, 0 },
+		{ dog,    true,  false, 0, 2, 0, 0, 0 },
+		{ dog,    true,  false, 0, 2, 0, 0, 100 },
+		{ secret, false, true,  0, 2, 0, 0, 50 },
+		{ secret, false, true,  2, 1, 0, 0, 0 }		// pried off the wall
+	};
+
+	carrier_walk(pairs, 8, holder);
+	ok(holder[3] == 0, "carrier: of two search objects the lower index",
+		holder[3], 0);
+	ok(holder[6] == 4, "carrier: of two enemies the lower index", holder[6],
+		4);
+	ok(holder[7] == -1, "carrier: a wall grab stays on its wall", holder[7],
+		-1);
+
+	// The reach: strict, in the carrier's own room, the cyborg in none.
+	const CarrierTestItem reach[] =
+	{
+		{ CARRIER_CYBORG, true,  false, 0, 3, 0, 0, 0 },
+		{ secret,         false, true,  0, 3, 0, 0, 0 },
+		{ dog,            true,  false, 0, 4, 0, 0, 0 },
+		{ secret,         false, true,  0, 4, 511, -255, 511 },
+		{ secret,         false, true,  0, 4, 512, 0, 0 },
+		{ secret,         false, true,  0, 4, 0, 256, 0 },
+		{ secret,         false, true,  0, 5, 0, 0, 0 },
+		{ search4,        false, false, 0, 4, 0, 0, -300 },
+		{ secret,         false, true,  0, 4, 0, 0, -300 }
+	};
+
+	carrier_walk(reach, 9, holder);
+	ok(holder[1] == -1, "carrier: nothing goes to the cyborg", holder[1], -1);
+	ok(holder[3] == 2, "carrier: 511 across and 255 up is in reach",
+		holder[3], 2);
+	ok(holder[4] == -1 && holder[5] == -1,
+		"carrier: 512 across or 256 up is out of reach", holder[4], -1);
+	ok(holder[6] == -1, "carrier: another room is out of reach", holder[6],
+		-1);
+	ok(holder[8] == 2, "carrier: SEARCH_OBJECT4 leaves it to the enemy",
+		holder[8], 2);
+
+	// The engine's own walk: the passes outside the index loop, each item
+	// asked for its pass, the old test gone, the pass in the line.
+	char* setup = hd_switch_text("../../game/setup.cpp");
+	static char body[8192];
+
+	glass_body(setup, "void GetCarriedItems()", body, sizeof(body));
+	ok(strstr(body, "for(pass=0;pass<CARRIER_PASSES;pass++)"
+		"for(lp=0;lp<level_items;lp++)baddy=&items[lp];"
+		"obj=&objects[baddy->object_number];"
+		"if(CarrierPass(baddy->object_number,obj->intelligent)!=pass)"
+		"continue;r=&room[baddy->room_number];") != 0,
+		"carrier: GetCarriedItems runs the passes and asks CarrierPass",
+		body[0] != 0, 1);
+	right = hd_switch_count(body, "SEARCH_OBJECT") +
+		hd_switch_count(body, "CYBORG") +
+		hd_switch_count(body, ".intelligent");
+	ok(right == 0, "carrier: no second test of the kinds beside the rule",
+		right, 0);
+	right = hd_switch_count(body, "%spass=%s\",") +
+		hd_switch_count(body, "\"carried\",CarrierPassName(pass));");
+	ok(right == 2, "carrier: the CARRYLOG line ends on the pass", right, 2);
+	ok(hd_switch_count(setup, "\"carrier_rule.h disagrees\"") == 1,
+		"carrier: setup.cpp holds the rule's slots to the enum",
+		hd_switch_count(setup, "\"carrier_rule.h disagrees\""), 1);
+
+	free(setup);
+}
+
 int main()
 {
 	printf("ModernTest - the arithmetic of the modern control\n");
@@ -30988,6 +31159,7 @@ int main()
 	thruster_move();
 	thruster_wiring();
 	xray_weapons();
+	carrier_pass();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

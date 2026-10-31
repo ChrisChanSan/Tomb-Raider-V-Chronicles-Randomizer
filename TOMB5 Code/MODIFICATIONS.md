@@ -17163,6 +17163,71 @@ stands after #284's, built on a branch of its own at the same time.
 
 **Commits.** `66c57ce3`.
 
+### JOBY2's cutscene soldier as a pool enemy: the brawler on a slot of his own (#288)
+
+2026-10-31.
+
+**What.** The soldier of JOBY2's last cutscene, the man in the tank top and the camouflage
+trousers on the submarine's deck, is an enemy of the randomizer's pool: `BRAWLER`, engine
+slot 471, behind `MESHSWAP_CROSS_CRANEGUY` (`NUMBER_OBJECTS` 472, `SLOT_FILE_BOUNDARY`
+stays 460). His slot carries his own meshes and the chef's animations; he runs the chef's
+initialise, control, collision and setup block, strikes with his bare fist and dies the
+chef's death, the soldier family's borrowed gunshot death. He hunts as soon as his trigger
+wakes him, whatever his OCB says. `Balance.txt` gains `HP_Brawler` (120) and
+`DMG_Brawler_Fist` (400), twice the chef's 60 and 200. The chef is unchanged: OCB bit 0
+makes a chef hunt, and the vanilla chef of joby3 (item 186, OCB 0) stays at his cutting
+board.
+
+**Why.** Core built him as a cutscene actor only: slot 439, `ANIMATING12_MIP`, 15 meshes,
+one placeholder animation (714), no control, and no room of any level holds an item of the
+slot. Cutscene 25 draws him twice, actors 1 and 2 on the one mesh list, both visible from
+frame 1485 to 1622 and from 1822 to the end. His bone tree is the chef's to the last word
+(`BoneCheck joby2.trc 439 joby3.trc 87`: 0 of 14 bones deviating), so the chef's set - 56
+animations from 645, of which the first 12 are real - moves him joint for joint; posed
+vertex by vertex on the chef's rest frame his meshes stand 795 high inside the frame's
+stored box of 797, where the chef's own measure 798. A slot of his own and not the chef's:
+the chef's slot carries the chef's meshes, and one level can hold both. The hunt is his
+slot's rule and not an OCB the randomizer writes, because no kitchen exists for him
+anywhere, and that leaves the chef's OCB rule and the vanilla chef exactly as they were.
+The fist: the chef strikes with mesh 13, the hand that holds the knife; on him it is an
+empty hand, a box of eight vertices 85 units long, so the blood of a hit comes from the
+middle of its knuckle face, `{ 4, 72, 15, 13 }`, and not from the knife's `{ 0, 200, 0 }`,
+which would lie 115 units past his knuckles. Core has no value for him, so both new lines
+repeat their standard in the vanilla column and the generated template names no original.
+
+**How.** `game/chef_rule.h` is new and engine-free: `ChefHunts` (the brawler always, a
+chef by OCB bit 0) and `BrawlerAnimBase` (his own set when his record carries one, the
+chef's for a record without, the record as it came when there is neither). `game/chef.cpp`
+reads every animation from the item's own slot (`InitialiseChef`, the stub death), asks
+`ChefHunts` in state 1 and strikes for the brawler with `balance.dmgBrawlerFist`, `fist`
+and the name `brawler` in the scene-hold refusal. `game/setup.cpp` carries the `BRAWLER`
+block, a copy of the chef's that resolves the anchor first and writes `hit_points` 120,
+and checks the rule's slot numbers against the enum. `game/objects.h` holds the slot,
+`game/balance.cpp` / `.h` the two lines, `specific/hd/hd_bind.cpp` / `.h` the slot's name
+and `HD_SLOT_COUNT` 472. The HD model follows the meshes: the sidecar's line `donor 471
+joby2 439` binds him through JOBY2's .MAP to `ANIMATING12_MIP_JOBY2`, which the installed
+Remaster carries (`MapProbe -hdm` on a randomized ANDREA1: HD if the skeleton fits,
+`donor_map`; `ModelProbe` draws the model on its slot 471 with all 15 nodes covered), so
+he takes no hand-table line; without the installation he draws classic. The strike's
+sounds stay the chef's: 89 and 187 from his anim commands, which every campaign level
+carries, 190, the chef's cry, which the import brings from joby3, and the hard-wired thud
+70. His items save like the chef's - position, hit points, flags, animation - and an older
+savegame holds no item of the slot. `ModernTest` gains the group `brawler_rule`, 22
+checks, the two rules and the engine's own text. No draw path changed: the classic and the
+HD drawing of the slot are the generic ones, so there is no `hd_build` parity to claim.
+
+**Decisions.** The randomizer writes OCB 0 for him and no spawn row, since his hunt does
+not read it. The strike range stays the chef's: the control starts a strike when Lara is
+within 683 units of its pivot, the knife's sphere reaches at most 473 units ahead of the
+chef and the fist's 345 ahead of him (both mesh sets posed on the chef's strike, animation
++2), so against a Lara who stands still at that distance both strike the air, the brawler
+more often. The stealth cutscenes of joby3 (`stealth3_start` and `stealth3_end` in
+`game/deltapak.cpp`) list the chef and five soldier slots and not him, as they list no
+other pool enemy.
+
+**Commits.** `99f30980` (the slot, the rule, the control, the lines), `2999d664`
+(ModernTest), `987200a5` (BoneCheck's script).
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -17297,6 +17362,27 @@ new.
   earlier void of that trigger is gone (`core/LevelFix.h`,
   `Preparation/Tools/ZoneAnalysis.ps1`). `docs/Randomizer-Manual.md` says all
   three.
+
+- **#288 - the brawler, a two-donor composite.** `core/Tr5Level.h`,
+  `core/Tr5Transfer.cpp`: `copyMoveableFrom` takes a mesh source beside its source - the
+  meshes, their texinfos and texture pages out of one slot, the bones, animations, state
+  changes, frames, anim commands and their sounds out of the other - refuses unless the
+  two bone trees agree word for word, and reports what it brought. `core/ApplyPatch.cpp` /
+  `.h`: `animsFromLevel` / `animsFromSlot` on a `moveableAdds` entry, the mesh donor in
+  the sidecar's donor line, and one note per composite, `IMPORT composite slot=471
+  meshes=joby2:439 anims=joby3:87 nodes=15 animations=12 sounds=1 pages=6 texinfos=153`
+  into a vanilla ANDREA1 (the pages and texinfos a level already holds are counted out).
+  `core/Randomizer.cpp` / `.h`, `gui/Language.cpp`: the brawler's row - slot 471, meshes
+  joby2:439, animations joby3:87, `animCount` 12, `baseSlot` 460 for the borrowed death -
+  measured by the anim donor's rest pose, no clone rule for a composite, so joby2 may take
+  him, "Brawler" in the enemy list ("Raufbold" in German), 471 a carrier. A new pool
+  member changes every cross draw after it; a build with only his row removed gives the
+  base's bytes, all 39 `.trc`, `.hdm` and log files of the thirteen campaign levels at
+  seed 380 plain and with `mix cross allsanity 8 weapons items20 weather`, at seed 1 with
+  `mix cross 8 weapons` and at seed 77 with `mix cross allsanity 8 items20`, and with the
+  row a plain run stays byte-identical too. Over ten seeds he stands 5 to 14 times per
+  campaign with `mix cross allsanity 8` (89 in all) and 2 to 14 with `mix cross 8` (68),
+  and joby3's item 186 keeps type 87 and OCB 0 in every run (`bb26f34e`).
 
 ## 4. Building this yourself
 
@@ -17465,3 +17551,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #283 | The openings take no room linked only through a flipmap twin |
 | #284 | A Zip call with no scene ends on a skip as one under a scene does |
 | #285 | The frame a flyby ends on is drawn with the camera it leaves |
+| #288 | JOBY2's cutscene soldier as a pool enemy: the brawler on a slot of his own; section 3 (the randomizer) |

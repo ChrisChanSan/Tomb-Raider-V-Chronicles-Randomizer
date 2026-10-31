@@ -228,6 +228,27 @@ Special cases - own rules
 	      project; they arrive in his own fallback slot 468 (see
 	      Cross Enemy Pool.txt).
 
+	6 BRAWLER (chef.cpp, engine slot 471) - added by this project. The soldier
+	  of JOBY2's last cutscene, Core's actor ANIMATING12_MIP (slot 439): fifteen
+	  meshes, one placeholder animation, no control, never an item in a room.
+	  His bone tree is the chef's to the last offset, so the randomizer builds
+	  him as a COMPOSITE (Cross Enemy Pool.txt): his meshes out of joby2, the
+	  chef's twelve real animations out of joby3, and he runs ChefControl with
+	  an empty fist - mesh 13, where the chef holds the knife.
+
+	  What is different about him in play:
+	    - He hunts whatever his OCB says (chef_rule.h): no kitchen exists for
+	      him, and the chef's own OCB rule stays as it was.
+	    - HP_Brawler 120 and DMG_Brawler_Fist 400, twice the chef's.
+	    - His fist's sphere reaches 345 units ahead of him, the knife's 473
+	      ahead of the chef, on the chef's strike range of 683 - against a
+	      Lara who stands still at that range he strikes the air more often
+	      than the chef.
+	    - He dies the chef's borrowed soldier death; the guard 460 travels
+	      along as its donor, as with the chef.
+	    - Six of joby2's texture pages and 153 texinfos, about 1.18 MB in a
+	      level that holds none of them yet.
+
 
 ================================================================
 Still open

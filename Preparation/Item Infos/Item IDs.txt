@@ -37,7 +37,7 @@ Revolver 				347
 Revolver/Deagle_Ammo	348
 }
 
-// Six enemy slots the randomizer itself uses, and a
+// Seven enemy slots the randomizer itself uses, and a
 // warning. Four vanilla slots were repurposed for the Tomb Raider III
 // guests, so their enum NAME does not say what stands there. Read the
 // number, not the name - and see Preparation\Enemies\Enemy Pools.txt.
@@ -53,6 +53,8 @@ Revolver/Deagle_Ammo	348
 //         470 beside it are not enemies but mesh warehouses (the cyborg's
 //         and the crane guy's swap halves), see
 //         Preparation\Enemies\Cross Enemy Pool.txt
+//   471 = Brawler BRAWLER, likewise - JOBY2's cutscene soldier (slot
+//         439 there) on the chef's animations and control
 // Not to be confused: 41 = DOG, 85 = HUSKIE. Upstream calls both "Dog".
 //Enemies:{
 SWAT					33

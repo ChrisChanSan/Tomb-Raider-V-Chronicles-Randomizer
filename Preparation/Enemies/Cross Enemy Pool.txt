@@ -55,6 +55,26 @@ the clean joby3 set, while slot 37 may hold a different model per level - the
 rich levels being the case that forced the change.
 
 
+THE COMPOSITE: TWO DONORS ON ONE SLOT
+================================================================
+A row may name a second donor (animFrom, animSlot). Its own donor then gives
+only the meshes, with their texinfos and texture pages; the second gives the
+bones, the animations, their frames and commands, and the sounds those
+commands play. The import refuses unless both slots carry the same number of
+meshes and the same bone tree word for word - BoneCheck answers that before
+anything is built.
+
+The brawler (471) is the case: JOBY2's cutscene soldier, slot 439, has meshes
+and one placeholder animation, and his tree is the chef's to the last offset.
+The donor rule above holds for the half that carries sounds: the anim donor
+joby3 has the chef as a vanilla instance, so the chef's samples are packed
+there, and the mesh donor brings none. His height for the headroom rule is
+the anim donor's rest pose, because his frames are the chef's; the HD model
+follows the meshes, so the sidecar names the mesh donor. A composite is a
+clone of nothing, so the rule that keeps a sourceSlot row out of its own
+donor level leaves it alone.
+
+
 THE SWAP HALVES, AND WHY EVERY TYPE HAS HIS OWN SLOT
 ================================================================
 Several enemies do not carry all their meshes in their own slot. The engine
@@ -132,7 +152,8 @@ Four small tables decide what a placed enemy needs:
                 (53), four of them - one Compy alone is not the animal.
   kSpawnOcb     which types get a behaviour OCB set on purpose. The Roman
                 god sword (61) gets 1 outside Andrea3, the hammer version
-                (461) gets 0, the chef (87) gets 1 so he hunts.
+                (461) gets 0, the chef (87) gets 1 so he hunts. The
+                brawler (471) gets none: he hunts by his slot's rule.
 
 Everything else is set to OCB 0 unless its type stands in KEEP_OCB - see
 Item Infos\Item Pool IDs.txt for that rule and its exceptions.

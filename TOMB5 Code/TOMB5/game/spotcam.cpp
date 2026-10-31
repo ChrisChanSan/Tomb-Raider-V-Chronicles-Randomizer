@@ -96,6 +96,24 @@ static void FlyLog(long x, long y, long z, short room, long skip)
 		GlobalCounter, InputSkipLatchHolds(0) ? "on" : "off");
 }
 
+/* FLYEND, behind -log: one line at every end of a flyby, written after the
+ * end's own camera step, so eye, target, their rooms and the field of view
+ * are the camera the frame of that tick is drawn with. how: end (the run
+ * reached its end), skip (a skip jumped this tick to it), look (Look broke
+ * it off), track (the trigger holding a sequence that tracks Lara let it
+ * go: the camera step in game\control.cpp). tick is GlobalCounter. */
+void FlyEndLog(const char* how)
+{
+	if (!gLogEnabled)
+		return;
+
+	Log("FLYEND tick=%d how=%s eye=(%ld,%ld,%ld)/%d target=(%ld,%ld,%ld)/%d "
+		"fov=%d", GlobalCounter, how, camera.pos.x, camera.pos.y,
+		camera.pos.z, (int)camera.pos.room_number, camera.target.x,
+		camera.target.y, camera.target.z, (int)camera.target.room_number,
+		(int)CurrentFov);
+}
+
 long Spline(long x, long* knots, long nk)
 {
 	long* k;
@@ -821,6 +839,22 @@ void CalculateSpotCams()
 						SCOverlay = 0;
 						SCNoDrawLara = 0;
 						AlterFOV(LastFov);
+
+						/* SNAPBACK puts eye, target and room back where the
+						 * flyby found them, after this frame's view was
+						 * built from the spline above (phd_LookAt). Left
+						 * so, the frame would take the flyby's eye with the
+						 * chase camera's room: a walk from a room the eye
+						 * is not in, the sky hung around a place far from
+						 * it. So the end runs the chase camera itself, as
+						 * the Look end below does, and the frame is drawn
+						 * with the camera the end leaves behind. A run that
+						 * ends on the spline to the chase camera keeps this
+						 * frame's own eye, target and room, which agree. */
+						if (s->flags & SP_SNAPBACK)
+							CalculateCamera();
+
+						FlyEndLog(skip_now ? "skip" : "end");
 					}
 					else
 					{
@@ -902,5 +936,6 @@ void CalculateSpotCams()
 		AlterFOV(LastFov);
 		CalculateCamera();
 		bCheckTrigger = 0;
+		FlyEndLog("look");
 	}
 }

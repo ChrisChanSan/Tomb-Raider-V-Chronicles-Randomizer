@@ -834,8 +834,16 @@ long ControlPhase(long nframes, long demo_mode)
 
 			if (!bUseSpotCam)
 			{
+				// A sequence that tracks Lara ends here: the top of
+				// ControlPhase cleared bUseSpotCam and her trigger did not
+				// arm it again. FLYEND, behind -log (game\spotcam.cpp).
+				const long tracked = bTrackCamInit;
+
 				bTrackCamInit = 0;
 				CalculateCamera();
+
+				if (tracked)
+					FlyEndLog("track");
 			}
 			else
 				CalculateSpotCams();

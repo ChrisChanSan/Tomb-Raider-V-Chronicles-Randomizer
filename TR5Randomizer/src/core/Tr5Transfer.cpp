@@ -618,7 +618,9 @@ bool Tr5Level::texWorkshopClose(std::string& error)
 }
 
 bool Tr5Level::copyMoveableFrom(const Tr5Level& src, int slotId, std::string& error,
-                                int dstSlot, bool meshesOnly, int animCount)
+                                int dstSlot, bool meshesOnly, int animCount,
+                                const Tr5Level* meshSrc, int meshSlot,
+                                TransferStats* stats)
 {
     char buf[256];
 
@@ -655,6 +657,48 @@ bool Tr5Level::copyMoveableFrom(const Tr5Level& src, int slotId, std::string& er
     if (mv.nmeshes <= 0 || mv.meshIndex < 0 ||
         mv.meshIndex + mv.nmeshes > src.m_meshPtrs.count)
     { error = "source slot has implausible mesh data"; return false; }
+
+    // The composite (see the prototype): the meshes out of another slot,
+    // perhaps of another level. Everything below that reads meshes, their
+    // texinfos and their pages reads ms and mmv; everything that reads
+    // bones, animations, frames and the commands' sounds reads src and mv.
+    // Without a mesh source the two are one and the same, and the copy is
+    // byte for byte the one it always was.
+    const Tr5Level& ms = meshSrc ? *meshSrc : src;
+    MoveableInfo mmv = mv;
+    if (meshSrc)
+    {
+        if (meshesOnly)
+        { error = "composite: a mesh store has no animations to combine"; return false; }
+        if (!ms.moveableInfo(meshSlot, mmv))
+        {
+            std::snprintf(buf, sizeof(buf), "composite: mesh source does not know slot %d", meshSlot);
+            error = buf;
+            return false;
+        }
+        if (mmv.nmeshes <= 0 || mmv.meshIndex < 0 ||
+            mmv.meshIndex + mmv.nmeshes > ms.m_meshPtrs.count)
+        { error = "composite: mesh source slot has implausible mesh data"; return false; }
+        if (mmv.nmeshes != mv.nmeshes)
+        {
+            std::snprintf(buf, sizeof(buf), "composite: %d meshes against %d animated nodes",
+                          mmv.nmeshes, mv.nmeshes);
+            error = buf;
+            return false;
+        }
+
+        // The frames turn mesh n about bone n, so the two trees must be
+        // the same to the last word: four longs per bone, flags and offset.
+        const long long words = static_cast<long long>(mv.nmeshes - 1) * 4;
+        if (mv.boneIndex < 0 || mmv.boneIndex < 0 ||
+            mv.boneIndex + words > src.m_bones.count ||
+            mmv.boneIndex + words > ms.m_bones.count ||
+            (words > 0 &&
+             std::memcmp(src.m_bytes.data() + src.m_bones.dataAt + static_cast<size_t>(mv.boneIndex) * 4,
+                         ms.m_bytes.data() + ms.m_bones.dataAt + static_cast<size_t>(mmv.boneIndex) * 4,
+                         static_cast<size_t>(words) * 4) != 0))
+        { error = "composite: the two slots' bone trees differ"; return false; }
+    }
 
     //========================================================================
     // Phase A: collect everything from the source. Up to here NOTHING is
@@ -921,10 +965,10 @@ bool Tr5Level::copyMoveableFrom(const Tr5Level& src, int slotId, std::string& er
     // Several pointers can point at the same mesh (the engine deduplicates
     // at load, drawroom.cpp). The mapping source offset -> new mesh is
     // therefore kept, instead of copying every occurrence individually.
-    const size_t srcMeshBytes = static_cast<size_t>(src.m_meshData.count) * 2;
+    const size_t srcMeshBytes = static_cast<size_t>(ms.m_meshData.count) * 2;
     std::vector<uint32_t> srcPtrs;
-    for (int i = 0; i < mv.nmeshes; ++i)
-        srcPtrs.push_back(rd32(src.m_bytes, src.m_meshPtrs.dataAt + (static_cast<size_t>(mv.meshIndex) + i) * 4));
+    for (int i = 0; i < mmv.nmeshes; ++i)
+        srcPtrs.push_back(rd32(ms.m_bytes, ms.m_meshPtrs.dataAt + (static_cast<size_t>(mmv.meshIndex) + i) * 4));
 
     std::map<uint32_t, std::pair<size_t, size_t>> meshRegion;   // source offset -> (start in meshPack, length)
     std::vector<uint8_t> meshPack;
@@ -936,12 +980,12 @@ bool Tr5Level::copyMoveableFrom(const Tr5Level& src, int slotId, std::string& er
         if (ofs >= srcMeshBytes) { error = "mesh pointer outside the mesh block"; return false; }
 
         size_t sz = 0;
-        if (!meshSize(src.m_bytes, src.m_meshData.dataAt + ofs, src.m_meshData.dataAt + srcMeshBytes, sz, error))
+        if (!meshSize(ms.m_bytes, ms.m_meshData.dataAt + ofs, ms.m_meshData.dataAt + srcMeshBytes, sz, error))
             return false;
 
         std::string faceErr;
-        if (!forEachFaceTex(src.m_bytes, src.m_meshData.dataAt + ofs, src.m_meshData.dataAt + ofs + sz,
-                            [&](size_t texAt) { srcTexinfoIdx.insert(rd16(src.m_bytes, texAt) & 0x7FFF); },
+        if (!forEachFaceTex(ms.m_bytes, ms.m_meshData.dataAt + ofs, ms.m_meshData.dataAt + ofs + sz,
+                            [&](size_t texAt) { srcTexinfoIdx.insert(rd16(ms.m_bytes, texAt) & 0x7FFF); },
                             faceErr))
         { error = faceErr; return false; }
 
@@ -950,20 +994,20 @@ bool Tr5Level::copyMoveableFrom(const Tr5Level& src, int slotId, std::string& er
         while (meshPack.size() % 4) meshPack.push_back(0);
         meshRegion[ofs] = { meshPack.size(), sz };
         meshPack.insert(meshPack.end(),
-                        src.m_bytes.begin() + src.m_meshData.dataAt + ofs,
-                        src.m_bytes.begin() + src.m_meshData.dataAt + ofs + sz);
+                        ms.m_bytes.begin() + ms.m_meshData.dataAt + ofs,
+                        ms.m_bytes.begin() + ms.m_meshData.dataAt + ofs + sz);
     }
 
     for (int t : srcTexinfoIdx)
-        if (t >= src.m_texinfos.count) { error = "mesh refers to a texinfo that does not exist"; return false; }
+        if (t >= ms.m_texinfos.count) { error = "mesh refers to a texinfo that does not exist"; return false; }
 
     // --- Tiles of the used texinfos -----------------------------------------
     std::set<int> srcTiles;
     for (int t : srcTexinfoIdx)
-        srcTiles.insert(rd16(src.m_bytes, src.m_texinfos.dataAt + static_cast<size_t>(t) * SZ_TEXINFO + 2) & 0x7FFF);
+        srcTiles.insert(rd16(ms.m_bytes, ms.m_texinfos.dataAt + static_cast<size_t>(t) * SZ_TEXINFO + 2) & 0x7FFF);
 
     TexHeader srcTex, dstTex;
-    if (!parseTexHeader(src.m_bytes, srcTex, error)) { error = "source: " + error; return false; }
+    if (!parseTexHeader(ms.m_bytes, srcTex, error)) { error = "source: " + error; return false; }
     if (!parseTexHeader(m_bytes, dstTex, error)) { error = "target: " + error; return false; }
 
     const int srcPages = srcTex.rt + srcTex.ot + srcTex.bt;
@@ -971,8 +1015,8 @@ bool Tr5Level::copyMoveableFrom(const Tr5Level& src, int slotId, std::string& er
         if (t >= srcPages) { error = "texinfo refers to a page that does not exist"; return false; }
 
     std::vector<uint8_t> src32, src16;
-    if (!inflateBlock(src.m_bytes, srcTex.block32At, src32, error)) { error = "source: " + error; return false; }
-    if (!inflateBlock(src.m_bytes, srcTex.block16At, src16, error)) { error = "source: " + error; return false; }
+    if (!inflateBlock(ms.m_bytes, srcTex.block32At, src32, error)) { error = "source: " + error; return false; }
+    if (!inflateBlock(ms.m_bytes, srcTex.block16At, src16, error)) { error = "source: " + error; return false; }
 
     // Target via the texture workshop: unpacked once, every import works
     // on the open blocks, packing happens at closing.
@@ -1064,7 +1108,7 @@ bool Tr5Level::copyMoveableFrom(const Tr5Level& src, int slotId, std::string& er
     for (int t : srcTexinfoIdx)
     {
         uint8_t rec[SZ_TEXINFO];
-        std::memcpy(rec, src.m_bytes.data() + src.m_texinfos.dataAt + static_cast<size_t>(t) * SZ_TEXINFO, SZ_TEXINFO);
+        std::memcpy(rec, ms.m_bytes.data() + ms.m_texinfos.dataAt + static_cast<size_t>(t) * SZ_TEXINFO, SZ_TEXINFO);
         uint16_t w; std::memcpy(&w, rec + 2, 2);
         const uint16_t newW = static_cast<uint16_t>((w & 0x8000) | tileRemap[w & 0x7FFF]);
         std::memcpy(rec + 2, &newW, 2);
@@ -1195,6 +1239,16 @@ bool Tr5Level::copyMoveableFrom(const Tr5Level& src, int slotId, std::string& er
     bump(m_texinfos, texinfoNew);
     if (!replaced) bump(m_objects, 1);
 
+    // What the copy brings, counted before the splices take the bytes.
+    if (stats)
+    {
+        stats->meshes = static_cast<int>(meshRegion.size());
+        stats->anims = static_cast<int>(animBytes.size() / SZ_ANIM);
+        stats->pages = newPages;
+        stats->texinfos = texinfoNew;
+        stats->sounds = 0;
+    }
+
     std::vector<Splice> splices;
     auto append = [&](const Block& b, int elem, std::vector<uint8_t>&& bytes) {
         if (bytes.empty()) return;
@@ -1262,6 +1316,7 @@ bool Tr5Level::copyMoveableFrom(const Tr5Level& src, int slotId, std::string& er
             // above. Hence soft here instead of hard.
             continue;
         }
+        if (stats) ++stats->sounds;
     }
 
     return true;

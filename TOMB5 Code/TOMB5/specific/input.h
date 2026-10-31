@@ -14,6 +14,8 @@
 #include "../global/types.h"
 #include "../game/key_scheme.h"	// KEY_SCHEME_ROLES and KEY_ROLE_SECOND - the keyboard's slot count is the shape of `layout` below
 #include "../game/pad_scheme.h"	// JOY_ROLES, JOY_ROLE_SECOND and PadSetSeat - the pad's slot count, and the seat of its two sets
+// The two skippers' latch kinds and their edge (game\skip_latch.h).
+#include "../game/skip_latch.h"
 
 // Control-method pages for the joystick: they choose only the button names shown.
 // The bit order is determined by the active input path (joystick_is_xinput).
@@ -45,6 +47,13 @@ long InputMouseButtons();	// the mouse's five buttons as the last S_UpdateInput 
 long InputPadDirection();	// the pad pair's own direction bits, last call
 long JoyBitConfirm();
 long JoyBitBack();
+/* The skip latch (game\skip_latch.h). JoyConfirmDown: the pad's confirm
+ * button in the last reading, as the latch left it. InputSkipLatch: a
+ * skipper fired on it, so it stays out of the input until it is released.
+ * InputSkipLatchHolds: not released yet; kind 0 asks about either skipper. */
+long JoyConfirmDown();
+void InputSkipLatch(long kind);
+long InputSkipLatchHolds(long kind);
 long ModernLookTankActive();	// the look key is steering Lara as in the Tank scheme this tick
 void InputModeLatchReset();	// Sprint mode / Duck mode let go - on a level start, a savegame load, a flip of either row
 

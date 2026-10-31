@@ -75,22 +75,25 @@ static short LastFov;
 static short spotcam_timer;
 static short spotcam_loopcnt;
 static short check_camera;	// whose SP_TESTTRIGGER set bCheckTrigger
+static char spot_confirm_held;	// the pad's confirm button, last frame
+static char spot_pad_skip;	// a press of it started this flyby's skip
 
 /* FLYLOG, behind -log: one line per heavy-trigger test a flyby makes. seq is
  * the sequence, cam the SpotCam index whose SP_TESTTRIGGER armed the test,
  * flags its flags, test and room the place handed to TestTriggersAtXYZ,
  * skip 1 when the skip jumped this frame's segment to its end, tick
- * GlobalCounter. A played and a skipped run of one flyby compare line for
- * line: the same cameras, the same places. */
+ * GlobalCounter, latch on while the pad button that skipped is still held
+ * and kept out of the input (game\skip_latch.h). A played and a skipped run
+ * of one flyby compare line for line: the same cameras, the same places. */
 static void FlyLog(long x, long y, long z, short room, long skip)
 {
 	if (!gLogEnabled)
 		return;
 
 	Log("FLYLOG seq=%d cam=%d flags=%04X test=%ld,%ld,%ld room=%d skip=%ld "
-		"tick=%d", current_sequence, check_camera,
+		"tick=%d latch=%s", current_sequence, check_camera,
 		(ushort)SpotCam[check_camera].flags, x, y, z, room, skip,
-		GlobalCounter);
+		GlobalCounter, InputSkipLatchHolds(0) ? "on" : "off");
 }
 
 long Spline(long x, long* knots, long nk)
@@ -169,6 +172,13 @@ void InitialiseSpotCam(short Sequence)
 	spotcam_timer = 0;
 	spotcam_loopcnt = 0;
 	bDisableLaraControl = 0;
+
+	/* The pad's skip begins on a fresh press (CalculateSpotCams), so the
+	 * edge starts from the button as it is now: a pull still held, the
+	 * press that set this flyby off, does not skip it. A skip of the flyby
+	 * before is forgotten. */
+	spot_confirm_held = (char)JoyConfirmDown();
+	spot_pad_skip = 0;
 	LaraHealth = lara_item->hit_points;
 	LaraAir = lara.air;
 	InitialCameraPosition.x = camera.pos.x;
@@ -474,10 +484,34 @@ void CalculateSpotCams()
 	// state directly; the confirm bit (Cross/A) depends on the active input
 	// path - see JoyBitConfirm() in input.cpp, same reasoning as the
 	// cutscene-skip fix in control.cpp.
-	if (tomb5.cutseq_skipper && (keymap[DIK_ESCAPE] || (ControlMethod == 1 && Key(256 + JoyBitConfirm()))) && gfLevelId != LVL5_TITLE)
+	//
+	// Escape skips while it is held. Cross starts a skip on a fresh press
+	// only, as at a cutscene: the button still held from pulling the rope
+	// that set this flyby off does not skip it. The press is latched
+	// (game\skip_latch.h): the frames jump while it is held, letting go
+	// ends the run, and play does not see the press until it is let go,
+	// so the end of the flyby does not hand it to Lara as Action.
+	// SpotPadSkipStarts holds the terms: a flyby that leaves Lara her
+	// control leaves her the button too.
 	{
-		current_spline_position = 0x10000;
-		skip_now = 1;
+		const int fresh = SkipConfirmEdge((int)JoyConfirmDown(),
+			&spot_confirm_held);
+
+		if (tomb5.cutseq_skipper && gfLevelId != LVL5_TITLE)
+		{
+			if (SpotPadSkipStarts(fresh, bDisableLaraControl != 0, s->flags))
+			{
+				spot_pad_skip = 1;
+				InputSkipLatch(SKIP_LATCH_FLYBY);
+			}
+
+			if (SpotSkipThisFrame(keymap[DIK_ESCAPE] != 0, spot_pad_skip,
+				(int)InputSkipLatchHolds(SKIP_LATCH_FLYBY)))
+			{
+				current_spline_position = 0x10000;
+				skip_now = 1;
+			}
+		}
 	}
 
 	if (!(input & IN_LOOK))

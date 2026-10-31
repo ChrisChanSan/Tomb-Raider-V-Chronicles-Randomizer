@@ -68,3 +68,29 @@ inline bool SpotSeqEndsShort(int first_flags, int last_flags)
 	return !(first_flags & (SPOT_LOOPCAMERA | SPOT_TRACKCAMERA)) &&
 		(first_flags & SPOT_SNAPBACK) && (last_flags & SPOT_TESTTRIGGER);
 }
+
+/* Whether a press of the pad's confirm button starts the skip of a flyby.
+ * It takes a fresh press (SkipConfirmEdge, game\skip_latch.h), as the
+ * cutscene skip does, so a button held when the flyby began - the pull
+ * that started it - does not skip it. It takes a flyby that holds Lara's
+ * control: while she keeps it the button is her Action, and a skip would
+ * eat a press she is using. And it takes a sequence that comes to an end:
+ * a LOOPCAMERA or TRACKCAMERA sequence never reaches the end a skip runs
+ * to. */
+inline int SpotPadSkipStarts(int fresh, int control_taken, int first_flags)
+{
+	return fresh && control_taken &&
+		!(first_flags & (SPOT_LOOPCAMERA | SPOT_TRACKCAMERA));
+}
+
+/* Whether a frame of a flyby jumps to the end of its segment - one camera
+ * a frame, so every camera's heavy test still runs. Escape skips while it
+ * is held, as ever. The pad skips while the press that started its skip
+ * of this flyby is still held: `pad_skip` says the press came during this
+ * flyby, `latch_holds` that the button has not been let go since
+ * (game\skip_latch.h). Letting go ends the run, as letting go of Escape
+ * does. */
+inline int SpotSkipThisFrame(int escape, int pad_skip, int latch_holds)
+{
+	return escape || (pad_skip && latch_holds);
+}

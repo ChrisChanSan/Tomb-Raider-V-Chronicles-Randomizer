@@ -110,6 +110,10 @@
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_sky_cap.h"
 // A lift door's delay kept while its pad is held (lift_door_rule).
 #include "../../../TOMB5 Code/TOMB5/game/lift_door_rule.h"
+// The button that skipped a scene, kept out of the input until it is let
+// go, and the pad roles it is held against (skip_latch, skip_latch_rope).
+#include "../../../TOMB5 Code/TOMB5/game/skip_latch.h"
+#include "../../../TOMB5 Code/TOMB5/game/pad_scheme.h"
 // A room group stored off its height: the count, the pick (yshift_rule).
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_scan.h"
 // The fog bulbs' body: the span, the column, the veil, the breath (fog_body),
@@ -30760,6 +30764,461 @@ static void xray_weapons()
 	free(model);
 }
 
+/* The skip latch's arithmetic (game\skip_latch.h) on made-up readings of the
+ * pad, one bit per button: Cross is bit 1 on DirectInput and bit 0 on
+ * XInput (JoyBitConfirm, specific\input.cpp), and every default page puts
+ * the Action role on it. The roles are asked through PadRoleFires
+ * (game\pad_scheme.h), the one question every pad producer asks, so the
+ * mask is held against the mapping and not against a guess. */
+static void skip_latch()
+{
+	printf("the button that skipped a scene does nothing more until it is "
+		"released\n");
+
+	const unsigned long cross = 1UL << 1, square = 1UL << 0;
+	const unsigned long dpad = 1UL << 20;
+	SKIP_LATCH l = { SKIP_LATCH_OFF, 0, 0 };
+	int released = 0;
+	long right = 0;
+
+	// No skip, no mask: thirty readings with Cross down pass whole.
+	for (int i = 0; i < 30; i++)
+		right += SkipLatchApply(&l, cross | square, &released) ==
+			(cross | square) && !released;
+
+	ok(right == 30, "skip latch: no mask without a skip", right, 30);
+
+	// A bit no pad path writes is refused and leaves the latch off.
+	SkipLatchEngage(&l, -1, SKIP_LATCH_FLYBY, 5);
+	SkipLatchEngage(&l, 24, SKIP_LATCH_FLYBY, 5);
+	ok(l.bit == SKIP_LATCH_OFF, "skip latch: a bit outside 0..23 is refused",
+		l.bit, SKIP_LATCH_OFF);
+
+	SkipLatchEngage(&l, 1, SKIP_LATCH_FLYBY, 100);
+	ok(l.bit == 1 && l.kind == SKIP_LATCH_FLYBY && l.since == 100,
+		"skip latch: a skip engages it on its bit, kind and tick", l.bit, 1);
+	ok(SkipLatchHolds(&l, 0) && SkipLatchHolds(&l, SKIP_LATCH_FLYBY) &&
+		!SkipLatchHolds(&l, SKIP_LATCH_CUTSEQ),
+		"skip latch: it holds for its own skipper and for either", 0, 1);
+
+	// Held: Cross leaves the reading, the other buttons stay.
+	right = 0;
+
+	for (int i = 0; i < 45; i++)
+		right += SkipLatchApply(&l, cross | square | dpad, &released) ==
+			(square | dpad) && !released;
+
+	ok(right == 45, "skip latch: Cross is out of every reading while held",
+		right, 45);
+
+	/* The roles out of that reading, read the engine's way: Action and Jump
+	 * as the DirectInput page binds them (jDefPS5DInput: 1 and 0), and the
+	 * two swapped on the binding page. No Modifier. Whichever role Cross
+	 * carries is the one silenced; the other fires. */
+	const long page[2] = { 1, 0 };		// Action, Jump
+	const long swapped[2] = { 0, 1 };
+	const unsigned long held = SkipLatchApply(&l, cross | square, &released);
+
+	ok(!PadRoleFires(held, page[0], 0, -1) &&
+		PadRoleFires(held, page[1], 0, -1),
+		"skip latch: Action on Cross is silent, Jump on Square fires",
+		PadRoleFires(held, page[0], 0, -1), 0);
+	ok(PadRoleFires(held, swapped[0], 0, -1) &&
+		!PadRoleFires(held, swapped[1], 0, -1),
+		"skip latch: swapped, Jump on Cross is silent and Action fires",
+		PadRoleFires(held, swapped[1], 0, -1), 0);
+	ok(PadRoleFires(cross | square, page[0], 0, -1) &&
+		PadRoleFires(cross | square, swapped[1], 0, -1),
+		"skip latch: unlatched, the role on Cross fires", 0, 1);
+
+	// Let go: the first reading with Cross up drops the latch and passes.
+	ok(SkipLatchApply(&l, square, &released) == square && released &&
+		l.bit == SKIP_LATCH_OFF,
+		"skip latch: released on the first reading with the button up",
+		released, 1);
+	ok(SkipLatchApply(&l, cross, &released) == cross && !released,
+		"skip latch: the next press passes whole", 0, 1);
+
+	// XInput: A is bit 0, the bit Square has on DirectInput.
+	SkipLatchEngage(&l, 0, SKIP_LATCH_CUTSEQ, 7);
+	right = SkipLatchApply(&l, square | cross, &released) == cross;
+	right += SkipLatchApply(&l, cross, &released) == cross && released;
+	ok(right == 2, "skip latch: the XInput bit, held and let go", right, 2);
+
+	// A level change lets go without a release.
+	SkipLatchEngage(&l, 1, SKIP_LATCH_CUTSEQ, 9);
+	SkipLatchDrop(&l);
+	ok(SkipLatchApply(&l, cross, &released) == cross && !released &&
+		!SkipLatchHolds(&l, 0),
+		"skip latch: dropped, the button passes and no release is told",
+		released, 0);
+
+	/* The edge both skippers ask. A button down when the scene begins is no
+	 * fresh press however long it stays down; up and down again is one. */
+	char was = 1;
+
+	right = !SkipConfirmEdge(1, &was) + !SkipConfirmEdge(1, &was);
+	right += !SkipConfirmEdge(0, &was) + SkipConfirmEdge(1, &was);
+	right += !SkipConfirmEdge(1, &was);
+	ok(right == 5, "skip edge: held from before no edge, pressed again one",
+		right, 5);
+	was = 0;
+	ok(SkipConfirmEdge(1, &was) && was == 1,
+		"skip edge: a press in a scene begun with the button up", was, 1);
+
+	/* Edge and latch together: the reading the latch leaves is what the
+	 * skipper reads, so a button held from one skip never gives the next
+	 * scene a fresh press, and its release is no press either. */
+	SkipLatchEngage(&l, 1, SKIP_LATCH_FLYBY, 0);
+	was = 0;
+	right = 0;
+
+	for (int i = 0; i < 20; i++)
+		right += !SkipConfirmEdge(
+			(SkipLatchApply(&l, cross, &released) & cross) != 0, &was);
+
+	right += !SkipConfirmEdge((SkipLatchApply(&l, 0, &released) & cross) != 0,
+		&was) && released;
+	right += SkipConfirmEdge((SkipLatchApply(&l, cross, &released) & cross) !=
+		0, &was);
+	ok(right == 22, "skip edge: the latched button gives no press until "
+		"released", right, 22);
+}
+
+/* The flyby's two rules for the pad (game\spotcam_math.h): when a press
+ * starts the skip and which frames jump. The flags are the levels' own
+ * first cameras: ANDREA2's sequence 1 (0651) and 9 (0441) take Lara's
+ * control, RICH1's 11 (0201) leaves it, RICH2's 13 (0049) tracks Lara and
+ * ANDY1's 5 (0008) too; 0004 is LOOPCAMERA alone. */
+static void spot_pad_skip()
+{
+	printf("the pad's skip of a flyby: a fresh press, a flyby that holds "
+		"Lara\n");
+
+	ok(SpotPadSkipStarts(1, 1, 0x0651) && SpotPadSkipStarts(1, 1, 0x0441),
+		"flyby pad: a fresh press skips a flyby that holds Lara's control",
+		0, 1);
+	ok(!SpotPadSkipStarts(0, 1, 0x0651),
+		"flyby pad: a held button does not start it", 1, 0);
+	ok(!SpotPadSkipStarts(1, 0, 0x0201),
+		"flyby pad: with Lara in control the button stays hers", 1, 0);
+	ok(!SpotPadSkipStarts(1, 1, 0x0049) && !SpotPadSkipStarts(1, 1, 0x0008) &&
+		!SpotPadSkipStarts(1, 1, 0x0004),
+		"flyby pad: a tracking or looping sequence takes no skip", 1, 0);
+	// The flags are a short: with SP_FLYBYONESHOT, bit 15, they arrive < 0.
+	ok(SpotPadSkipStarts(1, 1, 0x8651 - 0x10000),
+		"flyby pad: the one-shot bit in the flags changes nothing", 0, 1);
+
+	ok(SpotSkipThisFrame(1, 0, 0) && SpotSkipThisFrame(1, 1, 0),
+		"flyby frame: Escape held skips, whatever the pad", 0, 1);
+	ok(SpotSkipThisFrame(0, 1, 1),
+		"flyby frame: the pad's skip runs while its press is held", 0, 1);
+	ok(!SpotSkipThisFrame(0, 1, 0),
+		"flyby frame: letting go ends the run", 1, 0);
+	ok(!SpotSkipThisFrame(0, 0, 1),
+		"flyby frame: a latch from another scene skips nothing here", 1, 0);
+	ok(!SpotSkipThisFrame(0, 0, 0), "flyby frame: nothing, no skip", 1, 0);
+}
+
+/* A pull rope and the flyby it sets off, tick by tick in the engine's own
+ * order (ControlPhase, game\control.cpp): the pad is read (S_UpdateInput,
+ * the skip latch first); a flyby that holds Lara's control takes her
+ * input; the items run, and the raising cog (game\andrea.cpp) starts its
+ * flyby there, the tick after the pull; Lara runs - lara_as_pulley,
+ * AnimateLara, PulleyCollision, TestTriggers - and the pull is counted at
+ * frame 44 of the pull; the camera runs, CalculateSpotCams with its skip.
+ *
+ * Lara's pulley animations as ANDREA2 carries them: 339, stand to pull, 14
+ * frames, straight into 340; 340, the pull, 59 frames, the pull counted at
+ * frame 44 (lara_as_pulley), looping into itself unless the goal is the
+ * stand on its last two frames (its one state change, frames 58 and 59 to
+ * 341); 341, back to the stand, 14 frames. The goal is the pull while the
+ * interact bit is in her input. The flyby is `segs` segments of `len`
+ * ticks; a skipped frame ends its segment, one camera a frame. */
+enum
+{
+	ROPE_SKIPPER_OFF,	// the Cutscene skipper off
+	ROPE_SKIP_HELD,		// the skip before #279: Cross held skips, no latch
+	ROPE_SKIP_LATCH		// the fresh press, the latch
+};
+
+struct RopeSim
+{
+	int rule;
+	int cog;		// 1: the flyby starts the tick after the pull
+	int flags;		// the flyby's first camera
+	int segs, len;
+	int press[2][2];	// two presses of Cross, ticks [from, to)
+	int ticks;
+};
+
+struct RopeRun
+{
+	int pulls;
+	int pullAt[4];
+	int flybyEnd;	// the tick it ended in, -1 while it runs
+	int latchSet, latchReleased, latchHeld;
+};
+
+static RopeRun rope_run(const RopeSim& m)
+{
+	RopeRun r = { 0, { -1, -1, -1, -1 }, -1, -1, -1, -1 };
+	SKIP_LATCH latch = { SKIP_LATCH_OFF, 0, 0 };
+	const unsigned long cross = 1UL << 1;
+	int anim = 0, frame = 0;	// anim 0: standing
+	bool taken = false, flyby = false, played = false;
+	int seg = 0, segTick = 0, cogAt = -1, padSkip = 0;
+	char held = 0;
+
+	for (int t = 0; t < m.ticks; t++)
+	{
+		unsigned long fire = 0;
+
+		for (int p = 0; p < 2; p++)
+			if (t >= m.press[p][0] && t < m.press[p][1])
+				fire |= cross;
+
+		if (m.rule == ROPE_SKIP_LATCH)
+		{
+			const long since = latch.since;
+			int released;
+
+			fire = SkipLatchApply(&latch, fire, &released);
+
+			if (released)
+			{
+				r.latchReleased = t;
+				r.latchHeld = t - (int)since;
+			}
+		}
+
+		const bool interact = (fire & cross) && !taken;
+		bool start = cogAt == t;
+
+		if (anim)
+		{
+			const bool goalPull = interact;
+			const bool counted = anim == 340 && frame == 44;
+
+			frame++;
+
+			if (anim == 339 && frame > 13)
+				anim = 340, frame = 0;
+			else if (anim == 340 && !goalPull && frame >= 58)
+				anim = 341, frame = 0;
+			else if (anim == 340 && frame > 58)
+				frame = 0;
+			else if (anim == 341 && frame > 13)
+				anim = 0, frame = 0;
+
+			if (counted)
+			{
+				r.pullAt[r.pulls < 4 ? r.pulls : 3] = t;
+				r.pulls++;
+
+				if (!played && !flyby && !m.cog)
+					start = true;
+				else if (!played && !flyby)
+					cogAt = t + 1;
+			}
+		}
+
+		if (!anim && interact)
+			anim = 339, frame = 0;
+
+		// InitialiseSpotCam: SP_NOLARACONTROL (1 << 10, game\spotcam.h)
+		// takes her control; the edge starts from the button as it is.
+		if (start)
+		{
+			flyby = true;
+			taken = (m.flags & (1 << 10)) != 0;
+			seg = segTick = padSkip = 0;
+			held = (fire & cross) != 0;
+		}
+
+		if (!flyby)
+			continue;
+
+		bool skip = false;
+
+		if (m.rule == ROPE_SKIP_HELD)
+			skip = (fire & cross) != 0;
+		else if (m.rule == ROPE_SKIP_LATCH)
+		{
+			const int fresh = SkipConfirmEdge((fire & cross) != 0, &held);
+
+			if (SpotPadSkipStarts(fresh, taken, m.flags))
+			{
+				padSkip = 1;
+				SkipLatchEngage(&latch, 1, SKIP_LATCH_FLYBY, t);
+				r.latchSet = t;
+			}
+
+			skip = SpotSkipThisFrame(0, padSkip,
+				SkipLatchHolds(&latch, SKIP_LATCH_FLYBY)) != 0;
+		}
+
+		if (skip || ++segTick >= m.len)
+			seg++, segTick = 0;
+
+		if (seg >= m.segs)
+		{
+			flyby = taken = false;
+			played = true;
+			r.flybyEnd = t;
+		}
+	}
+
+	return r;
+}
+
+/* The pull ropes of ANDREA2: room 33's, whose trigger starts flyby 1 in the
+ * pull's own tick (nine segments on a skip, its jump at camera 2 counted
+ * in), and room 51's, whose raising cog starts flyby 9 a tick later (two
+ * segments). The trigger is a SWITCH: a second pull turns every target's
+ * code bits back. The button is held to pull from tick 0. */
+static void skip_latch_rope()
+{
+	printf("the pull rope and its flyby, before and after the latch\n");
+
+	const int len = 30;
+	RopeSim m = { ROPE_SKIP_HELD, 0, 0x0651, 9, len,
+		{ { 0, 120 }, { 0, 0 } }, 400 };
+	RopeRun r = rope_run(m);
+
+	/* The press at tick 0 starts 339; 340 takes over at tick 14 and its
+	 * frame 44 comes at tick 59. The held skip ends the flyby at 67, the
+	 * button is in Lara's input again at 68, the pull loops on frames 58
+	 * and 59 (ticks 72 and 73) and its frame 44 counts again at 118. */
+	ok(r.pulls == 2 && r.pullAt[0] == 59 && r.pullAt[1] == 118,
+		"rope 33, held skip: the held pull skips the flyby, pulls again",
+		r.pullAt[1], 118);
+	ok(r.flybyEnd == 67, "rope 33, held skip: the flyby is gone in 9 ticks",
+		r.flybyEnd, 67);
+
+	m.rule = ROPE_SKIP_LATCH;
+	r = rope_run(m);
+	ok(r.pulls == 1 && r.latchSet == -1,
+		"rope 33, latch: the held pull skips nothing and pulls once",
+		r.pulls, 1);
+	ok(r.flybyEnd == 59 + 9 * len - 1,
+		"rope 33, latch: the flyby plays through", r.flybyEnd,
+		59 + 9 * len - 1);
+
+	// Let go after the pull, press Cross to skip and hold it.
+	m.press[0][1] = 61;
+	m.press[1][0] = 63;
+	m.press[1][1] = 90;
+	r = rope_run(m);
+	ok(r.pulls == 1 && r.latchSet == 63 && r.flybyEnd == 71,
+		"rope 33, latch: a fresh press skips, Lara does not pull again",
+		r.pulls, 1);
+	ok(r.latchReleased == 90 && r.latchHeld == 27,
+		"rope 33, latch: released when let go, held 27 ticks",
+		r.latchHeld, 27);
+
+	m.rule = ROPE_SKIP_HELD;
+	r = rope_run(m);
+	ok(r.pulls == 2 && r.pullAt[1] == 118,
+		"rope 33, held skip: the same presses pull a second time",
+		r.pullAt[1], 118);
+
+	// Room 51: the cog's flyby, a tick after the pull.
+	RopeSim c = { ROPE_SKIP_HELD, 1, 0x0441, 2, 100,
+		{ { 0, 120 }, { 0, 0 } }, 400 };
+
+	r = rope_run(c);
+	ok(r.pulls == 2 && r.flybyEnd == 61 && r.pullAt[1] == 118,
+		"rope 51, held skip: the cog's flyby skipped, a second pull",
+		r.pullAt[1], 118);
+	c.rule = ROPE_SKIP_LATCH;
+	r = rope_run(c);
+	ok(r.pulls == 1 && r.flybyEnd == 60 + 2 * 100 - 1,
+		"rope 51, latch: one pull, the flyby plays", r.flybyEnd,
+		60 + 2 * 100 - 1);
+	c.press[0][1] = 61;
+	c.press[1][0] = 64;
+	c.press[1][1] = 80;
+	r = rope_run(c);
+	ok(r.pulls == 1 && r.latchSet == 64 && r.flybyEnd == 65 &&
+		r.latchHeld == 16,
+		"rope 51, latch: skipped with a fresh press, one pull", r.pulls, 1);
+
+	/* No skip, no change: held through the whole flyby and beyond, the
+	 * latch's rule pulls exactly as the skipper switched off does - again
+	 * when the flyby has ended, as at base. */
+	RopeSim h = { ROPE_SKIPPER_OFF, 0, 0x0651, 9, len,
+		{ { 0, 400 }, { 0, 0 } }, 500 };
+	const RopeRun off = rope_run(h);
+
+	h.rule = ROPE_SKIP_LATCH;
+	r = rope_run(h);
+	ok(off.pulls == 2 && r.pulls == off.pulls &&
+		r.pullAt[1] == off.pullAt[1] && r.flybyEnd == off.flybyEnd &&
+		r.latchSet == -1,
+		"rope 33: without a skip the latch's rule is the skipper off",
+		r.pulls, off.pulls);
+
+	// A flyby that leaves Lara her control: Cross is her Action, no skip.
+	h.flags = 0x0201;
+	h.press[0][1] = 61;
+	h.press[1][0] = 63;
+	h.press[1][1] = 66;
+	r = rope_run(h);
+	ok(r.latchSet == -1, "rope: a flyby that leaves Lara control takes no "
+		"pad skip", r.latchSet, -1);
+}
+
+/* The latch's wiring in the engine's own text: both skippers ask the one
+ * edge and engage the one latch, the flyby primes its edge where it
+ * begins, and S_UpdateInput takes the bit out before the first role is
+ * read. The skipper's old held read of Key(256 + ...) is gone. */
+static void skip_latch_wiring()
+{
+	char* control = hd_switch_text("../../game/control.cpp");
+	char* spot = hd_switch_text("../../game/spotcam.cpp");
+	char* in = hd_switch_text("../input.cpp");
+	static char body[16384];
+	long right;
+
+	ok(control && spot && in, "skip latch wiring: the three files", 0, 1);
+
+	right = hd_switch_count(control, "SkipConfirmEdge((int)JoyConfirmDown(),") +
+		hd_switch_count(control, "InputSkipLatch(SKIP_LATCH_CUTSEQ);") +
+		hd_switch_count(spot, "SkipConfirmEdge((int)JoyConfirmDown(),") +
+		hd_switch_count(spot, "InputSkipLatch(SKIP_LATCH_FLYBY);") +
+		hd_switch_count(spot, "SpotPadSkipStarts(fresh, bDisableLaraControl") +
+		hd_switch_count(spot, "SpotSkipThisFrame(keymap[DIK_ESCAPE] != 0,");
+	ok(right == 6, "skip latch wiring: both skippers, one edge, one latch",
+		right, 6);
+	ok(hd_switch_count(control, "Key(256") + hd_switch_count(spot,
+		"Key(256") == 0, "skip latch wiring: no skipper reads the raw key",
+		hd_switch_count(control, "Key(256") + hd_switch_count(spot,
+		"Key(256"), 0);
+
+	glass_body(spot, "void InitialiseSpotCam(short Sequence)", body,
+		sizeof(body));
+	ok(strstr(body, "spot_confirm_held=(char)JoyConfirmDown();spot_pad_skip"
+		"=0;") != 0, "skip latch wiring: a flyby primes its edge where it "
+		"begins", 0, 1);
+
+	glass_body(in, "void InputModeLatchReset()", body, sizeof(body));
+	ok(strstr(body, "SkipLatchDrop(&skip_latch);") != 0,
+		"skip latch wiring: the level change drops it", 0, 1);
+
+	const char* tick = in ? strstr(in, "long S_UpdateInput()") : 0;
+	const char* apply = tick ? strstr(tick, "SkipLatchApply(&skip_latch,") : 0;
+	const char* role = tick ? strstr(tick, "JoyRole(") : 0;
+	const char* read = tick ? strstr(tick, "joy_fire = ReadJoystick(") : 0;
+
+	ok(read && apply && role && read < apply && apply < role,
+		"skip latch wiring: taken out after the read, before any role", 0, 1);
+
+	free(control);
+	free(spot);
+	free(in);
+}
+
 int main()
 {
 	printf("ModernTest - the arithmetic of the modern control\n");
@@ -30988,6 +31447,10 @@ int main()
 	thruster_move();
 	thruster_wiring();
 	xray_weapons();
+	skip_latch();
+	spot_pad_skip();
+	skip_latch_rope();
+	skip_latch_wiring();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

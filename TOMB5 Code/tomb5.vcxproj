@@ -553,6 +553,7 @@
     <ClInclude Include="TOMB5\game\savegame.h" />
     <ClInclude Include="TOMB5\game\setup.h" />
     <ClInclude Include="TOMB5\game\skeleton.h" />
+    <ClInclude Include="TOMB5\game\skip_latch.h" />
     <ClInclude Include="TOMB5\game\sniper.h" />
     <ClInclude Include="TOMB5\game\sound.h" />
     <ClInclude Include="TOMB5\game\sphere.h" />

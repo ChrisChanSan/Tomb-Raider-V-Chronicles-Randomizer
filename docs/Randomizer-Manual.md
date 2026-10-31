@@ -297,7 +297,10 @@ A few kinds in that list are ones the original barely let you meet: the crane
 guy, whom Core modelled and never placed at all; the husky; the chef; the
 soldier statue's second version; and the **cyborg**, who in the original
 appears in one level only and cannot be killed there — outside it he now
-goes down like anyone else. Deselect the ones you would rather not run into.
+goes down like anyone else. One is new altogether: the **drone**, Red
+Alert's gunship shrunk to the vulture's size, which flies after Lara and
+fires in bursts (never in Red Alert itself, whose own helicopter stays as it
+was). Deselect the ones you would rather not run into.
 
 **"Enemy health" / "Enemy damage"** — *1.00x each,* range 0.50x to 2.00x, each
 with its own "Random" box. Traps, falls, fire, poison, drowning and the

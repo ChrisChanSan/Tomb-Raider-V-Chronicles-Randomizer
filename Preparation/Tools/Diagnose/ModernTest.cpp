@@ -127,6 +127,9 @@
 // zip_call_skip, zip_call_wiring), with or without a scene (zip_skip_rule,
 // zip_skip_noscene, zip_skip_wiring).
 #include "../../../TOMB5 Code/TOMB5/game/zip_call_rule.h"
+// The chef's control on two slots: the hunt no OCB turns off and the
+// brawler's animation anchor (brawler_rule).
+#include "../../../TOMB5 Code/TOMB5/game/chef_rule.h"
 // A room group stored off its height: the count, the pick (yshift_rule).
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_scan.h"
 // The fog bulbs' body: the span, the column, the veil, the breath (fog_body),
@@ -33566,6 +33569,183 @@ static void zip_skip_wiring()
 	free(in);
 }
 
+/* The number an enumerator stands at in game\objects.h's object_types: the
+ * entries counted from the brace, comments taken out, or -1. The enum has
+ * no "= n" in it, so its count is its number (Verification.md, section 2). */
+static long brawler_enum_at(const char* text, const char* name)
+{
+	const char* p = text ? strstr(text, "enum object_types") : 0;
+	const char* end = p ? strstr(p, "};") : 0;
+	char word[64];
+	long n = 0;
+	size_t w = 0;
+
+	p = p ? strchr(p, '{') : 0;
+
+	if (!p || !end)
+		return -1;
+
+	for (p++; p < end; p++)
+	{
+		if (p[0] == '/' && p[1] == '/')
+		{
+			while (p < end && *p != '\n')
+				p++;
+			continue;
+		}
+
+		if (p[0] == '/' && p[1] == '*')
+		{
+			const char* close = strstr(p + 2, "*/");
+
+			p = close ? close + 1 : end;
+			continue;
+		}
+
+		if (isalnum((unsigned char)*p) || *p == '_')
+		{
+			if (w + 1 < sizeof(word))
+				word[w++] = *p;
+			continue;
+		}
+
+		if (w)
+		{
+			word[w] = 0;
+
+			if (!strcmp(word, name))
+				return n;
+
+			n++;
+			w = 0;
+		}
+	}
+
+	return -1;
+}
+
+/* The brawler, JOBY2's cutscene soldier as a pool enemy (game\chef_rule.h):
+ * the hunt no OCB turns off and the chef's OCB bit as it was; the anchor of
+ * his animations; and the engine's own text - the slot numbers against
+ * objects.h's enum, the control asking the rule and reading the item's own
+ * slot, his own fist and his own Balance.txt line, setup.cpp's block
+ * resolving the anchor, and his two lines at twice the chef's numbers. */
+static void brawler_rule()
+{
+	printf("the brawler: the chef's control on a slot of his own\n");
+
+	long right = 0;
+
+	for (int ocb = 0; ocb < 64; ocb++)
+		right += ChefHunts(CHEF_RULE_BRAWLER, ocb);
+	ok(right == 64, "brawler: he hunts whatever his OCB says", right, 64);
+
+	right = 0;
+	for (int ocb = 0; ocb < 64; ocb++)
+		right += ChefHunts(CHEF_RULE_CHEF, ocb) == ((ocb & 1) != 0);
+	ok(right == 64, "brawler: a chef hunts by OCB bit 0 alone", right, 64);
+	ok(!ChefHunts(CHEF_RULE_CHEF, 0),
+		"brawler: the vanilla chef's OCB 0 keeps him at his board",
+		ChefHunts(CHEF_RULE_CHEF, 0), 0);
+	ok(ChefHunts(CHEF_RULE_CHEF, 1),
+		"brawler: the pool's chef, OCB 1, hunts", ChefHunts(CHEF_RULE_CHEF, 1),
+		1);
+
+	// The anchor: his own set first, the chef's only for a record without.
+	ok(BrawlerAnimBase(1043, true, 645) == 1043,
+		"brawler: his own set beside a loaded chef",
+		BrawlerAnimBase(1043, true, 645), 1043);
+	ok(BrawlerAnimBase(1043, false, 0) == 1043,
+		"brawler: his own set in a level without a chef",
+		BrawlerAnimBase(1043, false, 0), 1043);
+	ok(BrawlerAnimBase(-1, true, 645) == 645,
+		"brawler: a record without animations borrows the chef's",
+		BrawlerAnimBase(-1, true, 645), 645);
+	ok(BrawlerAnimBase(-1, false, 645) == -1 &&
+		BrawlerAnimBase(-1, true, -1) == -1,
+		"brawler: no set and no chef - the record stays as it came",
+		BrawlerAnimBase(-1, false, 645), -1);
+
+	// The engine's own text.
+	char* objects = hd_switch_text("../../game/objects.h");
+	char* chef = hd_switch_text("../../game/chef.cpp");
+	char* setup = hd_switch_text("../../game/setup.cpp");
+	char* balance = hd_switch_text("../../game/balance.cpp");
+	static char body[16384];
+
+	ok(brawler_enum_at(objects, "CHEF") == CHEF_RULE_CHEF &&
+		brawler_enum_at(objects, "BRAWLER") == CHEF_RULE_BRAWLER,
+		"brawler: the rule's slots are objects.h's enum",
+		brawler_enum_at(objects, "BRAWLER"), CHEF_RULE_BRAWLER);
+	ok(brawler_enum_at(objects, "NUMBER_OBJECTS") == CHEF_RULE_BRAWLER + 1,
+		"brawler: he is the last slot, NUMBER_OBJECTS behind him",
+		brawler_enum_at(objects, "NUMBER_OBJECTS"), CHEF_RULE_BRAWLER + 1);
+	ok(glass_define(objects, "#define SLOT_FILE_BOUNDARY") == 460,
+		"brawler: the file boundary stays at 460",
+		glass_define(objects, "#define SLOT_FILE_BOUNDARY"), 460);
+
+	glass_body(chef, "void InitialiseChef(short item_number)", body,
+		sizeof(body));
+	ok(strstr(body, "item->anim_number=objects[item->object_number]"
+		".anim_index;item->frame_number=anims[item->anim_number]"
+		".frame_base;") != 0,
+		"brawler: the start pose from the item's own slot", 0, 1);
+	ok(hd_switch_count(chef, "objects[CHEF]") == 0,
+		"brawler: chef.cpp names the chef's slot nowhere",
+		hd_switch_count(chef, "objects[CHEF]"), 0);
+
+	glass_body(chef, "void ChefControl(short item_number)", body,
+		sizeof(body));
+	ok(strstr(body, "brawler=item->object_number==BRAWLER;") &&
+		strstr(body, "if(ChefHunts(item->object_number,"
+		"item->trigger_flags)||") && !strstr(body, "trigger_flags&1"),
+		"brawler: state 1 asks the rule", 0, 1);
+	ok(strstr(body, "lara_item->hit_points-=EnemyDamage(brawler?"
+		"balance.dmgBrawlerFist:balance.dmgChefKnife);") &&
+		strstr(body, "CreatureEffectT(item,brawler?&fist:&knife,20,") &&
+		strstr(body, "brawler?\"brawler\":\"chef\"))"),
+		"brawler: his own line, his own fist, his own name", 0, 1);
+	ok(strstr(body, "item->anim_number=objects[item->object_number]"
+		".anim_index+11;") != 0,
+		"brawler: the stub death from the item's own slot", 0, 1);
+	ok(strstr(chef, "static BITE_INFO fist = { 4, 72, 15, 13 };") != 0,
+		"brawler: the fist on mesh 13, the knife's hand", 0, 1);
+
+	glass_body(setup, "if (objects[BRAWLER].loaded)", body, sizeof(body));
+	ok(strstr(body, "obj->anim_index=(short)BrawlerAnimBase(obj->anim_index,"
+		"objects[CHEF].loaded!=0,objects[CHEF].anim_index);"
+		"obj->initialise=InitialiseChef;obj->control=ChefControl;") != 0,
+		"brawler: setup resolves the anchor, then the chef's routines", 0, 1);
+	ok(strstr(body, "obj->intelligent=1;") && strstr(body,
+		"obj->save_position=1;obj->save_hitpoints=1;obj->save_flags=1;"
+		"obj->save_anim=1;") && strstr(body, "obj->hit_points=120;"),
+		"brawler: intelligent, saved like the chef, 120 written", 0, 1);
+
+	// His two Balance.txt lines at twice the chef's standards, and no
+	// original claimed for him (the vanilla column repeats the standard).
+	const long chefHp = glass_define(balance,
+		"HEALTH(\"HP_Chef\",\t\t\thpChef,\t\t\t");
+	const long hp = glass_define(balance,
+		"HEALTH(\"HP_Brawler\",\t\thpBrawler,\t\t");
+	const long chefDmg = glass_define(balance,
+		"DAMAGE(\"DMG_Chef_Knife\",\tdmgChefKnife,\t\t");
+	const long dmg = glass_define(balance,
+		"DAMAGE(\"DMG_Brawler_Fist\",\tdmgBrawlerFist,\t\t");
+
+	ok(chefHp > 0 && hp == 2 * chefHp, "brawler: HP_Brawler is twice HP_Chef",
+		hp, 2 * chefHp);
+	ok(chefDmg > 0 && dmg == 2 * chefDmg,
+		"brawler: DMG_Brawler_Fist is twice DMG_Chef_Knife", dmg, 2 * chefDmg);
+	ok(strstr(balance, "hpBrawler,\t\t120,\t120,\tBRAWLER)") &&
+		strstr(balance, "dmgBrawlerFist,\t\t400,\t400,\t"),
+		"brawler: the vanilla columns repeat the standards", 0, 1);
+
+	free(objects);
+	free(chef);
+	free(setup);
+	free(balance);
+}
+
 int main()
 {
 	printf("ModernTest - the arithmetic of the modern control\n");
@@ -33810,6 +33990,7 @@ int main()
 	zip_skip_rule();
 	zip_skip_noscene();
 	zip_skip_wiring();
+	brawler_rule();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

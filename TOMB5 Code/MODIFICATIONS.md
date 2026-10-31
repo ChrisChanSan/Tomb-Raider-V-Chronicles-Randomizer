@@ -16590,6 +16590,108 @@ stands after #277's.
 
 **Commits.** `51c78576`.
 
+### Skipping a Zip call ends it, and the pad skips every flyby with an end (#282)
+
+2026-10-31.
+
+**What.** With the *Cutscene skipper* on, skipping the flyby that comes with a call from
+Zip - Zip on Lara's headset in the VCI levels - ends the call with it: her hand comes down
+from her ear, or she is put straight back to standing while it is still on its way up,
+Zip falls silent, the level's music comes back, and she moves at once. A call the skip
+catches before it has posed her never poses her. A call that is not skipped plays as
+before. A call whose track does not start - no music device, the track's file missing -
+ends on the first tick it waits for the track instead of holding her in the pose for
+good. The controller's confirm button skips every flyby that comes to an end again, those
+that leave Lara playing too; the fresh press and the latch of #279 stay. A flyby that
+follows her or loops is left to Escape.
+
+**Why.** In RICH1 and RICH2, after a skipped flyby, Lara stood with her hand at her ear
+and could not move; a save and a load gave her control back. Read from the levels (the
+vanilla and the randomized `.TRC` hold the same calls) and from the code:
+
+- A call is an item of the slot the data name EXPANDING_PLATFORM, whose control is
+  `ControlZipController` (`game/twogun.cpp`); its OCB is the call's track. The campaign
+  has four: RICH1 item 4 (room 3, track 95) with flyby 11 and item 134 (room 72, track
+  94) with no scene; RICH2 item 56 (room 34, track 60, from six sectors) with flyby 12
+  and item 225 (room 161, track 77) with flyby 10. Each is a one-shot TRIGGER that
+  activates the call and then starts the flyby. RICH3 has none: its line from Zip (track
+  59, room 136) is a plain music trigger without the pose, as are RICH1's tracks 48, 52,
+  54 and 67 and RICH2's 79 and 90.
+- Stage 0 takes her control; stage 1 waits until she stands in ANIM_BREATH, poses her
+  (ANIM_ZIP_IN, AS_INTO_ZIP) and starts the track; stage 2 waits until the track is the
+  music and then until it is not, and only then sets her goal AS_OUT_ZIP, gives her
+  control back and kills the item. Her three zip states run `lara_as_null` with no
+  collision, and the pose (animation 468, 73 frames, in all three levels) loops until
+  goal AS_OUT_ZIP: the line that held her is stage 2's `else if (XATrack !=
+  item->trigger_flags)`, false for as long as the track plays.
+- No skip path touches the music: the flyby's skip, its two ends and the cutscene skipper
+  call neither `S_CDStop` nor `S_CDPlay`. Escape held from the first frame ends flyby 11
+  (16 segments of 100 ticks: 15 cameras and the spline back to her) in its 16th tick and
+  flyby 10 in its 3rd. Lara, who reaches the trigger walking or running, needs about 20
+  to 40 ticks to stand (her stop and ANIM_STOP before ANIM_BREATH), so the skipped flyby
+  handed her control back first, and the call posed her the first tick she stood still,
+  started the track then and held her for the whole of it. Played through, flyby 11 runs
+  1600 ticks, over 53 seconds, and the call plays under it.
+- A load lets her go because a savegame keeps the call's stage and not the music: the
+  load starts the level's atmosphere, and the call, which has heard its track, takes that
+  for its end. With no music device `S_CDPlay` does nothing and the call never hears its
+  track; with the track's file missing `ACMEmulateCDPlay` names the track and opens
+  nothing, so the call hears it and never sees it end. Both held her for good, the second
+  until a load.
+- The pad: #279 asked for Lara's control taken at the moment of the press. The two flybys
+  with a call that leave her the control by their flags (RICH1 11, RICH2 12) had it taken
+  by the call from their second tick, so Cross skipped them there before as well; it was
+  refused once the call had ended, and throughout the six flybys without a call that
+  leave her playing.
+
+ModernTest's `zip_call_skip` runs both flybys tick by tick. Before: Escape ends flyby 11
+at tick 15, Lara stands at 24, the call poses her at 25 and ends the track's length later.
+After: the skip ends the call at tick 15, before it poses her; standing on the trigger
+she is posed at 2 and back on her feet at 15, the track off.
+
+**How.** `game/zip_call_rule.h` (new, pure): `ZipCallTick` (one tick of a stage: started,
+posing, heard, waiting, ended, ended without track - decided on the first tick of stage
+2, because `S_CDPlay` has named the track and opened its stream before it returns),
+`ZipPoseEnd` (the end by track keeps goal AS_OUT_ZIP; a cut end takes her from AS_ZIP
+through AS_OUT_ZIP, from AS_INTO_ZIP straight to standing, and leaves any other state),
+`ZipEndMusic` (the level's atmosphere, looped, while the music is still the call's
+track; silence in a level without one; otherwise nothing) and `ZipCallWord`.
+`game/twogun.cpp`: `ControlZipController` steps through the rule; `ZipCallFinish` is the
+one end of a call, whatever ends it; `ZipCallsEndBySkip` ends every active item whose
+control is the call's. `specific/audio.cpp`: `S_CDTrackPlaying`, whether a track is the
+music and its stream runs. `game/spotcam.cpp`: a flyby notes that a skip jumped one of
+its frames, forgets it where it begins, and ends the calls at its end, before the last
+camera's test, and when Look breaks it off; `SpotPadSkipStarts` (`game/spotcam_math.h`)
+no longer asks whether her control is taken. `game/control.cpp`: the cutscene skipper
+ends the calls as well.
+
+With `-log`: `ZIPLOG item=<i> stage=<s> track=<t> tick=<n>` and `started`, `posing`,
+`heard`, `ended`, `ended by skip` or `ended without track`. SKIPLATCH and FLYLOG are
+unchanged.
+
+Measured with TrgProbe `-flyby`, a census of the calls and their triggers over the
+fifteen levels, a probe of Lara's zip animations (467, 468, 469: 19, 73 and 25 frames)
+and of her stops, and the levels' music bytes in `SCRIPT.DAT` (129 for the three Rich
+levels). The flyby census is unchanged, 64 sequences and 359 cameras. Of the 59 outside
+the title the pad now skips 53 (ANDREA1 6, ANDREA2 8, ANDREA3 5, ANDY1 1, ANDY2 6, ANDY3
+3, JOBY2 1, JOBY5 1, RICH1 9, RICH2 9, RICH3 4) against #279's 45; the 6 that track Lara
+(ANDY1 5, ANDY2 2, ANDY3 9, RICH2 7 and 13, RICH3 7) are left to Escape. ModernTest:
+`zip_call_rule` (16 checks), `zip_call_skip` (18), `zip_call_wiring` (9); `spot_pad_skip`
+and `skip_latch_rope` hold the new table. Game logic in every draw path; there is no
+`hd_build` parity to claim.
+
+**Decisions.** The skip ends the call when the flyby ends, not on its first skipped
+frame: a short press jumps a few cameras and the flyby plays on, and the call ends with it
+then. Every call running when a skipped scene ends ends with it, whatever its stage; one
+not yet posed would otherwise pose her wherever she next stood still. Her hand on its way
+up goes straight back to standing rather than up and down again, 44 frames more of a pose
+the skip was meant to end; the call's own end keeps its goal. RICH1's call 134 comes with
+no scene, so no skip reaches it, and it plays as before. The track's length is not read -
+the audio lies outside the level data - and the test stands a length in for it.
+Tasks #280, #281 and #283 are on branches of their own; this entry stands after #279's.
+
+**Commits.** `a37160b3`.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -16886,3 +16988,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #277 | The X-ray look holsters nothing at the thighs, its Uzis like its other guns |
 | #278 | A search object keeps the pickup in its reach from any enemy |
 | #279 | The button that skipped a scene does nothing more until it is released |
+| #282 | Skipping a Zip call ends it, and the pad skips every flyby with an end |

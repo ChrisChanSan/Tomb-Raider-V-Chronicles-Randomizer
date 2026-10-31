@@ -1630,10 +1630,17 @@ bool Rando::run(const RandoInput& in,
     // guard lies under 37 in every donor but lives under 460 in the target
     // - only that way can both guard models exist side by side. Such
     // levels run only on this engine; trview copes with them as well.
+    // "animFrom"/"animSlot" (0 = none): a COMPOSITE. "from" and
+    // "sourceSlot" then give only the meshes (with their texinfos and
+    // pages), and the animations, frames, bones and the sounds of their
+    // commands come out of animFrom's slot animSlot - two donors on one
+    // slot, the import refuses unless their bone trees are the same.
+    // animCount then counts the anim donor's slice. The brawler is the one
+    // so far: JOBY2's cutscene soldier on the chef's animations.
     struct CrossEnemy { int typeId; const char* from; CrossSound sounds[2];
                          int companions[2]; const char* swapFrom; int swapDst;
                          int animCount; int baseSlot; const char* tr3;
-                         int sourceSlot; };
+                         int sourceSlot; const char* animFrom; int animSlot; };
     static const CrossEnemy kCross[] = {
         { 33, "rich3",   {},                                    {-1,-1},  "rich3",   462, 0, 0 },  // SWAT
         // Sound 88 (BIO_BREATHE_OUT): the SWAT+'s gas mask breathing in
@@ -1877,6 +1884,37 @@ bool Rando::run(const RandoInput& in,
         // of +0..+11 stay within the 12-slice (0 wrong ones), more his
         // control never plays.
         { 87, "joby3",   {},                                    {-1,-1},  nullptr,   -1, 12, 460 }, // Chef
+        // The brawler: the soldier of JOBY2's last cutscene, Core's actor
+        // in slot 439 (ANIMATING12_MIP, drawn twice there - actors 1 and 2
+        // of cutscene 25 share the one mesh list). Fifteen meshes, ONE
+        // placeholder animation (714) and no control; no room of any
+        // level holds an item of the slot. His bone tree is the chef's to
+        // the last word (BoneCheck joby2 439 against joby3 87: 0 of 14
+        // bones deviating), so he is a COMPOSITE on engine slot 471: his
+        // meshes, texinfos and pages out of joby2's 439, the chef's 12 real
+        // animations, frames, state changes and anim commands out of
+        // joby3's 87 (animCount as at the chef's row), and he runs the
+        // chef's control with an empty fist (game/chef.cpp, chef_rule.h).
+        //
+        // Measured: 153 texinfos on 6 of joby2's pages (fewer where the
+        // target already holds the same page). His rest pose - the chef's
+        // anim +0 frame 0 on his own meshes - stands 795 high, inside the
+        // chef's frame box of 797 his frames carry, so the headroom rule
+        // measures him by the anim donor's box (heightOf). Zone: the
+        // chef's, BASIC_ZONE - his set has no jump or climb.
+        //
+        // Sounds: the chef's commands play 89 (boots, every campaign
+        // level has it), 187 (the swing, likewise) and 190 (the chef's
+        // attack cry, joby3 only) - phase D of the transfer brings 190
+        // from the anim donor. The thud of a hit (70) is hard-wired and in
+        // every level. No CrossSound entries.
+        //
+        // baseSlot 460 as for the chef: he dies the chef's borrowed
+        // soldier death, so the guard travels along. No spawn OCB: he
+        // hunts by his slot's rule whatever the OCB says, and the pool's 0
+        // stands. He may stand in joby2 itself - a composite exists in no
+        // level, so there is no clone of him to keep out (see the rule).
+        { 471, "joby2",  {},                                    {-1,-1},  nullptr,   -1, 12, 460, nullptr, 439, "joby3", 87 }, // Brawler
         // Imp: donor andy3, not andy1. andy1's Imp anim set is gutted: the
         // death animation +45 (ImpControl sets it fixed at hit_points<=0)
         // is a one-frame dummy there without a KillItem command - the Imp
@@ -1977,7 +2015,11 @@ bool Rando::run(const RandoInput& in,
             std::string fromLower;
             for (const char* p = c.from; *p; ++p)
                 fromLower.push_back((*p >= 'A' && *p <= 'Z') ? static_cast<char>(*p + 32) : *p);
-            if (fromLower == lowerName && c.sourceSlot > 0) continue;   // would clone himself
+            //
+            // A composite row is no clone anywhere: its slot joins two
+            // donors and exists in neither, so its mesh donor may take it.
+            if (fromLower == lowerName && c.sourceSlot > 0 && !c.animFrom)
+                continue;   // would clone himself
             candidates.push_back(&c);
         }
 
@@ -2286,7 +2328,12 @@ bool Rando::run(const RandoInput& in,
             {
                 if (k.typeId != typeId) continue;
                 int v = 0;
-                if (in.modelHeight(k.from, k.tr3, k.sourceSlot > 0 ? k.sourceSlot : k.typeId, v))
+                // A composite stands in the frames of its anim donor -
+                // the rest pose's box comes out of there.
+                const bool ok = k.animFrom
+                    ? in.modelHeight(k.animFrom, k.tr3, k.animSlot, v)
+                    : in.modelHeight(k.from, k.tr3, k.sourceSlot > 0 ? k.sourceSlot : k.typeId, v);
+                if (ok)
                     h = v;
                 break;
             }
@@ -3197,6 +3244,12 @@ bool Rando::run(const RandoInput& in,
         e.set("fromLevel", JsonValue::makeString(c->from));
         e.set("replace", JsonValue::makeBool(true));
         if (c->animCount > 0) e.set("animCount", JsonValue::makeInt(c->animCount));
+        // A composite names its anim donor beside the mesh donor above.
+        if (c->animFrom)
+        {
+            e.set("animsFromLevel", JsonValue::makeString(c->animFrom));
+            e.set("animsFromSlot", JsonValue::makeInt(c->animSlot));
+        }
         moveables.push(e);
 
         // The type's mandatory entourage (see the table comment).
@@ -3800,6 +3853,9 @@ std::vector<EnemyKind> Rando::enemyKinds()
         { 85, "Huskie",            nullptr },
         // The chef from joby3 - melee fighter with a knife.
         { 87, "Chef",              nullptr },
+        // Engine slot 471 (BRAWLER): JOBY2's cutscene soldier on the
+        // chef's animations and control - melee with his bare fists.
+        { 471, "Brawler",          nullptr },
         { 89, "Imp",               nullptr },
 
         // The guests from Tomb Raider 3. They sit on slots that carry a

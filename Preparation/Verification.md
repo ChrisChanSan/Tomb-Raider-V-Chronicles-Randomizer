@@ -137,6 +137,16 @@ beside it, and says so when the two disagree.
   from, so a `cross` run places a different set. Byte-identity with a
   build lacking the cyborg is claimed when the two new rows are
   deselected - the case to run when checking that claim.
+- **The brawler in the cross pool (#288).** One more foreign kind, so
+  every cross run draws differently from the first draw he joins on; a
+  plain run does not move. Byte-identity with the build before him is
+  claimed for a build with only his pool row removed: measured over the
+  thirteen campaign levels at seed 380 plain and with `mix cross allsanity
+  8 weapons items20 weather`, seed 1 with `mix cross 8 weapons` and seed 77
+  with `mix cross allsanity 8 items20`, all 156 `.trc`, `.hdm` and log
+  files identical. Deselecting him (`enemiesoff=471`) takes him out
+  before the roll and is the same case: the full build so, at seed 380
+  with the cross switches above, gives the old build's 39 files.
 - **Not the build id.** `RANDO_BUILD_ID` (`TR5Randomizer/src/core/
   BuildId.h`) moved from 19 to 20 because #214 and #223 change what a seed
   writes, and `RANDO_VERSION_STRING` became `Beta_3.0` with it. Neither

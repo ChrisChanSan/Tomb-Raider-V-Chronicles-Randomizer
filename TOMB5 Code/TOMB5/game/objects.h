@@ -378,6 +378,13 @@ enum object_types
 	// him. Same role as the six above.
 	MESHSWAP_CROSS_CRANEGUY,	// 470, from joby2
 
+	// BRAWLER: the soldier of JOBY2's last cutscene as a pool enemy. Core
+	// built him as a cutscene actor only (ANIMATING12_MIP, one placeholder
+	// animation, no control). His bone tree is the chef's, so the randomizer
+	// puts his meshes and the chef's animations together on this slot and
+	// he runs the chef's control with an empty fist (chef_rule.h).
+	BRAWLER,					// 471
+
 	NUMBER_OBJECTS
 };
 

@@ -40,7 +40,11 @@
             // The VCI cyborg as a pool enemy. Slot 67 keeps its name and its
             // Red Alert behaviour; this one is the mortal copy the randomizer
             // places, so the two have to be told apart at a glance.
-            { "id": 469, "name": "Cyborg (pool)",            "categories": [ "Enemy" ] }
+            { "id": 469, "name": "Cyborg (pool)",            "categories": [ "Enemy" ] },
+
+            // JOBY2's cutscene soldier as a pool enemy, on the chef's
+            // animations. No vanilla level has an item of him anywhere.
+            { "id": 471, "name": "Brawler",                  "categories": [ "Enemy" ] }
 
             // Deliberately absent: 462-468 and 470, the meshswap stores. They
             // are never an item in a level, and naming them would suggest

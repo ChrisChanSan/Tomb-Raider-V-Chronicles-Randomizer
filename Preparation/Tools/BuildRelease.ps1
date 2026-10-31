@@ -99,13 +99,13 @@ foreach ($f in (Get-ChildItem "$secretsIn\*.txt" | Sort-Object Name)) {
 Say "Secret lists  : $lists files (data\secrets)"
 
 # --- 3b. trview type names ---------------------------------------------------
-# Eleven slots that a level viewer would otherwise name wrongly or not at all:
+# Twelve slots that a level viewer would otherwise name wrongly or not at all:
 # four (31/43/53/75) carry different contents afterwards - the TR3 guests
 # overwrite SAS, CROW, SAILOR and REAPER; two (47/55) are ordinary Chronicles
-# slots trview has no entry for; three (460/461/469) lie beyond trview's list,
-# which ends at id 452; and two it knows but cannot tell apart - 41 and 85 are
-# both called "Dog" although only one is the husky, and "Soldier Statue" no
-# longer suffices now that two Roman gods can stand in one level.
+# slots trview has no entry for; four (460/461/469/471) lie beyond trview's
+# list, which ends at id 452; and two it knows but cannot tell apart - 41 and
+# 85 are both called "Dog" although only one is the husky, and "Soldier
+# Statue" no longer suffices now that two Roman gods can stand in one level.
 #
 # Not needed to play. It is here because anyone reporting an oddity is asked
 # to look at the level, and a viewer showing "Crow" where a vulture stands

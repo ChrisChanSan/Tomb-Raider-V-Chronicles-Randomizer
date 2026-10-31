@@ -21,8 +21,16 @@
 #include "effects.h"
 #include "control.h"
 #include "lara.h"
+#include "chef_rule.h"
 
 static BITE_INFO knife = { 0, 200, 0, 13 };
+
+// The brawler strikes with his empty fist: mesh 13, the hand the chef
+// holds the knife in, on him a box of eight vertices 85 units long.
+// The blood comes from the middle of its knuckle face (vertices 0, 1, 4
+// and 5 of joby2's slot 439); the knife's point above, 200 units down
+// the hand, would lie 115 units past his knuckles.
+static BITE_INFO fist = { 4, 72, 15, 13 };
 
 void InitialiseChef(short item_number)
 {
@@ -30,8 +38,10 @@ void InitialiseChef(short item_number)
 
 	item = &items[item_number];
 	InitialiseCreature(item_number);
-	item->anim_number = objects[CHEF].anim_index;
-	item->frame_number = anims[objects[CHEF].anim_index].frame_base;
+	// The item's own slot: the chef's set lies on CHEF, the brawler's copy
+	// of it on BRAWLER (chef_rule.h, BrawlerAnimBase).
+	item->anim_number = objects[item->object_number].anim_index;
+	item->frame_number = anims[item->anim_number].frame_base;
 	item->current_anim_state = 1;
 	item->goal_anim_state = 1;
 	item->pos.x_pos += 192 * phd_sin(item->pos.y_rot) >> W2V_SHIFT;
@@ -46,12 +56,14 @@ void ChefControl(short item_number)
 	AI_INFO larainfo;
 	long dx, dz;
 	short angle, head, torso_y, torso_x;
+	bool brawler;
 
 	if (!CreatureActive(item_number))
 		return;
 
 	item = &items[item_number];
 	chef = (CREATURE_INFO*)item->data;
+	brawler = item->object_number == BRAWLER;
 	head = 0;
 	torso_y = 0;
 	torso_x = 0;
@@ -72,6 +84,8 @@ void ChefControl(short item_number)
 	// all three sets (the rich set's dead animations only start at +19).
 	// The randomizer always includes a guard when the chef is placed as a
 	// pool enemy; with no donor loaded at all, the vanilla stub is used.
+	// The brawler dies the same way: his skeleton is the chef's, and the
+	// randomizer brings the guard along with him too.
 	if (item->hit_points <= 0)
 	{
 		item->hit_points = 0;
@@ -85,7 +99,7 @@ void ChefControl(short item_number)
 			else if (objects[BLUE_GUARD].loaded)
 				item->anim_number = objects[BLUE_GUARD].anim_index + 16;
 			else
-				item->anim_number = objects[CHEF].anim_index + 11;
+				item->anim_number = objects[item->object_number].anim_index + 11;
 
 			item->frame_number = anims[item->anim_number].frame_base;
 			// Take the state from the anim table (8 for the borrowed soldier
@@ -152,7 +166,10 @@ void ChefControl(short item_number)
 		// The vanilla chef (joby3 item 186) carries OCB 0 and stays with
 		// his vegetables; curation keeps him fixed in place regardless, so
 		// he can never lose that OCB.
-		if ((item->trigger_flags & 1) ||
+		//
+		// The brawler hunts whatever his OCB says - he has no kitchen
+		// (ChefHunts, chef_rule.h).
+		if (ChefHunts(item->object_number, item->trigger_flags) ||
 			(abs(lara_item->pos.y_pos - item->pos.y_pos) < 1024 && info.distance < 0x240000 &&
 			(item->touch_bits || lara_item->speed > 15 || item->hit_status || TargetVisible(item, &larainfo))))
 		{
@@ -186,13 +203,18 @@ void ChefControl(short item_number)
 		else
 			item->pos.y_rot += 364;
 
+		// The brawler strikes with the same animation and the same hand,
+		// mesh 13 (touch bit 0x2000), with a fist of his own: his own line
+		// in Balance.txt and his own point for the blood.
+		//
 		// Refused while a scene holds Lara (scene_hold.h).
 		if (!chef->flags && item->touch_bits & 0x2000 && item->frame_number > anims[item->anim_number].frame_base + 10 &&
-			!SceneHoldRefuses(EnemyDamage(balance.dmgChefKnife), item->object_number, "chef"))
+			!SceneHoldRefuses(EnemyDamage(brawler ? balance.dmgBrawlerFist : balance.dmgChefKnife),
+				item->object_number, brawler ? "brawler" : "chef"))
 		{
-			lara_item->hit_points -= EnemyDamage(balance.dmgChefKnife);
+			lara_item->hit_points -= EnemyDamage(brawler ? balance.dmgBrawlerFist : balance.dmgChefKnife);
 			lara_item->hit_status = 1;
-			CreatureEffectT(item, &knife, 20, item->pos.y_rot, DoBloodSplat);
+			CreatureEffectT(item, brawler ? &fist : &knife, 20, item->pos.y_rot, DoBloodSplat);
 			SoundEffect(SFX_LARA_THUD, &item->pos, SFX_DEFAULT);
 			chef->flags = 1;
 		}

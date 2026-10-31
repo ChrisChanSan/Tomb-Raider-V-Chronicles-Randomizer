@@ -169,7 +169,7 @@ chreden (https://github.com/chreden/trview). Copy it to
 and restart trview; it merges the file over its built-in list at
 startup.
 
-It only affects names. Eleven slots would otherwise read wrongly or
+It only affects names. Twelve slots would otherwise read wrongly or
 not at all, for four different reasons:
 
   - Four (31, 43, 53, 75) carry different contents after randomizing:
@@ -178,7 +178,7 @@ not at all, for four different reasons:
     and wrongly.
   - Two (47, 55) are ordinary Chronicles slots trview has no entry
     for at all.
-  - Three (460, 461, 469) lie beyond the original 460 and exist in no
+  - Four (460, 461, 469, 471) lie beyond the original 460 and exist in no
     vanilla level, so trview's list ends before them - its last TR5
     id is 452.
   - Two (85, 61) trview does know but cannot tell apart: it calls both

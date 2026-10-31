@@ -757,9 +757,31 @@ public:
     // grows along past the highest frame pointer of the extended slice;
     // scenery anims copied along are harmless ballast per the principle
     // "remove nothing, shift nothing".
+    //
+    // meshSrc / meshSlot (nullptr = the same as src / slotId): a COMPOSITE.
+    // The meshes, their texinfos and their texture pages come out of
+    // meshSrc's slot meshSlot; bones, animations, state changes, ranges,
+    // anim commands, frames and the commands' sounds out of src's slotId.
+    // The occasion is the brawler: JOBY2's cutscene soldier (slot 439, one
+    // placeholder animation) on the chef's animations (joby3, slot 87).
+    // Refused unless both slots carry the same number of meshes and the
+    // same bone tree to the last word - the frames turn meshes by bone, so
+    // a deviating tree would tear the model apart while drawing.
+    //
+    // stats (may be 0): what the copy brought - for the import's log line.
+    struct TransferStats
+    {
+        int meshes = 0;      // distinct meshes appended
+        int anims = 0;       // animations appended
+        int pages = 0;       // texture pages appended (not found in the target)
+        int texinfos = 0;    // texinfos appended (not found in the target)
+        int sounds = 0;      // samples copied for the anim commands
+    };
     bool copyMoveableFrom(const Tr5Level& src, int slotId, std::string& error,
                           int dstSlot = -1, bool meshesOnly = false,
-                          int animCount = -1);
+                          int animCount = -1,
+                          const Tr5Level* meshSrc = nullptr, int meshSlot = -1,
+                          TransferStats* stats = nullptr);
 
     // Lets one anim adopt the data and motion fields of another anim of the
     // SAME level: frame pointer, rate, frame_size, speeds and the command

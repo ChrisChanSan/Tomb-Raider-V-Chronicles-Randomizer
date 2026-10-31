@@ -926,6 +926,50 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
                 continue;
             }
 
+            // A composite (Tr5Level.h, copyMoveableFrom): the entry's own
+            // slot and level give the MESHES, and animsFromLevel /
+            // animsFromSlot the animations, frames, bones and the sounds
+            // of their commands. The brawler is the one so far.
+            const std::string animsFrom = w["animsFromLevel"].asString();
+            const int animsSlot = static_cast<int>(w["animsFromSlot"].asInt(-1));
+            if (!animsFrom.empty())
+            {
+                Tr5Level* animDonor = source(animsFrom);
+                if (!animDonor)
+                {
+                    report.warnings.push_back(std::string(what) + ": donor level " + animsFrom +
+                                              " not loadable - slot " + std::to_string(targetSlot) +
+                                              " is missing.");
+                    continue;
+                }
+
+                std::string cErr;
+                Tr5Level::TransferStats st;
+                if (!level.copyMoveableFrom(*animDonor, animsSlot, cErr, targetSlot, false,
+                                            animCount, donor, slot, &st))
+                {
+                    error = std::string(what) + " slot " + std::to_string(targetSlot) +
+                            " (meshes " + from + ":" + std::to_string(slot) + ", anims " +
+                            animsFrom + ":" + std::to_string(animsSlot) + "): " + cErr;
+                    return false;
+                }
+
+                // The HD model follows the meshes, never the animations:
+                // the donor line names the slot the meshes came out of.
+                level.hdMarkDonor(targetSlot, slot, from);
+                report.warnings.push_back(
+                    "IMPORT composite slot=" + std::to_string(targetSlot) +
+                    " meshes=" + from + ":" + std::to_string(slot) +
+                    " anims=" + animsFrom + ":" + std::to_string(animsSlot) +
+                    " nodes=" + std::to_string(st.meshes) +
+                    " animations=" + std::to_string(st.anims) +
+                    " sounds=" + std::to_string(st.sounds) +
+                    " pages=" + std::to_string(st.pages) +
+                    " texinfos=" + std::to_string(st.texinfos));
+                ++counter;
+                continue;
+            }
+
             std::string wErr;
             if (!level.copyMoveableFrom(*donor, slot, wErr, to, meshesOnly, animCount))
             {
@@ -1741,6 +1785,7 @@ bool Patch::writeHdMarkers(const Tr5Level& level, const std::wstring& levelPath,
     // Lara's own block and the slots this project added past vanilla. Both
     // numbers are the engine's (hd_bind.cpp: lara_block_last = 30, and the
     // hand table covers BLUE_GUARD2 460 .. MESHSWAP_CROSS_CRANEGUY 470).
+    // BRAWLER 471 is no hand-table slot: his donor line is the binding.
     const int kLaraBlockLast = 30;
     const int kHandTableFirst = 460, kHandTableLast = 470;
 

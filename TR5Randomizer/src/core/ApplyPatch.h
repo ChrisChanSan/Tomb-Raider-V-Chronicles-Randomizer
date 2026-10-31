@@ -276,6 +276,9 @@ namespace Patch
     //   - The slots this project added beyond vanilla, 460..470. The engine
     //     carries its own hand table for those (hd_bind.cpp), measured by
     //     picture; a donor's name table has nothing better to offer.
+    //     The brawler's 471 lies past that range on purpose: his meshes
+    //     are JOBY2's slot 439, and JOBY2's .MAP names that model, so his
+    //     donor line is written like any other.
     //
     // The file is written next to the finished level, so it is the CALLER
     // that calls this - after a successful save, with the same target path.

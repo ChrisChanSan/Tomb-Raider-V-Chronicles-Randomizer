@@ -24,6 +24,7 @@
 #include "hd_levelkey.h"		// the HD data kept across a same-level load
 #include "../registry.h"		// REG_PeekString - the outfit in the key
 #include "hd_render.h"
+#include "hd_fog.h"			// the fog's field and the art's mist
 #include "hd_vis.h"			// the visibility path's tables
 #include "hd_book.h"			// HDBookClock - the time the material 15 books turn on
 #include "hd_object.h"
@@ -6999,6 +7000,56 @@ static bool BulbUnderSheet(const FOGBULB_STRUCT& b)
 	return false;
 }
 
+/* The level's fog bulbs for the art's mist (HDRenderFogLevel, hd_fog.h
+ * HDFogArtVerdict), once the level is built: every bulb of the rooms'
+ * lists in the order aRoomInit copies them (drawroom.cpp), its centre in
+ * the world and its radius. With the log, one line per bulb with its
+ * field's reach and whether the fog's pass draws in the level (hd_fog 1
+ * and the water sheets, whose depth it reads), and one per mist range the
+ * bulbs' fog stands in for, left out where the pass draws. */
+static void ReportFogLevel()
+{
+	std::vector<float> bulbs;
+	std::vector<int> rooms;
+
+	for (int r = 0; r < number_rooms; r++)
+		for (int k = 0; room[r].fogbulb && k < room[r].nFogBulbs; k++)
+		{
+			const FOGBULB_INFO& b = room[r].fogbulb[k];
+
+			bulbs.push_back(b.px);
+			bulbs.push_back(b.py);
+			bulbs.push_back(b.pz);
+			bulbs.push_back(b.rad);
+			rooms.push_back(r);
+		}
+
+	HDRenderFogLevel(bulbs.empty() ? 0 : bulbs.data(), (int)rooms.size());
+
+	if (!gLogEnabled)
+		return;
+
+	const int pass = HDRenderFogOn() && HDRenderWaterSheetsBuilt() ? 1 : 0;
+
+	for (size_t i = 0; i < rooms.size(); i++)
+		Log("HDLOG fogfield level=%s bulb=%d room=%d radius=%.0f reach=%.0f "
+			"pass=%d", g_stem, (int)i, rooms[i], bulbs[i * 4 + 3],
+			HDFogFieldReach(bulbs[i * 4 + 3], HDRenderFogField()), pass);
+
+	const int all = HDRenderFogArt(0, 0, 1);
+	std::vector<HDFogArtPart> parts((size_t)(all > 0 ? all : 1));
+
+	HDRenderFogArt(parts.data(), all, 1);
+
+	for (int i = 0; i < all && pass; i++)
+		if (parts[(size_t)i].verdict != HD_FOG_ART_KEPT)
+			Log("HDLOG fogart level=%s group=%d range=%d dropped=%s "
+				"meets=%d gap=%.0f", g_stem, parts[(size_t)i].group,
+				parts[(size_t)i].range, parts[(size_t)i].verdict ==
+				HD_FOG_ART_BULB ? "bulb" : "field", parts[(size_t)i].meets,
+				parts[(size_t)i].gap);
+}
+
 /* What the whole frame shares. Every one of these is the engine's own global,
  * read where the classic path reads it: the fog bulb list that draw.cpp built
  * behind `if (tomb5.fog)` - so with fog off the count is 0 and the HD rooms
@@ -8637,6 +8688,10 @@ static void HDLevelBuildHD()
 	 * BuildWaterSurfaces, because it asks which faces are really drawn. */
 	BuildWaterFrames();
 	lap(LOAD_FRAMES);
+
+	// The art's mist against the level's fog bulbs, and the bulbs' fields:
+	// after the sheets, which say whether the fog's pass draws here.
+	ReportFogLevel();
 
 	/* `suppressed` and `kept` count the statics of the rooms drawn HD and of
 	 * the rooms drawn classic; `art`, `by_group` and `classic` the answers of
@@ -11410,7 +11465,8 @@ void HDFrameDrawGlow()
 		g_matrix_checked = true;
 		MatrixCheck(g_frame[0].room, g_frame[0].group, g_frame[0].world, projection);
 
-		// The fog bulbs' own pass in this bracket: bulbs taken, quads drawn.
+		// The fog bulbs' own pass in this bracket: bulbs taken, quads drawn,
+		// the taken bulbs whose fields meet and the mist draws left out.
 		HDFogLast fog;
 
 		HDRenderFogLast(&fog);
@@ -11418,7 +11474,8 @@ void HDFrameDrawGlow()
 			"wibble=%d cam_uw=%d shimmer=%d objects=%d object_calls=%d "
 			"cutout_calls=%d cutout_pages=%d flipbook_calls=%d "
 			"gloss_calls=%d water_calls=%d book_calls=%d clear_calls=%d "
-			"sheen_calls=%d fog_taken=%d fog_drawn=%d",
+			"sheen_calls=%d fog_taken=%d fog_drawn=%d fog_field=%d "
+			"fog_dropped=%d",
 			g_frame_count, g_frame_room_calls, g_frame_dropped,
 			frame.bulbCount, frame.distanceFogStart, (int)wibble,
 			frame.cameraUnderwater, tomb5.shimmer ? 1 : 0,
@@ -11426,7 +11483,8 @@ void HDFrameDrawGlow()
 			HDRenderCutoutCalls(), HDPageCacheCutoutPages(),
 			HDRenderFlipbookCalls(), HDRenderGlossCalls(),
 			HDRenderWaterCalls(), g_frame_book_calls, g_frame_clear_calls,
-			g_frame_sheen_calls, fog.offered, fog.drawn);
+			g_frame_sheen_calls, fog.offered, fog.drawn, fog.shared,
+			fog.dropped);
 	}
 
 	/* The followed book, page by page: the first book drawn in the level

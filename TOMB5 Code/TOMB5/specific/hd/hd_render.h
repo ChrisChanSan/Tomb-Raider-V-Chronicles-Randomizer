@@ -116,6 +116,11 @@ struct HDFogLast
 	int placed;
 	float eye[3];
 	float axes[9];
+	/* The field (hd_fog.h): the bulbs the pass took whose field meets
+	 * another taken bulb's, where the densities add, and the draws of the
+	 * art's mist the bracket left out because the bulbs' fog stands there. */
+	int shared;
+	int dropped;
 };
 
 void HDRenderFogLast(HDFogLast* out);

@@ -14,13 +14,15 @@
 /* The fog bulbs' body (hd_render.cpp, "the fog bulbs' body"; the rule and
  * its numbers are hd_fog.h's, line for line, where the reasons stand).
  *
- * One quad per fog bulb over the sphere's own rectangle on the screen,
- * drawn once a frame over the finished HD scene: each pixel's eye ray is
- * cut by the sphere and by the frame's depth, the bulb's density is
- * integrated along the piece that is left, and the pixel is veiled by it -
- * blended SRC ONE, DEST SRCALPHA, the colour the fog's own light and alpha
- * the light that passes. A ray that misses the bulb leaves the pixel as it
- * was, to the bit (colour 0, alpha 1).
+ * One quad per fog bulb over the rectangle of its field's sphere on the
+ * screen, drawn once a frame over the finished HD scene: each pixel's eye
+ * ray is cut by the field's sphere - the bulb's reach - and by the frame's
+ * depth, the field's density is integrated along the piece that is left,
+ * each piece weighted with the bulb's share of the bracket's fields'
+ * summed density (hd_fog.h, HDFogFieldShare), and the pixel is veiled by
+ * it - blended SRC ONE, DEST SRCALPHA, the colour the fog's own light and
+ * alpha the light that passes. A ray that misses the field leaves the
+ * pixel as it was, to the bit (colour 0, alpha 1).
  *
  * Build. bshader.bat compiles it,
  *
@@ -38,10 +40,17 @@
  *   c1 gFogScreen  the viewport's x, y, 1 / width, 1 / height
  *   c2 gFogTex     1 / the depth texture's width and height, the clock in
  *                  seconds, 1 for the breath and 0 without it
- *   c3 gFogBulb    the bulb's centre in view space, its radius
- *   c4 gFogColour  its colour 0..1, its density d
+ *   c3 gFogBulb    the bulb's centre in view space, its field's reach
+ *   c4 gFogColour  its colour 0..1, its density d times its strength
  *   c5 gFogEye     the eye in the world
  *   c6 - c8        gFogAxes, the world's x, y and z axes in view space
+ *   c9 gFogOwn     the bulb's own radius (the breath's cells), its peak
+ *                  (the density at its centre), the count of the fields
+ *                  below
+ *   c10 - c25      gFogFields, the fields that meet the bulb's own, its own
+ *                  the first: centre in view space, one over the reach
+ *                  squared
+ *   c26 - c29      gFogPeaks, their peaks four a register
  * Sampler s0: the frame's depth (INTZ), point, clamped. */
 
 float4 gFogRay : register(c0);
@@ -51,6 +60,9 @@ float4 gFogBulb : register(c3);
 float4 gFogColour : register(c4);
 float4 gFogEye : register(c5);
 float4 gFogAxes[3] : register(c6);
+float4 gFogOwn : register(c9);
+float4 gFogFields[16] : register(c10);
+float4 gFogPeaks[4] : register(c26);
 sampler2D sFogDepth : register(s0);
 
 // hd_fog.h's HD_FOG_PEAK, HD_FOG_BREATH, HD_FOG_CELL, HD_FOG_RISE and
@@ -110,6 +122,30 @@ float FogColumn(float k, float s0, float s1)
 	return (k * s1 - s1 * s1 * s1 / 3.0f) - (k * s0 - s0 * s0 * s0 / 3.0f);
 }
 
+/* HDFogFieldDensity summed at p (view space) over the fields that meet the
+ * bulb's own, its own the first (gFogOwn.z of them; no other adds there).
+ * Unrolled, as ps_3_0 reads no constant register by a run time index; a
+ * slot past the count is skipped by a branch every pixel takes alike. */
+float FogFieldSum(float3 p)
+{
+	float sum = 0.0f;
+
+	[unroll]
+	for (int j = 0; j < 16; j++)
+	{
+		[branch]
+		if ((float)j < gFogOwn.z)
+		{
+			const float3 v = p - gFogFields[j].xyz;
+
+			sum += gFogPeaks[j / 4][j % 4] *
+				max(1.0f - dot(v, v) * gFogFields[j].w, 0.0f);
+		}
+	}
+
+	return sum;
+}
+
 float4 FogPS(float2 vpos : VPOS) : COLOR
 {
 	const float2 pix = vpos + 0.5f;
@@ -122,8 +158,8 @@ float4 FogPS(float2 vpos : VPOS) : COLOR
 	// The surface's view depth; a cleared pixel comes out very far away.
 	const float zs = gFogRay.w / max(gFogRay.z - depth, 1.0e-6f);
 
-	// HDFogSpan: the piece of the ray inside the sphere, in radii from the
-	// point nearest the centre.
+	// HDFogSpan: the piece of the ray inside the field's sphere, in reaches
+	// from the point nearest the centre.
 	const float3 c = gFogBulb.xyz;
 	const float rad = gFogBulb.w;
 	const float len = length(dir);
@@ -141,9 +177,10 @@ float4 FogPS(float2 vpos : VPOS) : COLOR
 	if (s1 <= s0)
 		return float4(0.0f, 0.0f, 0.0f, 1.0f);
 
-	// HDFogRayTau: the column in pieces, each with the breath at its middle.
+	// HDFogFieldTau: the column in pieces, each with the bulb's share of the
+	// fields' sum and the breath (cells of its own radius) at its middle.
 	const float k = 1.0f - b2;
-	const float cell = FOG_CELL * max(rad, 1.0f);
+	const float cell = FOG_CELL * max(gFogOwn.x, 1.0f);
 	float column = 0.0f;
 
 	[loop]
@@ -156,7 +193,11 @@ float4 FogPS(float2 vpos : VPOS) : COLOR
 			dot(p, gFogAxes[1].xyz), dot(p, gFogAxes[2].xyz));
 		const float3 q = world / cell + float3(0.0f, gFogTex.z * FOG_RISE,
 			0.0f);
-		const float w = 1.0f - FOG_BREATH * gFogTex.w * FogNoise(q);
+		const float sum = FogFieldSum(p);
+		const float breath = 1.0f - FOG_BREATH * gFogTex.w * FogNoise(q);
+		// A select: under the peak the weight is the breath to the bit.
+		const float w = sum > gFogOwn.y ? breath * (gFogOwn.y / sum) :
+			breath;
 
 		column += w * FogColumn(k, a, b);
 	}

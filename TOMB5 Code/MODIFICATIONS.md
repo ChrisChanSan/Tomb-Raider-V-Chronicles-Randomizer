@@ -16,12 +16,12 @@ small local fixes that predate this repository and are documented in the files t
 (`dxsound.cpp` LOCSOFTWARE, `function_stubs.cpp` DO_LOG).
 
 Measured on **2026-10-31** by comparing every file under `TOMB5/` against that first
-commit: **130 files changed, 191 entirely new - 321 in all**, none deleted,
-**271** of them carrying the modification notice at the top, which `grep -rl
+commit: **133 files changed, 192 entirely new - 325 in all**, none deleted,
+**275** of them carrying the modification notice at the top, which `grep -rl
 "Modified 2026 by ChrisChanSan" TOMB5/` lists. The project file `tomb5.vcxproj` carries
 the same notice as an XML comment.
 
-50 of the 321 do not carry the notice, and none of them should:
+50 of the 325 do not carry the notice, and none of them should:
 
 - the 40 `specific/hd/hd_shader/*.inc` (9 vertex and 31 pixel shaders) are compiler
   output (`fxc` bytecode as a C array), regenerated from the eleven `.hlsl` files beside

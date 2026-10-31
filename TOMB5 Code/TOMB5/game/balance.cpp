@@ -122,6 +122,13 @@ static const BALANCE_LINE balanceLines[] =
 	HEALTH("HP_Cyborg",			hpCyborg,		180,	50,		CYBORG),
 	HEALTH("HP_Sniper",			hpSniper,		35,	35,		SNIPER),
 	HEALTH("HP_Chef",			hpChef,			60,	60,		CHEF),
+	/*
+	 * The brawler runs the chef's control and is shipped at twice the
+	 * chef's numbers. There is no Core value to hold him against - Core
+	 * never made him an enemy - so the vanilla column repeats the standard,
+	 * setup.cpp writes the same 120, and the template names no original.
+	 */
+	HEALTH("HP_Brawler",		hpBrawler,		120,	120,	BRAWLER),
 	HEALTH("HP_Pierre",			hpPierre,		60,	60,		PIERRE),
 	HEALTH("HP_Larson",			hpLarson,		60,	60,		LARSON),
 	HEALTH("HP_TwoGun",			hpTwoGun,		90,	90,		TWOGUN),
@@ -197,6 +204,7 @@ static const BALANCE_LINE balanceLines[] =
 		";  The supernatural and heavy machinery:\r\n"),
 
 	DAMAGE("DMG_Chef_Knife",	dmgChefKnife,		200,	150,	"  melee fighter in the enemy pool - was 80"),
+	DAMAGE("DMG_Brawler_Fist",	dmgBrawlerFist,		400,	400,	"  the chef's strike with an empty fist"),
 	DAMAGE("DMG_Skeleton_Strike", dmgSkeletonStrike, 400,	400,	0),
 	DAMAGE("DMG_Gladiator_Strike", dmgGladiatorStrike, 200,	120,	0),
 	DAMAGE("DMG_God_Strike",	dmgGodStrike,		60,	40,		"  Roman god in melee"),

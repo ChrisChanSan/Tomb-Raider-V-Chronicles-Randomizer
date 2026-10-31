@@ -62,6 +62,7 @@ struct BALANCE_INFO
 	long hpCyborg;			/* the same model as the pool enemy, but mortal */
 	long hpSniper;
 	long hpChef;
+	long hpBrawler;		/* JOBY2's cutscene soldier on the chef's control */
 	long hpTwoGun;
 	long hpHydra;
 	long hpImp;
@@ -91,6 +92,7 @@ struct BALANCE_INFO
 	long dmgBats;
 	long dmgSpiders;
 	long dmgChefKnife;
+	long dmgBrawlerFist;
 	long dmgSkeletonStrike;
 	long dmgGladiatorStrike;
 	long dmgGodStrike;

@@ -83,6 +83,7 @@
 #include "lara2gun.h"
 #include "../specific/hd/hd_bind.h"	// slot names for the diagnostic log
 #include "carrier_rule.h"	// CarrierPass - search objects before enemies
+#include "chef_rule.h"		// BrawlerAnimBase - the brawler's animations
 
 void InitialiseLara(long restore)
 {
@@ -1831,6 +1832,42 @@ void BaddyObjects()
 		bones[obj->bone_index + 52] |= 4;
 	}
 
+	// The brawler: the chef's block on a slot of his own (objects.h). His
+	// record carries his meshes out of JOBY2's cutscene soldier and the
+	// chef's animations beside them; the anchor is his own slot, or the
+	// chef's for a record without animations (BrawlerAnimBase, the way the
+	// stub soldiers above borrow the guard's set). Collision, shadow,
+	// pivot, radius, the save flags and the head and torso joints are the
+	// chef's - the two skeletons are the same to the last bone offset.
+	//
+	// hit_points is the literal 120, BalanceSetEnemies overwrites it from
+	// HP_Brawler and compares this against the table's vanilla column.
+	if (objects[BRAWLER].loaded)
+	{
+		obj = &objects[BRAWLER];
+		obj->anim_index = (short)BrawlerAnimBase(obj->anim_index,
+			objects[CHEF].loaded != 0, objects[CHEF].anim_index);
+		obj->initialise = InitialiseChef;
+		obj->control = ChefControl;
+		obj->collision = CreatureCollision;
+		obj->shadow_size = 128;
+		obj->hit_points = 120;
+		obj->pivot_length = 50;
+		obj->radius = 102;
+		obj->bite_offset = 0;
+		obj->object_mip = 5120;
+		obj->intelligent = 1;
+		obj->HitEffect = 1;
+		obj->save_position = 1;
+		obj->save_hitpoints = 1;
+		obj->save_flags = 1;
+		obj->save_anim = 1;
+		bones[obj->bone_index + 24] |= 8;
+		bones[obj->bone_index + 24] |= 4;
+		bones[obj->bone_index + 52] |= 8;
+		bones[obj->bone_index + 52] |= 4;
+	}
+
 	if (objects[TWOGUN].loaded)
 	{
 		obj = &objects[TWOGUN];
@@ -2248,6 +2285,10 @@ void InitialiseObjects()
 static_assert(CARRIER_SEARCH_OBJECT1 == SEARCH_OBJECT1 &&
 	CARRIER_SEARCH_OBJECT3 == SEARCH_OBJECT3 && CARRIER_CYBORG == CYBORG,
 	"carrier_rule.h disagrees");
+
+// And chef_rule.h's copy of the chef's and the brawler's.
+static_assert(CHEF_RULE_CHEF == CHEF && CHEF_RULE_BRAWLER == BRAWLER,
+	"chef_rule.h disagrees");
 
 void GetCarriedItems()
 {

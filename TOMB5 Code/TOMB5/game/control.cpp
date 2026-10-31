@@ -358,9 +358,10 @@ long ControlPhase(long nframes, long demo_mode)
 		if (cutseq_trig)
 		{
 			// Cross is added alongside Escape - Cross is already the
-			// confirm button everywhere else. Checked via Key(257) (raw
-			// joy_fire bit 1, Cross on this controller's DirectInput
-			// mapping), not input & IN_SELECT, because bDisableLaraControl
+			// confirm button everywhere else. Checked on the pad's own bit
+			// (JoyConfirmDown, specific\input.cpp: joy_fire bit 1 on
+			// DirectInput, bit 0 on XInput, Cross or A), not
+			// input & IN_SELECT, because bDisableLaraControl
 			// above already masks input down to IN_LOOK only during
 			// cutscenes (the same reason the original code checked
 			// keymap[DIK_ESCAPE] directly instead of input & IN_DESELECT).
@@ -378,15 +379,28 @@ long ControlPhase(long nframes, long demo_mode)
 			// key still held from firing the weapon does not instantly
 			// skip the scene that just started; Escape keeps its original
 			// held-key behavior.
+			//
+			// The press that skips stays out of the input until it is let
+			// go (game\skip_latch.h): play comes back a few ticks later,
+			// and the button is Action there. JoyConfirmDown reads the bit
+			// the latch leaves, so a button still held from skipping one
+			// scene cannot skip the next. Escape needs no latch: it is no
+			// play role (the binding page cannot take it, and its bits,
+			// IN_OPTION and IN_DESELECT, open the inventory only on a
+			// fresh press). The title skips nothing.
 			{
 				static char crossWasHeld = 0;
-				const char crossNow = (ControlMethod == 1 && Key(256 + JoyBitConfirm())) ? 1 : 0;	// Cross or A - the bit hangs on the input path (input.cpp)
+				const int crossFresh = SkipConfirmEdge((int)JoyConfirmDown(),
+					&crossWasHeld);
 
 				if (tomb5.cutseq_skipper && cutseq_trig == 2 && !ScreenFading && !bDoCredits &&
-					(keymap[DIK_ESCAPE] || (crossNow && !crossWasHeld)))
+					(keymap[DIK_ESCAPE] || crossFresh))
+				{
 					do_cutseq_skipper_stuff();
 
-				crossWasHeld = crossNow;
+					if (crossFresh && gfLevelId != LVL5_TITLE)
+						InputSkipLatch(SKIP_LATCH_CUTSEQ);
+				}
 			}
 
 			input = 0;

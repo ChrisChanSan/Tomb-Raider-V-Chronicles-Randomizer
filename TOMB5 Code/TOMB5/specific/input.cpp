@@ -822,6 +822,43 @@ static long duck_latch;
  * (game\modern_move.cpp). At the default it stays 0. */
 static long grab_latch;
 
+/* The skip latch, its whole memory (game\skip_latch.h holds the rule): the
+ * pad bit whose press skipped a cutscene or a flyby, kept out of every
+ * reading until a reading has it up. Engaged by the two skippers through
+ * InputSkipLatch (game\control.cpp, game\spotcam.cpp), applied and released
+ * in S_UpdateInput right after the pad is read, dropped by
+ * InputModeLatchReset. Off unless a skip fired on the pad. */
+static SKIP_LATCH skip_latch = { SKIP_LATCH_OFF, 0, 0 };
+
+/* The confirm button as the two skippers read it: on the pad page only, and
+ * out of the reading the latch has already taken its bit out of, so the
+ * button that skipped one scene reads as up until it is released and cannot
+ * skip the next scene with the same press. */
+long JoyConfirmDown()
+{
+	return (ControlMethod == 1 &&
+		PadBitDown((unsigned long)joy_fire, JoyBitConfirm())) ? 1 : 0;
+}
+
+/* A skipper fired on the confirm button. The bit is the active path's
+ * (JoyBitConfirm) as it is now; the latch keeps that bit until it is let go,
+ * whatever the path does meanwhile. SKIPLATCH, behind -log: `set=` the
+ * skipper, `bit=` the pad bit, `tick=` GlobalCounter. */
+void InputSkipLatch(long kind)
+{
+	SkipLatchEngage(&skip_latch, JoyBitConfirm(), kind, (long)GlobalCounter);
+
+	if (gLogEnabled)
+		Log("SKIPLATCH set=%s bit=%ld tick=%ld",
+			kind == SKIP_LATCH_CUTSEQ ? "cutseq" : "flyby", skip_latch.bit,
+			(long)GlobalCounter);
+}
+
+long InputSkipLatchHolds(long kind)
+{
+	return SkipLatchHolds(&skip_latch, kind) ? 1 : 0;
+}
+
 /* Drops the mode latches from outside a tick. Callers:
  *
  * - game\gameflow.cpp, beside the level's priming tick. That line covers a
@@ -836,12 +873,24 @@ static long grab_latch;
  *
  * The key memory is left alone on purpose: a key still held across a level
  * boundary or out of a menu is not a fresh press and must not latch
- * (game\modern_move.cpp). */
+ * (game\modern_move.cpp).
+ *
+ * The skip latch goes with them: the scene it was set by belongs to the
+ * level that ended, and the next level's scenes start their edge from the
+ * button as it is then (game\spotcam.cpp, InitialiseSpotCam). SKIPLATCH
+ * `dropped`, behind -log, when it was holding: `held=` the ticks since the
+ * skip. */
 void InputModeLatchReset()
 {
 	ModernModeLatchDrop(&sprint_latch);
 	ModernModeLatchDrop(&duck_latch);
 	ModernModeLatchDrop(&grab_latch);
+
+	if (gLogEnabled && SkipLatchHolds(&skip_latch, 0))
+		Log("SKIPLATCH dropped held=%ld tick=%ld",
+			(long)GlobalCounter - skip_latch.since, (long)GlobalCounter);
+
+	SkipLatchDrop(&skip_latch);
 }
 
 /* Whether the look key steers Lara as in Tank this tick. The bypass runs
@@ -1342,6 +1391,25 @@ long S_UpdateInput()
 		ModernCameraMouse(mouse_yaw, mouse_pitch);
 
 		joy_fire &= ~rstick_bits;
+	}
+
+	/* The skip latch (game\skip_latch.h): the button whose press skipped a
+	 * cutscene or a flyby is taken out of the reading here, before any role
+	 * is read from it, for as long as it stays down - every role bound to it
+	 * by the binding page is silent, in play and in the menus alike, so the
+	 * press that ended a scene neither pulls, grabs nor confirms. The first
+	 * reading with it up lets go. SKIPLATCH `released`, behind -log: `held=`
+	 * the ticks since the skip. */
+	{
+		const long since = skip_latch.since;
+		int released;
+
+		joy_fire = (long)SkipLatchApply(&skip_latch, (unsigned long)joy_fire,
+			&released);
+
+		if (released && gLogEnabled)
+			Log("SKIPLATCH released held=%ld tick=%ld",
+				(long)GlobalCounter - since, (long)GlobalCounter);
 	}
 
 	/* MOUSELOG, behind -log: one line per call on which the mouse moved or a

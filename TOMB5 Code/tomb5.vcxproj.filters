@@ -613,6 +613,9 @@
     <ClInclude Include="TOMB5\game\spotcam_math.h">
       <Filter>TOMB5\game</Filter>
     </ClInclude>
+    <ClInclude Include="TOMB5\game\skip_latch.h">
+      <Filter>TOMB5\game</Filter>
+    </ClInclude>
     <ClInclude Include="TOMB5\game\switch.h">
       <Filter>TOMB5\game</Filter>
     </ClInclude>

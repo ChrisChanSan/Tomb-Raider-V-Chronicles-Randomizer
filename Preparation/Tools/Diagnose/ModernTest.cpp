@@ -113,6 +113,8 @@
 // Who takes a pickup in reach at level start: the search objects before the
 // enemies (carrier_pass).
 #include "../../../TOMB5 Code/TOMB5/game/carrier_rule.h"
+// The drone's band, gun, height and death (drone_rule).
+#include "../../../TOMB5 Code/TOMB5/game/drone_rule.h"
 // The button that skipped a scene, kept out of the input until it is let
 // go, and the pad roles it is held against (skip_latch, skip_latch_rope).
 #include "../../../TOMB5 Code/TOMB5/game/skip_latch.h"
@@ -30967,6 +30969,9 @@ static void carrier_pass()
 	ok(CarrierPass(CARRIER_CYBORG, true) == -1,
 		"carrier: the pool cyborg carries nothing",
 		CarrierPass(CARRIER_CYBORG, true), -1);
+	ok(CarrierPass(CARRIER_DRONE, true) == -1,
+		"carrier: the drone carries nothing, it dies in the air",
+		CarrierPass(CARRIER_DRONE, true), -1);
 	ok(CarrierPass(dog, false) == -1 && CarrierPass(guardian, false) == -1,
 		"carrier: a slot not marked intelligent carries nothing",
 		CarrierPass(dog, false), -1);
@@ -31068,6 +31073,269 @@ static void carrier_pass()
 		hd_switch_count(setup, "\"carrier_rule.h disagrees\""), 1);
 
 	free(setup);
+}
+
+/* The drone's decision table (game\drone_rule.h) on made-up distances,
+ * sights and ticks: the band with its slack at both edges, the four
+ * conditions of a shot and the burst's share of every period, the strafe
+ * side and the turns, the step in each state, the height between floor and
+ * ceiling, the aim's scatter and the radius - and the engine's own text,
+ * which reads the hit points first, dies through CreatureDie with its
+ * explode flag and takes the damage line behind the scene hold. */
+static void drone_rule()
+{
+	printf("the drone: its band, its gun, its height and its death\n");
+
+	long n, m;
+
+	// The band.
+	ok(DroneNextState(DRONE_CLOSE, DRONE_NEAR - 1, true) == DRONE_BACK &&
+		DroneNextState(DRONE_HOLD, 0, false) == DRONE_BACK,
+		"drone: nearer than NEAR it backs off, sight or none",
+		DroneNextState(DRONE_CLOSE, DRONE_NEAR - 1, true), DRONE_BACK);
+	ok(DroneNextState(DRONE_BACK, DRONE_NEAR + DRONE_SLACK - 1, true) ==
+		DRONE_BACK, "drone: it backs off on to NEAR + SLACK",
+		DroneNextState(DRONE_BACK, DRONE_NEAR + DRONE_SLACK - 1, true),
+		DRONE_BACK);
+	ok(DroneNextState(DRONE_BACK, DRONE_NEAR + DRONE_SLACK, true) == DRONE_HOLD &&
+		DroneNextState(DRONE_BACK, DRONE_NEAR + DRONE_SLACK, false) == DRONE_CLOSE,
+		"drone: past the slack it holds with sight and closes without",
+		DroneNextState(DRONE_BACK, DRONE_NEAR + DRONE_SLACK, true), DRONE_HOLD);
+	ok(DroneNextState(DRONE_HOLD, 3000, false) == DRONE_CLOSE &&
+		DroneNextState(DRONE_CLOSE, 3000, false) == DRONE_CLOSE,
+		"drone: without sight it closes in along the path",
+		DroneNextState(DRONE_HOLD, 3000, false), DRONE_CLOSE);
+	ok(DroneNextState(DRONE_CLOSE, DRONE_FAR, true) == DRONE_HOLD &&
+		DroneNextState(DRONE_CLOSE, DRONE_FAR + 1, true) == DRONE_CLOSE,
+		"drone: closing, it holds at FAR and not beyond",
+		DroneNextState(DRONE_CLOSE, DRONE_FAR + 1, true), DRONE_CLOSE);
+	ok(DroneNextState(DRONE_HOLD, DRONE_FAR + DRONE_SLACK, true) == DRONE_HOLD &&
+		DroneNextState(DRONE_HOLD, DRONE_FAR + DRONE_SLACK + 1, true) == DRONE_CLOSE,
+		"drone: holding, it lets her go out to FAR + SLACK",
+		DroneNextState(DRONE_HOLD, DRONE_FAR + DRONE_SLACK + 1, true), DRONE_CLOSE);
+	ok(DroneNextState(DRONE_DEAD, 3000, true) == DRONE_DEAD,
+		"drone: the dead stay dead", DroneNextState(DRONE_DEAD, 3000, true),
+		DRONE_DEAD);
+
+	/* No flicker: Lara walking to and fro 400 units round either edge of
+	 * the band, inside its slack, changes the state not once. */
+	n = 0;
+	{
+		int s = DRONE_HOLD;
+
+		for (long t = 0; t < 600; t++)
+		{
+			const long d = DRONE_FAR + 300 - (t % 40 < 20 ? 0 : 400);
+			const int next = DroneNextState(s, d, true);
+
+			n += next != s;
+			s = next;
+		}
+	}
+	ok(n == 0, "drone: holding near FAR it does not flicker", n, 0);
+	n = 0;
+	{
+		int s = DRONE_BACK;
+
+		for (long t = 0; t < 600; t++)
+		{
+			const long d = DRONE_NEAR + 300 - (t % 40 < 20 ? 0 : 400);
+			const int next = DroneNextState(s, d, true);
+
+			n += next != s;
+			s = next;
+		}
+	}
+	ok(n == 0, "drone: backing off near NEAR it does not flicker", n, 0);
+
+	// The gun.
+	ok(DroneFires(DRONE_HOLD, true, DRONE_RANGE, DRONE_CONE, true) &&
+		DroneFires(DRONE_BACK, true, 100, -DRONE_CONE, true) &&
+		DroneFires(DRONE_CLOSE, true, 5000, 0, true),
+		"drone: sight, range, cone and burst - it fires in any state", 1, 1);
+	ok(!DroneFires(DRONE_HOLD, false, 3000, 0, true) &&
+		!DroneFires(DRONE_HOLD, true, 3000, 0, false) &&
+		!DroneFires(DRONE_HOLD, true, DRONE_RANGE + 1, 0, true) &&
+		!DroneFires(DRONE_HOLD, true, 3000, DRONE_CONE + 1, true) &&
+		!DroneFires(DRONE_HOLD, true, 3000, -DRONE_CONE - 1, true) &&
+		!DroneFires(DRONE_DEAD, true, 3000, 0, true),
+		"drone: any one of the four missing, or dead, holds its fire", 0, 0);
+
+	// BURST of every BURST + PAUSE ticks, for every drone, out of step.
+	n = 0;
+	m = 0;
+	for (unsigned item = 0; item < 200; item++)
+	{
+		long on = 0;
+
+		for (unsigned t = 0; t < DRONE_BURST + DRONE_PAUSE; t++)
+			on += DroneBurstOn(item, 1000 + t);
+
+		n += on != DRONE_BURST;
+		m += DroneBurstOn(item, 0) != DroneBurstOn(0, 0);
+	}
+	ok(n == 0, "drone: a burst is BURST ticks of every BURST + PAUSE", n, 0);
+	ok(m > 20, "drone: two drones do not fire in step", m, 21);
+	ok(DroneBurstOn(7, 123) == DroneBurstOn(7, 123) &&
+		DroneHash(7, 123) == DroneHash(7, 123) &&
+		DroneHash(7, 123) != DroneHash(123, 7),
+		"drone: the same moment, the same answer - a hash, no random number",
+		1, 1);
+
+	// The strafe side.
+	n = 0;
+	m = 0;
+	for (unsigned leg = 0; leg < 1000; leg++)
+	{
+		const int s = DroneStrafeSign(42, leg);
+
+		n += s == 1;
+		m += s != 1 && s != -1;
+	}
+	ok(m == 0 && n > 400 && n < 600,
+		"drone: a strafe leg goes either way, about half each", n, 500);
+
+	// Turn and bank.
+	ok(DroneTurnStep(10000) == DRONE_TURN && DroneTurnStep(-10000) == -DRONE_TURN &&
+		DroneTurnStep(300) == 300,
+		"drone: its nose turns 4 degrees a tick at most", DroneTurnStep(10000),
+		DRONE_TURN);
+	{
+		short b = 0;
+
+		for (int t = 0; t < 9; t++)
+			b = DroneBankStep(b, DRONE_HOLD, 1);
+		n = b;
+		for (int t = 0; t < 2; t++)
+			b = DroneBankStep(b, DRONE_HOLD, 1);
+		m = b;
+		for (int t = 0; t < 11; t++)
+			b = DroneBankStep(b, DRONE_CLOSE, 1);
+		ok(n == 9 * DRONE_BANK_STEP && m == DRONE_BANK && b == 0,
+			"drone: it banks into a strafe a degree a tick, and levels again",
+			m, DRONE_BANK);
+	}
+	ok(DroneBankStep(0, DRONE_HOLD, -1) == -DRONE_BANK_STEP,
+		"drone: the bank follows the strafe's side",
+		DroneBankStep(0, DRONE_HOLD, -1), -DRONE_BANK_STEP);
+
+	// The step in each state.
+	{
+		long dx, dz, len;
+
+		DroneMove(DRONE_CLOSE, 3000, 0, 0, 2000, 1, &dx, &dz);
+		ok(dx == 0 && dz == DRONE_SPEED_CLOSE,
+			"drone: closing, it flies along the path, not at Lara", dz,
+			DRONE_SPEED_CLOSE);
+		DroneMove(DRONE_CLOSE, 3000, 0, 10, -20, 1, &dx, &dz);
+		ok(dx == 10 && dz == -20, "drone: the last bit of a path step exactly",
+			dz, -20);
+		DroneMove(DRONE_BACK, 3000, 4000, 0, 0, 1, &dx, &dz);
+		ok(dx == -19 && dz == -25,
+			"drone: backing off, straight away from her (3:4 at 32)", dx, -19);
+		DroneMove(DRONE_HOLD, 3000, 4000, 0, 0, 1, &dx, &dz);
+		len = (long)DroneSqrt((unsigned long long)(dx * dx + dz * dz));
+		ok(labs(dx * 3000 + dz * 4000) <= 2 * 5000 &&
+			len >= DRONE_SPEED_STRAFE - 1 &&
+			len <= DRONE_SPEED_STRAFE,
+			"drone: holding, across her line at strafe speed", len,
+			DRONE_SPEED_STRAFE);
+		{
+			long ex, ez;
+
+			DroneMove(DRONE_HOLD, 3000, 4000, 0, 0, -1, &ex, &ez);
+			ok(ex == -dx && ez == -dz, "drone: the other side, the other way",
+				ex, -dx);
+		}
+		DroneMove(DRONE_DEAD, 3000, 4000, 500, 500, 1, &dx, &dz);
+		ok(dx == 0 && dz == 0, "drone: dead, it does not fly", dx, 0);
+		DroneMove(DRONE_HOLD, 0, 0, 0, 0, 1, &dx, &dz);
+		ok(dx == 0 && dz == 0, "drone: straight over her it holds still", dx, 0);
+	}
+	ok(DroneSqrt(0) == 0 && DroneSqrt(15) == 3 && DroneSqrt(16) == 4 &&
+		DroneSqrt(1ull << 40) == (1ul << 20) &&
+		DroneSqrt(8192ull * 8192ull * 2ull) == 11585,
+		"drone: the square root rounds down", (long)DroneSqrt(15), 3);
+
+	/* The height. Lara's head at -768, floor 0, ceiling -4096, the box -664
+	 * over the origin and 120 under it. */
+	ok(DroneHoverY(-768, 0, -4096, -664, 120) == -768 - DRONE_ABOVE,
+		"drone: ABOVE over her head where the room has it",
+		DroneHoverY(-768, 0, -4096, -664, 120), -768 - DRONE_ABOVE);
+	ok(DroneHoverY(-768, 0, -2048, -664, 120) == -2048 + 664 + DRONE_CLEAR,
+		"drone: a low ceiling holds its box under it",
+		DroneHoverY(-768, 0, -2048, -664, 120), -2048 + 664 + DRONE_CLEAR);
+	ok(DroneHoverY(2000, 0, -4096, -664, 120) == 0 - 120 - DRONE_CLEAR,
+		"drone: Lara below the floor's level, its box stays over the floor",
+		DroneHoverY(2000, 0, -4096, -664, 120), -120 - DRONE_CLEAR);
+	ok(DroneHoverY(-768, 0, -768, -664, 120) == (-768 + 664 + DRONE_CLEAR +
+		0 - 120 - DRONE_CLEAR) / 2,
+		"drone: a room lower than the drone takes it half way",
+		DroneHoverY(-768, 0, -768, -664, 120), -112);
+
+	// The scatter and the radius.
+	n = 0;
+	m = 0;
+	for (unsigned t = 0; t < 3000; t++)
+		for (int axis = 0; axis < 3; axis++)
+		{
+			const long s = DroneSpread(5, t, axis);
+
+			n += s < -DRONE_SPREAD || s > DRONE_SPREAD;
+			m += s == DroneSpread(5, t, axis);
+		}
+	ok(n == 0 && m == 9000, "drone: the aim scatters within SPREAD, by hash",
+		n, 0);
+	ok(DroneRadius(-230, 230) == 230 && DroneRadius(-10, 10) == DRONE_RADIUS_MIN &&
+		DroneRadius(-2000, 2000) == DRONE_RADIUS_MAX,
+		"drone: its radius is half its width, under half a sector",
+		DroneRadius(-230, 230), 230);
+	ok(DRONE_ROTOR_STEP * 10 >= 65536 - 10 && DRONE_ROTOR_STEP * 10 <= 65536 + 10,
+		"drone: the rotor's step a tick is a tenth of a turn",
+		DRONE_ROTOR_STEP * 10, 65536);
+	ok(!strcmp(DroneStateName(DRONE_CLOSE), "close") &&
+		!strcmp(DroneStateName(DRONE_HOLD), "hold") &&
+		!strcmp(DroneStateName(DRONE_BACK), "back") &&
+		!strcmp(DroneStateName(DRONE_DEAD), "dead"),
+		"drone: the states' words in the DRONELOG line", 0, 0);
+
+	// The engine's own text.
+	char* drone = hd_switch_text("../../game/drone.cpp");
+	static char body[16384];
+	const char* first;
+	const char* mind;
+
+	glass_body(drone, "void DroneControl(short item_number)", body, sizeof(body));
+	first = strstr(body, "if(item->hit_points<=0)DroneDie(item_number,item,tick);"
+		"return;}");
+	mind = strstr(body, "CreatureAIInfo(item,&info);");
+	ok(first && mind && first < mind,
+		"drone: the control reads its hit points before anything else",
+		first != 0, 1);
+	n = hd_switch_count(body, "DroneNextState(last,dist,los)") +
+		hd_switch_count(body, "DroneFires(state,los,dist,nose,"
+			"DroneBurstOn(item_number,tick))") +
+		hd_switch_count(body, "DroneMove(state,lx,lz,px,pz,sign,&dx,&dz)") +
+		hd_switch_count(body, "drone->target.y=DroneHoverY(") +
+		hd_switch_count(body, "CreatureAnimation(item_number,0,0);");
+	ok(n == 5, "drone: the control asks the rule for state, shot, step and height",
+		n, 5);
+	n = hd_switch_count(drone, "GetRandomControl");
+	ok(n == 0, "drone: no random number in its file", n, 0);
+	glass_body(drone, "static void DroneDie(", body, sizeof(body));
+	ok(hd_switch_count(body, "CreatureDie(item_number,1);") == 1 &&
+		hd_switch_count(body, "TriggerExplosionSparks(") == 2 &&
+		hd_switch_count(body, "SoundEffect(SFX_EXPLOSION2,") == 1,
+		"drone: it dies in an explosion, its body apart, the item ended",
+		hd_switch_count(body, "CreatureDie(item_number,1);"), 1);
+	glass_body(drone, "static void DroneShoot(", body, sizeof(body));
+	ok(hd_switch_count(body, "dmg=EnemyDamage(balance.dmgDrone);") == 1 &&
+		hd_switch_count(body, "if(SceneHoldRefuses(dmg,item->object_number,"
+			"\"drone\"))dmg=0;") == 1,
+		"drone: its hit is the Balance line's, behind the scene hold",
+		hd_switch_count(body, "dmg=EnemyDamage(balance.dmgDrone);"), 1);
+
+	free(drone);
 }
 
 /* The skip latch's arithmetic (game\skip_latch.h) on made-up readings of the
@@ -33796,6 +34064,7 @@ int main()
 	thruster_wiring();
 	xray_weapons();
 	carrier_pass();
+	drone_rule();
 	skip_latch();
 	spot_pad_skip();
 	skip_latch_rope();

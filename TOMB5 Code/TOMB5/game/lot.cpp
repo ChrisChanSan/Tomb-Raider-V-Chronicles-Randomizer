@@ -183,6 +183,7 @@ void InitialiseSlot(short item_number, long slot)
 	case WILLOWISP:
 	case GREEN_TEETH:
 	case ATTACK_SUB:
+	case DRONE:		// flies like the vulture it was sized after
 		creature->LOT.step = 20480;
 		creature->LOT.drop = -20480;
 		creature->LOT.fly = 16;

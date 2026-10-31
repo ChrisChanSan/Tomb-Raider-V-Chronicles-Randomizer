@@ -133,6 +133,7 @@ static const std::unordered_map<std::string, const char*>& table()
         { "Soldier statue (hammer)",  "Soldatenstatue (Hammer)" },
         { "Maze monster",             "Labyrinth-Monster" },
         { "Vulture (TR3 LA)",         "Geier (TR3 LA)" },
+        { "Drone",                    "Drohne" },
 
         // --- Window: debug markers ---------------------------------------
         { "Debug: sector markers", "Debug: Sektoren-Marker" },

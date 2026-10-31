@@ -129,6 +129,7 @@ static const BALANCE_LINE balanceLines[] =
 	HEALTH("HP_Huskie",			hpHuskie,		25,	24,		HUSKIE),
 	HEALTH("HP_Lion",			hpLion,			50,	40,		LION),
 	HEALTH("HP_Crow",			hpCrow,			30,	10,		CROW),
+	HEALTH("HP_Drone",			hpDrone,		60,	60,		DRONE),
 	HEALTH("HP_TRex",			hpTRex,			350,	800,	SAS),
 	HEALTH("HP_Raptor",			hpRaptor,		80,	90,		REAPER),
 	HEALTH("HP_Compy",			hpCompy,		25,	10,		SAILOR),
@@ -197,6 +198,7 @@ static const BALANCE_LINE balanceLines[] =
 		";  The supernatural and heavy machinery:\r\n"),
 
 	DAMAGE("DMG_Chef_Knife",	dmgChefKnife,		200,	150,	"  melee fighter in the enemy pool - was 80"),
+	DAMAGE("DMG_Drone",			dmgDrone,			5,	5,		"  per hit of the drone, half the attack helicopter's"),
 	DAMAGE("DMG_Skeleton_Strike", dmgSkeletonStrike, 400,	400,	0),
 	DAMAGE("DMG_Gladiator_Strike", dmgGladiatorStrike, 200,	120,	0),
 	DAMAGE("DMG_God_Strike",	dmgGodStrike,		60,	40,		"  Roman god in melee"),

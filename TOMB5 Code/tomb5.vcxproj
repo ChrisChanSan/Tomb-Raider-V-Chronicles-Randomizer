@@ -32,6 +32,7 @@
     <ClCompile Include="TOMB5\game\collide.cpp" />
     <ClCompile Include="TOMB5\game\control.cpp" />
     <ClCompile Include="TOMB5\game\crow.cpp" />
+    <ClCompile Include="TOMB5\game\drone.cpp" />
     <ClCompile Include="TOMB5\game\trex.cpp" />
     <ClCompile Include="TOMB5\game\raptor.cpp" />
     <ClCompile Include="TOMB5\game\compy.cpp" />
@@ -480,6 +481,8 @@
     <ClInclude Include="TOMB5\game\collide.h" />
     <ClInclude Include="TOMB5\game\control.h" />
     <ClInclude Include="TOMB5\game\crow.h" />
+    <ClInclude Include="TOMB5\game\drone.h" />
+    <ClInclude Include="TOMB5\game\drone_rule.h" />
     <ClInclude Include="TOMB5\game\trex.h" />
     <ClInclude Include="TOMB5\game\raptor.h" />
     <ClInclude Include="TOMB5\game\compy.h" />

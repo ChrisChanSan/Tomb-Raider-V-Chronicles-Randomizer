@@ -1124,35 +1124,17 @@ bool Tr5Level::copyMoveableFrom(const Tr5Level& src, int slotId, std::string& er
     //   - the animations: their speeds and accelerations, and the lengths
     //     their commands carry (SetPosition, JumpVelocity).
     //
-    // The factor is the ratio of two measured lengths, kept as the two
-    // numbers rather than a rounded decimal: the longest side any one
-    // keyframe box of the model reaches, over all its animations - a flyer
-    // is measured in flight, wings spread and rotor turning, and not in
-    // its first frame alone, which catches the vulture with its wings
-    // raised (612 x 1108 x 862) at half the span it flies with:
-    //   vulture 43 as the randomizer imports it   2290  (anim +7, the
-    //                                              glide, key 4: 2290 x
-    //                                              267 x 827)
-    //   gunship 91 in RICH3                        7161  (anim 0, key 1:
-    //                                              4595 x 2594 x 7161,
-    //                                              tail and rotor blade)
-    // so 2290 / 7161 = 0.3198. The drone is then 2269 long nose to tail in
-    // its first frame and its rotor 1935 across - the vulture's span.
+    // The factor and why it is what it is: kScales in Tr5Level.cpp.
     //
     // Integer arithmetic, rounded half away from zero: the same donor and
     // the same factor give the same bytes on every machine, which the
     // regression proof of the randomizer depends on.
-    struct ModelScale { int fromSlot; int toSlot; int num; int den; };
-    static const ModelScale kScales[] = {
-        { 91, 472, 2290, 7161 },     // gunship -> drone, vulture's size
-    };
-    const ModelScale* scale = nullptr;
-    for (const ModelScale& s : kScales)
-        if (s.fromSlot == slotId && s.toSlot == targetSlot) { scale = &s; break; }
+    int scaleNum = 0, scaleDen = 0;
+    const bool scale = importScale(slotId, targetSlot, scaleNum, scaleDen);
 
     if (scale)
     {
-        const long long num = scale->num, den = scale->den;
+        const long long num = scaleNum, den = scaleDen;
         auto scaled = [num, den](long long v) -> long long {
             const long long p = v * num;
             return (p >= 0) ? (p + den / 2) / den : -((-p + den / 2) / den);
@@ -1397,7 +1379,7 @@ bool Tr5Level::copyMoveableFrom(const Tr5Level& src, int slotId, std::string& er
 
     // The sidecar's `scale` line: the factor this copy was shrunk by, or
     // none - the last copy into a slot decides (Tr5Level::hdMarkScale).
-    hdMarkScale(targetSlot, scale ? scale->num : 0, scale ? scale->den : 0);
+    hdMarkScale(targetSlot, scaleNum, scaleDen);
 
     return true;
 }

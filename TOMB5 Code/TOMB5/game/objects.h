@@ -378,6 +378,18 @@ enum object_types
 	// him. Same role as the six above.
 	MESHSWAP_CROSS_CRANEGUY,	// 470, from joby2
 
+	// DRONE: RICH3's gunship as a pool enemy, at the size of the pool's
+	// flyer. The randomizer copies slot 91 here shrunk by 2290/7161 and
+	// with its origin in the middle of its frame box - kScales in the
+	// randomizer's core\Tr5Level.cpp, kOffsets in its core\Tr5Transfer.cpp;
+	// slot 91 itself stays RICH3's scripted, untouchable helicopter.
+	// drone.cpp flies it on the flyer zone after Lara and shoots with the
+	// gunship's gun.
+	//
+	// The number is written out, so a slot added before it cannot move it:
+	// the randomizer writes 472 into the level files.
+	DRONE = 472,
+
 	NUMBER_OBJECTS
 };
 

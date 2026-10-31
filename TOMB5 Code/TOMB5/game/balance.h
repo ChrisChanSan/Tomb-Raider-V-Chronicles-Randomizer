@@ -62,6 +62,7 @@ struct BALANCE_INFO
 	long hpCyborg;			/* the same model as the pool enemy, but mortal */
 	long hpSniper;
 	long hpChef;
+	long hpDrone;			/* RICH3's gunship at the vulture's size, a pool enemy */
 	long hpTwoGun;
 	long hpHydra;
 	long hpImp;
@@ -91,6 +92,7 @@ struct BALANCE_INFO
 	long dmgBats;
 	long dmgSpiders;
 	long dmgChefKnife;
+	long dmgDrone;			/* one hit of its gun, every other frame of a burst */
 	long dmgSkeletonStrike;
 	long dmgGladiatorStrike;
 	long dmgGodStrike;

@@ -47,12 +47,17 @@
  * softlock. Cheaper to keep the slot out of both passes than to depend on
  * its death.
  *
+ * The drone carries nothing for the same reason, and one more: it dies in
+ * the air, wherever the flyer zone took it, over a pit or a pool as well -
+ * DropBaddyPickups would hand the chain over there.
+ *
  * No engine header here: ModernTest asserts on it. */
 
 // The slots the rule names (game\objects.h); setup.cpp checks that they agree.
 #define CARRIER_SEARCH_OBJECT1	164
 #define CARRIER_SEARCH_OBJECT3	168
 #define CARRIER_CYBORG			469
+#define CARRIER_DRONE			472
 
 // The passes, in the order GetCarriedItems runs them.
 #define CARRIER_PASS_SEARCH		0
@@ -61,11 +66,11 @@
 
 /* The pass in which an item of slot `object` takes the pickups in its reach:
  * CARRIER_PASS_SEARCH for a search object, CARRIER_PASS_ENEMY for a slot
- * the engine marks `intelligent` (only a loaded slot is), -1 for the cyborg
- * and every other slot. */
+ * the engine marks `intelligent` (only a loaded slot is), -1 for the cyborg,
+ * the drone and every other slot. */
 inline int CarrierPass(int object, bool intelligent)
 {
-	if (object == CARRIER_CYBORG)
+	if (object == CARRIER_CYBORG || object == CARRIER_DRONE)
 		return -1;
 
 	if (object >= CARRIER_SEARCH_OBJECT1 && object <= CARRIER_SEARCH_OBJECT3)

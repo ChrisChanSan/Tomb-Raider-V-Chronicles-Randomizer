@@ -40,7 +40,11 @@
             // The VCI cyborg as a pool enemy. Slot 67 keeps its name and its
             // Red Alert behaviour; this one is the mortal copy the randomizer
             // places, so the two have to be told apart at a glance.
-            { "id": 469, "name": "Cyborg (pool)",            "categories": [ "Enemy" ] }
+            { "id": 469, "name": "Cyborg (pool)",            "categories": [ "Enemy" ] },
+
+            // RICH3's gunship as a pool enemy, shrunk to the vulture's size.
+            // Slot 91 keeps its name: that is RICH3's own helicopter.
+            { "id": 472, "name": "Drone (pool)",             "categories": [ "Enemy" ] }
 
             // Deliberately absent: 462-468 and 470, the meshswap stores. They
             // are never an item in a level, and naming them would suggest

@@ -4066,6 +4066,48 @@ bool Tr5Level::hdScaleOf(int slot, int& num, int& den) const
 }
 
 //----------------------------------------------------------------------------
+// The copies that come out smaller than their donor (see the scaling step in
+// copyMoveableFrom). One pair so far: RICH3's gunship (91) copied into the
+// drone's slot 472 at the size of the pool's flyer, the vulture (43).
+//
+// The factor is the ratio of two measured lengths, kept as the two numbers
+// rather than a rounded decimal: the longest side any one keyframe box of
+// the model reaches, over all its animations - a flyer is measured in
+// flight, wings spread and rotor turning, and not in its first frame alone,
+// which catches the vulture with its wings raised (612 x 1108 x 862) at half
+// the span it flies with:
+//   vulture 43 as the randomizer imports it   2290  (anim +7, the glide,
+//                                              key 4: 2290 x 267 x 827)
+//   gunship 91 in RICH3                        7161  (anim 0, key 1:
+//                                              4595 x 2594 x 7161, the
+//                                              tail and a rotor blade)
+// so 2290 / 7161 = 0.3198. The drone is then 2269 long nose to tail in its
+// first frame and its rotor 1935 across - the vulture's span.
+//----------------------------------------------------------------------------
+namespace
+{
+    struct ModelScale { int fromSlot; int toSlot; int num; int den; };
+    const ModelScale kScales[] = {
+        { 91, 472, 2290, 7161 },     // gunship -> drone, vulture's size
+    };
+}
+
+bool Tr5Level::importScale(int fromSlot, int toSlot, int& num, int& den)
+{
+    for (const ModelScale& s : kScales)
+        if (s.fromSlot == fromSlot && s.toSlot == toSlot)
+        {
+            num = s.num;
+            den = s.den;
+            return true;
+        }
+
+    num = 0;
+    den = 0;
+    return false;
+}
+
+//----------------------------------------------------------------------------
 // data[1] of the same 32 bytes: the weather. 0 dry, 1 rain, 2 snow.
 //
 // LoadLevel reads the block as "short data[16]" and takes

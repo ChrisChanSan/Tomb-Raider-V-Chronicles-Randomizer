@@ -936,7 +936,7 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
             // enemy's own slot (MESHSWAP1 405 -> 462..467), and only the
             // slot it came FROM says what the model actually is.
             level.hdMarkDonor(targetSlot, slot, from);
-            // A copy the transfer shrank (kScales in Tr5Transfer.cpp) says
+            // A copy the transfer shrank (kScales in Tr5Level.cpp) says
             // so in the run's log, with the factor as the two measured
             // lengths it is the ratio of.
             int sNum = 0, sDen = 0;

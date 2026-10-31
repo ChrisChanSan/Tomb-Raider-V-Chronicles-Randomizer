@@ -53,6 +53,8 @@ Revolver/Deagle_Ammo	348
 //         470 beside it are not enemies but mesh warehouses (the cyborg's
 //         and the crane guy's swap halves), see
 //         Preparation\Enemies\Cross Enemy Pool.txt
+//   472 = Drone        DRONE, likewise - RICH3's gunship (91), copied
+//         shrunk to the vulture's size; 91 stays RICH3's helicopter
 // Not to be confused: 41 = DOG, 85 = HUSKIE. Upstream calls both "Dog".
 //Enemies:{
 SWAT					33

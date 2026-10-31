@@ -62,7 +62,7 @@
 // Slots this table knows, which must equal NUMBER_OBJECTS. hd_level.cpp holds
 // the static_assert; this file is built without the engine so that the
 // diagnostic tools can use exactly the same binding.
-#define HD_SLOT_COUNT	471
+#define HD_SLOT_COUNT	473
 
 // The name of a slot, e.g. "BLUE_GUARD2", or 0 when the number is not one.
 const char* HDSlotName(int slot);

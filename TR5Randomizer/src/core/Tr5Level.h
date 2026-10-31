@@ -761,6 +761,13 @@ public:
                           int dstSlot = -1, bool meshesOnly = false,
                           int animCount = -1);
 
+    // The factor copyMoveableFrom shrinks a copy of `fromSlot` into `toSlot`
+    // by (kScales in Tr5Level.cpp), as the two measured lengths it is the
+    // ratio of; false (and 0, 0) where the pair copies at the donor's size.
+    // The randomizer's height rule asks it, so a shrunk enemy is measured at
+    // the height it will have and not at its donor's.
+    static bool importScale(int fromSlot, int toSlot, int& num, int& den);
+
     // Lets one anim adopt the data and motion fields of another anim of the
     // SAME level: frame pointer, rate, frame_size, speeds and the command
     // reference. State, frame range, next anim and changes stay. Meant for
@@ -1058,7 +1065,7 @@ public:
     void hdMarkRoom(int room);
     void hdMarkDonor(int slot, int fromSlot, const std::string& level);
     // The factor a copy was scaled by, kept as the two measured lengths it
-    // is the ratio of (kScales in Tr5Transfer.cpp). The sidecar carries it
+    // is the ratio of (kScales in Tr5Level.cpp). The sidecar carries it
     // as `scale <slot> <num> <den>`, and the engine's HD model build
     // shrinks the slot's .TRM by the same factor as the classic data was
     // shrunk here - without it the HD model would stand at full size on a

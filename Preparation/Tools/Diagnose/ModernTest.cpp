@@ -120,6 +120,9 @@
 // A scene that holds Lara leaves her life and air as they were: the kind,
 // the remembering and putting back, the blows refused (scene_hold).
 #include "../../../TOMB5 Code/TOMB5/game/scene_hold.h"
+// The raising cog's lift run to its end, a pull meanwhile kept for the next
+// (raising_cog, raising_cog_rope).
+#include "../../../TOMB5 Code/TOMB5/game/raising_cog_rule.h"
 // A room group stored off its height: the count, the pick (yshift_rule).
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_scan.h"
 // The fog bulbs' body: the span, the column, the veil, the breath (fog_body),
@@ -31749,6 +31752,502 @@ static void scene_hold()
 	free(trex);
 }
 
+/* The raising cog's lift (game\raising_cog_rule.h) on made-up states: a
+ * lift begun on the trigger and run 2 units a tick to its end, a pull in
+ * the lift kept and the bits turned on again, two pulls as two, the next
+ * lift begun in the tick the last one ends, the third lift engaging and
+ * dropping what comes too late, the cog turning after it, a savegame from
+ * before, and the ramp of the raise sound. */
+static void raising_cog()
+{
+	printf("the raising cog: a lift runs to its end, a pull meanwhile kept\n");
+
+	COG_STATE c = { 0, 0, 0 };
+	int w, n, begins = 0, rises = 0;
+
+	w = RaisingCogTick(&c, false);
+	ok(w == 0 && c.lifts == 0 && c.at == 0 && c.pending == 0,
+		"cog: no lift and the trigger off - nothing", w, 0);
+
+	w = RaisingCogTick(&c, true);
+	ok(w == (COG_BEGIN | COG_RISE) && c.at == 2,
+		"cog: the trigger on - a lift begins, its flyby, 2 units", w,
+		COG_BEGIN | COG_RISE);
+
+	for (n = 1; n < 128; n++)
+	{
+		w = RaisingCogTick(&c, true);
+		begins += (w & COG_BEGIN) != 0;
+		rises += w == COG_RISE;
+	}
+
+	ok(c.at == 256 && rises == 127 && begins == 0,
+		"cog: 128 ticks raise it 256 units, one flyby", c.at, 256);
+
+	w = RaisingCogTick(&c, true);
+	ok(w == (COG_DONE | COG_SLEEP) && c.lifts == 1 && c.at == 0 &&
+		c.pending == 0, "cog: the 129th tick ends the lift, the cog sleeps",
+		w, COG_DONE | COG_SLEEP);
+
+	// A pull in the lift turns the bits off: it rises on, the pull is kept.
+	COG_STATE p = { 0, 118, 0 };
+
+	w = RaisingCogTick(&p, false);
+	ok(w == (COG_REARM | COG_KEPT | COG_RISE) && p.at == 120 &&
+		p.pending == 1, "cog: a pull at 118 - kept, the bits on again, "
+		"it rises on", w, COG_REARM | COG_KEPT | COG_RISE);
+
+	w = RaisingCogTick(&p, true);
+	ok(w == COG_RISE && p.pending == 1,
+		"cog: the bits on again - it rises, the pull still kept", w,
+		COG_RISE);
+
+	// A second pull in the same lift turns them off once more: two kept.
+	w = RaisingCogTick(&p, false);
+	ok(w == (COG_REARM | COG_KEPT | COG_RISE) && p.pending == 2,
+		"cog: a second pull in one lift - two kept", p.pending, 2);
+
+	// A third in it is a fourth in all: no lift is left for it.
+	w = RaisingCogTick(&p, false);
+	ok(w == (COG_REARM | COG_DROPPED | COG_RISE) && p.pending == 2,
+		"cog: a fourth pull in all - dropped, it rises on", w,
+		COG_REARM | COG_DROPPED | COG_RISE);
+
+	// The end with two kept: the next lift begins in the same tick.
+	p.at = 256;
+	w = RaisingCogTick(&p, true);
+	ok(w == (COG_DONE | COG_FROM_PENDING | COG_BEGIN | COG_RISE) &&
+		p.lifts == 1 && p.at == 2 && p.pending == 1,
+		"cog: the end, pulls kept - the next lift begins at once", w,
+		COG_DONE | COG_FROM_PENDING | COG_BEGIN | COG_RISE);
+
+	// In the second lift one kept is all that is left: another is dropped.
+	p.at = 100;
+	w = RaisingCogTick(&p, false);
+	ok(w == (COG_REARM | COG_DROPPED | COG_RISE) && p.pending == 1,
+		"cog: lift 2 with one kept - another pull dropped", p.pending, 1);
+
+	// A pull on the last unit: counted, then the end, then the next lift.
+	COG_STATE top = { 0, 256, 0 };
+
+	w = RaisingCogTick(&top, false);
+	ok(w == (COG_REARM | COG_KEPT | COG_DONE | COG_FROM_PENDING |
+		COG_BEGIN | COG_RISE) && top.lifts == 1 && top.at == 2 &&
+		top.pending == 0, "cog: a pull on the last unit - the next lift "
+		"begins", w, COG_REARM | COG_KEPT | COG_DONE | COG_FROM_PENDING |
+		COG_BEGIN | COG_RISE);
+
+	// The end of the third lift engages the cog.
+	COG_STATE last = { 2, 256, 0 };
+
+	w = RaisingCogTick(&last, true);
+	ok(w == (COG_DONE | COG_ENGAGE | COG_SLEEP) && last.lifts == 3 &&
+		last.at == 0, "cog: the third lift ends - engaged, asleep", w,
+		COG_DONE | COG_ENGAGE | COG_SLEEP);
+
+	// A pull in the third lift: there is nothing to keep it for.
+	COG_STATE third = { 2, 100, 0 };
+
+	w = RaisingCogTick(&third, false);
+	ok(w == (COG_REARM | COG_DROPPED | COG_RISE) && third.pending == 0,
+		"cog: a pull in the third lift - dropped, it rises on", w,
+		COG_REARM | COG_DROPPED | COG_RISE);
+
+	third.at = 256;
+	w = RaisingCogTick(&third, false);
+	ok(w == (COG_REARM | COG_DROPPED | COG_DONE | COG_ENGAGE | COG_SLEEP) &&
+		third.lifts == 3, "cog: a pull on the third lift's last unit - "
+		"dropped, engaged", w, COG_REARM | COG_DROPPED | COG_DONE |
+		COG_ENGAGE | COG_SLEEP);
+
+	// No lift after the third, whatever was kept.
+	COG_STATE stray = { 2, 256, 1 };
+
+	w = RaisingCogTick(&stray, true);
+	ok(w == (COG_DONE | COG_ENGAGE | COG_SLEEP) && stray.pending == 0,
+		"cog: the third lift's end - no fourth lift, nothing kept",
+		stray.pending, 0);
+
+	// Lifted out it turns while its trigger is on and never rises again.
+	COG_STATE out = { 3, 0, 0 };
+	int turns = 0, on = 0, other = 0;
+
+	for (n = 0; n < 200; n++)
+	{
+		const bool active = (n / 7) % 2 == 0;
+
+		w = RaisingCogTick(&out, active);
+		on += active;
+		turns += w == COG_TURN;
+		other += w != COG_TURN && w != 0;
+	}
+
+	ok(turns == on && other == 0 && out.lifts == 3 && out.at == 0 &&
+		out.pending == 0, "cog: lifted out - it turns while on, toggles "
+		"raise it no more", turns, on);
+
+	// A savegame from before reads 0 in item_flags[3]: nothing kept.
+	COG_STATE old = { 0, 118, 0 };
+
+	w = RaisingCogTick(&old, true);
+	ok(w == COG_RISE && old.pending == 0, "cog: a savegame from before, in "
+		"mid-lift - it rises, nothing kept", w, COG_RISE);
+
+	// ... and one that left it stopped half way, its bits off.
+	COG_STATE stopped = { 0, 118, 0 };
+
+	w = RaisingCogTick(&stopped, false);
+	ok(w == (COG_REARM | COG_KEPT | COG_RISE) && stopped.pending == 1,
+		"cog: a savegame from before, stopped - it rises on, the pull kept",
+		w, COG_REARM | COG_KEPT | COG_RISE);
+
+	COG_STATE stoppedTop = { 1, 256, 0 };
+
+	w = RaisingCogTick(&stoppedTop, false);
+	ok(w == (COG_REARM | COG_KEPT | COG_DONE | COG_FROM_PENDING |
+		COG_BEGIN | COG_RISE) && stoppedTop.lifts == 2 &&
+		stoppedTop.at == 2, "cog: a savegame from before, stopped at the "
+		"top - lift 2 ends, lift 3 begins", stoppedTop.lifts, 2);
+
+	// The raise sound's ramp, as Core had it.
+	ok(RaisingCogVolume(0) == 0 && RaisingCogVolume(30) == 30 &&
+		RaisingCogVolume(31) == 31 && RaisingCogVolume(224) == 31 &&
+		RaisingCogVolume(225) == 30 && RaisingCogVolume(254) == 1,
+		"cog: the raise sound ramps up and down over 31 units",
+		RaisingCogVolume(254), 1);
+}
+
+/* ANDREA2's rope in room 51 and the cog it raises, tick by tick in the
+ * engine's order (ControlPhase, game\control.cpp): the items run first -
+ * the cog's control, while the cog is on the active list - and Lara after
+ * them, whose pull, counted at frame 44 of the pull, fires the rope's
+ * SWITCH trigger: the cog's code bits toggle, and the trigger puts the cog
+ * on the active list when they come on. The cog's lift and its flyby begin
+ * the tick after the pull. After the third lift the rope is dead (the cog
+ * changes its pulleys over). `pulls` are the ticks the pulls are counted
+ * in; Core's control, for the before, is andrea.cpp as it stood. */
+struct CogRun
+{
+	int lifts;		// lifts ended
+	int at;			// the units of the lift running at the end
+	int rise;		// the units risen in all
+	int beginAt[4], doneAt[4];
+	int kept, dropped, fromPending;
+	int stillAt;	// the units a lift first stood still at, -1 never
+	int maxStep;	// the most units of one tick
+};
+
+static int cog_core_tick(COG_STATE* c, bool active)
+{
+	if (!active)
+		return 0;
+
+	if (c->lifts >= 3)
+		return COG_TURN;
+
+	if (c->at >= 256)
+	{
+		c->at = 0;
+		c->lifts++;
+		return COG_DONE | COG_SLEEP | (c->lifts == 3 ? COG_ENGAGE : 0);
+	}
+
+	const int w = c->at ? COG_RISE : COG_BEGIN | COG_RISE;
+
+	c->at = (short)(c->at + 2);
+	return w;
+}
+
+static CogRun cog_run(bool rule, const int* pulls, int n, int ticks,
+	COG_STATE c = { 0, 0, 0 }, bool on = false, bool listed = false)
+{
+	CogRun r = { 0, 0, 0, { -1, -1, -1, -1 }, { -1, -1, -1, -1 }, 0, 0, 0,
+		-1, 0 };
+	bool dead = false;
+	int begins = 0, dones = 0;
+
+	for (int t = 0; t < ticks; t++)
+	{
+		if (listed)
+		{
+			const int w = rule ? RaisingCogTick(&c, on) :
+				cog_core_tick(&c, on);
+			const int step = (w & COG_RISE) ? COG_STEP : 0;
+
+			if (w & COG_REARM)
+				on = true;
+
+			r.kept += (w & COG_KEPT) != 0;
+			r.dropped += (w & COG_DROPPED) != 0;
+			r.fromPending += (w & COG_FROM_PENDING) != 0;
+
+			if (w & COG_DONE)
+			{
+				if (dones < 4)
+					r.doneAt[dones] = t;
+
+				dones++;
+			}
+
+			if (w & COG_ENGAGE)
+				dead = true;
+
+			if (w & COG_SLEEP)
+				listed = on = false;
+
+			if (w & COG_BEGIN)
+			{
+				if (begins < 4)
+					r.beginAt[begins] = t;
+
+				begins++;
+			}
+
+			// Still on the list, short of its lifts, risen, and no step.
+			if (!step && !(w & COG_DONE) && c.at > 0 && c.lifts < 3 &&
+				r.stillAt < 0)
+				r.stillAt = c.at;
+
+			r.rise += step;
+			r.maxStep = step > r.maxStep ? step : r.maxStep;
+		}
+
+		for (int p = 0; p < n; p++)
+		{
+			if (pulls[p] != t || dead)
+				continue;
+
+			on = !on;
+
+			if (on)
+				listed = true;
+		}
+	}
+
+	r.lifts = c.lifts;
+	r.at = c.at;
+	return r;
+}
+
+static void raising_cog_rope()
+{
+	printf("ANDREA2's rope and cog: a pull while the cog rises\n");
+
+	/* The first pull is counted at tick 59 (pressed at 0: 339's 14 frames,
+	 * then frame 44 of 340); the cog's flyby and first 2 units come at 60,
+	 * its 256th unit at 187, the end of the lift at 188. */
+	const int held[] = { 59, 118 };	// the held button before #279
+	CogRun b = cog_run(false, held, 2, 600);
+	CogRun a = cog_run(true, held, 2, 600);
+
+	ok(b.lifts == 0 && b.stillAt == 118, "rope 51, before: the pull at 118 "
+		"stops the cog at 118 of 256", b.stillAt, 118);
+	ok(a.lifts == 2 && a.kept == 1 && a.stillAt == -1 && a.rise == 512,
+		"rope 51, after: the pull at 118 kept, two lifts", a.lifts, 2);
+	ok(a.beginAt[0] == 60 && a.doneAt[0] == 188 && a.beginAt[1] == 188 &&
+		a.doneAt[1] == 316 && a.fromPending == 1, "rope 51, after: lift 1 "
+		"ends at 188, the kept pull's lift begins there", a.beginAt[1], 188);
+
+	const int late[] = { 59, 129 };	// a pull 70 ticks after the first
+	b = cog_run(false, late, 2, 600);
+	a = cog_run(true, late, 2, 600);
+	ok(b.lifts == 0 && b.stillAt == 140, "rope 51, before: a pull 70 ticks "
+		"on stops it at 140", b.stillAt, 140);
+	ok(a.lifts == 2 && a.doneAt[0] == 188 && a.beginAt[1] == 188,
+		"rope 51, after: that pull kept for lift 2", a.lifts, 2);
+
+	const int top[] = { 59, 187 };	// on the lift's last unit
+	b = cog_run(false, top, 2, 600);
+	a = cog_run(true, top, 2, 600);
+	ok(b.lifts == 0 && b.stillAt == 256, "rope 51, before: a pull on the "
+		"last unit leaves the lift uncounted", b.stillAt, 256);
+	ok(a.lifts == 2 && a.beginAt[1] == 188, "rope 51, after: a pull on the "
+		"last unit is lift 2", a.lifts, 2);
+
+	const int next[] = { 59, 188 };	// the tick the lift ends
+	b = cog_run(false, next, 2, 600);
+	a = cog_run(true, next, 2, 600);
+	ok(b.lifts == 2 && a.lifts == 2 && b.beginAt[1] == 189 &&
+		a.beginAt[1] == 189 && a.kept == 0, "rope 51: a pull as the lift "
+		"ends begins the next a tick later, as before", a.beginAt[1], 189);
+
+	// Three pulls as fast as a held rope pulls: one in 59 ticks.
+	const int fast[] = { 59, 118, 177 };
+	b = cog_run(false, fast, 3, 800);
+	a = cog_run(true, fast, 3, 800);
+	ok(b.lifts == 1 && b.doneAt[0] == 247, "rope 51, before: three fast "
+		"pulls, one lift", b.lifts, 1);
+	ok(a.lifts == 3 && a.doneAt[2] == 444 && a.rise == 768 &&
+		a.kept == 2, "rope 51, after: three fast pulls, three lifts, "
+		"engaged at 444", a.lifts, 3);
+
+	// A fourth pull is dropped, and the rope is dead after the third lift.
+	const int four[] = { 59, 118, 177, 236, 600, 659 };
+	a = cog_run(true, four, 6, 900);
+	ok(a.lifts == 3 && a.dropped == 1 && a.rise == 768 && a.at == 0,
+		"rope 51, after: a fourth pull dropped, 768 units in all",
+		a.dropped, 1);
+
+	// Pulls that wait for each lift's end: the rule changes nothing.
+	const int slow[] = { 59, 250, 450 };
+	b = cog_run(false, slow, 3, 800);
+	a = cog_run(true, slow, 3, 800);
+
+	int same = 0;
+
+	for (int i = 0; i < 3; i++)
+		same += a.beginAt[i] == b.beginAt[i] && a.doneAt[i] == b.doneAt[i];
+
+	ok(b.lifts == 3 && a.lifts == 3 && same == 3 && a.kept == 0 &&
+		a.doneAt[2] == 579, "rope 51: pulls after each lift - the same "
+		"ticks before and after", same, 3);
+
+	// A savegame from before that left the cog stopped half way.
+	const COG_STATE stopped = { 0, 118, 0 };
+
+	b = cog_run(false, 0, 0, 400, stopped, false, true);
+	a = cog_run(true, 0, 0, 400, stopped, false, true);
+	ok(b.lifts == 0 && b.at == 118, "rope 51, before: a cog stopped in a "
+		"savegame waits for a pull", b.at, 118);
+	ok(a.lifts == 2 && a.doneAt[0] == 69 && a.doneAt[1] == 197 &&
+		a.kept == 1, "rope 51, after: it rises on, its pull kept for lift 2",
+		a.doneAt[0], 69);
+
+	/* Three pulls at every second gap from 1 to 260 ticks and eleven third
+	 * gaps: with the rule three lifts each time, 768 units, never more than
+	 * 2 a tick, never standing still; before, three lifts only when no pull
+	 * landed in a lift - a second gap over 128 and a third one too. */
+	static const int gaps[] = { 1, 2, 30, 58, 59, 60, 127, 128, 129, 200,
+		300 };
+	int all = 0, three = 0, before3 = 0;
+
+	for (int m = 1; m <= 260; m++)
+	{
+		for (int g = 0; g < 11; g++)
+		{
+			const int pulls[] = { 59, 59 + m, 59 + m + gaps[g] };
+			const CogRun x = cog_run(true, pulls, 3, 1400);
+			const CogRun y = cog_run(false, pulls, 3, 1400);
+
+			all++;
+			three += x.lifts == 3 && x.rise == 768 && x.maxStep == 2 &&
+				x.stillAt < 0;
+			before3 += y.lifts == 3;
+		}
+	}
+
+	ok(three == all, "rope 51, after: three pulls, three lifts, whatever "
+		"their timing", three, all);
+	ok(before3 == 132 * 3, "rope 51, before: three lifts only with no pull "
+		"in a lift", before3, 132 * 3);
+}
+
+/* The rule's wiring in the engine's own text: ControlRaisingCog asks
+ * TriggerActive once a tick and the rule with its answer, keeps the state
+ * in item_flags 0, 2 and 3, turns the bits on again after a pull in the
+ * lift, sleeps, starts the flyby and moves the cog only where the rule
+ * says, and switches the pulleys at the third lift as before. The slot the
+ * kept pulls stand in is zeroed at a level's start, left alone by the
+ * cog's initialise, written by the savegame when it is not 0 and read
+ * back as 0 where it was not; the cog's flags are saved. */
+static void raising_cog_wiring()
+{
+	char* andrea = hd_switch_text("../../game/andrea.cpp");
+	char* save = hd_switch_text("../../game/savegame.cpp");
+	char* items = hd_switch_text("../../game/items.cpp");
+	char* init = hd_switch_text("../../game/init.cpp");
+	char* setup = hd_switch_text("../../game/setup.cpp");
+	static char body[65536];
+	bool wrote;
+
+	ok(andrea && save && items && init && setup,
+		"raising cog wiring: the five files", 0, 1);
+
+	glass_body(andrea, "void ControlRaisingCog(short item_number)", body,
+		sizeof(body));
+	ok(hd_switch_count(body, "tick=RaisingCogTick(&cog,TriggerActive(item)"
+		"!=0);") == 1 && hd_switch_count(body, "TriggerActive(") == 1,
+		"raising cog wiring: TriggerActive once, the rule with it",
+		hd_switch_count(body, "TriggerActive("), 1);
+	ok(strstr(body, "cog.lifts=item->item_flags[0];cog.at=item->item_flags"
+		"[2];cog.pending=item->item_flags[3];") != 0 && strstr(body,
+		"item->item_flags[0]=cog.lifts;item->item_flags[2]=cog.at;item->"
+		"item_flags[3]=cog.pending;") != 0,
+		"raising cog wiring: the state in item_flags 0, 2 and 3", 0, 1);
+	/* glass_body keeps the comments and drops every opening brace: the
+	 * re-arm is looked for after its branch, before the branch's line. */
+	const char* rearm = strstr(body, "if(tick&COG_REARM)");
+	const char* bits = rearm ? strstr(rearm, "item->flags|=IFL_CODEBITS;") : 0;
+	const char* line = rearm ? strstr(rearm, "Log(") : 0;
+
+	ok(bits && line && bits < line &&
+		hd_switch_count(body, "item->flags|=IFL_CODEBITS;") == 1,
+		"raising cog wiring: a pull in the lift turns the bits on again",
+		hd_switch_count(body, "item->flags|=IFL_CODEBITS;"), 1);
+	ok(strstr(body, "if(tick&COG_SLEEP)RemoveActiveItem(item_number);item->"
+		"status=ITEM_INACTIVE;item->flags&=~IFL_CODEBITS;return;}") != 0 &&
+		hd_switch_count(body, "RemoveActiveItem(") == 1,
+		"raising cog wiring: asleep on the rule's word alone",
+		hd_switch_count(body, "RemoveActiveItem("), 1);
+	ok(strstr(body, "if(tick&COG_BEGIN)InitialiseSpotCam(9);bUseSpotCam=1;")
+		!= 0 && hd_switch_count(body, "InitialiseSpotCam(") == 1,
+		"raising cog wiring: the flyby where a lift begins, only there",
+		hd_switch_count(body, "InitialiseSpotCam("), 1);
+	ok(strstr(body, "if(tick&COG_RISE)vol=(short)RaisingCogVolume(cog.at-"
+		"COG_STEP);SoundEffect(SFX_BLK_PLAT_RAISE_LOW,&item->pos,(vol<<8)|"
+		"SFX_SETVOL);item->pos.y_pos-=COG_STEP;}") != 0 &&
+		hd_switch_count(body, "y_pos") == 1,
+		"raising cog wiring: the cog moves by the rule's step alone",
+		hd_switch_count(body, "y_pos"), 1);
+	ok(strstr(body, "if(tick&COG_ENGAGE)for(NumTrigs=(short)GetSwitchTrigger"
+		"(item,TriggerItems,1);NumTrigs;NumTrigs--)triggered=&items["
+		"TriggerItems[NumTrigs-1]];if(triggered->object_number==PULLEY)if("
+		"triggered->room_number==item->item_flags[1])triggered->item_flags"
+		"[1]=0;triggered->flags|=IFL_TRIGGERED;}elsetriggered->item_flags[1]"
+		"=1;}elseif(triggered->object_number==TRIGGER_TRIGGERER)"
+		"AddActiveItem(TriggerItems[NumTrigs-1]);triggered->status="
+		"ITEM_ACTIVE;triggered->flags|=IFL_CODEBITS;}}}") != 0,
+		"raising cog wiring: the third lift switches the pulleys as before",
+		0, 1);
+	ok(hd_switch_count(andrea, "Log(\"COGLOG item=%d lift=%d at=") == 3,
+		"raising cog wiring: the three COGLOG lines",
+		hd_switch_count(andrea, "Log(\"COGLOG item=%d lift=%d at="), 3);
+
+	glass_body(save, "void SaveLevelData(long FullSave)", body, sizeof(body));
+	wrote = strstr(body, "if(item->item_flags[3])packed|=0x400;") != 0 &&
+		strstr(body, "if(packed&0x400)WriteSG(&item->item_flags[3],sizeof("
+		"short));") != 0;
+	glass_body(save, "void RestoreLevelData(long FullSave)", body,
+		sizeof(body));
+	ok(wrote && strstr(body, "if(packed&0x400)ReadSG(&item->item_flags[3],"
+		"sizeof(short));elseitem->item_flags[3]=0;") != 0,
+		"raising cog wiring: the savegame carries item_flags[3], 0 if none",
+		0, 1);
+
+	glass_body(items, "void InitialiseItem(short item_num)", body,
+		sizeof(body));
+	ok(strstr(body, "item->item_flags[3]=0;") != 0,
+		"raising cog wiring: a level's start zeroes item_flags[3]", 0, 1);
+
+	glass_body(init, "void InitialiseRaisingCog(short item_number)", body,
+		sizeof(body));
+	ok(body[0] && !strstr(body, "item_flags[3]"),
+		"raising cog wiring: the cog's initialise leaves item_flags[3]", 0,
+		1);
+
+	glass_body(setup, "void TrapObjects()", body, sizeof(body));
+	ok(strstr(body, "obj=&objects[RAISING_COG];obj->initialise="
+		"InitialiseRaisingCog;obj->control=ControlRaisingCog;obj->"
+		"save_position=1;obj->save_flags=1;") != 0,
+		"raising cog wiring: the cog's flags go into the savegame", 0, 1);
+
+	free(andrea);
+	free(save);
+	free(items);
+	free(init);
+	free(setup);
+}
+
 int main()
 {
 	printf("ModernTest - the arithmetic of the modern control\n");
@@ -31983,6 +32482,9 @@ int main()
 	skip_latch_rope();
 	skip_latch_wiring();
 	scene_hold();
+	raising_cog();
+	raising_cog_rope();
+	raising_cog_wiring();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

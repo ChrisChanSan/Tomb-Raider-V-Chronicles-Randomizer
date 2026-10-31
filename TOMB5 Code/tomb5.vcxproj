@@ -547,6 +547,7 @@
     <ClInclude Include="TOMB5\game\people.h" />
     <ClInclude Include="TOMB5\game\pickup.h" />
     <ClInclude Include="TOMB5\game\pierre.h" />
+    <ClInclude Include="TOMB5\game\raising_cog_rule.h" />
     <ClInclude Include="TOMB5\game\rat.h" />
     <ClInclude Include="TOMB5\game\romangod.h" />
     <ClInclude Include="TOMB5\game\rope.h" />

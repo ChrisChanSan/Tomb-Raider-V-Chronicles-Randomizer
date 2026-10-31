@@ -42,6 +42,8 @@
 #include "dog.h"
 #include "huskie.h"
 #include "crow.h"
+#include "drone.h"
+#include "drone_rule.h"	// DroneRadius - the shrunk copy's own width
 #include "trex.h"
 #include "raptor.h"
 #include "compy.h"
@@ -1573,6 +1575,32 @@ void BaddyObjects()
 		bones[obj->bone_index + 76] |= 8;
 	}
 
+	// RICH3's gunship as a pool enemy, at the vulture's size (drone.cpp;
+	// every decision it takes is drone_rule.h's). It flies with the
+	// vulture's LOT (lot.cpp), takes Lara's bullets in sparks like the
+	// sentry gun, and carries nothing (carrier_rule.h). Its radius is half
+	// its first frame's width, read off the copy the randomizer shrank, so
+	// it is as small as the model is. No bone flags: the gunship's two
+	// (setup below) rotate nothing without creature data, and the rotors
+	// turn in the animation.
+	if (objects[DRONE].loaded)
+	{
+		obj = &objects[DRONE];
+		obj->initialise = InitialiseDrone;
+		obj->control = DroneControl;
+		obj->collision = CreatureCollision;
+		obj->shadow_size = 256;
+		obj->hit_points = 60;
+		obj->pivot_length = 0;
+		obj->radius = (short)DroneRadius(obj->frame_base[0], obj->frame_base[1]);
+		obj->intelligent = 1;
+		obj->HitEffect = 3;
+		obj->save_position = 1;
+		obj->save_hitpoints = 1;
+		obj->save_flags = 1;
+		obj->save_anim = 1;
+	}
+
 	if (objects[REAPER].loaded)
 	{
 		// REAPER is the Raptor slot, no longer the jellyfish. REAPER was
@@ -2281,9 +2309,10 @@ void InitialiseObjects()
 		Spiders = (SPIDER_STRUCT*)game_malloc(1664);
 }
 
-// The rule's own copy of the three slots it names.
+// The rule's own copy of the four slots it names.
 static_assert(CARRIER_SEARCH_OBJECT1 == SEARCH_OBJECT1 &&
-	CARRIER_SEARCH_OBJECT3 == SEARCH_OBJECT3 && CARRIER_CYBORG == CYBORG,
+	CARRIER_SEARCH_OBJECT3 == SEARCH_OBJECT3 && CARRIER_CYBORG == CYBORG &&
+	CARRIER_DRONE == DRONE,
 	"carrier_rule.h disagrees");
 
 // And chef_rule.h's copy of the chef's and the brawler's.

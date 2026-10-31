@@ -83,6 +83,10 @@ struct HdMarkers
     std::vector<Cut> cuts;
     struct Donor { int slot, fromSlot; std::string level; };
     std::vector<Donor> donors;
+    // The factor a copy was shrunk by, as the two measured lengths it is
+    // the ratio of. No version of its own, like `item`.
+    struct Scale { int slot, num, den; };
+    std::vector<Scale> scales;
     // The items the run added, by their index in the level file. No
     // version of its own: an older reader counts the lines as unknown.
     std::vector<int> items;
@@ -134,6 +138,23 @@ static bool readHdm(const std::string& path, HdMarkers& out, std::string& error)
             d.fromSlot = b;
             out.donors.push_back(d);
             continue;
+        }
+        {
+            int c = 0;
+            if (std::sscanf(line, "scale %d %d %d", &a, &b, &c) == 3)
+            {
+                // A factor that shrinks to nothing or turns the model inside
+                // out is no factor; the engine's reader keeps it as unknown.
+                if (a >= 0 && b > 0 && c > 0)
+                {
+                    HdMarkers::Scale s;
+                    s.slot = a; s.num = b; s.den = c;
+                    out.scales.push_back(s);
+                }
+                else
+                    out.unknown.push_back(line);
+                continue;
+            }
         }
         if (std::sscanf(line, "item %d", &a) == 1)
         {
@@ -207,6 +228,10 @@ static void report(const HdMarkers& m)
     for (size_t i = 0; i < m.donors.size(); ++i)
         std::printf("  donor       slot %d <- %s slot %d\n",
                     m.donors[i].slot, m.donors[i].level.c_str(), m.donors[i].fromSlot);
+    for (size_t i = 0; i < m.scales.size(); ++i)
+        std::printf("  scale       slot %d x %d/%d = %.4f   (the .TRM shrinks alike)\n",
+                    m.scales[i].slot, m.scales[i].num, m.scales[i].den,
+                    static_cast<double>(m.scales[i].num) / m.scales[i].den);
     if (!m.items.empty())
     {
         std::printf("  items      ");

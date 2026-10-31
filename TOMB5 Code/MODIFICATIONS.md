@@ -17538,6 +17538,61 @@ other pool enemy.
 **Commits.** `99f30980` (the slot, the rule, the control, the lines), `2999d664`
 (ModernTest), `987200a5` (BoneCheck's script).
 
+### RICH3's gunship flies after Lara as a drone at the vulture's size (#289)
+
+2026-11-01.
+
+**What.** A new enemy slot, `DRONE` (472), holds RICH3's gunship as the randomizer copies
+it: shrunk to the size of the pool's flyer, the vulture, by 2290/7161, its origin moved
+into the middle of its frame box. `game/drone.cpp` flies it after Lara with the vulture's
+LOT, on the flyer zone: it closes in along the zone's path while it has no sight of her or
+she is farther than four sectors, holds two to four sectors off and strafes across her
+line while it sees her, backs off nearer than two, hangs a sector over her head with its
+box clear of floor and ceiling, turns its nose to her four degrees a tick and banks into a
+strafe. It fires the gunship's gun - the flash, the HK's report, a hit test every other
+tick along a ray past the aim point - in bursts of 12 ticks in every 48, its nose within
+30 degrees of her and she within eight sectors; a hit takes `DMG_Drone` (5, half the
+gunship's 10, through `EnemyDamage`) behind `SceneHoldRefuses`, and it smashes glass
+statics and smashable objects as the gunship does. It has 60 hit points (`HP_Drone`, the
+chef's), sparks where Lara's bullets strike it and carries no pickup. At zero it explodes
+on the motion sensors' pattern - the bang and two bursts of explosion sparks - and goes
+through `CreatureDie` with its explode flag: the body flies apart, the item ends, the AI
+slot is freed; the shot that took its last hit point counted the kill, as for every enemy.
+The HD model build reads a new sidecar line, `scale <slot> <num> <den>`, and shrinks the
+donor's `.TRM` by it, so GUNSHIP.TRM stands on the shrunk skeleton. With `-log`, a
+`DRONELOG item= tick= state= dist= los= fire=` line at every change of state and one per
+shot, which ends in `shot= dmg=`; the `HDLOG donor` line of a shrunk slot ends in
+`scale=`.
+
+**Why.** At home the gunship is a set piece: seven sectors long, it runs along one wall on
+a path of its own and nothing can hurt it. As an enemy in a random level none of that
+holds. Drawing it smaller would have left its collision, its boxes and its node offsets at
+full size, so the data is shrunk at the import by one factor for every length, and the HD
+model by the same factor at build - unshrunk on the shrunk skeleton its bind drift reads
+826.7 against the limit of 256, and it would have drawn classic; shrunk it reads 57.1, the
+gunship's own 178.5 times the factor. The factor is the ratio of the longest side any one
+keyframe box reaches, the vulture's glide (2290) against the gunship's rotor loop (7161);
+the first frames alone would have given 1108/7095, half the span the vulture flies with.
+The gunship's one animation turns its two rotors, 36 degrees a tick, and moves nothing, so
+the flight is the control's own step, taken only where the flyer zone lets the creature
+code take it. Every decision is one function of `game/drone_rule.h`, and none draws a
+random number: the burst's phase, the strafe's side and the aim's scatter are a hash of
+the drone's own state. It dies in the air, wherever the zone took it, so it carries
+nothing (`game/carrier_rule.h`), like the pool cyborg. Slot 91 is left as it was: RICH3's
+helicopter keeps its control, its item and its script.
+
+**How.** `game/objects.h` (`DRONE = 472`, the value written out), `game/drone.cpp`,
+`game/drone.h` and `game/drone_rule.h` (new), `game/setup.cpp` (the object block; its
+radius is half its first frame's width, read off the shrunk copy), `game/lot.cpp`,
+`game/balance.cpp` and `.h`, `game/carrier_rule.h`, `specific/hd/hd_bind.cpp` and `.h`
+(the slot's name, `HD_SLOT_COUNT` 473), `specific/hd/hd_markers.cpp` and `.h` (the `scale`
+line), `specific/hd/hd_object.cpp`, `specific/hd/hd_model.cpp` and `.h`
+(`HDModelSlot::scale`), `tomb5.vcxproj`. ModernTest's `drone_rule` (39 checks) holds the
+table and the control's text; `ModelProbe -hdm` draws a slot through the sidecar's donor
+and factor and prints the skeleton test's numbers.
+
+**Commits.** `f6bbae70`, `ee99cc56`.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -17693,6 +17748,31 @@ new.
   row a plain run stays byte-identical too. Over ten seeds he stands 5 to 14 times per
   campaign with `mix cross allsanity 8` (89 in all) and 2 to 14 with `mix cross 8` (68),
   and joby3's item 186 keeps type 87 and OCB 0 in every run (`bb26f34e`).
+
+- **#289 - the drone.** `core/Tr5Level.cpp` / `.h`, `core/Tr5Transfer.cpp`,
+  `core/ApplyPatch.cpp`, `core/Randomizer.cpp`, `gui/Language.cpp`: a copy can
+  come out shrunk. `copyMoveableFrom` scales it by the factor the table
+  `kScales` (`Tr5Level::importScale`) names for a pair of slots - mesh centres,
+  radii and vertices, bone offsets, keyframe boxes and root offsets, animation
+  speeds and command lengths, in integers rounded half away from zero - and the
+  one pair is RICH3's gunship (91) into the drone's slot 472 at 2290/7161, after
+  `kOffsets` has moved its origin into the middle of its frame box (x -30, z
+  -3528); measured against the donor, 267 numbers of the copy are the donor's
+  times the factor and none is off. The run's log names the factor (`cross-enemy
+  slot 91 from rich3 -> slot 472: scaled 2290/7161 (0.3198)`) and the `.hdm`
+  sidecar carries it as `scale 472 2290 7161`. The drone joins the cross pool
+  after the chef: donor rich3, sourceSlot 91, the sounds 65 (the rotor) and 68
+  (the gun), "Drone" in the enemy list, German "Drohne", measured by the height
+  rule at its shrunk 784 rather than the gunship's 2451; RICH3 never takes it,
+  so its own helicopter, item 147, and its script stay as they were. A new pool
+  member changes every draw after it: the same seed 380 with `mix cross
+  allsanity 8 weapons items20 weather` and the glitchless list gives 22 of 26
+  `.trc` and `.hdm` different from the build of `f6bbae70`, where a throwaway
+  build with the pool row taken out gives all 26 byte-identical, and the run
+  with no switches is byte-identical either way. Seeds 1 to 10 with `mix cross 8
+  weapons items20` place 34 drones, 3.4 a run, in eight of the thirteen levels;
+  seeds 1 to 5 with `allsanity` place 30. `LevelBuild -hdm` writes the sidecar
+  of a test level.
 
 ## 4. Building this yourself
 
@@ -17864,3 +17944,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #286 | A room under the sky lists the art that stands in the sky beside it |
 | #287 | The bulbs' fog reaches as a field, and the mist it stands in goes |
 | #288 | JOBY2's cutscene soldier as a pool enemy: the brawler on a slot of his own; section 3 (the randomizer) |
+| #289 | RICH3's gunship flies after Lara as a drone at the vulture's size |

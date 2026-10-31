@@ -384,6 +384,17 @@ enum object_types
 	// puts his meshes and the chef's animations together on this slot and
 	// he runs the chef's control with an empty fist (chef_rule.h).
 	BRAWLER,					// 471
+	// DRONE: RICH3's gunship as a pool enemy, at the size of the pool's
+	// flyer. The randomizer copies slot 91 here shrunk by 2290/7161 and
+	// with its origin in the middle of its frame box - kScales in the
+	// randomizer's core\Tr5Level.cpp, kOffsets in its core\Tr5Transfer.cpp;
+	// slot 91 itself stays RICH3's scripted, untouchable helicopter.
+	// drone.cpp flies it on the flyer zone after Lara and shoots with the
+	// gunship's gun.
+	//
+	// The number is written out, so a slot added before it cannot move it:
+	// the randomizer writes 472 into the level files.
+	DRONE = 472,
 
 	NUMBER_OBJECTS
 };

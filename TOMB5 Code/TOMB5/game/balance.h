@@ -63,6 +63,7 @@ struct BALANCE_INFO
 	long hpSniper;
 	long hpChef;
 	long hpBrawler;		/* JOBY2's cutscene soldier on the chef's control */
+	long hpDrone;			/* RICH3's gunship at the vulture's size, a pool enemy */
 	long hpTwoGun;
 	long hpHydra;
 	long hpImp;
@@ -93,6 +94,7 @@ struct BALANCE_INFO
 	long dmgSpiders;
 	long dmgChefKnife;
 	long dmgBrawlerFist;
+	long dmgDrone;			/* one hit of its gun, every other frame of a burst */
 	long dmgSkeletonStrike;
 	long dmgGladiatorStrike;
 	long dmgGodStrike;

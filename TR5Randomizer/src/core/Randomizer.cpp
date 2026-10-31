@@ -18,6 +18,7 @@
 #include "Randomizer.h"
 #include "LevelChains.h"
 #include "Tr3Source.h"
+#include "Tr5Level.h"       // importScale - a shrunk copy's height
 
 #include <algorithm>
 #include <cctype>
@@ -1915,6 +1916,33 @@ bool Rando::run(const RandoInput& in,
         // stands. He may stand in joby2 itself - a composite exists in no
         // level, so there is no clone of him to keep out (see the rule).
         { 471, "joby2",  {},                                    {-1,-1},  nullptr,   -1, 12, 460, nullptr, 439, "joby3", 87 }, // Brawler
+        // The drone (engine slot 472, DRONE): RICH3's gunship (91) at the
+        // size of the pool's flyer, the vulture. At home the gunship is a
+        // scripted helicopter that runs along one wall of its own and that
+        // nothing can hurt; its own slot gives it a control of its own
+        // (drone.cpp: it flies after Lara on the flyer zone, holds a band,
+        // strafes and fires the gunship's gun) and a death in an explosion.
+        //
+        // Donor rich3, sourceSlot 91. The transfer shrinks the copy by
+        // 2290/7161 and moves its origin into the middle of its frame box
+        // (kScales in Tr5Level.cpp, kOffsets in Tr5Transfer.cpp), and the
+        // height rule measures it at that size (Tr5Level::importScale):
+        // 784 tall in its first frame, against the gunship's 2451. The
+        // sourceSlot keeps it out of rich3, whose own helicopter (item 147)
+        // and script stay as Core built them.
+        //
+        // Two sounds, both hard-wired and on no anim command (its one
+        // animation has none): the rotor's loop 65 (SFX_HELICOPTER_LOOP,
+        // only rich3 has the sample) and the gun's 68 (SFX_HK_FIRE, the
+        // three rich levels). Its explosion, 106, is in every level. Neither
+        // is an import from another game, so neither is an sfximport line:
+        // the HQ bridge may pair them with the Remaster's own recordings of
+        // the same two ids (ApplyPatch.cpp, writeHdMarkers).
+        //
+        // No companions, no swap halves, no base type, no animCount - one
+        // animation of ten frames that turns its rotors. Price: seven
+        // object texture pages and 195 texinfos per target level.
+        { 472, "rich3",  { {65,"rich3",65}, {68,"rich3",68} },   {-1,-1},  nullptr,   -1, 0, 0, nullptr, 91 }, // Drone
         // Imp: donor andy3, not andy1. andy1's Imp anim set is gutted: the
         // death animation +45 (ImpControl sets it fixed at hit_points<=0)
         // is a one-frame dummy there without a KillItem command - the Imp
@@ -2328,13 +2356,22 @@ bool Rando::run(const RandoInput& in,
             {
                 if (k.typeId != typeId) continue;
                 int v = 0;
+                const int src = k.sourceSlot > 0 ? k.sourceSlot : k.typeId;
                 // A composite stands in the frames of its anim donor -
                 // the rest pose's box comes out of there.
                 const bool ok = k.animFrom
                     ? in.modelHeight(k.animFrom, k.tr3, k.animSlot, v)
-                    : in.modelHeight(k.from, k.tr3, k.sourceSlot > 0 ? k.sourceSlot : k.typeId, v);
+                    : in.modelHeight(k.from, k.tr3, src, v);
                 if (ok)
+                {
                     h = v;
+                    // A copy the transfer shrinks (the drone) stands at
+                    // the height it will have, not at its donor's - the
+                    // same factor, rounded the same way.
+                    int num = 0, den = 0;
+                    if (Tr5Level::importScale(src, k.typeId, num, den))
+                        h = static_cast<int>((static_cast<long long>(v) * num + den / 2) / den);
+                }
                 break;
             }
         }
@@ -3856,6 +3893,9 @@ std::vector<EnemyKind> Rando::enemyKinds()
         // Engine slot 471 (BRAWLER): JOBY2's cutscene soldier on the
         // chef's animations and control - melee with his bare fists.
         { 471, "Brawler",          nullptr },
+        // Engine slot 472 (DRONE): RICH3's gunship at the vulture's size,
+        // flying after Lara and firing. Slot 91 stays RICH3's helicopter.
+        { 472, "Drone",            nullptr },
         { 89, "Imp",               nullptr },
 
         // The guests from Tomb Raider 3. They sit on slots that carry a

@@ -980,6 +980,19 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
             // enemy's own slot (MESHSWAP1 405 -> 462..467), and only the
             // slot it came FROM says what the model actually is.
             level.hdMarkDonor(targetSlot, slot, from);
+            // A copy the transfer shrank (kScales in Tr5Level.cpp) says
+            // so in the run's log, with the factor as the two measured
+            // lengths it is the ratio of.
+            int sNum = 0, sDen = 0;
+            if (level.hdScaleOf(targetSlot, sNum, sDen))
+            {
+                char line[160];
+                std::snprintf(line, sizeof(line),
+                              "%s slot %d from %s -> slot %d: scaled %d/%d (%.4f)",
+                              what, slot, from.c_str(), targetSlot, sNum, sDen,
+                              static_cast<double>(sNum) / sDen);
+                report.warnings.push_back(line);
+            }
             ++counter;
         }
         return true;
@@ -1877,6 +1890,17 @@ bool Patch::writeHdMarkers(const Tr5Level& level, const std::wstring& levelPath,
         std::fprintf(f, "donor %d %s %d\n", d.slot, d.level.c_str(), d.fromSlot);
         if (donorsOut) ++*donorsOut;
     }
+
+    /* The factor a copy was shrunk by (Tr5Level::hdMarkScale), one line a
+     * slot, ascending because a std::map is: `scale <slot> <num> <den>`, the
+     * two measured lengths the factor is the ratio of. The engine's HD model
+     * build shrinks the slot's .TRM by it, so the HD model stands on the
+     * shrunk skeleton at the size the classic one has. No version of its
+     * own: only a slot this engine added carries it, and an engine that
+     * knows the slot knows the line; a run that shrank nothing writes none,
+     * so every older sidecar stays byte for byte what it was. */
+    for (const auto& s : level.hdScales())
+        std::fprintf(f, "scale %d %d %d\n", s.first, s.second.first, s.second.second);
 
     /* The items this run added, one line each, ascending because a
      * std::set is - the same seed, the same file. Last in the file, so every

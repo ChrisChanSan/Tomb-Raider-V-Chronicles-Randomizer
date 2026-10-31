@@ -2329,6 +2329,8 @@ static void ObjectLevelBuild(const char* installRoot, const char* stem,
 		const char* model;	// 0 = this slot stays classic
 		bool tr3;
 		const char* why;
+		int scaleNum;		// the sidecar's `scale` line, 1/1 without
+		int scaleDen;
 	};
 
 	std::vector<DonorPlan> donors;
@@ -2349,6 +2351,8 @@ static void ObjectLevelBuild(const char* installRoot, const char* stem,
 		plan.model = 0;
 		plan.tr3 = false;
 		plan.why = "";
+		plan.scaleNum = mark->scaleNum;
+		plan.scaleDen = mark->scaleDen;
 
 		if (_stricmp(mark->level, "TR3") == 0)
 		{
@@ -2444,6 +2448,12 @@ static void ObjectLevelBuild(const char* installRoot, const char* stem,
 
 			one.name = plan->model;
 			one.fromTr3 = plan->tr3;
+
+			/* A copy the run shrank: the .TRM shrinks by the same factor,
+			 * or the full-size model would stand on the shrunk skeleton -
+			 * and the skeleton test would throw it out as drifted. */
+			if (plan->scaleNum > 0 && plan->scaleDen > 0)
+				one.scale = (float)plan->scaleNum / (float)plan->scaleDen;
 		}
 
 		wanted.push_back(one);
@@ -3372,10 +3382,18 @@ static void ObjectLevelBuild(const char* installRoot, const char* stem,
 		else if (plan.model && !hd)
 			why = g_slot[slot].why;		// the skeleton test said no
 
-		Log("HDLOG donor slot=%d name=%s from=%s:%d model=%s hd=%d reason=%s",
+		/* A shrunk copy says its factor at the end of the line; every
+		 * other donor's line stays what it was. */
+		char scaled[48] = "";
+
+		if (plan.scaleNum != plan.scaleDen)
+			std::snprintf(scaled, sizeof(scaled), " scale=%d/%d",
+				plan.scaleNum, plan.scaleDen);
+
+		Log("HDLOG donor slot=%d name=%s from=%s:%d model=%s hd=%d reason=%s%s",
 			slot, HDSlotName(slot) ? HDSlotName(slot) : "?",
 			plan.level, plan.fromSlot, plan.model ? plan.model : "-",
-			hd ? 1 : 0, why);
+			hd ? 1 : 0, why, scaled);
 	}
 
 	if (!donors.empty())

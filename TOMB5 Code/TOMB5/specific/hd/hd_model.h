@@ -94,6 +94,15 @@ struct HDModelSlot
 	int rigidNode = -1;
 	bool fromTr3 = false;
 
+	/* The factor the classic copy of this slot was shrunk by (the sidecar's
+	 * `scale` line, hd_markers.h). Every vertex position of the .TRM is
+	 * multiplied by it right after the file is read, before anything
+	 * measures the model - the bind drift, the bounds and the floor rule
+	 * then see the model at the size its shrunk skeleton has. 1 is the
+	 * file's own size, which is every slot but one: the drone, RICH3's
+	 * gunship at the size of the pool's vulture. */
+	float scale = 1.0f;
+
 	/* A rigid face's neck, out of the face's own rig.
 	 *
 	 * -1 is a face wholly rigid on `rigidNode`. A node number here hangs

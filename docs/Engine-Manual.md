@@ -4919,7 +4919,7 @@ are not case-sensitive.
 | Block | What is in it |
 |---|---|
 | Damage of Lara's weapons | nine lines. The revolver and the HK have two each — the revolver is weak up to Colosseum and strong from the submarine on, and the HK hits harder aimed from a standstill than fired on the move. `Crossbow` is the Grappling Gun. Shotgun damage counts **per pellet**. |
-| Enemy hit points | 33 lines, `HP_<enemy>`, absolute as in the original |
+| Enemy hit points | 34 lines, `HP_<enemy>`, absolute as in the original |
 | Enemy damage against Lara | per attack |
 | Level hazards | the ceiling gun and its kind |
 | Everything at once | `WeaponDamage`, `EnemyHealth`, `EnemyDamage` — percentages applied **on top** of everything above |
@@ -5052,6 +5052,21 @@ chef's hits and his punch hurts twice as much as the knife; both stand in
 `Balance.txt` as lines of his own (`HP_Brawler` 120, `DMG_Brawler_Fist`
 400). He dies the way the chef does, with the soldiers' gunshot death. With
 the Remaster installed he wears its model of that soldier.
+
+**The drone is the gunship from Red Alert, shrunk to the size of the
+vulture.** The helicopter in Red Alert stays what it was: it flies along its
+wall, fires through the windows and cannot be hurt. The enemy pool places a
+copy of it on a slot of its own, scaled down to the vulture's span - about
+two and a quarter sectors nose to tail, its rotor a little under two across.
+It flies after Lara wherever the vulture could fly, hangs about a sector
+over her head and keeps two to four sectors away, backs off when she comes
+closer, slides from side to side while it has her in sight, and fires the
+gunship's gun in short bursts, nose on, at up to eight sectors. Each hit
+costs half what the gunship's does. Shot down, it blows apart. Its two
+lines in `Balance.txt` are `HP_Drone` (60, the chef's) and `DMG_Drone`
+(5 a hit); like every enemy's, its damage follows `EnemyDamage`. With
+`-log`, a `DRONELOG` line names each change of what it is doing and each
+shot.
 
 **Some deaths burst apart instead of playing an animation.** The skeletons,
 the swamp witch, the Imp and the Maze Monster have no usable death animation

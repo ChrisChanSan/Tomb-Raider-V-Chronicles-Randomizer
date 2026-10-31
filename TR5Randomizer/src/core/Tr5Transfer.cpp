@@ -905,9 +905,18 @@ bool Tr5Level::copyMoveableFrom(const Tr5Level& src, int slotId, std::string& er
     //
     // The amount is subtracted from EVERY frame, not only the first - that
     // way the root motion within the animation stays untouched.
+    //
+    // RICH3's gunship (91) is the second case, copied as the drone (472):
+    // Core hung it on its nose, with the body seven sectors behind the
+    // origin, because it only ever flies along a wall of its own. Frame
+    // box centre with ModelOffset: x 30, z 3528 (box -689..750,
+    // -19..7076). A flying enemy turns about its origin and is kept off the
+    // walls by it, so the origin goes into the middle of the box - before
+    // the copy is shrunk below, so both numbers are the donor's own.
     struct ModelOffset { int slot; int dx; int dz; };
     static const ModelOffset kOffsets[] = {
         { 55, 510, -361 },
+        { 91, -30, -3528 },
     };
     for (const ModelOffset& v : kOffsets)
     {
@@ -1144,6 +1153,110 @@ bool Tr5Level::copyMoveableFrom(const Tr5Level& src, int slotId, std::string& er
         { error = faceErr; return false; }
     }
 
+    // --- Scale the model -----------------------------------------------------
+    // A copy can come out smaller than its donor. The occasion is the drone:
+    // RICH3's gunship (91), a scripted helicopter seven sectors long, copied
+    // into its own slot 472 at the size of the pool's flyer, the vulture
+    // (43). Shrinking only the picture at draw time would leave collision,
+    // the frame boxes and every node offset at full size, so the DATA is
+    // shrunk here, once, with one factor for every length the model has:
+    //
+    //   - the meshes: centre, radius and every vertex (normals are
+    //     directions and stay),
+    //   - the bones: the offset of every node from its parent,
+    //   - the frames: the box and the root offset of every keyframe,
+    //   - the animations: their speeds and accelerations, and the lengths
+    //     their commands carry (SetPosition, JumpVelocity).
+    //
+    // The factor and why it is what it is: kScales in Tr5Level.cpp.
+    //
+    // Integer arithmetic, rounded half away from zero: the same donor and
+    // the same factor give the same bytes on every machine, which the
+    // regression proof of the randomizer depends on.
+    int scaleNum = 0, scaleDen = 0;
+    const bool scale = importScale(slotId, targetSlot, scaleNum, scaleDen);
+
+    if (scale)
+    {
+        const long long num = scaleNum, den = scaleDen;
+        auto scaled = [num, den](long long v) -> long long {
+            const long long p = v * num;
+            return (p >= 0) ? (p + den / 2) / den : -((-p + den / 2) / den);
+        };
+        auto scale16 = [&](std::vector<uint8_t>& b, size_t at) {
+            if (at + 2 > b.size()) return;
+            int16_t w; std::memcpy(&w, b.data() + at, 2);
+            w = static_cast<int16_t>(scaled(w));
+            std::memcpy(b.data() + at, &w, 2);
+        };
+        auto scale32 = [&](std::vector<uint8_t>& b, size_t at) {
+            if (at + 4 > b.size()) return;
+            int32_t w; std::memcpy(&w, b.data() + at, 4);
+            w = static_cast<int32_t>(scaled(w));
+            std::memcpy(b.data() + at, &w, 4);
+        };
+
+        // Meshes: each distinct mesh once (several pointers can share one).
+        for (const auto& kv : meshRegion)
+        {
+            const size_t at = kv.second.first;
+            for (int k = 0; k < 4; ++k) scale16(meshPack, at + static_cast<size_t>(k) * 2);
+            const int nVerts = rd16(meshPack, at + 10) & 0xFF;
+            for (int v = 0; v < nVerts * 3; ++v)
+                scale16(meshPack, at + 12 + static_cast<size_t>(v) * 2);
+        }
+
+        // Bones: four longs a node - flags, then x, y, z.
+        for (size_t o = 0; o + 16 <= boneBytes.size(); o += 16)
+            for (int k = 1; k <= 3; ++k) scale32(boneBytes, o + static_cast<size_t>(k) * 4);
+
+        // Frames, walked through the animations as the offset fix above
+        // walks them, each keyframe once: (end - base) / rate keyframes
+        // plus the first, and one more where the last frame falls between
+        // two keys - the engine's own count (GetFrames).
+        std::set<size_t> keys;
+        for (size_t a = 0; a + SZ_ANIM <= animBytes.size(); a += SZ_ANIM)
+        {
+            const uint32_t fp = rd32(animBytes, a);
+            const int rate = animBytes[a + 4];
+            const size_t fsz = static_cast<size_t>(animBytes[a + 5]) * 2;
+            const int fb = rd16(animBytes, a + 24), fe = rd16(animBytes, a + 26);
+            if (rate <= 0 || fsz < 18 || fe < fb || fp < frameStart) continue;
+
+            const int count = (fe - fb + rate - 1) / rate + 1;
+            size_t pos = static_cast<size_t>(fp - frameStart);
+            for (int k = 0; k < count && pos + 18 <= frameBytes.size(); ++k, pos += fsz)
+                keys.insert(pos);
+        }
+        for (size_t f : keys)
+            for (int k = 0; k < 9; ++k) scale16(frameBytes, f + static_cast<size_t>(k) * 2);
+
+        // Animations: velocity, acceleration and their lateral twins
+        // (16.16 lengths a frame), and the lengths their commands carry -
+        // each command once, since two anims may share one list.
+        std::set<size_t> lengths;
+        for (size_t a = 0; a + SZ_ANIM <= animBytes.size(); a += SZ_ANIM)
+        {
+            for (int k = 0; k < 4; ++k) scale32(animBytes, a + 8 + static_cast<size_t>(k) * 4);
+
+            const uint16_t nCmd = rd16(animBytes, a + 36);
+            const uint16_t iCmd = rd16(animBytes, a + 38);
+            if (!nCmd || iCmd < cmdStart) continue;
+            size_t c = (static_cast<size_t>(iCmd) - static_cast<size_t>(cmdStart)) * 2;
+            for (int k = 0; k < nCmd && c + 2 <= cmdBytes.size(); ++k)
+            {
+                const int16_t type = rs16(cmdBytes, c);
+                const int len = commandLen(type);
+                if (len <= 0) break;
+                if (type == 1 || type == 2)          // SetPosition x y z,
+                    for (int p = 1; p < len; ++p)   // JumpVelocity v h
+                        lengths.insert(c + static_cast<size_t>(p) * 2);
+                c += static_cast<size_t>(len) * 2;
+            }
+        }
+        for (size_t at : lengths) scale16(cmdBytes, at);
+    }
+
     // Rebase: the copied blocks receive the target's deltas.
     const int32_t dstMeshBytesOld = m_meshData.count * 2;
     const int32_t dstPtrOld = m_meshPtrs.count;
@@ -1318,6 +1431,10 @@ bool Tr5Level::copyMoveableFrom(const Tr5Level& src, int slotId, std::string& er
         }
         if (stats) ++stats->sounds;
     }
+
+    // The sidecar's `scale` line: the factor this copy was shrunk by, or
+    // none - the last copy into a slot decides (Tr5Level::hdMarkScale).
+    hdMarkScale(targetSlot, scaleNum, scaleDen);
 
     return true;
 }

@@ -39,6 +39,8 @@ namespace
 	std::vector<int> g_rooms;
 	std::vector<HDMarkerCut> g_cuts;
 	std::vector<Donor> g_donors;
+	// The `scale` lines: slot, num, den - three ints each.
+	std::vector<int> g_scales;
 	std::vector<std::string> g_unknown;
 	// The sound ids this run imported from another game.
 	std::vector<int> g_sfx_imports;
@@ -61,6 +63,18 @@ namespace
 			one.slot = g_donors[i].slot;
 			one.fromSlot = g_donors[i].fromSlot;
 			one.level = g_donors[i].level.c_str();
+			one.scaleNum = 1;
+			one.scaleDen = 1;
+
+			// The last line for a slot counts, as the writer keeps only
+			// the last copy's factor anyway.
+			for (size_t s = 0; s + 2 < g_scales.size(); s += 3)
+				if (g_scales[s] == one.slot)
+				{
+					one.scaleNum = g_scales[s + 1];
+					one.scaleDen = g_scales[s + 2];
+				}
+
 			g_donor_view.push_back(one);
 		}
 	}
@@ -199,6 +213,28 @@ bool HDMarkersLoad(const char* levelPath)
 			continue;
 		}
 
+		/* The factor a copy was shrunk by, as two measured lengths. A line
+		 * that would shrink to nothing or turn the model inside out says
+		 * nothing this engine can draw, and is kept as unknown instead of
+		 * as a factor. */
+		{
+			int c = 0;
+
+			if (std::sscanf(line, "scale %d %d %d", &a, &b, &c) == 3)
+			{
+				if (a >= 0 && b > 0 && c > 0)
+				{
+					g_scales.push_back(a);
+					g_scales.push_back(b);
+					g_scales.push_back(c);
+				}
+				else
+					g_unknown.push_back(line);
+
+				continue;
+			}
+		}
+
 		/* An item the run added. A negative index names no item and is not
 		 * kept; one past the level's last item is kept and never asked. */
 		if (std::sscanf(line, "item %d", &a) == 1)
@@ -243,6 +279,7 @@ bool HDMarkersLoad(const char* levelPath)
 		g_rooms.clear();
 		g_cuts.clear();
 		g_donors.clear();
+		g_scales.clear();
 		g_unknown.clear();
 		g_sfx_imports.clear();
 		g_items.clear();
@@ -265,6 +302,7 @@ void HDMarkersFree()
 	g_rooms.clear();
 	g_cuts.clear();
 	g_donors.clear();
+	g_scales.clear();
 	g_donor_view.clear();
 	g_unknown.clear();
 	g_sfx_imports.clear();

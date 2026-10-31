@@ -21,6 +21,7 @@
 #include "camera.h"
 #include "lara.h"
 #include "../specific/gamemain.h"
+#include "raising_cog_rule.h"
 
 void ControlPropeller(short item_number)
 {
@@ -281,26 +282,55 @@ void ControlRaisingCog(short item_number)
 {
 	ITEM_INFO* item;
 	ITEM_INFO* triggered;
+	COG_STATE cog, before;
 	short TriggerItems[4];
 	short NumTrigs, vol;
+	long tick, kept;
 
 	item = &items[item_number];
 
-	if (!TriggerActive(item))
-		return;
+	/* A lift that has begun runs to its end, and a pull while it runs is
+	 * kept for the next lift (raising_cog_rule.h, which says why: the rope's
+	 * SWITCH trigger toggles the code bits, and a pull during the lift used
+	 * to stop it half way). The state stands in item_flags 0, 2 and 3;
+	 * TriggerActive is asked once a tick, as Core did, and the rule says
+	 * what the tick does. */
+	cog.lifts = item->item_flags[0];
+	cog.at = item->item_flags[2];
+	cog.pending = item->item_flags[3];
+	before = cog;
+	tick = RaisingCogTick(&cog, TriggerActive(item) != 0);
+	item->item_flags[0] = cog.lifts;
+	item->item_flags[2] = cog.at;
+	item->item_flags[3] = cog.pending;
 
-	if (item->item_flags[0] >= 3)
+	if (tick & COG_TURN)
 	{
 		AnimateItem(item);
 		return;
 	}
 
-	if (item->item_flags[2] >= 256)
-	{
-		item->item_flags[2] = 0;
-		item->item_flags[0]++;
+	/* COGLOG (-log only): a line for each pull during a lift, kept or
+	 * dropped, for each lift's end and for each lift's begin, from a pull
+	 * or from a kept one - `lift=` the lift's number, `at=` the units it
+	 * stood at, `pulls_pending=` the pulls kept then. */
+	kept = before.pending + ((tick & COG_KEPT) ? 1 : 0);
 
-		if (item->item_flags[0] == 3)
+	if (tick & COG_REARM)
+	{
+		// The pull turned the code bits off: on again for the next one.
+		item->flags |= IFL_CODEBITS;
+		Log("COGLOG item=%d lift=%d at=%d pulls_pending=%ld %s", item_number,
+			before.lifts + 1, before.at, kept,
+			(tick & COG_KEPT) ? "kept" : "dropped");
+	}
+
+	if (tick & COG_DONE)
+	{
+		Log("COGLOG item=%d lift=%d at=%d pulls_pending=%ld done",
+			item_number, cog.lifts, before.at, kept);
+
+		if (tick & COG_ENGAGE)
 		{
 			for (NumTrigs = (short)GetSwitchTrigger(item, TriggerItems, 1); NumTrigs; NumTrigs--)
 			{
@@ -324,29 +354,30 @@ void ControlRaisingCog(short item_number)
 				}
 			}
 		}
+	}
 
+	if (tick & COG_SLEEP)
+	{
 		RemoveActiveItem(item_number);
 		item->status = ITEM_INACTIVE;
 		item->flags &= ~IFL_CODEBITS;
+		return;
 	}
-	else
+
+	if (tick & COG_BEGIN)
 	{
-		if (!item->item_flags[2])
-		{
-			InitialiseSpotCam(9);
-			bUseSpotCam = 1;
-		}
+		InitialiseSpotCam(9);
+		bUseSpotCam = 1;
+		Log("COGLOG item=%d lift=%d at=0 pulls_pending=%d %s", item_number,
+			cog.lifts + 1, cog.pending,
+			(tick & COG_FROM_PENDING) ? "started from pending" : "begin");
+	}
 
-		if (item->item_flags[2] < 31)
-			vol = item->item_flags[2];
-		else if (item->item_flags[2] > 224)
-			vol = 255 - item->item_flags[2];
-		else
-			vol = 31;
-
+	if (tick & COG_RISE)
+	{
+		vol = (short)RaisingCogVolume(cog.at - COG_STEP);
 		SoundEffect(SFX_BLK_PLAT_RAISE_LOW, &item->pos, (vol << 8) | SFX_SETVOL);
-		item->item_flags[2] += 2;
-		item->pos.y_pos -= 2;
+		item->pos.y_pos -= COG_STEP;
 	}
 }
 

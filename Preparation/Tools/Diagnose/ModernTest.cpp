@@ -30933,6 +30933,8 @@ static void carrier_pass()
 		hd_switch_count(setup, "\"carrier_rule.h disagrees\""), 1);
 
 	free(setup);
+}
+
 /* The skip latch's arithmetic (game\skip_latch.h) on made-up readings of the
  * pad, one bit per button: Cross is bit 1 on DirectInput and bit 0 on
  * XInput (JoyBitConfirm, specific\input.cpp), and every default page puts

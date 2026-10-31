@@ -1559,6 +1559,14 @@ namespace
 		 * surface (fog_add_coat), 0..1; -1 for every other range. Not in
 		 * the key: it follows from the triangles. */
 		float addCoat = -1.0f;
+		/* The art's mist against the level's bulbs (HDRenderFogLevel,
+		 * hd_fog.h HDFogArtVerdict): its verdict, the bulb met or whose
+		 * field holds it (-1 for none) and its distance to the box. Kept,
+		 * -1 and 0 for every other range. Not in the key: it follows from
+		 * the triangles and the level's bulbs. */
+		int addLeft = 0;
+		int addMeets = -1;
+		float addGap = 0.0f;
 		/* The gloss of this draw call - the .TRG material's own strength and
 		 * exponent, 0 for every part that names none. One pixel shader
 		 * constant, hence part of the sort key. */
@@ -5022,14 +5030,17 @@ namespace
 	 *
 	 * The frame's fog bulbs drawn as fog of their own (the rule is hd_fog.h's,
 	 * the pixel's arithmetic hd_fog.hlsl's): one quad per bulb over the
-	 * sphere's rectangle on the screen, at the end of the bracket that asked
+	 * rectangle of its field's sphere on the screen - the bulb's reach, its
+	 * field (HD_FOG_FIELD) - at the end of the bracket that asked
 	 * the rooms' additive pass - the last HD pass of the frame, after the
 	 * glass, the glows and the water, before the classic path's sprites and
 	 * the HUD - over the frame's own depth. A bulb the pass draws leaves the
 	 * per-pixel haze of the room, model and receive shaders: its density goes
 	 * up as 0 (c40), which takes it out of every BulbIntensity to the bit,
-	 * so no bulb counts twice. A bulb whose sphere is off the screen stays as
+	 * so no bulb counts twice. A bulb whose field is off the screen stays as
 	 * it was and costs the pass nothing; a frame with none draws nothing.
+	 * The art's mist whose box meets a bulb's sphere or lies in its field is
+	 * left out where the pass draws (fog_add_left).
 	 *
 	 * The depth is the frame's INTZ texture (HDRenderWaterDepthBind), which
 	 * the engine binds in a level that built water sheets and RoomProbe for
@@ -5082,6 +5093,20 @@ namespace
 	float g_fog_art_probe = -1.0f;
 	// RoomProbe's -fogstrength: one strength for every bulb, -1 the rule.
 	float g_fog_strength = -1.0f;
+
+	/* The field (hd_fog.h, HD_FOG_FIELD): each taken bulb's reach, and
+	 * RoomProbe's -fogfactor, one factor for every bulb or -1 for the
+	 * rule. The mist draws the bracket leaves out (fog_add_left), and
+	 * RoomProbe's -fogdrop 0, which leaves none out. */
+	float g_fog_reach[HD_MAX_BULBS];
+	float g_fog_factor = -1.0f;
+	int g_fog_dropped = 0;
+	bool g_fog_drop = true;
+
+	float fog_factor()
+	{
+		return g_fog_factor >= 0.0f ? g_fog_factor : HD_FOG_FIELD;
+	}
 
 	/* One triangle of an additive range into the range's box (HDRange::
 	 * addBox), its corners in the group's own coordinates; the range's
@@ -5248,6 +5273,10 @@ namespace
 		part.base = base;
 		part.weight = weight;
 		part.coat = range.addCoat;
+		part.range = (int)(&range - &g_groups[(size_t)group].pass[2][0]);
+		part.verdict = range.addLeft;
+		part.meets = range.addMeets;
+		part.gap = range.addGap;
 
 		float most = 0.0f;
 
@@ -5283,11 +5312,27 @@ namespace
 		return weight;
 	}
 
-	/* The bracket's bulbs: each one whose sphere reaches the screen is
-	 * kept for the pass, its density times its strength (hd_fog.h,
-	 * HDFogStrength), and its density in the upload `bulbs` (c40, eight
-	 * floats a bulb) set to 0. Nothing with hd_fog 0 or without the depth
-	 * texture, so the upload stays as it was.
+	/* An additive range the bracket leaves out (draw_pass): the art's mist
+	 * whose box meets a bulb's sphere or lies in its field (HDRange::
+	 * addLeft, HDRenderFogLevel), with hd_fog 1 and where the pass draws
+	 * the bulbs' fog - the frame's depth and the level's sheets, as
+	 * fog_take asks - so the bulbs' fog stands in its place. Without the
+	 * pass the bulbs keep the haze and the mist keeps its weight. */
+	bool fog_add_left(const HDRange& range)
+	{
+		if (range.addLeft == HD_FOG_ART_KEPT || !g_fog_on || !g_fog_drop ||
+			!g_depth_texture || !HDRenderWaterSheetsBuilt())
+			return false;
+
+		g_fog_dropped++;
+		return true;
+	}
+
+	/* The bracket's bulbs: each one whose field reaches the screen is
+	 * kept for the pass, its density times its field's strength (hd_fog.h,
+	 * HDFogStrength over the reach), and its density in the upload `bulbs`
+	 * (c40, eight floats a bulb) set to 0. Nothing with hd_fog 0 or without
+	 * the depth texture, so the upload stays as it was.
 	 *
 	 * Once a bracket. The marble floors' mirror hands the frame's lighting
 	 * back after its models (HDRenderMarbleDraw) while its mirrored
@@ -5330,19 +5375,26 @@ namespace
 		const float znear = g_proj[10] > 0.0f ? -g_proj[14] / g_proj[10]
 			: 20.0f;
 
+		/* Each bulb with its field (hd_fog.h, HD_FOG_FIELD): the rectangle
+		 * of its reach, and the strength the band's top gives the field's
+		 * own densest line. */
+		const float factor = fog_factor();
+
 		for (int j = 0; j < count && j < HD_MAX_BULBS; j++)
 		{
 			const HDFogBulb& b = f->bulbs[j];
 			const float c[3] = { b.x, b.y, b.z };
+			const float reach = HDFogFieldReach(b.rad, factor);
 			float* rect = g_fog_rect[g_fog_count];
 
-			if (!HDFogBounds(c, b.rad, sx, sy, znear, rect))
+			if (!HDFogBounds(c, reach, sx, sy, znear, rect))
 				continue;
 
 			g_fog_index[g_fog_count] = j;
+			g_fog_reach[g_fog_count] = reach;
 			g_fog_bulb[g_fog_count] = b;
 			g_fog_bulb[g_fog_count++].density *= g_fog_strength >= 0.0f ?
-				g_fog_strength : HDFogStrength(b.density, b.rad, b.r, b.g, b.b);
+				g_fog_strength : HDFogStrength(b.density, reach, b.r, b.g, b.b);
 			bulbs[j * 8 + 7] = 0.0f;
 		}
 
@@ -5448,6 +5500,25 @@ namespace
 		g_fog_last.placed = g_fog_placed ? 1 : 0;
 		std::memcpy(g_fog_last.eye, g_fog_eye, sizeof(g_fog_eye));
 		std::memcpy(g_fog_last.axes, g_fog_axes, sizeof(g_fog_axes));
+		g_fog_last.dropped = g_fog_dropped;
+		g_fog_dropped = 0;
+
+		// The taken bulbs whose fields meet, where the densities add.
+		for (int n = 0; n < g_fog_count; n++)
+			for (int k = 0; k < g_fog_count; k++)
+			{
+				const HDFogBulb& a = g_fog_bulb[n];
+				const HDFogBulb& o = g_fog_bulb[k];
+				const float v[3] = { a.x - o.x, a.y - o.y, a.z - o.z };
+				const float both = g_fog_reach[n] + g_fog_reach[k];
+
+				if (k != n && v[0] * v[0] + v[1] * v[1] + v[2] * v[2] <
+					both * both)
+				{
+					g_fog_last.shared++;
+					break;
+				}
+			}
 
 		if (!due || !g_fog_count || !g_device || !g_depth_texture ||
 			!g_fog_draws)
@@ -5499,9 +5570,9 @@ namespace
 		}
 
 		// What the pass changes beyond HDRenderStateRestore's list.
-		float saved[9 * 4];
+		float saved[30 * 4];
 
-		g_device->GetPixelShaderConstantF(0, saved, 9);
+		g_device->GetPixelShaderConstantF(0, saved, 30);
 
 		const int order[HD_MAX_BULBS] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
 			11, 12, 13, 14, 15 };
@@ -5563,8 +5634,43 @@ namespace
 		{
 			const HDFogBulb& b = g_fog_bulb[sorted[n]];
 			const float* r = g_fog_rect[sorted[n]];
-			const float bulb[8] = { b.x, b.y, b.z, b.rad, b.r, b.g, b.b,
-				b.density };
+			// Its field's reach for the span, its own radius for the breath.
+			const float bulb[8] = { b.x, b.y, b.z, g_fog_reach[sorted[n]],
+				b.r, b.g, b.b, b.density };
+
+			/* The fields the cap sums (hd_fog.hlsl, c9 - c29): its own
+			 * first, then each taken bulb's whose field meets it - no other
+			 * reaches a point of its own - with its centre in view space,
+			 * one over its reach squared and its peak. */
+			float fields[HD_MAX_BULBS * 4] = {};
+			float peaks[HD_MAX_BULBS] = {};
+			int count = 0;
+
+			for (int k = -1; k < g_fog_count; k++)
+			{
+				const int at = k < 0 ? sorted[n] : k;
+				const HDFogBulb& o = g_fog_bulb[at];
+				const float reach = g_fog_reach[at];
+				const float v[3] = { o.x - b.x, o.y - b.y, o.z - b.z };
+				const float both = reach + g_fog_reach[sorted[n]];
+
+				if (k == sorted[n] || (k >= 0 && !(v[0] * v[0] + v[1] * v[1] +
+					v[2] * v[2] < both * both)))
+					continue;
+
+				fields[count * 4 + 0] = o.x;
+				fields[count * 4 + 1] = o.y;
+				fields[count * 4 + 2] = o.z;
+				fields[count * 4 + 3] = reach > 0.0f ? 1.0f / (reach *
+					reach) : 0.0f;
+				peaks[count++] = o.density * HD_FOG_PEAK;
+			}
+
+			const float own[4] = { b.rad, b.density * HD_FOG_PEAK,
+				(float)count, 0.0f };
+
+			g_device->SetPixelShaderConstantF(10, fields, HD_MAX_BULBS);
+			g_device->SetPixelShaderConstantF(26, peaks, HD_MAX_BULBS / 4);
 			const float x0 = r[0] - padX, y0 = r[1] - padY;
 			const float x1 = r[2] + padX, y1 = r[3] + padY;
 			const float corners[16] =
@@ -5574,6 +5680,7 @@ namespace
 			};
 
 			g_device->SetPixelShaderConstantF(3, bulb, 2);
+			g_device->SetPixelShaderConstantF(9, own, 1);
 			g_device->DrawPrimitiveUP(D3DPT_TRIANGLEFAN, 2, corners,
 				4 * sizeof(float));
 			g_fog_last.drawn++;
@@ -5634,7 +5741,7 @@ namespace
 			if (q[i])
 				q[i]->Release();
 
-		g_device->SetPixelShaderConstantF(0, saved, 9);
+		g_device->SetPixelShaderConstantF(0, saved, 30);
 	}
 
 	void apply_frame_lighting(const HDFrameLighting* f)
@@ -5781,6 +5888,10 @@ int HDRenderFogArt(HDFogArtPart* out, int max, int level)
 				p.base = r.addWeight;
 				p.weight = r.addWeight;
 				p.coat = r.addCoat;
+				p.range = (int)(&r - &g_groups[g].pass[2][0]);
+				p.verdict = r.addLeft;
+				p.meets = r.addMeets;
+				p.gap = r.addGap;
 
 				for (int i = 0; i < 3; i++)
 				{
@@ -5809,6 +5920,63 @@ void HDRenderFogArtProbe(float weight)
 void HDRenderFogStrengthProbe(float strength)
 {
 	g_fog_strength = strength;
+}
+
+/* The verdict of every mist range against the level's bulbs (hd_fog.h,
+ * HDFogArtVerdict), its box in the world - the group's origin in x and z,
+ * as HDRenderFogArt lists it - at the field's factor in force. Every other
+ * range, and every range with no bulb, is kept. */
+void HDRenderFogLevel(const float* bulbs, int count)
+{
+	const float factor = fog_factor();
+
+	for (size_t g = 0; g < g_groups.size(); g++)
+		for (HDRange& r : g_groups[g].pass[2])
+		{
+			r.addLeft = HD_FOG_ART_KEPT;
+			r.addMeets = -1;
+			r.addGap = 0.0f;
+
+			if (!bulbs || count <= 0 ||
+				!HDFogArtMist(r.material == HD_TRG_MATERIAL_FLOW, r.scrollU,
+				r.scrollV, r.addCoat))
+				continue;
+
+			float lo[3], hi[3];
+			const size_t o = g * 2;
+
+			for (int i = 0; i < 3; i++)
+			{
+				lo[i] = r.addBox[i];
+				hi[i] = r.addBox[i + 3];
+			}
+
+			if (o + 1 < g_group_origin.size())
+			{
+				lo[0] += g_group_origin[o];
+				hi[0] += g_group_origin[o];
+				lo[2] += g_group_origin[o + 1];
+				hi[2] += g_group_origin[o + 1];
+			}
+
+			r.addLeft = HDFogArtVerdict(lo, hi, bulbs, count, factor,
+				&r.addMeets, &r.addGap);
+		}
+}
+
+void HDRenderFogFieldProbe(float factor)
+{
+	g_fog_factor = factor;
+}
+
+void HDRenderFogDropProbe(int on)
+{
+	g_fog_drop = on != 0;
+}
+
+float HDRenderFogField()
+{
+	return fog_factor();
 }
 
 namespace
@@ -13141,6 +13309,10 @@ namespace
 			// The remaster's water art under a sheet's place (step 8 of
 			// HDRenderSetWaterSheets) - false in every draw call without one.
 			if (range.artHidden)
+				continue;
+
+			// The art's mist the bulbs' fog stands in for (fog_add_left).
+			if (additive_pass && !add_glass && fog_add_left(range))
 				continue;
 
 			/* The flipbook. Four pages, one of them per frame time, the

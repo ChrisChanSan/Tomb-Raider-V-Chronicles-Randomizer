@@ -57,6 +57,9 @@
  *                 is not a smooth ball and only ever thins. The column is
  *                 taken in HD_FOG_STEPS equal pieces, each one exact for the
  *                 smooth density and weighted with the breath at its middle.
+ *   the field     the same body over HD_FOG_FIELD radii instead of one, the
+ *                 neighbours' densities added and capped (HDFogFieldTau,
+ *                 below): the pass draws the field.
  *
  * Units: world units (y down), view space with the eye at the origin, the
  * ray dir * t with t the view depth, seconds. */
@@ -390,17 +393,204 @@ inline float HDFogArtWeight(float base)
 	return base * HD_FOG_ART_WEIGHT;
 }
 
+/* The field. A bulb's body reaches past its radius: its density falls
+ * over HD_FOG_FIELD radii - the reach - as the body's own smooth fall,
+ * peak (1 - (distance / reach)^2), so the ground between neighbouring
+ * bulbs carries fog and the fog fades to nothing one reach from the last
+ * bulb. Its strength is the band's top on the field's own densest line
+ * (HDFogStrength over the reach): one bulb alone never adds more than the
+ * top. Where the fields of neighbouring bulbs overlap their densities add,
+ * capped at a field's own peak (HDFogFieldShare): each bulb keeps the
+ * share peak / sum of its density where the sum passes its peak, so the
+ * sum stays at the peak. The breath keeps the bulb's own radius for its
+ * cells. HD_FOG_FIELD is measured, in steps of a quarter from 1: the
+ * ground between ANDY3's mill bulbs carries fog from 3.75 on, no eye of
+ * the look's measurement passes the band's top up to 4.25, and the pass
+ * stays under a millisecond at 2,560 x 1,440 at the mill up to 4.0. */
+#define HD_FOG_FIELD		4.0f
+
+// A bulb's reach: its radius times the field's factor.
+inline float HDFogFieldReach(float rad, float factor)
+{
+	return rad * factor;
+}
+
+/* A field's density at the squared distance `dist2` from its centre:
+ * `peak` (1 - dist2 / reach^2), none at and past the reach. `peak` is the
+ * density at the centre: d times the strength times HD_FOG_PEAK. */
+inline float HDFogFieldDensity(float peak, float dist2, float reach)
+{
+	if (!(reach > 0.0f))
+		return 0.0f;
+
+	const float fall = 1.0f - dist2 / (reach * reach);
+
+	return fall > 0.0f ? peak * fall : 0.0f;
+}
+
+/* The share of its own density a field keeps at a point where the fields'
+ * densities add to `sum`: all of it up to its peak, peak / sum past it -
+ * so the shares of equal fields add to the peak, never more. */
+inline float HDFogFieldShare(float peak, float sum)
+{
+	return sum > peak && sum > 0.0f ? peak / sum : 1.0f;
+}
+
+/* The whole field for one pixel's ray on the processor, the shader's twin:
+ * as HDFogRayTau, the span cut at the bulb's reach (`reach`), the breath's
+ * cells on its own radius (`rad`), and each piece weighted as well with
+ * the bulb's share (HDFogFieldShare) of the bracket's fields' summed
+ * density at its middle - `fields` four floats a field (its centre in view
+ * space and its reach), `peaks` one each, `count` of them, the bulb's own
+ * among them. d is the bulb's density times its strength. */
+inline float HDFogFieldTau(const float dir[3], const float c[3], float rad,
+	float reach, float d, float zs, const float eyeWorld[3],
+	const float axes[9], float clock, int breathOn, const float* fields,
+	const float* peaks, int count)
+{
+	float s0 = 0, s1 = 0, b2 = 0;
+
+	if (!HDFogSpan(dir, c, reach, zs, &s0, &s1, &b2))
+		return 0.0f;
+
+	const float len = sqrtf(dir[0] * dir[0] + dir[1] * dir[1] +
+		dir[2] * dir[2]);
+	const float m = (dir[0] * c[0] + dir[1] * c[1] + dir[2] * c[2]) / len;
+	const float own = d * HD_FOG_PEAK;
+	float column = 0.0f;
+
+	for (int k = 0; k < HD_FOG_STEPS; k++)
+	{
+		const float a = s0 + (s1 - s0) * (float)k / HD_FOG_STEPS;
+		const float b = s0 + (s1 - s0) * (float)(k + 1) / HD_FOG_STEPS;
+		// The piece's middle, in view space.
+		const float along = m + 0.5f * (a + b) * reach;
+		const float p[3] = { dir[0] / len * along, dir[1] / len * along,
+			dir[2] / len * along };
+		float sum = 0.0f;
+
+		for (int j = 0; j < count; j++)
+		{
+			const float* f = fields + j * 4;
+			const float v[3] = { p[0] - f[0], p[1] - f[1], p[2] - f[2] };
+
+			sum += HDFogFieldDensity(peaks[j], v[0] * v[0] + v[1] * v[1] +
+				v[2] * v[2], f[3]);
+		}
+
+		float w = HDFogFieldShare(own, sum);
+
+		if (breathOn)
+		{
+			float world[3];
+
+			for (int i = 0; i < 3; i++)
+				world[i] = eyeWorld[i] + p[0] * axes[i * 3 + 0] +
+					p[1] * axes[i * 3 + 1] + p[2] * axes[i * 3 + 2];
+
+			w *= HDFogBreath(world, rad, clock);
+		}
+
+		column += w * HDFogColumn(b2, a, b);
+	}
+
+	return HDFogTau(d, reach, column);
+}
+
+/* The distance from the point c to the box lo..hi, 0 inside it. */
+inline float HDFogBoxGap(const float lo[3], const float hi[3],
+	const float c[3])
+{
+	float sum = 0.0f;
+
+	for (int i = 0; i < 3; i++)
+	{
+		const float e = c[i] < lo[i] ? lo[i] - c[i] : c[i] > hi[i] ?
+			c[i] - hi[i] : 0.0f;
+
+		sum += e * e;
+	}
+
+	return sqrtf(sum);
+}
+
+/* The art's mist and the bulbs (hd_render.cpp, HDRenderFogLevel): a mist
+ * range whose box meets a bulb's sphere - the bulb's centre nearer the box
+ * than its radius, inside it as well - is HD_FOG_ART_BULB; else one whose
+ * box's centre lies in a bulb's field - nearer than its reach - is
+ * HD_FOG_ART_FIELD; else HD_FOG_ART_KEPT. With hd_fog 1, where the pass
+ * draws the bulbs' fog, the first two are left out: the bulbs' fog stands
+ * in their place. A kept mist has its weight (HDFogArtWeight), as with no
+ * bulb at all. `bulbs` four floats a bulb (its centre in the world and its
+ * radius), `count` of them; `which` the bulb met, the nearest in radii, or
+ * the field's nearest, -1 for none, `gap` its distance to the box. */
+#define HD_FOG_ART_KEPT		0
+#define HD_FOG_ART_BULB		1
+#define HD_FOG_ART_FIELD	2
+
+inline int HDFogArtVerdict(const float lo[3], const float hi[3],
+	const float* bulbs, int count, float factor, int* which, float* gap)
+{
+	const float centre[3] = { 0.5f * (lo[0] + hi[0]),
+		0.5f * (lo[1] + hi[1]), 0.5f * (lo[2] + hi[2]) };
+	int met = -1, field = -1;
+	float metRho = 0.0f, metGap = 0.0f, fieldRho = 0.0f, fieldGap = 0.0f;
+
+	for (int j = 0; j < count; j++)
+	{
+		const float* b = bulbs + j * 4;
+
+		if (!(b[3] > 0.0f))
+			continue;
+
+		const float g = HDFogBoxGap(lo, hi, b);
+		const float rho = g / b[3];
+		const float inField = HDFogRho(centre, b, HDFogFieldReach(b[3],
+			factor));
+
+		if (g < b[3] && (met < 0 || rho < metRho))
+		{
+			met = j;
+			metRho = rho;
+			metGap = g;
+		}
+
+		if (inField < 1.0f && (field < 0 || inField < fieldRho))
+		{
+			field = j;
+			fieldRho = inField;
+			fieldGap = g;
+		}
+	}
+
+	const int verdict = met >= 0 ? HD_FOG_ART_BULB : field >= 0 ?
+		HD_FOG_ART_FIELD : HD_FOG_ART_KEPT;
+
+	if (which)
+		*which = met >= 0 ? met : field;
+
+	if (gap)
+		*gap = met >= 0 ? metGap : field >= 0 ? fieldGap : 0.0f;
+
+	return verdict;
+}
+
 /* RoomProbe's numbers of an additive range (hd_render.cpp,
  * fog_add_weight): its group, its .TRG part (a book's, -1 for any other),
  * its material, its box's centre in the world and in view space and its
  * half sizes, the bulb of the bracket the centre lies in (-1 for none) and
  * its rho, the range's own weight and the weight drawn, its swing, its
- * scroll and its coat (-1 where none is asked). */
+ * scroll and its coat (-1 where none is asked); and with the level's
+ * bulbs (HDRenderFogLevel) its place in its group's additive pass, its
+ * verdict (HDFogArtVerdict), the level's bulb it meets or whose field
+ * holds it (-1 for none) and that bulb's distance to its box. */
 struct HDFogArtPart
 {
 	int group, part, material, bulb;
 	float world[3], view[3], half[3];
 	float rho, base, weight, period, scroll[2], coat;
+	int range, verdict, meets;
+	float gap;
 };
 
 /* level 0: the ranges the last bracket that asked the additive pass drew,
@@ -412,3 +602,15 @@ int HDRenderFogArt(HDFogArtPart* out, int max, int level);
 void HDRenderFogArtProbe(float weight);
 // RoomProbe's -fogstrength: s for every bulb's body, -1 the rule.
 void HDRenderFogStrengthProbe(float strength);
+
+/* The level's fog bulbs for the art's mist (HDFogArtVerdict): four floats
+ * a bulb, its centre in the world and its radius; 0 bulbs leaves every
+ * range kept. hd_level.cpp hands them in once the level is built,
+ * RoomProbe with -fogbulbs. Defined in hd_render.cpp. */
+void HDRenderFogLevel(const float* bulbs, int count);
+// RoomProbe's -fogfactor: k for the field's factor, -1 the rule.
+void HDRenderFogFieldProbe(float factor);
+// RoomProbe's -fogdrop 0: no mist left out, whatever its verdict.
+void HDRenderFogDropProbe(int on);
+// The field's factor in force (HD_FOG_FIELD, or -fogfactor's).
+float HDRenderFogField();

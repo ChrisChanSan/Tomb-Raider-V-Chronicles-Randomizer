@@ -30130,6 +30130,163 @@ static void fog_art()
 		"fog art: a point on the rim is one radius out", 0, 0);
 }
 
+/* The field and the art's mist against the bulbs (hd_fog.h): a box's gap
+ * to a bulb, the verdict with ANDY3's mill (bulbs 7 to 11, radius 1,312;
+ * the mist boxes of groups 10, 15 and 17 as the -fogart census lists
+ * them), the field's fall, strength and cap, and the field's column on the
+ * processor against the body's. */
+static void fog_field()
+{
+	printf("the fog's field and the art's mist against the bulbs\n");
+
+	const float lo[3] = { 0.0f, 0.0f, 0.0f };
+	const float hi[3] = { 100.0f, 50.0f, 200.0f };
+	const float in[3] = { 50.0f, 25.0f, 100.0f };
+	const float side[3] = { 130.0f, 25.0f, 100.0f };
+	const float corner[3] = { -30.0f, -40.0f, 100.0f };
+
+	ok(HDFogBoxGap(lo, hi, in) == 0.0f &&
+		fabsf(HDFogBoxGap(lo, hi, side) - 30.0f) < 1e-4f &&
+		fabsf(HDFogBoxGap(lo, hi, corner) - 50.0f) < 1e-4f,
+		"fog field: a box's gap is 0 inside, the distance outside",
+		(long)HDFogBoxGap(lo, hi, corner), 50);
+
+	// The mill's bulbs 7, 8, 9, 10, 11: centre and radius, world units.
+	const float mill[5 * 4] =
+	{
+		35328.0f, 8192.0f, 48640.0f, 1312.0f,
+		42496.0f, 8192.0f, 47616.0f, 1312.0f,
+		35328.0f, 8192.0f, 45568.0f, 1312.0f,
+		45568.0f, 6528.0f, 47616.0f, 1312.0f,
+		46592.0f, 5376.0f, 49664.0f, 1312.0f
+	};
+	// The mist boxes: groups 17, 15 and 10, least and most corners.
+	const float lo17[3] = { 33018.0f, 6913.0f, 48568.0f };
+	const float hi17[3] = { 43322.0f, 10263.0f, 54724.0f };
+	const float lo15[3] = { 38281.0f, 6913.0f, 48570.0f };
+	const float hi15[3] = { 43321.0f, 9613.0f, 52610.0f };
+	const float lo10[3] = { 33018.0f, 7547.0f, 50636.0f };
+	const float hi10[3] = { 36790.0f, 10263.0f, 54724.0f };
+	int which = -2;
+	float gap = -1.0f;
+
+	ok(HDFogArtVerdict(lo17, hi17, mill, 5, 1.0f, &which, &gap) ==
+		HD_FOG_ART_BULB && which == 0 && gap == 0.0f,
+		"fog field: group 17's box holds bulb 7's centre", which, 0);
+	ok(HDFogArtVerdict(lo15, hi15, mill, 5, 1.0f, &which, &gap) ==
+		HD_FOG_ART_BULB && which == 1 && fabsf(gap - 954.0f) < 1.0f,
+		"fog field: group 15's box meets bulb 8's sphere at 954",
+		(long)gap, 954);
+
+	const int kept = HDFogArtVerdict(lo10, hi10, mill, 5, 3.0f, &which,
+		&gap);
+	const int held = HDFogArtVerdict(lo10, hi10, mill, 5, 3.25f, 0, 0);
+
+	ok(HDFogArtVerdict(lo10, hi10, mill, 5, 1.0f, 0, 0) == HD_FOG_ART_KEPT &&
+		kept == HD_FOG_ART_KEPT && which == -1 && held == HD_FOG_ART_FIELD,
+		"fog field: group 10's centre lies in bulb 7's field past 3.14",
+		held, HD_FOG_ART_FIELD);
+	ok(HDFogArtVerdict(lo17, hi17, mill, 0, 3.0f, &which, &gap) ==
+		HD_FOG_ART_KEPT && which == -1 &&
+		fabsf(HDFogArtWeight(1.0f) - HD_FOG_ART_WEIGHT) < 1e-7f,
+		"fog field: no bulb, no field - the mist keeps its weight", 0, 0);
+
+	// The field's fall, its strength and its cap.
+	const float d = 1.0f / 71.75f;
+	const float colour[3] = { 134.0f / 255.0f, 168.0f / 255.0f,
+		148.0f / 255.0f };
+	const float luma = 0.299f * colour[0] + 0.587f * colour[1] +
+		0.114f * colour[2];
+	const float r = 1312.0f;
+
+	ok(HDFogFieldDensity(2.0f, 0.0f, 3.0f * r) == 2.0f &&
+		fabsf(HDFogFieldDensity(2.0f, 0.25f * 9.0f * r * r, 3.0f * r) -
+		1.5f) < 1e-5f && HDFogFieldDensity(2.0f, 9.0f * r * r, 3.0f * r) ==
+		0.0f && HDFogFieldDensity(2.0f, 10.0f * r * r, 3.0f * r) == 0.0f,
+		"fog field: the peak at the centre, 3/4 at half, none at the reach",
+		0, 0);
+	ok(fabsf(HDFogFieldDensity(d * HD_FOG_PEAK, 0.36f * r * r, r) -
+		HDFogDensity(d, 0.6f)) < 1e-7f,
+		"fog field: at the factor 1 the field is the body's density", 0, 0);
+
+	bool top = true;
+
+	for (int k = 1; k <= 4; k++)
+	{
+		const float reach = HDFogFieldReach(r, (float)k);
+		const float s = HDFogStrength(d, reach, colour[0], colour[1],
+			colour[2]);
+		const float tau = s * HDFogClassicPeak(d, reach) / 255.0f;
+
+		top = top && fabsf(255.0f * luma * (1.0f - HDFogTransmit(tau)) -
+			33.0f) < 0.01f;
+	}
+
+	ok(top, "fog field: every reach's densest line adds the band's top",
+		top, 1);
+	ok(HDFogFieldShare(1.0f, 0.6f) == 1.0f &&
+		fabsf(HDFogFieldShare(1.0f, 2.0f) - 0.5f) < 1e-7f &&
+		fabsf(0.8f * HDFogFieldShare(1.0f, 1.6f) +
+		0.8f * HDFogFieldShare(1.0f, 1.6f) - 1.0f) < 1e-6f,
+		"fog field: two fields over their peak share it to the peak", 0, 0);
+
+	// The field's column on the processor against the body's.
+	const float ahead[3] = { 0.0f, 0.0f, 1.0f };
+	const float none[3] = { 0.0f, 0.0f, 0.0f };
+	const float axes[9] = { 1, 0, 0, 0, 1, 0, 0, 0, 1 };
+	const float c0[3] = { 0.0f, 0.0f, 8000.0f };
+	const float one[4] = { c0[0], c0[1], c0[2], r };
+	const float peak1 = d * HD_FOG_PEAK;
+	const float body = HDFogRayTau(ahead, c0, r, d, 1.0e9f, none, axes, 0.0f,
+		0);
+	const float field1 = HDFogFieldTau(ahead, c0, r, r, d, 1.0e9f, none,
+		axes, 0.0f, 0, one, &peak1, 1);
+
+	ok(fabsf(field1 - body) < 1e-6f * (body > 1.0f ? body : 1.0f),
+		"fog field: one bulb at the factor 1 is the body",
+		(long)(field1 * 1e6f), (long)(body * 1e6f));
+
+	const float beside[3] = { 1.5f * r, 0.0f, 8000.0f };
+	const float three = 3.0f * r;
+	const float wide[4] = { beside[0], beside[1], beside[2], three };
+	const float past[3] = { 3.01f * r, 0.0f, 8000.0f };
+	const float far4[4] = { past[0], past[1], past[2], three };
+
+	ok(HDFogRayTau(ahead, beside, r, d, 1.0e9f, none, axes, 0.0f, 0) ==
+		0.0f && HDFogFieldTau(ahead, beside, r, three, d, 1.0e9f, none,
+		axes, 0.0f, 0, wide, &peak1, 1) > 0.0f &&
+		HDFogFieldTau(ahead, past, r, three, d, 1.0e9f, none, axes, 0.0f, 0,
+		far4, &peak1, 1) == 0.0f,
+		"fog field: it reaches past the radius and ends at the reach", 0, 0);
+
+	/* Two bulbs in one place: their densities add where the sum stays
+	 * under the peak and are capped at it nearer the centre - the two make
+	 * more fog than one and less than two apart. */
+	const float twin[8] = { c0[0], c0[1], c0[2], three, c0[0], c0[1],
+		c0[2], three };
+	const float peaks[2] = { peak1, peak1 };
+	const float alone = HDFogFieldTau(ahead, c0, r, three, d, 1.0e9f, none,
+		axes, 0.0f, 0, twin, peaks, 1);
+	const float half = HDFogFieldTau(ahead, c0, r, three, d, 1.0e9f, none,
+		axes, 0.0f, 0, twin, peaks, 2);
+
+	ok(alone > 0.0f && 2.0f * half > 1.01f * alone &&
+		2.0f * half < 1.99f * alone,
+		"fog field: two bulbs in one place add, capped at the peak",
+		(long)(2.0f * half * 1e6f), (long)(alone * 1e6f));
+
+	/* The measured factor: a step of a quarter from 1, and at it the
+	 * ground between the mill's bulbs covered down to the floor bound of
+	 * its layer - the farthest point of the hull of bulbs 7 to 11 at y
+	 * 10752 lies 3.662 radii from the nearest bulb. */
+	const float steps = (HD_FOG_FIELD - 1.0f) / 0.25f;
+
+	ok(fabsf(steps - floorf(steps + 0.5f)) < 1e-6f &&
+		HD_FOG_FIELD > 3.662f,
+		"fog field: the factor is a quarter step covering the mill",
+		(long)(HD_FOG_FIELD * 100.0f), 400);
+}
+
 /* A keyframe for the pocket walk: box, offset, and one rotation word per
  * node of a two-node slot. */
 struct PocketKey
@@ -33786,6 +33943,7 @@ int main()
 	debris_pieces();
 	fog_body();
 	fog_art();
+	fog_field();
 	object_rules();
 	install_names();
 	glow_normal();

@@ -353,6 +353,15 @@
  *     -fogstrength <s>  every bulb's body at the strength s instead of the
  *                     rule's (hd_fog.h, HDFogStrength); 1 is the column
  *                     of the classic's chord through the centre
+ *     -fogfield       (and -fogbulbs) every bulb's field: its reach, the
+ *                     strength of the reach, its peak and the bulbs whose
+ *                     fields meet it (hd_fog.h, HD_FOG_FIELD); each -fogart
+ *                     line ends with the bulb its box meets or whose field
+ *                     holds it and the verdict, kept, bulb or field
+ *     -fogfactor <k>  the field's factor k instead of the rule's; 1 is the
+ *                     bulb's body alone
+ *     -fogdrop 0      no mist left out, whatever its verdict: with
+ *                     -fogfactor 1 the fog of the rules before the field
  *     -underwater     the room carries ROOM_UNDERWATER and the camera is in
  *                     it: the WaterTable darkening on the colour and the
  *                     screen wobble on the position.
@@ -9078,6 +9087,7 @@ namespace probefog
 	static int g_key = -1;			// -hdfog 0|1, -1 not given
 	static int g_pass = 1;			// -fogpass 0: the haze out, no pass
 	static bool g_art = false;		// -fogart
+	static bool g_field = false;		// -fogfield
 	static std::vector<Bulb> g_level;
 	static float g_origin[3] = { 0, 0, 0 };
 	// The level's number of each entry of g_bulbs; -1 for a -bulb.
@@ -9120,6 +9130,30 @@ namespace probefog
 		if (!strcmp(a, "-fogstrength") && more)
 		{
 			HDRenderFogStrengthProbe((float)atof(argv[++*at]));
+			return true;
+		}
+
+		/* -fogfield (with -fogbulbs): every bulb's field - its reach, the
+		 * strength of the reach, the bulbs whose fields it meets - and
+		 * -fogfactor <k>: the field's factor k instead of the rule's
+		 * (hd_fog.h, HD_FOG_FIELD); 1 is the body alone. */
+		if (!strcmp(a, "-fogfield"))
+		{
+			g_field = true;
+			g_list = true;
+			return true;
+		}
+
+		if (!strcmp(a, "-fogfactor") && more)
+		{
+			HDRenderFogFieldProbe((float)atof(argv[++*at]));
+			return true;
+		}
+
+		// -fogdrop 0: no mist left out, whatever its verdict.
+		if (!strcmp(a, "-fogdrop") && more)
+		{
+			HDRenderFogDropProbe(atoi(argv[++*at]));
 			return true;
 		}
 
@@ -9379,6 +9413,58 @@ namespace probefog
 			Profile(g_level[(size_t)g_profile]);
 		else if (g_profile >= 0)
 			printf("-fogprofile: the level has no bulb %d\n", g_profile);
+
+		// The level's bulbs for the art's mist, as hd_level.cpp hands them.
+		std::vector<float> world;
+
+		for (const Bulb& b : g_level)
+		{
+			world.push_back(b.x);
+			world.push_back(b.y);
+			world.push_back(b.z);
+			world.push_back(b.rad);
+		}
+
+		HDRenderFogLevel(world.empty() ? 0 : world.data(),
+			(int)g_level.size());
+
+		if (!g_field)
+			return;
+
+		/* -fogfield: each bulb's field - its reach, the strength the band's
+		 * top gives its reach, its peak (the density at its centre) and the
+		 * level's bulbs whose fields meet it, where the densities add. */
+		const float factor = HDRenderFogField();
+
+		printf("-fogfield: factor %.2f, %d bulb(s)\n", factor,
+			(int)g_level.size());
+
+		for (const Bulb& b : g_level)
+		{
+			const float reach = HDFogFieldReach(b.rad, factor);
+			const float s = HDFogStrength(b.d, reach, b.r, b.g, b.b);
+			std::string with;
+
+			for (const Bulb& o : g_level)
+			{
+				const float v[3] = { b.x - o.x, b.y - o.y, b.z - o.z };
+				const float both = reach + HDFogFieldReach(o.rad, factor);
+				const float dist = sqrtf(v[0] * v[0] + v[1] * v[1] +
+					v[2] * v[2]);
+				char one[32];
+
+				if (o.index == b.index || !(dist < both))
+					continue;
+
+				sprintf(one, " %d(%.0f)", o.index, dist);
+				with += one;
+			}
+
+			printf("fogfield %2d room %3d world %7.0f %7.0f %7.0f radius %5.0f "
+				"reach %6.0f strength %.4f peak %.6f shares%s\n", b.index,
+				b.room, b.x, b.y, b.z, b.rad, reach, s, b.d * s * HD_FOG_PEAK,
+				with.empty() ? " none" : with.c_str());
+		}
 	}
 
 	static std::vector<double> g_times;
@@ -9393,10 +9479,13 @@ namespace probefog
 		HDFogLast last;
 
 		HDRenderFogLast(&last);
+		// And the field: its factor, the bulbs whose fields meet, and the
+		// mist draws left out (hd_render.cpp, fog_add_left).
 		printf("-fogbulbs: %s - hd_fog %d, the pass drew %d of %d bulb(s), %ld "
-			"pixel(s) of rectangles, GPU %s%.4f ms\n", what, HDRenderFogOn(),
-			last.drawn, last.offered, last.pixels, last.timed ? "" :
-			"(not timed) ", last.gpuMs);
+			"pixel(s) of rectangles, GPU %s%.4f ms, field %.2f, %d sharing, "
+			"%d mist draw(s) left out\n", what, HDRenderFogOn(), last.drawn,
+			last.offered, last.pixels, last.timed ? "" : "(not timed) ",
+			last.gpuMs, HDRenderFogField(), last.shared, last.dropped);
 
 		if (last.placed)
 			printf("-fogbulbs: the breath placed: eye %.3f %.3f %.3f, axes "
@@ -9442,12 +9531,17 @@ namespace probefog
 				in += one;
 			}
 
+			// And the bulb its box meets, or whose field holds its centre,
+			// with the verdict (hd_fog.h, HDFogArtVerdict).
 			printf("fogart group %3d part %3d mat %2d world %7.0f %7.0f %7.0f "
 				"half %5.0f %5.0f %5.0f weight %.4f swing %.2f scroll %.4f "
-				"%.4f coat %.3f bulbs%s\n", p.group, p.part, p.material,
-				p.world[0], p.world[1], p.world[2], p.half[0], p.half[1],
-				p.half[2], p.base, p.period, p.scroll[0], p.scroll[1], p.coat,
-				in.empty() ? " none" : in.c_str());
+				"%.4f coat %.3f bulbs%s range %d meets %d gap %.0f verdict "
+				"%s\n", p.group, p.part, p.material, p.world[0], p.world[1],
+				p.world[2], p.half[0], p.half[1], p.half[2], p.base,
+				p.period, p.scroll[0], p.scroll[1], p.coat,
+				in.empty() ? " none" : in.c_str(), p.range, p.meets, p.gap,
+				p.verdict == HD_FOG_ART_BULB ? "bulb" :
+				p.verdict == HD_FOG_ART_FIELD ? "field" : "kept");
 		}
 
 		const int drawn = HDRenderFogArt(0, 0, 0);
@@ -20289,6 +20383,8 @@ static int ProbeMain(int argc, char** argv)
 			"(with -roombox), the frame's taken, one bulb's profile\n");
 		printf("       -hdfog 0|1 (or -fog 0|1)  -fogpass 0   the fog bulbs' "
 			"own pass off or on; the haze out with no pass\n");
+		printf("       -fogfield  -fogfactor <k>  -fogdrop 0   every bulb's "
+			"field, the field's factor, no mist left out\n");
 		printf("       -effect <0..21>  -paritycheck\n");
 		printf("       -sky  -skyonly  -skycensus  -skydump <path>   the HD "
 			"sky drawn, alone, or its parts counted\n");

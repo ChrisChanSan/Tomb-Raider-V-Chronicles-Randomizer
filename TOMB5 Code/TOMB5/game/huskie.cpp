@@ -183,7 +183,9 @@ void HuskieControl(short item_number)
 
 		case 6:
 
-			if (info.bite && item->touch_bits & 0x6648 && frame >= 4 && frame <= 14)
+			// Refused while a scene holds Lara (scene_hold.h).
+			if (info.bite && item->touch_bits & 0x6648 && frame >= 4 && frame <= 14 &&
+				!SceneHoldRefuses(EnemyDamage(balance.dmgHuskieBite), item->object_number, "huskie-bite"))
 			{
 				CreatureEffectT(item, &huskie_bite, 2, -1, DoBloodSplat);
 				lara_item->hit_points -= EnemyDamage(balance.dmgHuskieBite);
@@ -258,7 +260,9 @@ void HuskieControl(short item_number)
 
 		case 12:
 
-			if (info.bite && item->touch_bits & 0x48 && (frame >= 9 && frame <= 12 || frame >= 22 && frame <= 25))
+			// Refused while a scene holds Lara (scene_hold.h).
+			if (info.bite && item->touch_bits & 0x48 && (frame >= 9 && frame <= 12 || frame >= 22 && frame <= 25) &&
+				!SceneHoldRefuses(EnemyDamage(balance.dmgHuskieJump), item->object_number, "huskie-jump"))
 			{
 				CreatureEffectT(item, &huskie_bite, 2, -1, DoBloodSplat);
 				lara_item->hit_points -= EnemyDamage(balance.dmgHuskieJump);

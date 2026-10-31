@@ -591,11 +591,17 @@ void FireTwogunWeapon(ITEM_INFO* item, long lr, long plasma)
 		}
 	}
 
+	// Both refused while a scene holds Lara (scene_hold.h).
 	if (hit)
 	{
 		if (lara_item->hit_points >= 501)
-			lara_item->hit_points -= EnemyDamage(balance.dmgTwoGunPlasma);
-		else
+		{
+			if (!SceneHoldRefuses(EnemyDamage(balance.dmgTwoGunPlasma),
+				item->object_number, "plasma"))
+				lara_item->hit_points -= EnemyDamage(balance.dmgTwoGunPlasma);
+		}
+		else if (!SceneHoldRefuses(SCENE_HOLD_WHOLE_LIFE, item->object_number,
+			"plasma"))
 		{
 			LaraBurn();
 			lara.BurnBlue = 1;

@@ -141,7 +141,9 @@ void UpdateSpiders()
 				dz = lara_item->pos.z_pos - fx->pos.z_pos;
 				angle = (short)phd_atan(dz, dx) - fx->pos.y_rot;
 
-				if (abs(dz) < 85 && abs(dy) < 85 && abs(dx) < 85)
+				// Refused while a scene holds Lara (scene_hold.h).
+				if (abs(dz) < 85 && abs(dy) < 85 && abs(dx) < 85 &&
+					!SceneHoldRefuses(EnemyDamage(balance.dmgSpiders), -1, "spiders"))
 				{
 					lara_item->hit_points -= EnemyDamage(balance.dmgSpiders);
 					lara_item->hit_status = 1;

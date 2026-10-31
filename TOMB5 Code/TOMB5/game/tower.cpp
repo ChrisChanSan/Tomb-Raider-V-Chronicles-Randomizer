@@ -259,8 +259,13 @@ void ControlGunship(short item_number)
 				if (items[Target].object_number == LARA)
 				{
 					TriggerDynamic(pos2.x, pos2.y, pos2.z, 16, (GetRandomControl() & 0x3F) + 96, (GetRandomControl() & 0x1F) + 64, 0);
-					DoBloodSplat(v.x, v.y, v.z, short((GetRandomControl() & 1) + 2), short(GetRandomControl() << 1), lara_item->room_number);
-					lara_item->hit_points -= (short)balance.dmgGunship;
+
+					// Refused while a scene holds Lara (scene_hold.h).
+					if (!SceneHoldRefuses(balance.dmgGunship, item->object_number, "gunship"))
+					{
+						DoBloodSplat(v.x, v.y, v.z, short((GetRandomControl() & 1) + 2), short(GetRandomControl() << 1), lara_item->room_number);
+						lara_item->hit_points -= (short)balance.dmgGunship;
+					}
 				}
 				else if (items[Target].object_number >= SMASH_OBJECT1 && items[Target].object_number <= SMASH_OBJECT8)
 				{
@@ -364,15 +369,22 @@ void ControlIris(short item_number)
 				if (!item->item_flags[3])
 					SoundEffect(SFX_LARA_INJURY_NONRND, &lara_item->pos, SFX_DEFAULT);
 
+				// Both refused while a scene holds Lara (scene_hold.h); the
+				// iris keeps its own count.
 				if (lara_item->hit_points <= 72 || item->item_flags[3] >= 45)
 				{
-					LaraBurn();
-					lara_item->hit_points = 0;
-					lara.BurnCount = 24;
+					if (!SceneHoldRefuses(SCENE_HOLD_WHOLE_LIFE, item->object_number, "iris"))
+					{
+						LaraBurn();
+						lara_item->hit_points = 0;
+						lara.BurnCount = 24;
+					}
 				}
 				else
 				{
-					lara_item->hit_points -= (short)balance.dmgIris;
+					if (!SceneHoldRefuses(balance.dmgIris, item->object_number, "iris"))
+						lara_item->hit_points -= (short)balance.dmgIris;
+
 					item->item_flags[3]++;
 				}
 			}
@@ -561,9 +573,13 @@ void ControlArea51Laser(short item_number)
 			item->draw_room = 1;
 		}
 
-		lara_item->hit_points -= (short)balance.dmgArea51Laser;
-		DoBloodSplat(lara_item->pos.x_pos, item->pos.y_pos - GetRandomControl() - 32, lara_item->pos.z_pos,
-			(GetRandomControl() & 3) + 4, short(GetRandomControl() << 1), lara_item->room_number);
+		// Refused while a scene holds Lara (scene_hold.h).
+		if (!SceneHoldRefuses(balance.dmgArea51Laser, item->object_number, "area51-laser"))
+		{
+			lara_item->hit_points -= (short)balance.dmgArea51Laser;
+			DoBloodSplat(lara_item->pos.x_pos, item->pos.y_pos - GetRandomControl() - 32, lara_item->pos.z_pos,
+				(GetRandomControl() & 3) + 4, short(GetRandomControl() << 1), lara_item->room_number);
+		}
 		AnimateItem(item);
 	}
 	else

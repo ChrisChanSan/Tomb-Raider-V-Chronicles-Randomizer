@@ -186,7 +186,9 @@ void ChefControl(short item_number)
 		else
 			item->pos.y_rot += 364;
 
-		if (!chef->flags && item->touch_bits & 0x2000 && item->frame_number > anims[item->anim_number].frame_base + 10)
+		// Refused while a scene holds Lara (scene_hold.h).
+		if (!chef->flags && item->touch_bits & 0x2000 && item->frame_number > anims[item->anim_number].frame_base + 10 &&
+			!SceneHoldRefuses(EnemyDamage(balance.dmgChefKnife), item->object_number, "chef"))
 		{
 			lara_item->hit_points -= EnemyDamage(balance.dmgChefKnife);
 			lara_item->hit_status = 1;

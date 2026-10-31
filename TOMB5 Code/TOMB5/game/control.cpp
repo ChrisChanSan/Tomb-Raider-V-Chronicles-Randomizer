@@ -197,6 +197,88 @@ static void DeathLogStep(long selection)
 	}
 }
 
+/* The hold a scene puts on Lara's life and air (game\scene_hold.h, which
+ * says why). HOLDLOG, behind -log: `begin=` the kind, her life and air as
+ * remembered; `end=` the kind, the ticks it lasted, the times her life was
+ * put back, the blows refused, `how=` - `scene` when a look found its scene
+ * gone, `release` at a cutscene's own end, `level` when a level load
+ * dropped it with nothing put back - and her life and air as it ended; one
+ * `refused` line per blow refused: the slot that dealt it (-1 for none),
+ * the place, the damage asked. `tick=` is GlobalCounter. */
+static SCENE_HOLD scene_hold;
+
+static void SceneHoldEndLog(const char* how, long life, long air)
+{
+	if (gLogEnabled)
+		Log("HOLDLOG end=%s ticks=%ld restored=%ld refused=%ld how=%s "
+			"life=%ld air=%ld tick=%d", SceneHoldName(scene_hold.last),
+			scene_hold.ticks, scene_hold.restored, scene_hold.refused, how,
+			life, air, GlobalCounter);
+}
+
+/* One look at the scene: before the item loop (`tick` 1, the tick's first
+ * look), before her control, where the flyby put her life back, where a
+ * flyby begins or ends or hands her control over, at a cutscene's start,
+ * and before a blow that takes her whole life. */
+void SceneHoldStep(long tick)
+{
+	const int kind = SceneHoldKind(GLOBAL_playing_cutseq, bUseSpotCam,
+		bDisableLaraControl);
+	const int seen = SceneHoldSync(&scene_hold, kind, &lara_item->hit_points,
+		&lara.air, tick != 0, lara.death_count != 0);
+
+	if (seen == SCENE_HOLD_BEGAN && gLogEnabled)
+		Log("HOLDLOG begin=%s life=%d air=%d tick=%d",
+			SceneHoldName(scene_hold.kind), scene_hold.life, scene_hold.air,
+			GlobalCounter);
+	else if (seen == SCENE_HOLD_ENDED)
+		SceneHoldEndLog("scene", lara_item->hit_points, lara.air);
+}
+
+/* A cutscene's own end (handle_cutseq_triggering), before its end hook, so
+ * what the hook itself does to her stands - swampy_end caps her air. */
+void SceneHoldRelease()
+{
+	if (SceneHoldSync(&scene_hold, SCENE_HOLD_NONE, &lara_item->hit_points,
+		&lara.air, false, lara.death_count != 0) == SCENE_HOLD_ENDED)
+		SceneHoldEndLog("release", lara_item->hit_points, lara.air);
+}
+
+/* A level load (reset_cutseq_vars): a hold of the level before ends with
+ * nothing put back - its Lara is not this level's. */
+void SceneHoldReset()
+{
+	if (scene_hold.kind == SCENE_HOLD_NONE)
+		return;
+
+	scene_hold.last = scene_hold.kind;
+	scene_hold.kind = SCENE_HOLD_NONE;
+	SceneHoldEndLog("level", scene_hold.life, scene_hold.air);
+}
+
+/* A blow asked before it lands: refused when a scene holds her and it takes
+ * her whole life (SceneHoldRefusesBlow). A look first, so a scene that began
+ * since the last look already holds her. `slot` names the dealer in the
+ * line, `site` the place. */
+long SceneHoldRefuses(long damage, long slot, const char* site)
+{
+	if (damage < SCENE_HOLD_WHOLE_LIFE)
+		return 0;
+
+	SceneHoldStep(0);
+
+	if (!SceneHoldRefusesBlow(scene_hold.kind, damage))
+		return 0;
+
+	scene_hold.refused++;
+
+	if (gLogEnabled)
+		Log("HOLDLOG refused slot=%ld site=%s dmg=%ld tick=%d", slot, site,
+			damage, GlobalCounter);
+
+	return 1;
+}
+
 static long S_Death()
 {
 	long selection, menu, ret;
@@ -598,6 +680,11 @@ long ControlPhase(long nframes, long demo_mode)
 		else
 			InfraRed = 0;
 
+		/* A scene that holds Lara puts her life and air back before any
+		 * item or effect of this tick can read them (game\scene_hold.h);
+		 * the tick's first look begins or ends the hold. */
+		SceneHoldStep(1);
+
 		ClearDynamics();
 		ClearFires();
 		GotLaraSpheres = 0;
@@ -690,6 +777,11 @@ long ControlPhase(long nframes, long demo_mode)
 				PoisonFlag = 16;
 			}
 		}
+
+		/* ...and again before her control, which in a flyby runs: it never
+		 * sees what the items, the effects and the poison did to her in
+		 * this tick. */
+		SceneHoldStep(0);
 
 		lara.skelebob = 0;
 		InItemControlLoop = 1;

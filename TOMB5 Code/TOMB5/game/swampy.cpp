@@ -123,7 +123,9 @@ void SwampyControl(short item_number)
 	case 3:
 		swampy->maximum_turn = 364;
 
-		if (!swampy->flags && (item->touch_bits & 0x3C3C0) && item->frame_number > anims[item->anim_number].frame_base + 29)
+		// Refused while a scene holds Lara (scene_hold.h).
+		if (!swampy->flags && (item->touch_bits & 0x3C3C0) && item->frame_number > anims[item->anim_number].frame_base + 29 &&
+			!SceneHoldRefuses(EnemyDamage(balance.dmgSwampMonster), item->object_number, "swampy"))
 		{
 			lara_item->hit_points -= EnemyDamage(balance.dmgSwampMonster);
 			lara_item->hit_status = 1;

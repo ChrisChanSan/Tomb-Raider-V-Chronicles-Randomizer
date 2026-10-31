@@ -145,7 +145,9 @@ void AutogunControl(short item_number)
 			item->mesh_bits |= 0x100;
 			TriggerDynamic(pos1.x, pos1.y, pos1.z, 10, (GetRandomControl() & 0x1F) + 192, (GetRandomControl() & 0x1F) + 128, 0);
 
-			if (GetRandomControl() & 3)
+			// Refused while a scene holds Lara (scene_hold.h): a miss.
+			if (GetRandomControl() & 3 && !SceneHoldRefuses(balance.dmgAutogun,
+				item->object_number, "autogun"))
 			{
 				pos2.x = 0;
 				pos2.y = 0;

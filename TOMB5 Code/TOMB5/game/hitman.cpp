@@ -278,8 +278,10 @@ void HitmanControl(short item_number)
 			right_foot_room = lara_item->room_number;
 			GetFloor(pos2.x, pos2.y, pos2.z, &right_foot_room);
 
+			// Refused while a scene holds Lara (scene_hold.h).
 			if ((room[left_foot_room].flags & ROOM_UNDERWATER || room[right_foot_room].flags & ROOM_UNDERWATER) &&
-				(room[left_foot_room].FlipNumber == room[item->room_number].FlipNumber || room[right_foot_room].FlipNumber == room[item->room_number].FlipNumber))
+				(room[left_foot_room].FlipNumber == room[item->room_number].FlipNumber || room[right_foot_room].FlipNumber == room[item->room_number].FlipNumber) &&
+				!SceneHoldRefuses(SCENE_HOLD_WHOLE_LIFE, item->object_number, "hitman-water"))
 			{
 				LaraBurn();
 				lara.BurnBlue = 1;

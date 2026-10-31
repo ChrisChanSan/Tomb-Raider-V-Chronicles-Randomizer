@@ -2350,6 +2350,7 @@ void reset_cutseq_vars()
 	GLOBAL_playing_cutseq = 0;
 	GLOBAL_cutseq_frame = 0;
 	SetFadeClip(0, 1);
+	SceneHoldReset();	// a hold of the level before ends, nothing put back
 }
 
 void GetAIPickups()

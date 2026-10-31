@@ -1515,6 +1515,10 @@ long CreatureVault(short item_number, short angle, long vault, long shift)
 
 void CreatureKill(ITEM_INFO* item, short kill_anim, short kill_state, short lara_anim)
 {
+	// Refused while a scene holds Lara (scene_hold.h): no enemy calls it.
+	if (SceneHoldRefuses(SCENE_HOLD_WHOLE_LIFE, item->object_number, "kill"))
+		return;
+
 	item->anim_number = objects[item->object_number].anim_index + kill_anim;
 	item->frame_number = anims[item->anim_number].frame_base;
 	item->current_anim_state = kill_state;

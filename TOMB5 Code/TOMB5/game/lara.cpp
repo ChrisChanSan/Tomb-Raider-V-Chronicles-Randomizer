@@ -515,6 +515,11 @@ long LaraLandedBad(ITEM_INFO* item, COLL_INFO* coll)
 	if (land_speed <= 0)
 		return 0;
 
+	// Refused while a scene holds Lara (scene_hold.h): she lands unhurt.
+	if (SceneHoldRefuses(land_speed <= 14 ? 1000 * SQUARE(land_speed) / 196 :
+		SCENE_HOLD_WHOLE_LIFE, LARA, "fall"))
+		return 0;
+
 	if (land_speed <= 14)
 		item->hit_points += -1000 * SQUARE(land_speed) / 196;
 	else

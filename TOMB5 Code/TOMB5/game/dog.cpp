@@ -170,7 +170,9 @@ void DogControl(short item_number)
 		case 7:
 			dog->maximum_turn = 91;
 
-			if (dog->flags != 1 && info.ahead && item->touch_bits & 0x122000)
+			// Refused while a scene holds Lara (scene_hold.h).
+			if (dog->flags != 1 && info.ahead && item->touch_bits & 0x122000 &&
+				!SceneHoldRefuses(EnemyDamage(balance.dmgDogBite), item->object_number, "dog-bite"))
 			{
 				CreatureEffect(item, &dog_bite, DoBloodSplat);
 				lara_item->hit_points -= EnemyDamage(balance.dmgDogBite);
@@ -187,7 +189,9 @@ void DogControl(short item_number)
 
 		case 8:
 
-			if (dog->flags != 2 && item->touch_bits & 0x122000)
+			// Refused while a scene holds Lara (scene_hold.h).
+			if (dog->flags != 2 && item->touch_bits & 0x122000 &&
+				!SceneHoldRefuses(EnemyDamage(balance.dmgDogJump), item->object_number, "dog-jump"))
 			{
 				CreatureEffect(item, &dog_bite, DoBloodSplat);
 				lara_item->hit_points -= EnemyDamage(balance.dmgDogJump);
@@ -205,7 +209,9 @@ void DogControl(short item_number)
 		case 9:
 			dog->maximum_turn = 1092;
 
-			if (dog->flags != 3 && item->touch_bits & 0x122000)
+			// Refused while a scene holds Lara (scene_hold.h).
+			if (dog->flags != 3 && item->touch_bits & 0x122000 &&
+				!SceneHoldRefuses(EnemyDamage(balance.dmgDogChase), item->object_number, "dog-chase"))
 			{
 				CreatureEffect(item, &dog_bite, DoBloodSplat);
 				lara_item->hit_points -= EnemyDamage(balance.dmgDogChase);

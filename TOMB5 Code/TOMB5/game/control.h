@@ -12,8 +12,15 @@
  */
 #pragma once
 #include "../global/types.h"
+#include "scene_hold.h"	// SCENE_HOLD_WHOLE_LIFE - what a refused blow asks
 
 long ControlPhase(long nframes, long demo_mode);
+/* A scene that holds Lara (scene_hold.h): one look at it, a cutscene's own
+ * end, a level load, and a blow asked before it lands. */
+void SceneHoldStep(long tick);
+void SceneHoldRelease();
+void SceneHoldReset();
+long SceneHoldRefuses(long damage, long slot, const char* site);
 long GetChange(ITEM_INFO* item, ANIM_STRUCT* anim);
 long CheckGuardOnTrigger();
 void InterpolateAngle(short dest, short* src, short* diff, short speed);

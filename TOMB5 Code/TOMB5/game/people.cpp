@@ -154,7 +154,8 @@ long ShotLara(ITEM_INFO* item, AI_INFO* info, BITE_INFO* gun, short extra_rotati
 	{
 		if (enemy == lara_item)
 		{
-			if (hit)
+			// Refused while a scene holds Lara (scene_hold.h): a miss.
+			if (hit && !SceneHoldRefuses(EnemyDamage((short)damage), item->object_number, "shot"))
 			{
 				CreatureEffect(item, gun, GunHit);
 				lara_item->hit_points -= EnemyDamage((short)damage);

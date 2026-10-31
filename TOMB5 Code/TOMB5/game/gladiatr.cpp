@@ -253,7 +253,10 @@ void GladiatorControl(short item_number)
 					}
 				}
 
-				if (!gladiator->flags && item->touch_bits & 0x6000)
+				// Refused while a scene holds Lara (scene_hold.h).
+				if (!gladiator->flags && item->touch_bits & 0x6000 &&
+					!SceneHoldRefuses(EnemyDamage(balance.dmgGladiatorStrike),
+						item->object_number, "gladiator"))
 				{
 					lara_item->hit_points -= EnemyDamage(balance.dmgGladiatorStrike);
 					lara_item->hit_status = 1;

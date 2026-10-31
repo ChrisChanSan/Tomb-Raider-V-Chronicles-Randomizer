@@ -2225,6 +2225,11 @@ void handle_cutseq_triggering(long name)
 		ScreenFadedOut = 0;
 		numnailed = 0;
 
+		/* The scene lets go of her life and air - put back a last time
+		 * before the end hook, whose own changes to her stand, and before
+		 * her control runs again (game\scene_hold.h). */
+		SceneHoldRelease();
+
 		if (cutseq_control_routines[cutseq_num].end_func)
 			cutseq_control_routines[cutseq_num].end_func();
 
@@ -3576,6 +3581,7 @@ void init_cutseq_actors(char* data, long resident)
 
 	InitPackNodes(nlheader, camera_pnodes, packed, pda_nodes + 1);
 	GLOBAL_playing_cutseq = 1;
+	SceneHoldStep(0);	// the scene holds her life and air (scene_hold.h)
 	GLOBAL_cutseq_frame = 0;
 	cutseq_actors_logged = false;
 	DelsHandyTeleportLara(GLOBAL_cutme->orgx, GLOBAL_cutme->orgy, GLOBAL_cutme->orgz, 0);

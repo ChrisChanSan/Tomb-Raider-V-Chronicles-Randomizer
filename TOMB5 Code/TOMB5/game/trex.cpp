@@ -106,7 +106,14 @@ void DinoControl(short item_number)
         angle = CreatureTurn(item, rex->maximum_turn);
 
         if (item->touch_bits)
-            lara_item->hit_points -= EnemyDamage(item->current_anim_state == DINO_RUN ? balance.dmgTRexKickRun : balance.dmgTRexKick);
+        {
+            const short kick = EnemyDamage(item->current_anim_state == DINO_RUN ?
+                balance.dmgTRexKickRun : balance.dmgTRexKick);
+
+            // Refused while a scene holds Lara (scene_hold.h).
+            if (!SceneHoldRefuses(kick, item->object_number, "trex-kick"))
+                lara_item->hit_points -= kick;
+        }
 
         rex->flags = rex->mood != ESCAPE_MOOD && !info.ahead &&
                      info.enemy_facing > -0x4000 && info.enemy_facing < 0x4000;
@@ -224,12 +231,22 @@ void DinoControl(short item_number)
             // The sound hangs on exactly that animation in TR3 and would
             // thus stay mute. It is therefore triggered directly here: the
             // snap is heard even though the special animation is missing.
+            //
+            // The bite takes her whole life. While a scene holds her it is
+            // refused (scene_hold.h): the snap is heard and goes into the
+            // air - no blood, no damage, her life as the scene began.
             if (item->touch_bits & 0x3000)
             {
                 SoundEffect(SFX_TREX_ATTACK, &item->pos, 0);
-                CreatureEffect(item, &trex_hit, DoBloodSplat);
-                lara_item->hit_points -= EnemyDamage(balance.dmgTRexBite);
-                lara_item->hit_status = 1;
+
+                if (!SceneHoldRefuses(EnemyDamage(balance.dmgTRexBite),
+                    item->object_number, "trex-bite"))
+                {
+                    CreatureEffect(item, &trex_hit, DoBloodSplat);
+                    lara_item->hit_points -= EnemyDamage(balance.dmgTRexBite);
+                    lara_item->hit_status = 1;
+                }
+
                 rex->maximum_turn = 0;
             }
 

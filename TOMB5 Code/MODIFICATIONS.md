@@ -17078,37 +17078,37 @@ changes before and at 0, 1 and 0 after - room 222's one with the eye in room 154
 room; between one change's eye and the next they come and go 64, 24 and 40 times before
 and 14, 2 and 19 after. At the 136 changes the pictures showed, drawn from both replays,
 2,914,074 pixels move before and 75,176 after, 108 changes and 26; what still moves is art
-not in the sky: the loggia's own (room 225), the rooms below the courtyard (21, 18, 17),
-the building west of the tower (162) and group 52's facade in room 232's box (14,324
-pixels at frame 3,739). The tables of the fifteen levels room by room (TrgProbe `-vistable
--visroom all`): every guest, opening, wide and enclosure line as before; 501 sky pairs, 84
-sky groups a room takes - ANDREA1 33 pairs, ANDREA2 47, ANDREA3 11, ANDY1 136, ANDY2 0,
-ANDY3 111, JOBY2 34, JOBY3 0, JOBY4 82, JOBY5 1, RICH1 0, RICH2 26, RICH3 3, RICHCUT2 0,
-TITLE 17; the largest RICH2's group 26 (59,896 triangles in the sky), ANDREA3's 67
-(30,601), TITLE's 54 (28,697), ANDY3's 23 (21,532), ANDY1's 202 (15,758) and ANDREA2's 55
-(13,321); six groups left out as copies (ANDREA3's 66, 69 and 91 of 67, ANDY3's 201,
-JOBY5's 82, RICH2's 120 of 26) and 45 because their room is not under the sky. RICH2's
-table is the same with the y shift the engine reads (RoomProbe `-visyshift 1`). The parity
-set of #236, 72 of 72 pictures byte-identical (six classic, six HD, thirty census and
-thirty camera pictures); #269's seven before-and-after places 7 of 7; of its 88 card
-samples 76, the twelve others named: TITLE's room 43 four views (540 to 2,998 pixels at
-960 x 540), the sky groups 35 and 54 - the landscape past the rooms - listed there with
-room 33, a guest of theirs; ANDY1's rooms 96, 97 and 135 eight views (1 to 18 pixels), the
-same rooms in another order and wider windows, rooms 143, 159, 162 and 163 queued first by
-the sky table, at room 96 also 121, 160, 161 and 150. RICH1 has no sky pair: its tables
-and walk, and #283's three pictures, are those of before. The price at ten eyes of the
-log, at 2,560 x 1,440, every pass timed 30 times on the GPU (median): the rooms 45, 12,
-13, 12, 12, 14, 13, 18, 14 and 8 before, 49, 14, 28, 23, 24, 16, 15, 19, 17 and 12 after;
-the triangles 25,134 to 440,028 before, 71,114 to 473,073 after; the draw calls 99 to 401
-before, 173 to 451 after; the GPU time 0.189 ms on average before and 0.235 after, at most
-0.157 to 0.459 ms at frame 3,739 (13 to 28 rooms, 54,279 to 418,708 triangles, room 10's
-309,808 among them, a guest of the rooms the sky groups walk into). The log's frames ran
-at the 165 Hz cap (6.06 ms median, 5.31 of it waiting at the flip, the walk 0.11 ms, the
-HD draws 0.32 ms of the CPU). The table build costs 1,435 ms before and 1,258 after on
-ANDREA2, 480 and 588 on ANDY1. ModernTest 17,123 checks, 0 failed (`vis_sky_art`, 18),
-MenuTest 45,043, InterpTest 754, LipsTest 272, 0 failed. `hd_vis` 0 is unchanged by
-construction: the sky table is built on the visibility path alone; `hd_build` 0 is
-untouched.
+not in the sky: the loggia's own (room 225), the rooms below the courtyard (21, 18, 17 and
+46, the last two 14,324 pixels at frame 3,739) and the building west of the tower (162);
+room 52's facade in room 232's box, gone with room 222 before, stays. The tables of the
+fifteen levels room by room (TrgProbe `-vistable -visroom all`): every guest, opening,
+wide and enclosure line as before; 501 sky pairs, 84 sky groups a room takes - ANDREA1 33
+pairs, ANDREA2 47, ANDREA3 11, ANDY1 136, ANDY2 0, ANDY3 111, JOBY2 34, JOBY3 0, JOBY4 82,
+JOBY5 1, RICH1 0, RICH2 26, RICH3 3, RICHCUT2 0, TITLE 17; the largest RICH2's group 26
+(59,896 triangles in the sky), ANDREA3's 67 (30,601), TITLE's 54 (28,697), ANDY3's 23
+(21,532), ANDY1's 202 (15,758) and ANDREA2's 55 (13,321); six groups left out as copies
+(ANDREA3's 66, 69 and 91 of 67, ANDY3's 201, JOBY5's 82, RICH2's 120 of 26) and 45 because
+their room is not under the sky. RICH2's table is the same with the y shift the engine
+reads (RoomProbe `-visyshift 1`). The parity set of #236, 72 of 72 pictures byte-identical
+(six classic, six HD, thirty census and thirty camera pictures); #269's seven
+before-and-after places 7 of 7; of its 88 card samples 76, the twelve others named:
+TITLE's room 43 four views (540 to 2,998 pixels at 960 x 540), the sky groups 35 and 54 -
+the landscape past the rooms - listed there with room 33, a guest of theirs; ANDY1's rooms
+96, 97 and 135 eight views (1 to 18 pixels), the same rooms in another order and wider
+windows, rooms 143, 159, 162 and 163 queued first by the sky table, at room 96 also 121,
+160, 161 and 150. RICH1 has no sky pair: its tables and walk, and #283's three pictures,
+are those of before. The price at ten eyes of the log, at 2,560 x 1,440, every pass timed
+30 times on the GPU (median): the rooms 45, 12, 13, 12, 12, 14, 13, 18, 14 and 8 before,
+49, 14, 28, 23, 24, 16, 15, 19, 17 and 12 after; the triangles 25,134 to 440,028 before,
+71,114 to 473,073 after; the draw calls 99 to 401 before, 173 to 451 after; the GPU time
+0.189 ms on average before and 0.235 after, at most 0.157 to 0.459 ms at frame 3,739 (13
+to 28 rooms, 54,279 to 418,708 triangles, room 10's 309,808 among them, a guest of the
+rooms the sky groups walk into). The log's frames ran at the 165 Hz cap (6.06 ms median,
+5.31 of it waiting at the flip, the walk 0.11 ms, the HD draws 0.32 ms of the CPU). The
+table build costs 1,435 ms before and 1,258 after on ANDREA2, 480 and 588 on ANDY1.
+ModernTest 17,123 checks, 0 failed (`vis_sky_art`, 18), MenuTest 45,043, InterpTest 754,
+LipsTest 272, 0 failed. `hd_vis` 0 is unchanged by construction: the sky table is built on
+the visibility path alone; `hd_build` 0 is untouched.
 
 **Decisions.** The art of a room not under the sky is left out, all of it: the 45 groups
 so left out include ANDREA3's arena skylines (groups 16, 17, 28 and 55, 29,127 to 29,458

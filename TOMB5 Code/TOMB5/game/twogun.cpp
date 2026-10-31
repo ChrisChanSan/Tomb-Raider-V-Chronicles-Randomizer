@@ -33,6 +33,11 @@
 #include "objects.h"
 #include "lara.h"
 #include "zip_call_rule.h"
+#include "deltapak.h"
+#include "gameflow.h"
+#include "../specific/input.h"
+#include "../specific/dxshell.h"
+#include "../tomb5/tomb5.h"
 
 static_assert(ZIP_AS_INTO == AS_INTO_ZIP && ZIP_AS_POSE == AS_ZIP &&
 	ZIP_AS_OUT == AS_OUT_ZIP, "zip_call_rule.h states");
@@ -141,8 +146,9 @@ void ControlZipController(short item_number)
 
 /* A skipped scene ends every Zip call still running (zip_call_rule.h): the
  * end of a flyby a skip jumped (game\spotcam.cpp) and the cutscene skipper
- * (game\control.cpp) call this. A call is an active item whose control is
- * the one above, whatever its slot. */
+ * (game\control.cpp) call this, and so does the skip of a call with no
+ * scene below. A call is an active item whose control is the one above,
+ * whatever its slot. */
 void ZipCallsEndBySkip()
 {
 	short item_number, next;
@@ -156,6 +162,73 @@ void ZipCallsEndBySkip()
 			ControlZipController)
 			ZipCallFinish(item_number, ZIP_ENDED_BY_SKIP);
 	}
+}
+
+/* The pad's confirm button as the skip without a scene last read it, on
+ * every tick a call runs: the call's first tick, stage 0, which holds
+ * nothing yet, primes it, so a button already down when the call begins
+ * does not skip it. */
+static char zip_confirm_held;
+
+/* ZIPSKIP, behind -log: a call ended by a skip with no scene running - the
+ * item, its stage, the tick (GlobalCounter) and what skipped it, escape or
+ * pad. Its ZIPLOG line "ended by skip" follows. */
+static void ZipSkipLog(short item_number, int how)
+{
+	if (!gLogEnabled)
+		return;
+
+	Log("ZIPSKIP item=%d stage=%d tick=%d how=%s scene=0", item_number,
+		items[item_number].item_flags[0], GlobalCounter, ZipSkipWord(how));
+}
+
+/* The skip of a call that holds Lara with no scene running (zip_call_rule.h,
+ * ZipSkipStarts). game\control.cpp asks it once a tick, after her input is
+ * masked and before the inventory, and makes the tick it fires on a held
+ * one. The call ends as under a skipped scene (ZipCallsEndBySkip), and a
+ * press of the pad's confirm button stays out of the input until it is let
+ * go (game\skip_latch.h). Returns whether it fired. */
+long ZipCallSkipWithoutScene()
+{
+	ITEM_INFO* item;
+	short item_number;
+	int fresh, step, how;
+
+	for (item_number = next_item_active; item_number != NO_ITEM;
+		item_number = items[item_number].next_active)
+	{
+		if (objects[items[item_number].object_number].control ==
+			ControlZipController)
+			break;
+	}
+
+	if (item_number == NO_ITEM)
+		return 0;
+
+	item = &items[item_number];
+	fresh = SkipConfirmEdge((int)JoyConfirmDown(), &zip_confirm_held);
+
+	// What the call's own tick does now, asked as the controller asks it.
+	step = ZipCallTick(item->item_flags[0], item->item_flags[1],
+		lara_item->current_anim_state == AS_STOP &&
+		lara_item->anim_number == ANIM_BREATH,
+		item->item_flags[0] == ZIP_STAGE_LISTEN &&
+		S_CDTrackPlaying(item->trigger_flags));
+	how = ZipSkipStarts(tomb5.cutseq_skipper && gfLevelId != LVL5_TITLE,
+		item->item_flags[0], bDisableLaraControl != 0, step,
+		bUseSpotCam || bTrackCamInit || cutseq_trig || GLOBAL_playing_cutseq,
+		keymap[DIK_ESCAPE] != 0, fresh);
+
+	if (how == ZIP_SKIP_NONE)
+		return 0;
+
+	ZipSkipLog(item_number, how);
+	ZipCallsEndBySkip();
+
+	if (ZipSkipLatchKind(fresh))
+		InputSkipLatch(ZipSkipLatchKind(fresh));
+
+	return 1;
 }
 
 void InitialiseTwogun(short item_number)

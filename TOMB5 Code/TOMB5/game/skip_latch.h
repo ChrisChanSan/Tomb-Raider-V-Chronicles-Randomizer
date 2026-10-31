@@ -31,7 +31,8 @@
  * Pure, with no engine header, so that
  * Preparation\Tools\Diagnose\ModernTest.cpp includes this file itself. The
  * state lives in specific\input.cpp, which applies it to each reading
- * before any role is read from it; the two skippers engage it. */
+ * before any role is read from it; the two skippers engage it, and so does
+ * the skip of a Zip call that holds her with no scene (game\twogun.cpp). */
 
 // No bit latched.
 #define SKIP_LATCH_OFF	(-1)
@@ -40,15 +41,25 @@
 enum
 {
 	SKIP_LATCH_CUTSEQ = 1,
-	SKIP_LATCH_FLYBY = 2
+	SKIP_LATCH_FLYBY = 2,
+	SKIP_LATCH_ZIP = 3	// a Zip call skipped with no scene running
 };
 
 struct SKIP_LATCH
 {
 	long bit;	// the pad bit the skip fired on, SKIP_LATCH_OFF for none
-	long kind;	// SKIP_LATCH_CUTSEQ or SKIP_LATCH_FLYBY
+	long kind;	// SKIP_LATCH_CUTSEQ, SKIP_LATCH_FLYBY or SKIP_LATCH_ZIP
 	long since;	// the tick the skip fired on
 };
+
+// The `set=` word of a kind in the SKIPLATCH line (specific\input.cpp).
+inline const char* SkipLatchWord(long kind)
+{
+	if (kind == SKIP_LATCH_CUTSEQ)
+		return "cutseq";
+
+	return kind == SKIP_LATCH_ZIP ? "zip" : "flyby";
+}
 
 /* A fresh press: down on this reading and not on the last one. `held`
  * carries the reading to the next call. Whoever begins a scene sets it to

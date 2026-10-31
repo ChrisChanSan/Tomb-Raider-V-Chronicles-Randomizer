@@ -15,6 +15,7 @@
 
 void ControlZipController(short item_number);
 void ZipCallsEndBySkip();
+long ZipCallSkipWithoutScene();
 void InitialiseTwogun(short item_number);
 void TwogunControl(short item_number);
 void UpdateTwogunLasers();

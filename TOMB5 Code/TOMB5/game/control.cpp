@@ -493,6 +493,21 @@ long ControlPhase(long nframes, long demo_mode)
 			input = 0;
 		}
 
+		// A Zip call that holds Lara with no scene running - one without a
+		// flyby, or one that outlived its flyby - skips the same way:
+		// Escape held or a fresh press of the confirm button ends it, as a
+		// skipped scene does (ZipCallSkipWithoutScene, game\twogun.cpp).
+		// Asked after her input is masked and before the inventory: the
+		// tick it fires on stays a held tick, so the press that skipped
+		// neither opens the ring nor reaches her. A call that outlived its
+		// flyby holds her with bDisableLaraControl clear, where a fresh
+		// Escape opened the ring; it takes that press now.
+		if (ZipCallSkipWithoutScene())
+		{
+			dbinput = 0;
+			input &= IN_LOOK;
+		}
+
 		SetDebounce = 0;
 
 		if (gfLevelId != LVL5_TITLE && (dbinput & IN_OPTION || GLOBAL_enterinventory != NO_ITEM) && !cutseq_trig && lara_item->hit_points > 0)

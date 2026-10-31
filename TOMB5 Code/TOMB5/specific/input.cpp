@@ -843,15 +843,15 @@ long JoyConfirmDown()
 /* A skipper fired on the confirm button. The bit is the active path's
  * (JoyBitConfirm) as it is now; the latch keeps that bit until it is let go,
  * whatever the path does meanwhile. SKIPLATCH, behind -log: `set=` the
- * skipper, `bit=` the pad bit, `tick=` GlobalCounter. */
+ * skipper (SkipLatchWord: cutseq, flyby, or zip for a Zip call skipped
+ * with no scene), `bit=` the pad bit, `tick=` GlobalCounter. */
 void InputSkipLatch(long kind)
 {
 	SkipLatchEngage(&skip_latch, JoyBitConfirm(), kind, (long)GlobalCounter);
 
 	if (gLogEnabled)
-		Log("SKIPLATCH set=%s bit=%ld tick=%ld",
-			kind == SKIP_LATCH_CUTSEQ ? "cutseq" : "flyby", skip_latch.bit,
-			(long)GlobalCounter);
+		Log("SKIPLATCH set=%s bit=%ld tick=%ld", SkipLatchWord(kind),
+			skip_latch.bit, (long)GlobalCounter);
 }
 
 long InputSkipLatchHolds(long kind)

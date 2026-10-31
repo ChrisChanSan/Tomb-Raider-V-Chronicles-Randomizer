@@ -286,6 +286,23 @@ void S_CDStop()
 	LeaveCriticalSection(&audio_cs);
 }
 
+/* Whether `track` is the music now and its stream runs. XATrack alone does
+ * not say it: ACMEmulateCDPlay names the track before it opens its file,
+ * and a track whose file is missing stays named with nothing playing, so
+ * a Zip call (game\twogun.cpp) waiting for it to end waited for good. */
+long S_CDTrackPlaying(long track)
+{
+	long playing;
+
+	if (!acm_ready)
+		return 0;
+
+	EnterCriticalSection(&audio_cs);
+	playing = XATrack == track && (audio_stream_fp || OggStream);
+	LeaveCriticalSection(&audio_cs);
+	return playing;
+}
+
 void S_CDFade(long n)
 {
 

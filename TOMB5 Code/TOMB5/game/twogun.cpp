@@ -32,6 +32,10 @@
 #include "spotcam.h"
 #include "objects.h"
 #include "lara.h"
+#include "zip_call_rule.h"
+
+static_assert(ZIP_AS_INTO == AS_INTO_ZIP && ZIP_AS_POSE == AS_ZIP &&
+	ZIP_AS_OUT == AS_OUT_ZIP, "zip_call_rule.h states");
 
 TWOGUN_INFO twogun[4];
 
@@ -43,43 +47,114 @@ static BITE_INFO Guns[2] =
 
 static BITE_INFO twogun_head = { 0,-200, 0, 2 };
 
-void ControlZipController(short item_number)
+/* ZIPLOG, behind -log: one line at each step of a Zip call and at its end
+ * (zip_call_rule.h, ZipCallWord) - the item, the stage it is in, its track
+ * and the tick (GlobalCounter, as in FLYLOG and SKIPLATCH). */
+static void ZipLog(short item_number, int step)
 {
 	ITEM_INFO* item;
 
-	item = &items[item_number];
+	if (!gLogEnabled)
+		return;
 
-	if (!item->item_flags[0])
+	item = &items[item_number];
+	Log("ZIPLOG item=%d stage=%d track=%d tick=%d %s", item_number,
+		item->item_flags[0], item->trigger_flags, GlobalCounter,
+		ZipCallWord(step));
+}
+
+/* The one end of a call, whatever ends it (zip_call_rule.h): Lara out of
+ * the pose as ZipPoseEnd says, the music back to the level's atmosphere
+ * while the call's own track is still the music (a skip cut it), her
+ * control back, the item killed. */
+static void ZipCallFinish(short item_number, int why)
+{
+	ITEM_INFO* item;
+	int pose, music;
+
+	item = &items[item_number];
+	pose = ZipPoseEnd(why, lara_item->current_anim_state);
+	music = ZipEndMusic(XATrack == item->trigger_flags, CurrentAtmosphere);
+
+	if (pose == ZIP_POSE_GOAL_OUT || pose == ZIP_POSE_OUT)
+		lara_item->goal_anim_state = AS_OUT_ZIP;
+	else if (pose == ZIP_POSE_STAND)
 	{
+		lara_item->goal_anim_state = AS_STOP;
+		lara_item->current_anim_state = AS_STOP;
+		lara_item->anim_number = ANIM_BREATH;
+		lara_item->frame_number = anims[lara_item->anim_number].frame_base;
+	}
+
+	if (music == ZIP_MUSIC_ATMOSPHERE)
+		S_CDPlay(CurrentAtmosphere, 1);
+	else if (music == ZIP_MUSIC_STOP)
+		S_CDStop();
+
+	ZipLog(item_number, why);
+	bDisableLaraControl = 0;
+	KillItem(item_number);
+}
+
+void ControlZipController(short item_number)
+{
+	ITEM_INFO* item;
+	int step;
+
+	item = &items[item_number];
+	step = ZipCallTick(item->item_flags[0], item->item_flags[1],
+		lara_item->current_anim_state == AS_STOP &&
+		lara_item->anim_number == ANIM_BREATH,
+		item->item_flags[0] == ZIP_STAGE_LISTEN &&
+		S_CDTrackPlaying(item->trigger_flags));
+
+	switch (step)
+	{
+	case ZIP_STARTED:
+		ZipLog(item_number, step);
 		bDisableLaraControl = 1;
 		item->item_flags[0]++;
+		break;
+
+	case ZIP_POSING:
+		ZipLog(item_number, step);
+		lara_item->goal_anim_state = AS_INTO_ZIP;
+		lara_item->current_anim_state = AS_INTO_ZIP;
+		lara_item->anim_number = ANIM_ZIP_IN;
+		lara_item->frame_number = anims[lara_item->anim_number].frame_base;
+		item->item_flags[0]++;
+		IsAtmospherePlaying = 0;
+		S_CDPlay(item->trigger_flags, 0);
+		break;
+
+	case ZIP_HEARD:
+		ZipLog(item_number, step);
+		item->item_flags[1] = 1;
+		break;
+
+	case ZIP_ENDED:
+	case ZIP_ENDED_NO_TRACK:
+		ZipCallFinish(item_number, step);
+		break;
 	}
-	else if (item->item_flags[0] == 1)
+}
+
+/* A skipped scene ends every Zip call still running (zip_call_rule.h): the
+ * end of a flyby a skip jumped (game\spotcam.cpp) and the cutscene skipper
+ * (game\control.cpp) call this. A call is an active item whose control is
+ * the one above, whatever its slot. */
+void ZipCallsEndBySkip()
+{
+	short item_number, next;
+
+	for (item_number = next_item_active; item_number != NO_ITEM;
+		item_number = next)
 	{
-		if (lara_item->current_anim_state == AS_STOP && lara_item->anim_number == ANIM_BREATH)
-		{
-			lara_item->goal_anim_state = AS_INTO_ZIP;
-			lara_item->current_anim_state = AS_INTO_ZIP;
-			lara_item->anim_number = ANIM_ZIP_IN;
-			lara_item->frame_number = anims[lara_item->anim_number].frame_base;
-			item->item_flags[0]++;
-			IsAtmospherePlaying = 0;
-			S_CDPlay(item->trigger_flags, 0);
-		}
-	}
-	else if (item->item_flags[0] == 2)
-	{
-		if (!item->item_flags[1])
-		{
-			if (XATrack == item->trigger_flags)
-				item->item_flags[1] = 1;
-		}
-		else if (XATrack != item->trigger_flags)
-		{
-			lara_item->goal_anim_state = AS_OUT_ZIP;
-			bDisableLaraControl = 0;
-			KillItem(item_number);
-		}
+		next = items[item_number].next_active;
+
+		if (objects[items[item_number].object_number].control ==
+			ControlZipController)
+			ZipCallFinish(item_number, ZIP_ENDED_BY_SKIP);
 	}
 }
 

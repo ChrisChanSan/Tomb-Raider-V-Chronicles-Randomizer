@@ -15,6 +15,7 @@
 
 void S_CDPlay(long track, long mode);
 void S_CDStop();
+long S_CDTrackPlaying(long track);
 void S_CDFade(long n);
 void S_StartSyncedAudio(long track);
 void ACMSetVolume();

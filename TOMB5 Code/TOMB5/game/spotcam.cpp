@@ -22,6 +22,7 @@
 #include "gameflow.h"
 #include "../specific/input.h"
 #include "lara.h"
+#include "twogun.h"
 #include "../specific/dxshell.h"
 #include "../specific/LoadSave.h"
 #include "../tomb5/tomb5.h"
@@ -75,6 +76,7 @@ static short spotcam_loopcnt;
 static short check_camera;	// whose SP_TESTTRIGGER set bCheckTrigger
 static char spot_confirm_held;	// the pad's confirm button, last frame
 static char spot_pad_skip;	// a press of it started this flyby's skip
+static char spot_skipped;	// a skip jumped a frame of this flyby
 
 /* FLYLOG, behind -log: one line per heavy-trigger test a flyby makes. seq is
  * the sequence, cam the SpotCam index whose SP_TESTTRIGGER armed the test,
@@ -177,6 +179,7 @@ void InitialiseSpotCam(short Sequence)
 	 * before is forgotten. */
 	spot_confirm_held = (char)JoyConfirmDown();
 	spot_pad_skip = 0;
+	spot_skipped = 0;
 	InitialCameraPosition.x = camera.pos.x;
 	InitialCameraPosition.y = camera.pos.y;
 	InitialCameraPosition.z = camera.pos.z;
@@ -493,15 +496,18 @@ void CalculateSpotCams()
 	// (game\skip_latch.h): the frames jump while it is held, letting go
 	// ends the run, and play does not see the press until it is let go,
 	// so the end of the flyby does not hand it to Lara as Action.
-	// SpotPadSkipStarts holds the terms: a flyby that leaves Lara her
-	// control leaves her the button too.
+	// SpotPadSkipStarts holds the terms: every flyby that comes to an end,
+	// whether it holds Lara still or leaves her playing. A flyby a skip
+	// jumped ends the Zip calls running when it ends (ZipCallsEndBySkip,
+	// game\twogun.cpp): the call's track stops, she leaves the headset
+	// pose, and her control comes back with the camera.
 	{
 		const int fresh = SkipConfirmEdge((int)JoyConfirmDown(),
 			&spot_confirm_held);
 
 		if (tomb5.cutseq_skipper && gfLevelId != LVL5_TITLE)
 		{
-			if (SpotPadSkipStarts(fresh, bDisableLaraControl != 0, s->flags))
+			if (SpotPadSkipStarts(fresh, s->flags))
 			{
 				spot_pad_skip = 1;
 				InputSkipLatch(SKIP_LATCH_FLYBY);
@@ -512,6 +518,7 @@ void CalculateSpotCams()
 			{
 				current_spline_position = 0x10000;
 				skip_now = 1;
+				spot_skipped = 1;
 			}
 		}
 	}
@@ -749,6 +756,12 @@ void CalculateSpotCams()
 					}
 					else if (s->flags & SP_SNAPBACK || spline_to_camera)
 					{
+						// A skip ends the Zip calls under the flyby with
+						// it, before the last camera's test, which may
+						// start what follows the scene.
+						if (spot_skipped)
+							ZipCallsEndBySkip();
+
 						if (bCheckTrigger)
 						{
 							// A skipped end tests at the last camera's own
@@ -876,6 +889,11 @@ void CalculateSpotCams()
 	}
 	else
 	{
+		// Look breaks the flyby off; one a skip jumped first ends its Zip
+		// calls as its own end does.
+		if (spot_skipped)
+			ZipCallsEndBySkip();
+
 		SetFadeClip(0, 1);
 		bUseSpotCam = 0;
 		bDisableLaraControl = 0;

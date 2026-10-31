@@ -619,6 +619,9 @@
     <ClInclude Include="TOMB5\game\raising_cog_rule.h">
       <Filter>TOMB5\game</Filter>
     </ClInclude>
+    <ClInclude Include="TOMB5\game\zip_call_rule.h">
+      <Filter>TOMB5\game</Filter>
+    </ClInclude>
     <ClInclude Include="TOMB5\game\switch.h">
       <Filter>TOMB5\game</Filter>
     </ClInclude>

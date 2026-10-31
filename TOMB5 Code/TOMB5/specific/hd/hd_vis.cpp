@@ -241,6 +241,88 @@ bool HDVisBuild(const trf::remaster::Trg& trg, const HDVisRoom* rooms,
 		if (rooms[r].twin >= 0 && rooms[r].twin < roomCount)
 			mainOf[(size_t)rooms[r].twin] = r;
 
+	/* Which rooms are in the world together, linked. A record - a portal
+	 * or a floor link - names a room number, and the number of a flipmap
+	 * pair holds its main room while the map is off and the other room
+	 * while it is on (FlipMap swaps the two). A room of a pair is in the
+	 * world in its own state alone, so its record reaches the room its
+	 * number holds then when that room flips by the same map, and either
+	 * of the two when by another map or by none. `together` holds the
+	 * rooms so linked: in the world together in some state of the maps,
+	 * with a way between them. `linked` below, closed over the twins, also
+	 * joins a room with what its twin's records name, in the twin's state.
+	 *
+	 * RICH1's room 85 is the main room of a pair on map 0 whose other room,
+	 * 86, is the chute that room 21's twin 96 leads into with the map on:
+	 * a box with no record of its own at the place of the shaft room 89.
+	 * No record reaches it: with the map off only 96 names its number, and
+	 * 96 is not in the world then; with the map on 86 stands there. By the
+	 * closure it is linked with room 21, and from 21, with the map off,
+	 * the openings beside the shaft's portal listed it beside 89: its art
+	 * filled the shaft with a second set of walls that fought 89's. An
+	 * opening keeps a room number only when the room it holds while the
+	 * opening's room is drawn is in the world with it, linked. */
+	std::vector<unsigned char> together(n * n, 0);
+	std::vector<int> pairOf(n, -1), mapOf(n, -1);
+	std::vector<unsigned char> second(n, 0);
+
+	for (int r = 0; r < roomCount; r++)
+	{
+		const int tw = rooms[r].twin;
+
+		if (tw < 0 || tw >= roomCount || tw == r)
+			continue;
+
+		pairOf[(size_t)r] = tw;
+		pairOf[(size_t)tw] = r;
+		second[(size_t)tw] = 1;
+		mapOf[(size_t)r] = mapOf[(size_t)tw] = rooms[r].flip;
+	}
+
+	const auto join = [&](int a, int b)
+	{
+		together[(size_t)a * n + b] = together[(size_t)b * n + a] = 1;
+	};
+
+	const auto inWorld = [&](int a, int b)
+	{
+		return together[(size_t)a * n + b] != 0;
+	};
+
+	/* Whether the room number `at` holds while room g is drawn is in the
+	 * world with g, linked: the main room `at` while its map is off, its
+	 * twin while the map is on - the one g's own state gives when g flips
+	 * by the same map, either when by another or by none. */
+	const auto inWorldAt = [&](int g, int at)
+	{
+		const int alt = pairOf[(size_t)at];
+
+		if (alt < 0)
+			return inWorld(g, at);
+
+		if (mapOf[(size_t)g] >= 0 && mapOf[(size_t)g] == mapOf[(size_t)at])
+			return inWorld(g, second[(size_t)g] ? alt : at);
+
+		return inWorld(g, at) || inWorld(g, alt);
+	};
+
+	// Room r's record naming number `to`: the room or rooms it reaches.
+	const auto record = [&](int r, int to)
+	{
+		const int alt = pairOf[(size_t)to];
+
+		if (alt < 0)
+			join(r, to);
+		else if (mapOf[(size_t)r] >= 0 &&
+			mapOf[(size_t)r] == mapOf[(size_t)to])
+			join(r, second[(size_t)r] ? alt : to);
+		else
+		{
+			join(r, to);
+			join(r, alt);
+		}
+	};
+
 	for (int r = 0; r < roomCount; r++)
 	{
 		for (int i = 0; portals && i < rooms[r].portalCount; i++)
@@ -249,7 +331,10 @@ bool HDVisBuild(const trf::remaster::Trg& trg, const HDVisRoom* rooms,
 			const int to = at >= 0 && at < portalCount ? portals[at].to : -1;
 
 			if (to >= 0 && to < roomCount)
+			{
 				link[(size_t)r * n + to] = link[(size_t)to * n + r] = 1;
+				record(r, to);
+			}
 		}
 
 		t.floorFirst[(size_t)r] = (int)t.floorRooms.size();
@@ -263,6 +348,7 @@ bool HDVisBuild(const trf::remaster::Trg& trg, const HDVisRoom* rooms,
 				continue;
 
 			link[(size_t)r * n + to] = link[(size_t)to * n + r] = 1;
+			record(r, to);
 
 			// Each room a floor link names, once (a link per square).
 			if (std::find(t.floorRooms.begin() + t.floorFirst[(size_t)r],
@@ -562,6 +648,29 @@ bool HDVisBuild(const trf::remaster::Trg& trg, const HDVisRoom* rooms,
 
 				if (again)
 					continue;
+
+				// What the number holds while g is drawn: in the world with g.
+				if (!inWorldAt(g, at))
+				{
+					bool known = false;
+
+					for (const HDVisStateRefused& seen : t.stateRefused)
+						known = known || (seen.holder == g &&
+							seen.face == one.face && seen.behind == at);
+
+					if (!known)
+					{
+						HDVisStateRefused refused;
+
+						refused.holder = g;
+						refused.face = one.face;
+						refused.behind = at;
+						t.stateRefused.push_back(refused);
+						t.openingsState++;
+					}
+
+					continue;
+				}
 
 				one.behind = at;
 				open[(size_t)g].push_back(one);

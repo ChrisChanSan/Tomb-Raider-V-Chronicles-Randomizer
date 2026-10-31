@@ -4123,6 +4123,7 @@ static void BuildRoomVis()
 		one.bottom = info->minfloor;
 		one.flags = info->flags;
 		one.twin = info->flipped_room;
+		one.flip = info->flipped_room >= 0 ? (int)info->FlipNumber : -1;
 		one.firstFace = (int)faces.size();
 		one.faceCount = 0;
 		one.firstPortal = (int)portals.size();
@@ -8381,11 +8382,22 @@ static void HDLevelBuildHD()
 	 * room's own art is drawn where the walk lists it: a room drawn HD, or
 	 * one whose hollow art is drawn beside it (g_group_hollow), and
 	 * `copied` the triangles the art copies put into the room's place
-	 * (hd_artcopy.h), its statics' and its faces'. */
+	 * (hd_artcopy.h), its statics' and its faces'. A room the visibility
+	 * path's openings no longer name, linked with the room whose bare face
+	 * it stands behind only through a flipmap twin, in no state that has
+	 * both in the world, ends in `refused=flipstate` (hd_vis.h,
+	 * HDVisTables::stateRefused). */
 	const std::vector<int> copied = ArtCopiedPerRoom();
+	const HDVisTables* vis = HDVisLevelTables();
 
 	for (int r = 0; r < g_room_count; r++)
 	{
+		bool refused = false;
+
+		for (size_t k = 0; vis && k < vis->stateRefused.size() && !refused;
+			k++)
+			refused = vis->stateRefused[k].behind == r;
+
 		const int on = (size_t)r < stand_on.size() ? stand_on[(size_t)r] : 0;
 		const int covered = r < HD_MAX_ROOMS ? (int)g_group_stand_covered[r] : 0;
 		const int carrier = r < HD_MAX_ROOMS ? (int)g_group_stand_carrier[r] : -1;
@@ -8406,7 +8418,7 @@ static void HDLevelBuildHD()
 		Log("HDLOG room=%d group=%d tris=%d/%d/%d overhang=%d cut=%d "
 			"ranges=%d statics=%d hd=%d reason=%s stand=%d covered=%d "
 			"carrier=%d faces=%d faces_covered=%d floors_kept=%d shadow=%d "
-			"drawn=%d copied=%d",
+			"drawn=%d copied=%d%s",
 			r, r, HDRenderGroupTriangles(r, 0), HDRenderGroupTriangles(r, 1),
 			HDRenderGroupTriangles(r, 2), HDRenderGroupOverhangTriangles(r),
 			cuts[(size_t)r], HDRenderGroupRanges(r, -1),
@@ -8416,7 +8428,8 @@ static void HDLevelBuildHD()
 			here ? (int)g_group_stand_floors_kept[r] : 0,
 			here && (g_group_hd[r] || g_group_stand_shadow[r]) ? 1 : 0,
 			here && (g_group_hd[r] || g_group_hollow[r]) ? 1 : 0,
-			(size_t)r < copied.size() ? copied[(size_t)r] : 0);
+			(size_t)r < copied.size() ? copied[(size_t)r] : 0,
+			refused ? " refused=flipstate" : "");
 	}
 
 	/* The hollow groups (HDRenderHollowText): where their art stands and
@@ -9328,7 +9341,9 @@ static int SurfaceRoom()
  *   HDLOG level=<stem> vis=1 rooms= art_rooms= walls= bare= void= guests=
  *         guest_tris= wide= ms= twin= wide_bare= edge= statics_held=
  *         statics_ms= enclosed= hull_guests= hollow_hidden= guests_hanging=
+ *         openings_state=
  *   HDLOG visguest level=<stem> room= group= tris= box= refused=hanging
+ *   HDLOG visopening level=<stem> room= face= behind= refused=flipstate
  *
  * art_rooms the rooms whose walls were asked, walls their classic wall
  * faces, bare those the art leaves bare (the openings), void those with no
@@ -9344,7 +9359,12 @@ static int SurfaceRoom()
  * whose faces go; guests_hanging the guests the sky's rule refused, art
  * hanging into a room under the sky from an enclosed room over it with no
  * link (hd_vis.h, guestRule), each with a visguest line of its holder, its
- * group, its triangles in the holder's inside and their box. */
+ * group, its triangles in the holder's inside and their box;
+ * openings_state the openings the flipmaps' states refused, a room number
+ * whose room, while the holder is drawn, is linked with it in no state of
+ * the maps that has both in the world (HDVisTables::stateRefused), each
+ * with a visopening line of the holder, its bare face and the room
+ * behind. */
 
 static int VisContents(int roomIndex)
 {
@@ -9412,12 +9432,13 @@ bool HDVisWalkOn()
 		Log("HDLOG level=%s vis=1 rooms=%d art_rooms=%d walls=%d bare=%d "
 			"void=%d guests=%d guest_tris=%lld wide=%d ms=%.0f twin=%d "
 			"wide_bare=%.2f edge=%.5f statics_held=%d statics_ms=%.0f "
-			"enclosed=%d hull_guests=%d hollow_hidden=%d guests_hanging=%d",
+			"enclosed=%d hull_guests=%d hollow_hidden=%d guests_hanging=%d "
+			"openings_state=%d",
 			g_stem, t->rooms, t->artRooms, t->wallFaces, t->bareFaces,
 			t->voidFaces, t->guestPairs, t->guestTris, t->widePortals, t->ms,
 			t->openingsTwin, p.wideBare, p.edge, t->staticsHeld, t->staticMs,
 			t->roomsEnclosed, g_vis_hull_guests, hollow_hidden,
-			t->guestsHanging);
+			t->guestsHanging, t->openingsState);
 
 		// The guests the sky's rule refused (HDVisRefused), one line each.
 		for (const HDVisRefused& one : t->hanging)
@@ -9425,6 +9446,12 @@ bool HDVisWalkOn()
 				"box=%.0f..%.0f,%.0f..%.0f,%.0f..%.0f refused=hanging", g_stem,
 				one.holder, one.group, one.tris, one.lo[0], one.hi[0],
 				one.lo[1], one.hi[1], one.lo[2], one.hi[2]);
+
+		/* The openings the flipmaps' states refused (HDVisStateRefused): the
+		 * holder, its bare face and the room behind it, one line each. */
+		for (const HDVisStateRefused& one : t->stateRefused)
+			Log("HDLOG visopening level=%s room=%d face=%d behind=%d "
+				"refused=flipstate", g_stem, one.holder, one.face, one.behind);
 	}
 
 	return true;

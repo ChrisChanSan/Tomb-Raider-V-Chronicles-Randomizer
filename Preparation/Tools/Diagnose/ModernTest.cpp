@@ -15321,6 +15321,131 @@ static void vis_hanging()
 		"vis: under no sky the link rule refuses it", t.guestsUnlinked, 1);
 }
 
+/* The openings and the flipmaps' states (hd_vis.cpp, `together`) on a level
+ * of three flipmap pairs built by hand, RICH1's shaft cut down: H (0) and
+ * its twin H' (3) hold the bare east face, S (1) and S' (4) the shaft
+ * behind it, linked with H by portals, and D (2) and D' (5) a box at the
+ * shaft's place - D with no record of its own, H' leading into D's number
+ * and D' leading into H's, as 96 leads into 85 and 86 into 21. With one
+ * map for all three, D is linked with H only by the closure over the twins,
+ * in no state that has both in the world: H's opening names S alone and H'
+ * names D's number, which holds D' while H' is drawn. With D on a map of
+ * its own, D' can stand at D's number beside H, and both are named. */
+static void vis_flip_state()
+{
+	trf::remaster::Trg trg;
+	std::vector<HDVisRoom> rooms(6);
+	std::vector<HDCoverFace> faces(2);
+	std::vector<HDVisPortal> portals(4);
+	const long x[6] = { 0, 5120, 5120, 0, 5120, 5120 };
+	const int xs[6] = { 6, 6, 4, 6, 6, 4 };
+	const int twin[6] = { 3, 4, 5, -1, -1, -1 };
+
+	for (int r = 0; r < 6; r++)
+	{
+		HDVisRoom& one = rooms[(size_t)r];
+
+		one.x = x[r];
+		one.y = 0;
+		one.z = 0;
+		one.xs = one.zs = xs[r];
+		one.top = -4096;
+		one.bottom = 0;
+		one.flags = 0;
+		one.twin = twin[r];
+		one.flip = twin[r] >= 0 ? 0 : -1;
+		one.firstFace = 0;
+		one.faceCount = r == 0 || r == 3 ? 2 : 0;
+		one.firstPortal = 0;
+		one.portalCount = 0;
+		one.firstLink = 0;
+		one.linkCount = 0;
+	}
+
+	// H's and H''s west wall (normal -x) and east wall (+x), as vis_tables.
+	const double w[4][3] = { { 1024, 0, 3072 }, { 1024, 0, 2048 },
+		{ 1024, -1024, 2048 }, { 1024, -1024, 3072 } };
+	const double e[4][3] = { { 5120, 0, 2048 }, { 5120, 0, 3072 },
+		{ 5120, -1024, 3072 }, { 5120, -1024, 2048 } };
+
+	for (int c = 0; c < 4; c++)
+		for (int k = 0; k < 3; k++)
+		{
+			faces[0].v[c][k] = w[c][k];
+			faces[1].v[c][k] = e[c][k];
+		}
+
+	faces[0].corners = faces[1].corners = 4;
+	faces[0].doubleSided = faces[1].doubleSided = 0;
+
+	/* The records: H to S and S back on H's east wall beside the bare face,
+	 * H' to D's number, D' to H's. */
+	const short pa[4][3] = { { 5120, 0, 3072 }, { 5120, 0, 4096 },
+		{ 5120, -1024, 4096 }, { 5120, -1024, 3072 } };
+	const int from[4] = { 0, 1, 3, 5 }, to[4] = { 1, 0, 2, 0 };
+
+	for (int i = 0; i < 4; i++)
+	{
+		portals[(size_t)i].to = to[i];
+		portals[(size_t)i].n[0] = (short)(from[i] % 3 == 0 ? -1 : 1);
+		portals[(size_t)i].n[1] = portals[(size_t)i].n[2] = 0;
+
+		for (int c = 0; c < 4; c++)
+			for (int k = 0; k < 3; k++)
+				portals[(size_t)i].v[c][k] = (short)(k == 0 ?
+					pa[c][0] - x[from[i]] : pa[c][k]);
+
+		rooms[(size_t)from[i]].firstPortal = i;
+		rooms[(size_t)from[i]].portalCount = 1;
+	}
+
+	// H's and H''s own art on the west face only: the east face is bare.
+	trg.groups.resize(6);
+
+	for (int g : { 0, 3 })
+	{
+		trf::remaster::TrgPart part;
+		const float a[3] = { 1024, 0, 3072 }, b[3] = { 1024, 0, 2048 };
+		const float c[3] = { 1024, -1024, 2048 };
+		const float d[3] = { 1024, -1024, 3072 };
+
+		part.pass[0].start = (uint32_t)trg.indices.size();
+		vis_tri(trg, 0, 0, 0, a, b, c);
+		vis_tri(trg, 0, 0, 0, a, c, d);
+		part.pass[0].count = (uint32_t)trg.indices.size() - part.pass[0].start;
+		trg.groups[(size_t)g].parts.push_back(part);
+	}
+
+	HDVisTables t;
+	const HDVisParams p = HDVisDefaults();
+
+	HDVisBuild(trg, &rooms[0], 6, &faces[0], 2, &portals[0], 4, 0, 0, p, &t);
+	ok(t.openCount[0] == 1 && t.openings[(size_t)t.openFirst[0]].behind == 1,
+		"vis: H's bare face names the shaft S alone", t.openCount[0], 1);
+	ok(t.openingsState == 1 && t.stateRefused.size() == 1 &&
+		t.stateRefused[0].holder == 0 && t.stateRefused[0].face == 1 &&
+		t.stateRefused[0].behind == 2,
+		"vis: D, linked with H only through H', is refused by the states",
+		t.openingsState, 1);
+	ok(t.openCount[3] == 1 && t.openings[(size_t)t.openFirst[3]].behind == 2,
+		"vis: H' names D's number, which holds D' while H' is drawn",
+		t.openCount[3] ? t.openings[(size_t)t.openFirst[3]].behind : -1, 2);
+
+	// D on a map of its own: D' can stand at D's number beside H.
+	rooms[2].flip = 1;
+	HDVisBuild(trg, &rooms[0], 6, &faces[0], 2, &portals[0], 4, 0, 0, p, &t);
+	ok(t.openCount[0] == 2 && t.openingsState == 0,
+		"vis: with D on another map H names S and D", t.openCount[0], 2);
+
+	// No map known: the states cannot be told, every link holds.
+	for (HDVisRoom& one : rooms)
+		one.flip = -1;
+
+	HDVisBuild(trg, &rooms[0], 6, &faces[0], 2, &portals[0], 4, 0, 0, p, &t);
+	ok(t.openCount[0] == 2 && t.openingsState == 0,
+		"vis: with no map known H names S and D", t.openCount[0], 2);
+}
+
 /* The art of a static carried to another placement of its slot
  * (hd_artcopy.h) on a level of two rooms built by hand, RICH2's stairwell
  * cut down: room 0 drawn by its own art, x and z 0..6144, y -1536..0, and
@@ -31475,6 +31600,7 @@ int main()
 	stand_cover();
 	vis_tables();
 	vis_hanging();
+	vis_flip_state();
 	vis_plane();
 	vis_wall();
 	vis_hidden_room();

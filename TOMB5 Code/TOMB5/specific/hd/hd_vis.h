@@ -65,6 +65,9 @@ struct HDVisRoom
 	long top, bottom;	// the box in y: the highest ceiling, the lowest floor
 	int flags;			// ROOM_INFO flags: 8 is ROOM_OUTSIDE, under the sky
 	int twin;			// the flipmap twin, -1 for none
+	/* The flipmap that swaps a room naming a twin (ROOM_INFO FlipNumber),
+	 * -1 for none or not known; the twin is asked by its main room's. */
+	int flip = -1;
 	int firstFace, faceCount;
 	int firstPortal, portalCount;	// in the room's own door order
 	int firstLink, linkCount;
@@ -97,6 +100,18 @@ struct HDVisRefused
 	int group;
 	int tris;
 	float lo[3], hi[3];
+};
+
+/* An opening the flipmaps' states refused (HDVisTables::stateRefused): the
+ * holder, its bare face (counted in the holder's own faces) and the room
+ * behind it, named by its pair's main room - linked with the holder only
+ * by the closure over the twins, in no state of the flipmaps that has both
+ * in the world. */
+struct HDVisStateRefused
+{
+	int holder;
+	int face;
+	int behind;
 };
 
 /* A classic wall face of a room its own art leaves bare, and the room behind
@@ -236,6 +251,13 @@ struct HDVisTables
 	int guestsHanging = 0;
 	std::vector<HDVisRefused> hanging;
 	int openingsUnlinked = 0;
+	/* What the flipmaps' states took out: the openings onto a room number
+	 * whose room, while the holder is drawn, is linked with the holder
+	 * only by the closure over the twins, in no state of the maps that has
+	 * both in the world (HDVisBuild, `together`) - each in `stateRefused`,
+	 * for the log. */
+	int openingsState = 0;
+	std::vector<HDVisStateRefused> stateRefused;
 	/* Openings that named the other room of a flipmap pair, named by the
 	 * pair's main room instead. */
 	int openingsTwin = 0;

@@ -222,7 +222,9 @@ void RaptorControl(short item_number)
 
 			if (enemy == lara_item)
 			{
-				if (!(raptor->flags & 1) && item->touch_bits & 0xFF7C00)
+				// Refused while a scene holds Lara (scene_hold.h).
+				if (!(raptor->flags & 1) && item->touch_bits & 0xFF7C00 &&
+					!SceneHoldRefuses(EnemyDamage(balance.dmgRaptorBite), item->object_number, "raptor-bite"))
 				{
 					raptor->flags |= 1;
 					CreatureEffect(item, &raptor_bite, DoBloodSplat);
@@ -261,7 +263,9 @@ void RaptorControl(short item_number)
 
 			if (enemy == lara_item)
 			{
-				if (!(raptor->flags & 1) && item->touch_bits & 0xFF7C00)
+				// Refused while a scene holds Lara (scene_hold.h).
+				if (!(raptor->flags & 1) && item->touch_bits & 0xFF7C00 &&
+					!SceneHoldRefuses(EnemyDamage(balance.dmgRaptorJump), item->object_number, "raptor-jump"))
 				{
 					raptor->flags |= 1;
 					CreatureEffect(item, &raptor_bite, DoBloodSplat);

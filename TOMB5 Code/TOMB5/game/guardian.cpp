@@ -521,7 +521,9 @@ void GuardianControl(short item_number)
 										pos3.z -= tz;
 									}
 
-									if (lp1 == 999)
+									// Refused in a held scene (scene_hold.h).
+									if (lp1 == 999 && !SceneHoldRefuses(SCENE_HOLD_WHOLE_LIFE,
+										item->object_number, "guardian"))
 									{
 										LaraBurn();
 										lara.BurnCount = 48;

@@ -370,8 +370,12 @@ void RomangodControl(short item_number)
 			}
 			else if (item->frame_number > anims[item->anim_number].frame_base + 54 && item->frame_number < anims[item->anim_number].frame_base + 74 && item->touch_bits)
 			{
-				lara_item->hit_points -= EnemyDamage(balance.dmgGodStrike);
-				lara_item->hit_status = 1;
+				// Refused while a scene holds Lara (scene_hold.h).
+				if (!SceneHoldRefuses(EnemyDamage(balance.dmgGodStrike), item->object_number, "god-strike"))
+				{
+					lara_item->hit_points -= EnemyDamage(balance.dmgGodStrike);
+					lara_item->hit_status = 1;
+				}
 			}
 			else if (item->frame_number == anims[item->anim_number].frame_end)
 			{
@@ -580,7 +584,10 @@ void RomangodControl(short item_number)
 						}
 					}
 
-					if (!roman->flags && item->touch_bits & 0xC000)
+					// Refused while a scene holds Lara (scene_hold.h).
+					if (!roman->flags && item->touch_bits & 0xC000 &&
+						!SceneHoldRefuses(EnemyDamage(balance.dmgGodLightning),
+							item->object_number, "god-lightning"))
 					{
 						lara_item->hit_points -= EnemyDamage(balance.dmgGodLightning);
 						lara_item->hit_status = 1;

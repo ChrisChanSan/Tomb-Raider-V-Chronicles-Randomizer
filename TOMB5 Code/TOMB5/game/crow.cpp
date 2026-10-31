@@ -138,7 +138,9 @@ void CrowControl(short item_number)
 
 		case 6:
 
-			if (!crow->flags && item->touch_bits)
+			// Refused while a scene holds Lara (scene_hold.h).
+			if (!crow->flags && item->touch_bits &&
+				!SceneHoldRefuses(EnemyDamage(balance.dmgCrowStrike), item->object_number, "crow"))
 			{
 				lara_item->hit_points -= EnemyDamage(balance.dmgCrowStrike);
 				lara_item->hit_status = 1;

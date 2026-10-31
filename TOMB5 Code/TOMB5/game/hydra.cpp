@@ -157,7 +157,9 @@ void HydraControl(short item_number)
 
 			if (!hydra->flags)
 			{
-				if (item->touch_bits & 0x400)
+				// Refused while a scene holds Lara (scene_hold.h).
+				if (item->touch_bits & 0x400 &&
+					!SceneHoldRefuses(EnemyDamage(balance.dmgHydraBeam), item->object_number, "hydra"))
 				{
 					lara_item->hit_points -= EnemyDamage(balance.dmgHydraBeam);
 					lara_item->hit_status = 1;

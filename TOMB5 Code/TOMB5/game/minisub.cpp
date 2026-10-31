@@ -270,7 +270,9 @@ void TorpedoControl(short item_number)
 		return;
 	}
 
-	if (ItemNearLara(&item->pos, 200))
+	// Refused while a scene holds Lara (scene_hold.h): it runs on.
+	if (ItemNearLara(&item->pos, 200) &&
+		!SceneHoldRefuses(EnemyDamage(balance.dmgTorpedo), item->object_number, "torpedo"))
 	{
 		TriggerUnderwaterExplosion(item);
 		SoundEffect(SFX_UNDERWATER_EXPLOSION, &item->pos, SFX_ALWAYS);

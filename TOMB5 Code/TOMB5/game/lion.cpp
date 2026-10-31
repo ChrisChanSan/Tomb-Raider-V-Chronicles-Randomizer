@@ -129,7 +129,9 @@ void LionControl(short item_number)
 
 		case 4:
 
-			if (!item->required_anim_state && item->touch_bits & 0x200048)
+			// Refused while a scene holds Lara (scene_hold.h).
+			if (!item->required_anim_state && item->touch_bits & 0x200048 &&
+				!SceneHoldRefuses(EnemyDamage(balance.dmgLionJump), item->object_number, "lion-jump"))
 			{
 				lara_item->hit_points -= EnemyDamage(balance.dmgLionJump);
 				lara_item->hit_status = 1;
@@ -142,7 +144,9 @@ void LionControl(short item_number)
 		case 7:
 			lion->maximum_turn = 182;
 
-			if (!item->required_anim_state && item->touch_bits & 0x200048)
+			// Refused while a scene holds Lara (scene_hold.h).
+			if (!item->required_anim_state && item->touch_bits & 0x200048 &&
+				!SceneHoldRefuses(EnemyDamage(balance.dmgLionPaw), item->object_number, "lion-paw"))
 			{
 				CreatureEffectT(item, &lion_bite, 10, item->pos.y_rot, DoBloodSplat);
 				lara_item->hit_points -= EnemyDamage(balance.dmgLionPaw);

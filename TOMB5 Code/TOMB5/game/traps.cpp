@@ -78,7 +78,10 @@ void LaraBurn()
 {
 	short fire;
 
-	if (!lara.burn && !lara.BurnSmoke)
+	// A fire on her burns to her death: refused while a scene holds Lara
+	// (scene_hold.h), for every caller at once.
+	if (!lara.burn && !lara.BurnSmoke &&
+		!SceneHoldRefuses(SCENE_HOLD_WHOLE_LIFE, -1, "burn"))
 	{
 		fire = CreateEffect(lara_item->room_number);
 
@@ -98,7 +101,9 @@ void LavaBurn(ITEM_INFO* item)
 	{
 		room_number = item->room_number;
 
-		if (item->floor == GetHeight(GetFloor(item->pos.x_pos, 32000, item->pos.z_pos, &room_number), item->pos.x_pos, 32000, item->pos.z_pos))
+		// Refused while a scene holds Lara (scene_hold.h).
+		if (item->floor == GetHeight(GetFloor(item->pos.x_pos, 32000, item->pos.z_pos, &room_number), item->pos.x_pos, 32000, item->pos.z_pos) &&
+			!SceneHoldRefuses(SCENE_HOLD_WHOLE_LIFE, -1, "lava"))
 		{
 			item->hit_points = -1;
 			item->hit_status = 1;
@@ -776,7 +781,9 @@ void RollingBallCollision(short item_number, ITEM_INFO* laraitem, COLL_INFO* col
 	if (!TestBoundsCollide(item, laraitem, coll->radius) || !TestCollision(item, laraitem))
 		return;
 
-	if (TriggerActive(item) && (item->item_flags[0] || item->fallspeed))
+	// Refused while a scene holds Lara (scene_hold.h): it pushes her.
+	if (TriggerActive(item) && (item->item_flags[0] || item->fallspeed) &&
+		!SceneHoldRefuses(SCENE_HOLD_WHOLE_LIFE, item->object_number, "rolling-ball"))
 	{
 		lara_item->anim_number = ANIM_RBALL_DEATH;
 		lara_item->frame_number = anims[ANIM_RBALL_DEATH].frame_base;
@@ -1348,7 +1355,9 @@ void ControlScaledSpike(short item_number)
 
 			if ((item->item_flags[0] > 1024 || lara_item->gravity_status) && (item->trigger_flags & 7) > 2 && (item->trigger_flags & 7) < 6)
 			{
-				if (lara_item->fallspeed > 6 || item->item_flags[0] > 1024)
+				// Refused while a scene holds Lara (scene_hold.h).
+				if ((lara_item->fallspeed > 6 || item->item_flags[0] > 1024) &&
+					!SceneHoldRefuses(SCENE_HOLD_WHOLE_LIFE, item->object_number, "spikes"))
 				{
 					lara_item->hit_points = -1;
 					num = 20;
@@ -1395,7 +1404,9 @@ void ControlScaledSpike(short item_number)
 				num--;
 			}
 
-			if (lara_item->hit_points <= 0)
+			// Refused while a scene holds Lara (scene_hold.h).
+			if (lara_item->hit_points <= 0 &&
+				!SceneHoldRefuses(SCENE_HOLD_WHOLE_LIFE, item->object_number, "spiked"))
 			{
 				room_number = lara_item->room_number;
 				dy = GetHeight(GetFloor(lara_item->pos.x_pos, lara_item->pos.y_pos, lara_item->pos.z_pos, &room_number),

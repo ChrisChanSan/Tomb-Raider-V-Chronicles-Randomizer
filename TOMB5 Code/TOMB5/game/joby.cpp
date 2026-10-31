@@ -138,7 +138,9 @@ void ControlElectricalCables(short item_number)
 			pos.z = 0;
 			GetJointAbsPosition(item, &pos, i);
 
-			if (CheckCableBox(&pos, item->trigger_flags))
+			// Refused while a scene holds Lara (scene_hold.h).
+			if (CheckCableBox(&pos, item->trigger_flags) &&
+				!SceneHoldRefuses(SCENE_HOLD_WHOLE_LIFE, item->object_number, "cable"))
 			{
 				for (int j = 0; j < 48; j++)
 					TriggerLaraSparks(0);
@@ -209,9 +211,17 @@ void ControlElectricalCables(short item_number)
 				TriggerLaraSparks(0);
 				TriggerLaraSparks(1);
 				TriggerDynamic(pos.x, pos.y, pos.z, 8, 0, GetRandomControl() & 127, (GetRandomControl() & 63) + 128);
-				lara_item->hit_points -= (short)balance.dmgPowerCable;
+
+				// Refused while a scene holds Lara (scene_hold.h).
+				if (!SceneHoldRefuses(balance.dmgPowerCable, item->object_number, "power"))
+					lara_item->hit_points -= (short)balance.dmgPowerCable;
+
 				return;
 			}
+
+			// Refused while a scene holds Lara (scene_hold.h).
+			if (SceneHoldRefuses(SCENE_HOLD_WHOLE_LIFE, item->object_number, "power"))
+				return;
 
 			item->item_flags[0] = 28;
 			LaraBurn();
@@ -242,7 +252,12 @@ void WreckingBallCollision(short item_num, ITEM_INFO* l, COLL_INFO* coll)
 		return;
 
 	if (middle)
-		l->hit_points = 0;
+	{
+		// Refused while a scene holds Lara (scene_hold.h).
+		if (!SceneHoldRefuses(SCENE_HOLD_WHOLE_LIFE, item->object_number,
+			"wrecking-ball"))
+			l->hit_points = 0;
+	}
 	else
 		l->hit_points -= (short)damage;
 

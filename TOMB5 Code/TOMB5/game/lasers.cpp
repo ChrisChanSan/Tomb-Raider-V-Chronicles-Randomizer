@@ -58,7 +58,9 @@ void ControlLasers(short item_number)
 
 		if (CheckLaserBox(bbox))
 		{
-			if (!lara.burn && item->trigger_flags & 2)
+			// Refused while a scene holds Lara (scene_hold.h).
+			if (!lara.burn && item->trigger_flags & 2 &&
+				!SceneHoldRefuses(SCENE_HOLD_WHOLE_LIFE, item->object_number, "laser"))
 			{
 				LaraBurn();
 				lara.BurnCount = 24;
@@ -103,7 +105,9 @@ void ControlSteamLasers(short item_number)
 
 		if (SteamLasers[(GlobalCounter >> 5) & 7][item->trigger_flags])
 		{
-			if (CheckLaserBox(bbox) && !lara.burn)
+			// Refused while a scene holds Lara (scene_hold.h).
+			if (CheckLaserBox(bbox) && !lara.burn &&
+				!SceneHoldRefuses(SCENE_HOLD_WHOLE_LIFE, item->object_number, "steam-laser"))
 			{
 				LaraBurn();
 				lara.BurnCount = 24;
@@ -201,7 +205,9 @@ void ControlFloorLasers(short item_number)
 			bbox[4] = item->pos.z_pos + laser->v1.z;
 			bbox[5] = item->pos.z_pos + laser->v4.z;
 
-			if (CheckLaserBox(bbox) && !lara.burn)
+			// Refused while a scene holds Lara (scene_hold.h).
+			if (CheckLaserBox(bbox) && !lara.burn &&
+				!SceneHoldRefuses(SCENE_HOLD_WHOLE_LIFE, item->object_number, "floor-laser"))
 			{
 				LaraBurn();
 				lara.BurnCount = 24;

@@ -457,7 +457,9 @@ void ControlGenSlot1(short item_number)
 				hit = 1;
 		}
 
-		if (hit)
+		// Refused while a scene holds Lara (scene_hold.h).
+		if (hit && !SceneHoldRefuses(SCENE_HOLD_WHOLE_LIFE, item->object_number,
+			"crush"))
 		{
 			for (int i = 7; i < 15; i++)
 			{

@@ -268,7 +268,10 @@ void CompyControl(short item_number)
 			// The second branch (gnawing at the carcass) drops with deviation 1.
 			if (!(compy->flags & 1))
 			{
-				if (item->touch_bits & 4 && compys_attack_lara)
+				// Refused while a scene holds Lara (scene_hold.h).
+				if (item->touch_bits & 4 && compys_attack_lara &&
+					!SceneHoldRefuses(EnemyDamage(balance.dmgCompyBite),
+						item->object_number, "compy"))
 				{
 					compy->flags |= 1;
 					lara_item->hit_points -= EnemyDamage(balance.dmgCompyBite);

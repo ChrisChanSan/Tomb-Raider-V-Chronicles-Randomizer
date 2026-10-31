@@ -245,9 +245,11 @@ void MazeMonsterControl(short item_number)
 				{
 					frame = anims[item->anim_number].frame_base;
 
+					// Both refused while a scene holds Lara (scene_hold.h).
 					if (item->touch_bits & 0x3C000 &&
 						(item->anim_number == anim + 8 && item->frame_number > frame + 19 && item->frame_number < frame + 25 ||
-						item->anim_number == anim + 2 && item->frame_number > frame + 6 && item->frame_number < frame + 16))
+						item->anim_number == anim + 2 && item->frame_number > frame + 6 && item->frame_number < frame + 16) &&
+						!SceneHoldRefuses(EnemyDamage(balance.dmgMazeMonster), item->object_number, "maze-left"))
 					{
 						CreatureEffectT(item, &mazemonster_hitleft, 20, item->pos.y_rot, DoBloodSplat);
 						lara_item->hit_points -= EnemyDamage(balance.dmgMazeMonster);
@@ -256,7 +258,8 @@ void MazeMonsterControl(short item_number)
 					}
 					else if (item->touch_bits & 0xF00000 &&
 						(item->anim_number == anim + 8 && item->frame_number > frame + 13 && item->frame_number < frame + 20 ||
-						item->anim_number == anim + 2 && item->frame_number > frame + 33 && item->frame_number < frame + 43))
+						item->anim_number == anim + 2 && item->frame_number > frame + 33 && item->frame_number < frame + 43) &&
+						!SceneHoldRefuses(EnemyDamage(balance.dmgMazeMonster), item->object_number, "maze-right"))
 					{
 						CreatureEffectT(item, &mazemonster_hitright, 20, item->pos.y_rot, DoBloodSplat);
 						lara_item->hit_points -= EnemyDamage(balance.dmgMazeMonster);

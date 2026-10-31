@@ -238,7 +238,9 @@ void ImpControl(short item_number)
 		case 5:
 			imp->maximum_turn = -1;
 
-			if (!imp->flags && item->touch_bits & 0x280)
+			// Refused while a scene holds Lara (scene_hold.h).
+			if (!imp->flags && item->touch_bits & 0x280 &&
+				!SceneHoldRefuses(EnemyDamage(balance.dmgImpThrow), item->object_number, "imp"))
 			{
 				lara_item->hit_points -= EnemyDamage(balance.dmgImpThrow);
 				lara_item->hit_status = 1;

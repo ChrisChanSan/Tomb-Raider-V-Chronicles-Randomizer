@@ -240,7 +240,9 @@ void UpdateBats()
 			{
 				TriggerBlood(fx->pos.x_pos, fx->pos.y_pos, fx->pos.z_pos, GetRandomControl() << 1, 2);
 
-				if (lara_item->hit_points > 0)
+				// Refused while a scene holds Lara (scene_hold.h).
+				if (lara_item->hit_points > 0 &&
+					!SceneHoldRefuses(EnemyDamage(balance.dmgBats), -1, "bats"))
 					lara_item->hit_points -= EnemyDamage(balance.dmgBats);
 			}
 		}

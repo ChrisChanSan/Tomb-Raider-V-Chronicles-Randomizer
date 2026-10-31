@@ -793,6 +793,9 @@
     <ClInclude Include="TOMB5\game\savegame.h">
       <Filter>TOMB5\game</Filter>
     </ClInclude>
+    <ClInclude Include="TOMB5\game\scene_hold.h">
+      <Filter>TOMB5\game</Filter>
+    </ClInclude>
     <ClInclude Include="TOMB5\game\crow.h">
       <Filter>TOMB5\game</Filter>
     </ClInclude>

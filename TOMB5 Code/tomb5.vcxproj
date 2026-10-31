@@ -552,6 +552,7 @@
     <ClInclude Include="TOMB5\game\rope.h" />
     <ClInclude Include="TOMB5\game\sas.h" />
     <ClInclude Include="TOMB5\game\savegame.h" />
+    <ClInclude Include="TOMB5\game\scene_hold.h" />
     <ClInclude Include="TOMB5\game\setup.h" />
     <ClInclude Include="TOMB5\game\skeleton.h" />
     <ClInclude Include="TOMB5\game\sniper.h" />

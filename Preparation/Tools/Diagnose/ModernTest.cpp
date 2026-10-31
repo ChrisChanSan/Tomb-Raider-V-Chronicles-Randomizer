@@ -113,6 +113,9 @@
 // Who takes a pickup in reach at level start: the search objects before the
 // enemies (carrier_pass).
 #include "../../../TOMB5 Code/TOMB5/game/carrier_rule.h"
+// A scene that holds Lara leaves her life and air as they were: the kind,
+// the remembering and putting back, the blows refused (scene_hold).
+#include "../../../TOMB5 Code/TOMB5/game/scene_hold.h"
 // A room group stored off its height: the count, the pick (yshift_rule).
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_scan.h"
 // The fog bulbs' body: the span, the column, the veil, the breath (fog_body),
@@ -30931,6 +30934,362 @@ static void carrier_pass()
 	free(setup);
 }
 
+/* The census of the places that write Lara's life (game\scene_hold.h): per
+ * file, the subtractions through lara_item, those of them a Balance.txt
+ * value decides, and the places that ask the hold before a blow lands. */
+struct SceneHoldCensus
+{
+	const char* file;
+	int minus;		// "lara_item->hit_points -="
+	int balance;	// "hit_points -= EnemyDamage(" or "(short)balance."
+	int asks;		// "SceneHoldRefuses("
+};
+
+static const SceneHoldCensus scene_hold_census[] =
+{
+	{ "andrea.cpp", 0, 0, 1 },		// the crush that sets her life to 0
+	{ "autogun.cpp", 1, 1, 1 },
+	{ "bat.cpp", 1, 1, 1 },
+	{ "box.cpp", 0, 0, 1 },			// CreatureKill, called by no enemy
+	{ "camera.cpp", 1, 0, 0 },		// the sniper, 100
+	{ "chef.cpp", 1, 1, 1 },
+	{ "compy.cpp", 1, 1, 1 },
+	{ "control.cpp", 1, 0, 1 },		// the poison; the helper's definition
+	{ "crow.cpp", 1, 1, 1 },
+	{ "dog.cpp", 3, 3, 3 },
+	{ "effect2.cpp", 4, 0, 0 },		// 300, 200, 50, 2; the fire in LaraBurn
+	{ "gladiatr.cpp", 1, 1, 1 },
+	{ "guardian.cpp", 0, 0, 1 },
+	{ "hitman.cpp", 0, 0, 1 },
+	{ "huskie.cpp", 2, 2, 2 },
+	{ "hydra.cpp", 1, 1, 1 },
+	{ "imp.cpp", 1, 1, 1 },
+	{ "joby.cpp", 1, 1, 4 },		// the cable twice, the ball's crush
+	{ "lara.cpp", 0, 0, 1 },		// the fall
+	{ "lara1gun.cpp", 1, 0, 0 },	// her own grenade, 50
+	{ "lasers.cpp", 0, 0, 3 },
+	{ "lion.cpp", 2, 2, 2 },
+	{ "minisub.cpp", 1, 1, 1 },
+	{ "people.cpp", 1, 1, 1 },		// every gun of the human enemies
+	{ "raptor.cpp", 2, 2, 2 },
+	{ "romangod.cpp", 2, 2, 2 },
+	{ "skeleton.cpp", 1, 1, 1 },
+	{ "spider.cpp", 1, 1, 1 },
+	{ "swampy.cpp", 1, 1, 1 },
+	{ "tomb4fx.cpp", 1, 0, 0 },		// the shockwave, 33 at most
+	{ "tower.cpp", 3, 3, 4 },		// the iris also sets her life to 0
+	{ "traps.cpp", 6, 0, 5 },		// fire, lava, ball, spikes twice
+	{ "trex.cpp", 2, 1, 2 },		// the kick through a local
+	{ "twogun.cpp", 1, 1, 2 },
+	{ "willwisp.cpp", 2, 2, 2 }
+};
+
+// Where `what` stands in `text`, or -1.
+static long scene_hold_at(const char* text, const char* what)
+{
+	const char* p = text ? strstr(text, what) : 0;
+
+	return p ? (long)(p - text) : -1;
+}
+
+/* A scene that holds Lara (game\scene_hold.h): the kind of every flag set;
+ * a cutscene's hold from its start through blows to its end; the air of a
+ * flyby; a Lara dead at the start and one whose death began; a flyby a
+ * cutscene takes over; the class rule against made-up balance tables; and
+ * the engine's own text - where the looks stand in the tick, the flyby's
+ * old memory gone, the T-Rex's bite asked, the census of every place. */
+static void scene_hold()
+{
+	printf("a scene that holds Lara leaves her life and air as they were\n");
+
+	long right = 0;
+
+	for (int c = 0; c < 2; c++)
+		for (int u = 0; u < 2; u++)
+			for (int d = 0; d < 2; d++)
+			{
+				const int want = c ? SCENE_HOLD_CUTSEQ :
+					u && d ? SCENE_HOLD_FLYBY : SCENE_HOLD_NONE;
+
+				right += SceneHoldKind(c, u, d) == want;
+			}
+
+	ok(right == 8, "hold: the kind of all eight flag sets", right, 8);
+	ok(SceneHoldKind(0, 0, 1) == SCENE_HOLD_NONE,
+		"hold: her control taken without a flyby holds nothing",
+		SceneHoldKind(0, 0, 1), SCENE_HOLD_NONE);
+	ok(SceneHoldKind(0, 1, 0) == SCENE_HOLD_NONE,
+		"hold: a flyby that leaves her control holds nothing",
+		SceneHoldKind(0, 1, 0), SCENE_HOLD_NONE);
+	ok(!strcmp(SceneHoldName(SCENE_HOLD_CUTSEQ), "cutseq") &&
+		!strcmp(SceneHoldName(SCENE_HOLD_FLYBY), "flyby") &&
+		!strcmp(SceneHoldName(SCENE_HOLD_NONE), "none"),
+		"hold: the words of the HOLDLOG lines", 0, 0);
+
+	// A cutscene: nothing, the start, blows in three ticks, the end.
+	SCENE_HOLD h = {};
+	short life = 640, air = 1800;
+
+	ok(SceneHoldSync(&h, SCENE_HOLD_NONE, &life, &air, true, false) ==
+		SCENE_HOLD_KEPT && h.kind == SCENE_HOLD_NONE && life == 640,
+		"hold: no scene, nothing remembered or put back", h.kind, 0);
+	ok(SceneHoldSync(&h, SCENE_HOLD_CUTSEQ, &life, &air, false, false) ==
+		SCENE_HOLD_BEGAN && h.life == 640 && h.air == 1800 && h.ticks == 0,
+		"hold: the scene's start remembers her life and air", h.life, 640);
+	life -= 300;	// a guard's burst in the item loop
+	SceneHoldSync(&h, SCENE_HOLD_CUTSEQ, &life, &air, true, false);
+	ok(life == 640 && h.restored == 1 && h.ticks == 1,
+		"hold: a tick's first look puts her life back", life, 640);
+	SceneHoldSync(&h, SCENE_HOLD_CUTSEQ, &life, &air, false, false);
+	ok(h.restored == 1 && h.ticks == 1,
+		"hold: a look with nothing to undo counts nothing", h.restored, 1);
+	life -= 999;	// one short of her whole life: it lands...
+	ok(life < 0, "hold: a blow of 999 lands on a life of 640", life, -359);
+	SceneHoldSync(&h, SCENE_HOLD_CUTSEQ, &life, &air, false, false);
+	ok(life == 640 && h.restored == 2,
+		"hold: ...and is put back before her control", life, 640);
+	life -= 50;
+	ok(SceneHoldSync(&h, SCENE_HOLD_NONE, &life, &air, false, false) ==
+		SCENE_HOLD_ENDED && life == 640 && h.kind == SCENE_HOLD_NONE &&
+		h.last == SCENE_HOLD_CUTSEQ,
+		"hold: the end puts her life back a last time", life, 640);
+	ok(h.restored == 3 && h.ticks == 1 && h.refused == 0,
+		"hold: the end line's counts", h.restored, 3);
+	life -= 100;
+	SceneHoldSync(&h, SCENE_HOLD_NONE, &life, &air, true, false);
+	ok(life == 540, "hold: after the end a blow stands", life, 540);
+
+	// A flyby under water: her air is held, and so is its refill.
+	SCENE_HOLD f = {};
+
+	life = 1000;
+	air = 900;
+	SceneHoldSync(&f, SCENE_HOLD_FLYBY, &life, &air, false, false);
+	air -= 1;	// her control under water
+	SceneHoldSync(&f, SCENE_HOLD_FLYBY, &life, &air, false, false);
+	ok(air == 900 && f.restored == 0,
+		"hold: her air is put back; her life unchanged counts none", air,
+		900);
+	air += 10;	// above water it would fill again
+	SceneHoldSync(&f, SCENE_HOLD_FLYBY, &life, &air, true, false);
+	ok(air == 900 && f.ticks == 1,
+		"hold: nor does her air fill while she is held", air, 900);
+
+	// Dead at the start: no scene brings her back.
+	SCENE_HOLD d = {};
+
+	life = -1;
+	air = -1;
+	SceneHoldSync(&d, SCENE_HOLD_CUTSEQ, &life, &air, false, false);
+	life = 0;
+	SceneHoldSync(&d, SCENE_HOLD_CUTSEQ, &life, &air, true, false);
+	ok(life == -1 && d.life == -1,
+		"hold: a life of -1 at the start stays -1", life, -1);
+	SCENE_HOLD z = {};
+
+	life = 0;
+	air = 1800;
+	SceneHoldSync(&z, SCENE_HOLD_FLYBY, &life, &air, false, false);
+	SceneHoldSync(&z, SCENE_HOLD_NONE, &life, &air, false, false);
+	ok(life == 0, "hold: a life of 0 at the start is 0 at the end", life,
+		0);
+
+	// Her death begun inside the hold - her own control in a flyby.
+	SCENE_HOLD g = {};
+
+	life = 5;
+	air = 0;
+	SceneHoldSync(&g, SCENE_HOLD_FLYBY, &life, &air, false, false);
+	life = -1;
+	ok(!SceneHoldPut(&g, &life, &air, true) && life == -1,
+		"hold: once her death has begun nothing is put back", life, -1);
+	ok(SceneHoldSync(&g, SCENE_HOLD_NONE, &life, &air, false, true) ==
+		SCENE_HOLD_ENDED && life == -1,
+		"hold: nor at the end - a dead Lara stays dead", life, -1);
+
+	// A cutscene over a flyby: one hold, the flyby's memory.
+	SCENE_HOLD k = {};
+
+	life = 800;
+	air = 1800;
+	SceneHoldSync(&k, SCENE_HOLD_FLYBY, &life, &air, false, false);
+	life = 300;
+	ok(SceneHoldSync(&k, SCENE_HOLD_CUTSEQ, &life, &air, true, false) ==
+		SCENE_HOLD_KEPT && life == 800 && k.kind == SCENE_HOLD_CUTSEQ,
+		"hold: a cutscene over a flyby keeps the flyby's memory", life,
+		800);
+
+	/* The class rule: the threshold is her maximum life, whatever the
+	 * table says - two made-up Balance.txt tables, one of them with the
+	 * EnemyDamage percentage line at 300. */
+	struct Blow
+	{
+		const char* name;
+		long damage;
+	};
+	static const Blow mild[] =
+	{
+		{ "DMG_TRex_Bite", 10000 }, { "DMG_Skeleton_Strike", 400 },
+		{ "DMG_Dog_Jump", 80 }, { "DMG_Bats", 2 }, { "DMG_Torpedo", 300 }
+	};
+	static const Blow harsh[] =
+	{
+		{ "DMG_TRex_Bite", 30000 }, { "DMG_Skeleton_Strike", 1200 },
+		{ "DMG_Dog_Jump", 240 }, { "DMG_Bats", 6 }, { "DMG_Torpedo", 900 },
+		{ "DMG_Gunship", 999 }, { "DMG_Iris", 1000 }
+	};
+	long refused = 0, landed = 0;
+
+	for (const Blow& b : mild)
+	{
+		refused += SceneHoldRefusesBlow(SCENE_HOLD_CUTSEQ, b.damage);
+		landed += !SceneHoldRefusesBlow(SCENE_HOLD_NONE, b.damage);
+	}
+
+	ok(refused == 1 && landed == 5,
+		"hold: today's table - only the bite refused, unheld all land",
+		refused, 1);
+	refused = 0;
+
+	for (const Blow& b : harsh)
+		refused += SceneHoldRefusesBlow(SCENE_HOLD_FLYBY, b.damage);
+
+	ok(refused == 3, "hold: a harsh table - the bite, 1200 and 1000",
+		refused, 3);
+	ok(!SceneHoldRefusesBlow(SCENE_HOLD_FLYBY, SCENE_HOLD_WHOLE_LIFE - 1) &&
+		SceneHoldRefusesBlow(SCENE_HOLD_FLYBY, SCENE_HOLD_WHOLE_LIFE) &&
+		SCENE_HOLD_WHOLE_LIFE == 1000,
+		"hold: refused from her whole life, 1000, on", SCENE_HOLD_WHOLE_LIFE,
+		1000);
+	ok(!SceneHoldRefusesBlow(SCENE_HOLD_NONE, 32767),
+		"hold: with no scene nothing is refused", 0, 0);
+
+	// The engine's own text: the looks in the tick, in their order.
+	char* control = hd_switch_text("../../game/control.cpp");
+	static char body[65536];
+
+	glass_body(control, "long ControlPhase(long nframes, long demo_mode)", body,
+		sizeof(body));
+
+	const long first = scene_hold_at(body, "SceneHoldStep(1);");
+	const long loop = scene_hold_at(body, "item_num=next_item_active;");
+	const long again = scene_hold_at(body, "SceneHoldStep(0);lara.skelebob=0;");
+	const long poison = scene_hold_at(body, "lara.poisoned>>(8-lara.Gassed);");
+	const long her = scene_hold_at(body, "LaraControl(0);");
+	const long spot = scene_hold_at(body, "CalculateSpotCams();");
+
+	ok(first > 0 && first < loop,
+		"hold: ControlPhase looks before the item loop", first > 0, 1);
+	ok(poison > loop && again > poison && again < her && her < spot,
+		"hold: ...again after the poison, before her control", again > 0,
+		1);
+	ok(hd_switch_count(body, "SceneHoldStep(") == 2,
+		"hold: ControlPhase looks twice a tick",
+		hd_switch_count(body, "SceneHoldStep("), 2);
+	glass_body(control, "long SceneHoldRefuses(long damage, long slot, "
+		"const char* site)", body, sizeof(body));
+	ok(scene_hold_at(body, "SceneHoldStep(0);") >= 0 &&
+		scene_hold_at(body, "SceneHoldRefusesBlow(scene_hold.kind,damage)") >
+		scene_hold_at(body, "SceneHoldStep(0);"),
+		"hold: a blow asked looks at the scene first", body[0] != 0, 1);
+
+	// The flyby: Core's memory gone, its restore a look.
+	char* spotcam = hd_switch_text("../../game/spotcam.cpp");
+
+	ok(hd_switch_count(spotcam, "LaraHealth") == 0 &&
+		hd_switch_count(spotcam, "LaraAir") == 0,
+		"hold: the flyby keeps no memory of its own",
+		hd_switch_count(spotcam, "LaraHealth"), 0);
+	glass_body(spotcam, "void CalculateSpotCams()", body, sizeof(body));
+	ok(scene_hold_at(body, "SceneHoldStep(0);") >= 0 &&
+		scene_hold_at(body, "SceneHoldStep(0);") <
+		scene_hold_at(body, "cpx=Spline("),
+		"hold: CalculateSpotCams looks where Core put her life back",
+		body[0] != 0, 1);
+	ok(hd_switch_count(body, "SceneHoldStep(0);") == 4,
+		"hold: ...and where its cameras hand her control over or end",
+		hd_switch_count(body, "SceneHoldStep(0);"), 4);
+	glass_body(spotcam, "void InitialiseSpotCam(short Sequence)", body,
+		sizeof(body));
+	ok(scene_hold_at(body, "SceneHoldStep(0);") >
+		scene_hold_at(body, "bDisableLaraControl=1;"),
+		"hold: a flyby's start looks once its flag is read",
+		body[0] != 0, 1);
+
+	// The cutscene: the look at its start, the release before its end hook.
+	char* delta = hd_switch_text("../../game/deltapak.cpp");
+
+	glass_body(delta, "void init_cutseq_actors(char* data, long resident)",
+		body, sizeof(body));
+	ok(scene_hold_at(body, "GLOBAL_playing_cutseq=1;SceneHoldStep(0);") >= 0,
+		"hold: a cutscene's start looks the moment it plays", body[0] != 0,
+		1);
+	glass_body(delta, "void handle_cutseq_triggering(long name)", body,
+		sizeof(body));
+	ok(scene_hold_at(body, "SceneHoldRelease();if(cutseq_control_routines"
+		"[cutseq_num].end_func)") >= 0,
+		"hold: a cutscene lets go before its end hook", body[0] != 0, 1);
+
+	char* setup = hd_switch_text("../../game/setup.cpp");
+
+	glass_body(setup, "void reset_cutseq_vars()", body, sizeof(body));
+	ok(scene_hold_at(body, "SceneHoldReset();") >= 0,
+		"hold: a level load drops a hold of the level before",
+		body[0] != 0, 1);
+
+	// The T-Rex: the bite asked before blood and damage (glass_body keeps
+	// no opening brace).
+	char* trex = hd_switch_text("../../game/trex.cpp");
+
+	glass_body(trex, "void DinoControl(short item_number)", body,
+		sizeof(body));
+	ok(scene_hold_at(body, "if(!SceneHoldRefuses(EnemyDamage(balance."
+		"dmgTRexBite),item->object_number,\"trex-bite\"))CreatureEffect("
+		"item,&trex_hit,DoBloodSplat);lara_item->hit_points-=EnemyDamage("
+		"balance.dmgTRexBite);") >= 0,
+		"hold: the T-Rex's bite is asked before blood and damage",
+		body[0] != 0, 1);
+
+	// The census, file by file.
+	long minus = 0, asks = 0, wrong = 0;
+
+	for (const SceneHoldCensus& c : scene_hold_census)
+	{
+		char name[64];
+
+		snprintf(name, sizeof(name), "../../game/%s", c.file);
+
+		char* text = hd_switch_text(name);
+		const int m = hd_switch_count(text, "lara_item->hit_points -=");
+		const int b = hd_switch_count(text, "hit_points -= EnemyDamage(") +
+			hd_switch_count(text, "hit_points -= (short)balance.");
+		const int a = hd_switch_count(text, "SceneHoldRefuses(");
+
+		if (!text || m != c.minus || b != c.balance || a != c.asks ||
+			a < b)
+		{
+			wrong++;
+			printf("  census %s: %d/%d/%d, want %d/%d/%d\n", c.file, m, b,
+				a, c.minus, c.balance, c.asks);
+		}
+
+		minus += m;
+		asks += a;
+		free(text);
+	}
+
+	ok(wrong == 0, "hold: the census of every file holds", wrong, 0);
+	ok(minus == 47, "hold: 47 subtractions through lara_item", minus, 47);
+	ok(asks == 52, "hold: 51 places ask, and the helper's definition",
+		asks, 52);
+
+	free(control);
+	free(spotcam);
+	free(delta);
+	free(setup);
+	free(trex);
+}
+
 int main()
 {
 	printf("ModernTest - the arithmetic of the modern control\n");
@@ -31160,6 +31519,7 @@ int main()
 	thruster_wiring();
 	xray_weapons();
 	carrier_pass();
+	scene_hold();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

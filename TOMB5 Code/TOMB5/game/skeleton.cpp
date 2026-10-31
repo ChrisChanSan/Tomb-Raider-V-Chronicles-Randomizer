@@ -115,7 +115,9 @@ void SkeletonControl(short item_number)
 	case 2:
 	case 3:
 
-		if (!skeleton->flags && item->touch_bits & 0x9470 && item->frame_number > anims[item->anim_number].frame_base + 18)
+		// Refused while a scene holds Lara (scene_hold.h).
+		if (!skeleton->flags && item->touch_bits & 0x9470 && item->frame_number > anims[item->anim_number].frame_base + 18 &&
+			!SceneHoldRefuses(EnemyDamage(balance.dmgSkeletonStrike), item->object_number, "skeleton"))
 		{
 			lara_item->hit_points -= EnemyDamage(balance.dmgSkeletonStrike);
 			lara_item->hit_status = 1;

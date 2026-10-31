@@ -60,8 +60,6 @@ static long camera_roll[18];
 static long camera_fov[18];
 static long camera_speed[18];
 static long CameraFade;
-static long LaraHealth;
-static long LaraAir;
 static long spline_to_camera;
 static long spline_from_camera;
 static long bCheckTrigger = 0;
@@ -169,8 +167,6 @@ void InitialiseSpotCam(short Sequence)
 	spotcam_timer = 0;
 	spotcam_loopcnt = 0;
 	bDisableLaraControl = 0;
-	LaraHealth = lara_item->hit_points;
-	LaraAir = lara.air;
 	InitialCameraPosition.x = camera.pos.x;
 	InitialCameraPosition.y = camera.pos.y;
 	InitialCameraPosition.z = camera.pos.z;
@@ -201,6 +197,12 @@ void InitialiseSpotCam(short Sequence)
 		if (gfGameMode != 1)
 			SetFadeClip(16, 1);
 	}
+
+	/* A flyby that takes her control holds her life and air from here on
+	 * (game\scene_hold.h) - remembered where Core remembered them. A flyby
+	 * whose caller raises bUseSpotCam only after this call begins its hold
+	 * at the next look. */
+	SceneHoldStep(0);
 
 	if (s->flags & SP_TRACKCAMERA)
 	{
@@ -367,11 +369,11 @@ void CalculateSpotCams()
 	s = &SpotCam[first_camera];
 	sp = 0;
 
-	if (bDisableLaraControl)
-	{
-		lara_item->hit_points = (short)LaraHealth;
-		lara.air = (short)LaraAir;
-	}
+	/* Core put back here, once a tick and after her control, the life and
+	 * air it remembered at the flyby's start. The hold does it now, here
+	 * too - so what her control did to her is undone before the frame - and
+	 * before the item loop and her control (game\scene_hold.h). */
+	SceneHoldStep(0);
 
 	if (s->flags & SP_TRACKCAMERA)
 		spline_cnt = current_camera_cnt + 2;
@@ -640,6 +642,9 @@ void CalculateSpotCams()
 						bDisableLaraControl = 1;
 					}
 
+					// The camera hands her control over: the hold begins
+					// or ends right here (game\scene_hold.h).
+					SceneHoldStep(0);
 					n = 0;
 
 					if (SpotCam[current_spline_camera].flags & SP_JUMPTO)
@@ -749,6 +754,7 @@ void CalculateSpotCams()
 						SetFadeClip(0, 1);
 						bUseSpotCam = 0;
 						bDisableLaraControl = 0;
+						SceneHoldStep(0);	// the hold ends with the flyby
 						bCheckTrigger = 0;
 						camera.old_type = FIXED_CAMERA;
 						camera.type = CHASE_CAMERA;
@@ -839,6 +845,7 @@ void CalculateSpotCams()
 		SetFadeClip(0, 1);
 		bUseSpotCam = 0;
 		bDisableLaraControl = 0;
+		SceneHoldStep(0);	// the hold ends with the flyby
 		camera.speed = 1;
 		AlterFOV(LastFov);
 		CalculateCamera();

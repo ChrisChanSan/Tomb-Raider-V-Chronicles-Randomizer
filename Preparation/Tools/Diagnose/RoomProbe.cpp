@@ -5260,9 +5260,10 @@ namespace walkoff
 	/* -vis 1: the visibility path's walk (game\draw.cpp, VisExtend and
 	 * VisFollowPortal) over the tables hd_vis.cpp builds out of the .TRG and
 	 * the .TRC (LoadHd), with the reach off. `g_vis_sources` (-vissrc) lets
-	 * the walk ask the three tables one by one: bit 0 the guests, bit 1 the
-	 * openings, bit 2 the wide portals. `g_vis_why` is per room the source
-	 * that queued it first, as VISLOG prints it: 0 the portals or the seed,
+	 * the walk ask the tables one by one: bit 0 the guests and the sky
+	 * table's groups, bit 1 the openings, bit 2 the wide portals.
+	 * `g_vis_why` is per room the source that queued it first, as VISLOG
+	 * prints it: 0 the portals or the seed,
 	 * 1 a guest, 2 an opening, 3 a wide portal, 4 a portal at the window's
 	 * edge, 0xff not queued. */
 	static bool g_vis = false;
@@ -5273,12 +5274,20 @@ namespace walkoff
 	 * the level's hulls (the HDLOG hull lines with hull=1). */
 	static std::set<int> g_vis_noguest;
 	static HDVisParams g_vis_params = HDVisDefaults();
+	/* -visyshift 1: the tables built with the groups' y shifts, as the
+	 * engine's build hands them in (HDVisLevelBuild); 0, the default, with
+	 * the art as the file stores it, as before. */
+	static bool g_vis_yshift = false;
 	static HDVisTables g_vis_tables;
 	static std::vector<HDVisRoom> g_vis_rooms;
 	static std::vector<HDCoverFace> g_vis_faces;
 	static std::vector<HDVisPortal> g_vis_portals;
 	static std::vector<int> g_vis_links;
 	static std::vector<unsigned char> g_vis_why;
+	/* Per room, 1 when the sky table queued it first (hd_vis.h): the engine
+	 * hands the walk a room's sky groups as guests, and VISLOG names them g
+	 * (1 in g_vis_why); -walkfinal names them `sky`. */
+	static std::vector<unsigned char> g_vis_skyq;
 	static int g_vis_count[6] = { 0, 0, 0, 0, 0, 0 };
 
 	// The group a room holds now, as hd_level.cpp's g_room_group.
@@ -5537,6 +5546,30 @@ namespace walkoff
 
 			VisGuestBounds(g, b, r, mx, here);
 			VisNote(b, 1, before);
+		}
+
+		/* The room's sky groups, handed to the walk as guests (hd_level.cpp,
+		 * VisKeepGuests): by the box of their art in the sky. */
+		for (int k = 0; (g_vis_sources & 1) && (size_t)c < t.skyCount.size() &&
+			k < t.skyCount[(size_t)c]; k++)
+		{
+			const HDVisGuest& g = t.sky[(size_t)(t.skyFirst[(size_t)c] + k)];
+			const int b = VisRoomOfGroup(g.group);
+
+			if (b < 0 || (size_t)b >= g_room.size() || b == here ||
+				g_vis_noguest.count(g.group))
+				continue;
+
+			const char before = g_room[(size_t)b].bound_active;
+			const bool fresh = (size_t)b < g_vis_why.size() &&
+				g_vis_why[(size_t)b] == 0xff;
+
+			VisGuestBounds(g, b, r, mx, here);
+			VisNote(b, 1, before);
+
+			if (fresh && g_vis_why[(size_t)b] == 1 &&
+				(size_t)b < g_vis_skyq.size())
+				g_vis_skyq[(size_t)b] = 1;
 		}
 
 		for (int k = 0; (g_vis_sources & 2) && k < t.openCount[(size_t)c]; k++)
@@ -6083,7 +6116,8 @@ namespace walkoff
 				g_vis_portals.empty() ? 0 : &g_vis_portals[0],
 				(int)g_vis_portals.size(),
 				g_vis_links.empty() ? 0 : &g_vis_links[0],
-				(int)g_vis_links.size(), g_vis_params, &g_vis_tables);
+				(int)g_vis_links.size(), g_vis_params, &g_vis_tables,
+				g_vis_yshift && !shifts.empty() ? &shifts[0] : 0);
 
 			const HDVisTables& t = g_vis_tables;
 
@@ -6091,19 +6125,46 @@ namespace walkoff
 				"void=%d guests=%d guest_tris=%lld wide=%d ms=%.0f "
 				"reach=%.0f bare_share=%.2f guest_tris_min=%d sources=%d "
 				"twin=%d wide_bare=%.2f edge=%.5f mirror=%d enclosed=%d "
-				"openings_state=%d\n",
+				"openings_state=%d sky_groups=%d sky_tris=%lld sky_pairs=%d "
+				"sky_copies=%d sky_closed=%d\n",
 				t.rooms, t.artRooms, t.wallFaces, t.bareFaces, t.voidFaces,
 				t.guestPairs, t.guestTris, t.widePortals, t.ms,
 				g_vis_params.reach, g_vis_params.bare, g_vis_params.guestTris,
 				g_vis_sources, t.openingsTwin, g_vis_params.wideBare,
 				g_vis_params.edge, t.wideMirrored, t.roomsEnclosed,
-				t.openingsState);
+				t.openingsState, t.skyGroups, t.skyArtTris, t.skyPairs,
+				t.skyCopies, t.skyClosed);
 
 			/* The openings the flipmaps' states refused, as the engine's
 			 * HDLOG visopening lines name them. */
 			for (const HDVisStateRefused& one : t.stateRefused)
 				printf("-vis: visopening room=%d face=%d behind=%d "
 					"refused=flipstate\n", one.holder, one.face, one.behind);
+
+			/* The sky table's pairs and the groups left out as copies, as
+			 * the engine's HDLOG vissky lines name them. */
+			for (int r = 0; r < t.rooms && (size_t)r < t.skyCount.size(); r++)
+				for (int k = 0; k < t.skyCount[(size_t)r]; k++)
+				{
+					const HDVisGuest& one =
+						t.sky[(size_t)(t.skyFirst[(size_t)r] + k)];
+					const size_t g = (size_t)one.group;
+
+					printf("-vis: vissky room=%d group=%d tris=%d over_sky=%d "
+						"over_closed=%d beyond=%d box=%.0f..%.0f,%.0f..%.0f,"
+						"%.0f..%.0f\n", r, one.group, one.tris,
+						t.skyOverSky[g], t.skyOverClosed[g], t.skyBeyond[g],
+						one.lo[0], one.hi[0], one.lo[1], one.hi[1], one.lo[2],
+						one.hi[2]);
+				}
+
+			for (size_t g = 0; g < t.skyCopyOf.size(); g++)
+				if (t.skyCopyOf[g] >= 0)
+					printf("-vis: vissky group=%d tris=%d copy_of=%d "
+						"refused=copy\n", (int)g, t.skyTris[g], t.skyCopyOf[g]);
+				else if (g < t.skyRoomClosed.size() && t.skyRoomClosed[g])
+					printf("-vis: vissky group=%d tris=%d refused=closed\n",
+						(int)g, t.skyTris[g]);
 
 			/* The rooms standing inside another whose art stands in
 			 * them (HDVisTables::enclosedBy; nothing is drawn from
@@ -6420,6 +6481,7 @@ namespace walkoff
 		g_end = 1;
 		g_list[0] = seed;
 		g_vis_why.assign(g_room.size(), 0xff);
+		g_vis_skyq.assign(g_room.size(), 0);
 		g_vis_count[0] = g_vis_count[1] = g_vis_count[2] = g_vis_count[3] =
 			g_vis_count[4] = g_vis_count[5] = 0;
 		g_queue_peak = 1;
@@ -6563,12 +6625,15 @@ namespace walkoff
 			"portal", "edge", "near" };
 		const int why = g_vis && (size_t)which < g_vis_why.size() &&
 			g_vis_why[(size_t)which] < 6 ? g_vis_why[(size_t)which] : 0;
+		// A guest the sky table queued first (g_vis_skyq) reads `sky`.
+		const bool sky = why == 1 && (size_t)which < g_vis_skyq.size() &&
+			g_vis_skyq[(size_t)which];
 
 		printf("%sroom %d final=%d,%d..%d,%d reach=%d,%d..%d,%d %s%s%s\n", lead,
 			which, r.left, r.top, r.right, r.bottom, r.box[0], r.box[1],
 			r.box[2], r.box[3],
 			(r.left >= r.right || r.top >= r.bottom) ? "REACH" : "classic",
-			g_vis ? " vis=" : "", g_vis ? kWhy[why] : "");
+			g_vis ? " vis=" : "", g_vis ? (sky ? "sky" : kWhy[why]) : "");
 	}
 
 	static void Why(int want)
@@ -18530,6 +18595,15 @@ static void SpringBlocks(const char* stem, std::vector<HDSpringBlock>& out,
  *                     the seed room's frame, under its decide line
  *   -visnear 0|1      1, the default, lists the room behind a portal the
  *                     eye stands at (VisNearPortals); 0 leaves that out
+ *   -vissky 0|1       1, the default, builds the sky table (hd_vis.h,
+ *                     HDVisParams::skyArt) and the walk lists its groups
+ *                     as guests; 0 builds none, the walk as before it
+ *   -visskyreach <u>  how far beside a room's floor plan a sky group's art
+ *                     may stand for the room to take it (skyReach), -1
+ *                     every room under the sky
+ *   -visyshift 0|1    1 builds the tables with the groups' y shifts, as
+ *                     the engine's build does; 0, the default, with the
+ *                     art as the file stores it, as before
  *   -gpu <n>          the frame's solid room draws timed n times on the GPU
  *                     after the picture (the print beside the draw calls)
  *   -gpuadd <n>       the same of the additive pass
@@ -18571,6 +18645,12 @@ static bool VisArg(int argc, char** argv, int* at)
 		walkoff::g_vis_params.wideBare = atof(argv[*at + 1]);
 	else if (!strcmp(a, "-visedge"))
 		walkoff::g_vis_params.edge = atof(argv[*at + 1]);
+	else if (!strcmp(a, "-vissky"))
+		walkoff::g_vis_params.skyArt = atoi(argv[*at + 1]);
+	else if (!strcmp(a, "-visskyreach"))
+		walkoff::g_vis_params.skyReach = atof(argv[*at + 1]);
+	else if (!strcmp(a, "-visyshift"))
+		walkoff::g_vis_yshift = atoi(argv[*at + 1]) != 0;
 	else if (!strcmp(a, "-visnoguest"))
 	{
 		for (const char* p = argv[*at + 1]; *p; )

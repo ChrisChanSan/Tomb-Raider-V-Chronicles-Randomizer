@@ -92,6 +92,11 @@ char tomb5_hd_install_tr3[260];
 
 namespace
 {
+	/* -visskyreach <units>: the sky table's reach (HDVisParams::skyReach)
+	 * for -vistable, -1 every room under the sky; unset, the default. */
+	bool g_sky_reach_set = false;
+	double g_sky_reach = 0.0;
+
 	const char* const kLevels[] =
 	{
 		"ANDREA1", "ANDREA2", "ANDREA3", "ANDY1", "ANDY2", "ANDY3",
@@ -4633,9 +4638,15 @@ namespace
 	 *             boxes (box_pairs=) and insides (inside_pairs=)
 	 *
 	 * The first line ends in openings_state=, the openings the flipmaps'
-	 * states refused, each with a `flipstate room= face= behind=` line.
-	 * With -visroom <n> that room's guests, openings and wides; with
-	 * -visroom all every room's, and the room each stands enclosed in. */
+	 * states refused, each with a `flipstate room= face= behind=` line,
+	 * and in sky_groups= sky_tris= sky_pairs= sky_copies= sky_closed=,
+	 * the sky table (hd_vis.h), with a `skyart group= tris= over_sky=
+	 * over_closed= beyond= box` line per sky group, a `skycopy group=
+	 * tris= copy_of=` line per group left out as a copy and a `skyclosed
+	 * group= tris=` line per group left out, its room not under the sky.
+	 * With -visroom <n> that room's guests, openings, wides and sky groups
+	 * (`room= sky= tris=`); with -visroom all every room's, and the room
+	 * each stands enclosed in. */
 	void dumpVisTable(const std::string& root, const std::string& stem,
 		const std::string& folder, int focus,
 		const std::vector<double>& reaches)
@@ -4666,8 +4677,11 @@ namespace
 
 		VisInputFromLevel(level, rooms, faces, portals, links);
 
-		const HDVisParams base = HDVisDefaults();
+		HDVisParams base = HDVisDefaults();
 		HDVisTables t;
+
+		if (g_sky_reach_set)
+			base.skyReach = g_sky_reach;
 
 		HDVisBuild(trg, rooms.empty() ? 0 : &rooms[0], (int)rooms.size(),
 			faces.empty() ? 0 : &faces[0], (int)faces.size(),
@@ -4678,12 +4692,14 @@ namespace
 			"bare=%d void=%d guests=%d guest_tris=%lld portals=%d wide=%d "
 			"ms=%.0f guests_unlinked=%d openings=%d openings_unlinked=%d "
 			"openings_twin=%d wide_mirror=%d guests_hanging=%d "
-			"openings_state=%d\n",
+			"openings_state=%d sky_groups=%d sky_tris=%lld sky_pairs=%d "
+			"sky_copies=%d sky_closed=%d\n",
 			stem.c_str(), (int)rooms.size(), (int)trg.groups.size(), t.artRooms,
 			t.wallFaces, t.bareFaces, t.voidFaces, t.guestPairs, t.guestTris,
 			(int)portals.size(), t.widePortals, t.ms, t.guestsUnlinked,
 			(int)t.openings.size(), t.openingsUnlinked, t.openingsTwin,
-			t.wideMirrored, t.guestsHanging, t.openingsState);
+			t.wideMirrored, t.guestsHanging, t.openingsState, t.skyGroups,
+			t.skyArtTris, t.skyPairs, t.skyCopies, t.skyClosed);
 
 		// The guests the sky's rule refused, one line each.
 		for (const HDVisRefused& one : t.hanging)
@@ -4696,6 +4712,38 @@ namespace
 		for (const HDVisStateRefused& one : t.stateRefused)
 			std::printf("vistable: %s flipstate room=%d face=%d behind=%d\n",
 				stem.c_str(), one.holder, one.face, one.behind);
+
+		/* The sky table's groups, one line each: the art in the sky, over a
+		 * room under the sky and over no room, the art over a closed room's
+		 * roof counted apart, and the box of the sky's; then the groups left
+		 * out as copies of a sky group's art there. */
+		{
+			std::vector<char> taken((size_t)t.rooms, 0);
+
+			for (const HDVisGuest& one : t.sky)
+				if (one.group >= 0 && one.group < t.rooms &&
+					!taken[(size_t)one.group])
+				{
+					const size_t g = (size_t)one.group;
+
+					taken[g] = 1;
+					std::printf("vistable: %s skyart group=%d tris=%d "
+						"over_sky=%d over_closed=%d beyond=%d box %.0f..%.0f "
+						"%.0f..%.0f %.0f..%.0f\n", stem.c_str(), one.group,
+						one.tris, t.skyOverSky[g], t.skyOverClosed[g],
+						t.skyBeyond[g], one.lo[0], one.hi[0], one.lo[1],
+						one.hi[1], one.lo[2], one.hi[2]);
+				}
+
+			for (int g = 0; g < t.rooms; g++)
+				if (t.skyCopyOf[(size_t)g] >= 0)
+					std::printf("vistable: %s skycopy group=%d tris=%d "
+						"copy_of=%d\n", stem.c_str(), g, t.skyTris[(size_t)g],
+						t.skyCopyOf[(size_t)g]);
+				else if (t.skyRoomClosed[(size_t)g])
+					std::printf("vistable: %s skyclosed group=%d tris=%d\n",
+						stem.c_str(), g, t.skyTris[(size_t)g]);
+		}
 
 		/* The faces the art plainly covers: wholly covered at the largest
 		 * reach asked. `plain=` on each reach's line is the share of them
@@ -4881,6 +4929,17 @@ namespace
 					stem.c_str(), focus, w.portal, p.to, p.v[0][0], p.v[0][1],
 					p.v[0][2], p.v[2][0], p.v[2][1], p.v[2][2], w.v[0][0],
 					w.v[0][1], w.v[0][2], w.v[2][0], w.v[2][1], w.v[2][2]);
+			}
+
+			// The sky groups the room takes (the box on the skyart line).
+			for (int k = 0; (size_t)focus < t.skyCount.size() &&
+				k < t.skyCount[(size_t)focus]; k++)
+			{
+				const HDVisGuest& g =
+					t.sky[(size_t)(t.skyFirst[(size_t)focus] + k)];
+
+				std::printf("vistable: %s room=%d sky=%d tris=%d\n",
+					stem.c_str(), focus, g.group, g.tris);
 			}
 		};
 
@@ -7381,6 +7440,11 @@ int main(int argc, char** argv)
 			// "all" asks every room (-2), a number that room.
 			++i;
 			vis_room = !_stricmp(argv[i], "all") ? -2 : std::atoi(argv[i]);
+		}
+		else if (!_stricmp(argv[i], "-visskyreach") && i + 1 < argc)
+		{
+			g_sky_reach_set = true;
+			g_sky_reach = std::atof(argv[++i]);
 		}
 		else if (!_stricmp(argv[i], "-visreach") && i + 1 < argc)
 		{

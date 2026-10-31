@@ -19,16 +19,21 @@
  * is drawn whole but for its art standing inside another room, which is cut
  * to its room's window as on the other path (hd_level.cpp, DecidePairs), and
  * the depth buffer decides the rest. The walk is extended where the art
- * opens more than the classic level, by three tables made here once per
+ * opens more than the classic level, by four tables made here once per
  * level:
  *
  *   guests    per room, the groups whose art stands in its inside
  *   openings  per room, the classic wall faces its own art leaves bare,
  *             each with a room behind it
  *   wides     per room, the portals that bare faces round them widen
+ *   sky       per room under the sky, the groups of rooms under the sky
+ *             whose art stands in the sky - in no room's box and under no
+ *             room, over a room under the sky or past the level's rooms -
+ *             beside it
  *
  * A room any of them lists walks on through its own portals with the window
- * it was listed with, as a room the portals list does.
+ * it was listed with, as a room the portals list does. The walk is handed a
+ * room's sky groups as guests (hd_level.cpp, HDVisRoomGuests).
  *
  * The approach - the walk as the list, every listed room's art drawn whole,
  * a group listed by its art in a listed room's box, eight triangles making
@@ -180,7 +185,18 @@ struct HDVisStatic
  *   staticStep   the spacing of a static's samples
  *   staticShare  the share of a static's samples one group's art must lie
  *              on before the static's place is that art's
- *              (HDVisStaticDrawnByArt) */
+ *              (HDVisStaticDrawnByArt)
+ *   skyArt     0: no sky table; 1, the default: a room under the sky
+ *              takes as a sky group each group of a room under the sky
+ *              with guestTris triangles or more in the sky - in the open
+ *              air (HDVisInOpenAir) over a room under the sky or past the
+ *              level's rooms - whose box there stands over its floor plan
+ *              or within skyReach of it, but a group whose triangles there
+ *              are, all but fewer than guestTris, copies of another sky
+ *              group's (centroids within two units)
+ *   skyReach   how far beside a room's floor plan, in x and z, the box
+ *              of a sky group's art may stand for the room to take it;
+ *              below 0 every room under the sky takes every sky group */
 struct HDVisParams
 {
 	double reach;
@@ -196,6 +212,8 @@ struct HDVisParams
 	double staticReach;
 	double staticStep;
 	double staticShare;
+	int skyArt;
+	double skyReach;
 };
 
 HDVisParams HDVisDefaults();
@@ -265,11 +283,96 @@ struct HDVisTables
 	/* Of the wide portals, those wide only by the record leading back: the
 	 * art's hole round the portal bare on the other room's faces alone. */
 	int wideMirrored = 0;
+	/* The sky table (skyArt 1): per room under the sky, skyCount groups
+	 * from skyFirst on whose art stands in the sky beside it, each with its
+	 * triangles there and their box, the same for every room. */
+	std::vector<int> skyFirst, skyCount;
+	std::vector<HDVisGuest> sky;
+	/* Per group: its triangles in the sky, 0 for none - over a room under
+	 * the sky (skyOverSky) and over no room (skyBeyond), the room over
+	 * being the highest whose floor plan holds the point below it -; its
+	 * triangles in the open air over a closed room, counted apart and no
+	 * more (skyOverClosed); and the sky group whose copies they are, -1
+	 * for none. For the log. */
+	std::vector<int> skyTris, skyOverSky, skyOverClosed, skyBeyond;
+	std::vector<int> skyCopyOf;
+	/* Per group, 1 for one with guestTris triangles or more in the sky
+	 * whose room is not under the sky, left out (for the log). */
+	std::vector<unsigned char> skyRoomClosed;
+	int skyGroups = 0;			// the groups with sky art, copies left out
+	long long skyArtTris = 0;	// their triangles in the sky
+	int skyPairs = 0;			// the (room, group) pairs of the sky table
+	int skyCopies = 0;			// the groups left out as copies
+	int skyClosed = 0;			// the groups left out, rooms not under it
 	long long samples = 0, samplesCovered = 0;
 	double ms = 0.0;
 };
 
-/* The three tables of one level out of its .TRG (group i is room i) and its
+/* Where point p (world units, y down) stands against one room's whole box:
+ * 1 in it, 2 under it - in its floor plan, below its floor -, 0 neither. */
+inline int HDVisPointAgainstRoom(const HDVisRoom& r, const double p[3])
+{
+	const double x1 = (double)(r.x + ((long)r.xs << 10));
+	const double z1 = (double)(r.z + ((long)r.zs << 10));
+
+	if (p[0] < (double)r.x || p[0] > x1 || p[2] < (double)r.z || p[2] > z1)
+		return 0;
+
+	if (p[1] >= (double)r.top && p[1] <= (double)r.bottom)
+		return 1;
+
+	return p[1] > (double)r.bottom ? 2 : 0;
+}
+
+/* Whether a triangle of room `own`'s art whose centroid is p stands in the
+ * open air: farther than `overhang` outside its own room's whole box, and
+ * in no room's box and under no room (HDVisPointAgainstRoom) - over a room
+ * under the sky, on the roof of one that is not, or past the level's rooms.
+ * HDVisBuild asks it of the rooms whose sectors hold p alone. The sky table
+ * takes such art over a room under the sky or past the rooms: on a closed
+ * room's roof the art may close a space of its own that no portal reaches
+ * - RICH2's lift shaft rises inside its own walls above its last classic
+ * room, 188,974 triangles there.
+ *
+ * What for: art in the sky is seen across the sky, from wherever the sky
+ * is seen, and no portal leads to it. ANDREA2's courtyard (room 223) is
+ * under the sky; group 222 models the facade over its east side (300
+ * triangles) and a parapet past the level's rooms (467), and with them the
+ * roofs and the coffered ceiling over the loggia (room 225), group 55 the
+ * skyline of the city past the level's east edge (13,321) - each listed
+ * only while its own room is, through a chain of portals that the window
+ * loses as the eye turns, and then the facade, the coffers and the red
+ * building go out and come back. A room under the sky takes such art
+ * whole, as a guest (the sky table).
+ * The reading - art standing above a room's classic box counts for that
+ * room, the Remaster building higher than the classic level - follows the
+ * guests' column of TROne (GPLv3) by Todesengel1931 -
+ * https://github.com/todesengel1931; the open air, the sky, the reach and
+ * the copies are this engine's own. */
+inline bool HDVisInOpenAir(const HDVisRoom* rooms, int count, int own,
+	const double p[3], double overhang)
+{
+	if (own >= 0 && own < count)
+	{
+		const HDVisRoom& r = rooms[own];
+
+		if (p[0] >= (double)r.x - overhang &&
+			p[0] <= (double)(r.x + ((long)r.xs << 10)) + overhang &&
+			p[2] >= (double)r.z - overhang &&
+			p[2] <= (double)(r.z + ((long)r.zs << 10)) + overhang &&
+			p[1] >= (double)r.top - overhang &&
+			p[1] <= (double)r.bottom + overhang)
+			return false;
+	}
+
+	for (int i = 0; rooms && i < count; i++)
+		if (HDVisPointAgainstRoom(rooms[i], p))
+			return false;
+
+	return true;
+}
+
+/* The four tables of one level out of its .TRG (group i is room i) and its
  * classic side. `faces` are the rooms' classic faces in world units, as
  * InsertRoomlet draws them; `portals` the portal records, room-local;
  * `links` the rooms' floor links. */

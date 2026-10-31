@@ -15459,6 +15459,181 @@ static void vis_flip_state()
 		"vis: with no map known H names S and D", t.openCount[0], 2);
 }
 
+/* The sky table (hd_vis.cpp, skyArt 1) on rooftops built by hand: S (0) a
+ * courtyard under the sky, x 0..6144, z 0..6144, y -4096..0; C (1) a closed
+ * building beside it, x 6144..12288, same z and y; G (2) a rooftop under
+ * the sky far off, x 0..4096, z 12288..16384, whose art is put in three
+ * places, eight small triangles each: over S's floor plan above its top
+ * (ANDREA2's facade over room 223), in C's box (the loggia, room 225), and
+ * over C's roof one sector past S's wall (the roofs group 222 models over
+ * the loggia, which come along with its sky art and are none). And H (3),
+ * a second room under the sky, x 0..6144, z 24576..30720, twenty sectors
+ * off; and K (4), under the sky, x 0..4096, z 18432..22528, for a copy. */
+static void vis_sky_scene(trf::remaster::Trg& trg, float cx, float cy,
+	float cz, int copies)
+{
+	trg = trf::remaster::Trg();
+	trg.groups.resize(5);
+
+	// Group 2's art, and with `copies` the same triangles in group 4.
+	for (int g = 2; g <= (copies ? 4 : 2); g += 2)
+	{
+		trf::remaster::TrgPart part;
+		const float ox = 0.0f, oz = g == 2 ? 12288.0f : 18432.0f;
+
+		part.pass[0].start = (uint32_t)trg.indices.size();
+
+		for (int k = 0; k < 8; k++)
+		{
+			const float a[3] = { cx, cy, cz + k * 16.0f };
+			const float b[3] = { cx + 8.0f, cy, cz + k * 16.0f };
+			const float c[3] = { cx, cy - 8.0f, cz + 8.0f + k * 16.0f };
+
+			vis_tri(trg, ox, 0, oz, a, b, c);
+		}
+
+		part.pass[0].count = (uint32_t)trg.indices.size() - part.pass[0].start;
+		trg.groups[(size_t)g].parts.push_back(part);
+	}
+}
+
+static void vis_sky_art()
+{
+	trf::remaster::Trg trg;
+	std::vector<HDVisRoom> rooms(5);
+	const long x[5] = { 0, 6144, 0, 0, 0 };
+	const long z[5] = { 0, 0, 12288, 24576, 18432 };
+	const int xs[5] = { 6, 6, 4, 6, 4 };
+
+	for (int r = 0; r < 5; r++)
+	{
+		HDVisRoom& one = rooms[(size_t)r];
+
+		std::memset(&one, 0, sizeof(one));
+		one.x = x[r];
+		one.z = z[r];
+		one.xs = one.zs = xs[r];
+		one.top = -4096;
+		one.bottom = 0;
+		one.flags = r == 1 ? 0 : 8;
+		one.twin = -1;
+		one.flip = -1;
+	}
+
+	HDVisTables t;
+	const HDVisParams p = HDVisDefaults();
+
+	ok(p.skyArt == 1 && p.skyReach > 1023.0 && p.skyReach < 1025.0,
+		"sky: on by default, a sector beside a floor plan", (long)p.skyReach,
+		1024);
+
+	// 1. Art above the courtyard: in no box, over S - S takes G.
+	vis_sky_scene(trg, 3000.0f, -6000.0f, 3000.0f, 0);
+	HDVisBuild(trg, &rooms[0], 5, 0, 0, 0, 0, 0, 0, p, &t);
+	ok(t.skyTris[2] == 8 && t.skyOverSky[2] == 8 && t.skyGroups == 1,
+		"sky: G's art above S stands in the open air over a sky room",
+		t.skyOverSky[2], 8);
+	ok(t.skyCount[0] == 1 && t.sky[(size_t)t.skyFirst[0]].group == 2,
+		"sky: S, under the sky, takes G as a sky group", t.skyCount[0], 1);
+	ok(t.skyCount[1] == 0 && t.skyCount[2] == 0,
+		"sky: C, not under the sky, takes nothing, G not its own art",
+		t.skyCount[1], 0);
+	ok(t.skyCount[3] == 0 && t.skyPairs == 1,
+		"sky: H, twenty sectors off the art, does not take it",
+		t.skyCount[3], 0);
+	ok(t.guestCount[0] == 0 && t.guestPairs == 0,
+		"sky: the art above S's box is no guest of its inside",
+		t.guestCount[0], 0);
+
+	// Every room under the sky with skyReach below 0: S, H and K.
+	HDVisParams every = p;
+
+	every.skyReach = -1.0;
+	HDVisBuild(trg, &rooms[0], 5, 0, 0, 0, 0, 0, 0, every, &t);
+	ok(t.skyCount[3] == 1 && t.skyPairs == 3,
+		"sky: with no reach H takes it too", t.skyCount[3], 1);
+
+	// G not under the sky: its art there lists no room.
+	rooms[2].flags = 0;
+	HDVisBuild(trg, &rooms[0], 5, 0, 0, 0, 0, 0, 0, p, &t);
+	ok(t.skyTris[2] == 8 && t.skyRoomClosed[2] == 1 && t.skyClosed == 1 &&
+		t.skyPairs == 0,
+		"sky: the sky art of a room not under the sky is left out",
+		t.skyClosed, 1);
+	rooms[2].flags = 8;
+
+	// No sky table with skyArt 0.
+	HDVisParams off = p;
+
+	off.skyArt = 0;
+	HDVisBuild(trg, &rooms[0], 5, 0, 0, 0, 0, 0, 0, off, &t);
+	ok(t.skyPairs == 0 && t.skyTris[2] == 0 && t.sky.empty(),
+		"sky: skyArt 0 builds no sky table", t.skyPairs, 0);
+
+	// 2. Art inside the closed building beside the courtyard: in C's box.
+	vis_sky_scene(trg, 9000.0f, -2000.0f, 3000.0f, 0);
+	HDVisBuild(trg, &rooms[0], 5, 0, 0, 0, 0, 0, 0, p, &t);
+	ok(t.skyTris[2] == 0 && t.skyPairs == 0,
+		"sky: art in a closed room's box is not in the open air",
+		t.skyTris[2], 0);
+
+	// 3. Art over the closed building's roof, a sector past S's wall: in
+	// the open air, but over no room under the sky - counted apart only.
+	vis_sky_scene(trg, 6500.0f, -6000.0f, 3000.0f, 0);
+	HDVisBuild(trg, &rooms[0], 5, 0, 0, 0, 0, 0, 0, p, &t);
+	ok(t.skyOverClosed[2] == 8 && t.skyTris[2] == 0 && t.skyPairs == 0,
+		"sky: art over a closed room's roof is no sky art, no room takes it",
+		t.skyOverClosed[2], 8);
+	ok(t.skyCount[1] == 0 && t.skyCount[0] == 0,
+		"sky: neither S beside it nor C under it takes the art over C's roof",
+		t.skyCount[0], 0);
+
+	// Past the level's rooms, three sectors off S's floor plan: out of reach.
+	vis_sky_scene(trg, -3000.0f, -3000.0f, 3000.0f, 0);
+	HDVisBuild(trg, &rooms[0], 5, 0, 0, 0, 0, 0, 0, p, &t);
+	ok(t.skyBeyond[2] == 8 && t.skyPairs == 0,
+		"sky: art past the rooms out of every sky room's reach, taken by none",
+		t.skyPairs, 0);
+
+	// Under C's floor: under a room, not in the open air.
+	vis_sky_scene(trg, 9000.0f, 1000.0f, 3000.0f, 0);
+	HDVisBuild(trg, &rooms[0], 5, 0, 0, 0, 0, 0, 0, p, &t);
+	ok(t.skyTris[2] == 0,
+		"sky: art under a room's floor is not in the open air",
+		t.skyTris[2], 0);
+
+	// Past the level's rooms, beside S: over no room, taken by S.
+	vis_sky_scene(trg, -500.0f, -3000.0f, 3000.0f, 0);
+	HDVisBuild(trg, &rooms[0], 5, 0, 0, 0, 0, 0, 0, p, &t);
+	ok(t.skyBeyond[2] == 8 && t.skyCount[0] == 1,
+		"sky: art past the level's rooms beside S is taken by S",
+		t.skyBeyond[2], 8);
+
+	// The same triangles in groups 2 and 4: one taken, the other a copy.
+	vis_sky_scene(trg, 3000.0f, -6000.0f, 3000.0f, 1);
+	HDVisBuild(trg, &rooms[0], 5, 0, 0, 0, 0, 0, 0, p, &t);
+	ok(t.skyGroups == 1 && t.skyCopies == 1 && t.skyCopyOf[4] == 2 &&
+		t.skyCount[0] == 1 && t.sky[(size_t)t.skyFirst[0]].group == 2,
+		"sky: a group copying a sky group's art is left out", t.skyCopyOf[4],
+		2);
+
+	// The pure tests the build asks.
+	const double over[3] = { 3000.0, -6000.0, 3000.0 };
+	const double in[3] = { 9000.0, -2000.0, 3000.0 };
+	const double under[3] = { 9000.0, 1000.0, 3000.0 };
+
+	ok(HDVisPointAgainstRoom(rooms[1], in) == 1 &&
+		HDVisPointAgainstRoom(rooms[1], under) == 2 &&
+		HDVisPointAgainstRoom(rooms[0], over) == 0,
+		"sky: a point in a room's box, under it, over it",
+		HDVisPointAgainstRoom(rooms[1], under), 2);
+	ok(HDVisInOpenAir(&rooms[0], 5, 2, over, 128.0) &&
+		!HDVisInOpenAir(&rooms[0], 5, 2, in, 128.0) &&
+		!HDVisInOpenAir(&rooms[0], 5, 0, over, 4096.0),
+		"sky: in the open air, in a box, within its own room's overhang",
+		HDVisInOpenAir(&rooms[0], 5, 2, over, 128.0) ? 1 : 0, 1);
+}
+
 /* The art of a static carried to another placement of its slot
  * (hd_artcopy.h) on a level of two rooms built by hand, RICH2's stairwell
  * cut down: room 0 drawn by its own art, x and z 0..6144, y -1536..0, and
@@ -33989,6 +34164,7 @@ int main()
 	vis_tables();
 	vis_hanging();
 	vis_flip_state();
+	vis_sky_art();
 	vis_plane();
 	vis_wall();
 	vis_hidden_room();

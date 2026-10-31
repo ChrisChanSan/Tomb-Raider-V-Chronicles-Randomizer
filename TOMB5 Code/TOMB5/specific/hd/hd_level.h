@@ -242,9 +242,10 @@ int HDCarriedRoom(int group);
 /* The visibility path (tomb5.hd_vis 1, hd_vis.h), as the room walk
  * (game\draw.cpp) asks it. HDVisWalkOn: the level was built with the path
  * and HDLevelActive() holds - the walk then extends the portals' list and
- * the reach is off. The three tables of the group room `roomIndex` holds
- * now: its guests and its openings (the count, the entries in `*out`) and
- * the wide opening round its portal `portal` (null for none). And the room
+ * the reach is off. The tables of the group room `roomIndex` holds now:
+ * its guests, the sky table's groups after them, and its openings (the
+ * count, the entries in `*out`) and the wide opening round its portal
+ * `portal` (null for none). And the room
  * that draws group `group` in the flipmap state of this moment, -1 while
  * the group is out of the world (as HDCarriedRoom). The walk asks the four
  * only while HDVisWalkOn() holds; with no tables they answer 0 or null. */

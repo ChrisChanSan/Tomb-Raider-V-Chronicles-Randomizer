@@ -64,7 +64,11 @@
  *                  standing 2 pixels or less off it at 2,560 (49 touching
  *                  it); 2 pixels lists 81 of the 181 there again, 4 and 8
  *                  only 85 and 90; with the wides read from both records
- *                  85, against 11 with the edge at 0 */
+ *                  85, against 11 with the edge at 0
+ *   skyArt 1       the sky table - see the sky groups below
+ *   skyReach 1024  a sector, the width of a room's wall ring: the skyline
+ *                  past the east wall of ANDREA2's courtyard (room 223)
+ *                  stands 889 units off its floor plan */
 HDVisParams HDVisDefaults()
 {
 	HDVisParams p;
@@ -82,6 +86,8 @@ HDVisParams HDVisDefaults()
 	p.staticReach = 32.0;
 	p.staticStep = HD_COVER_STEP;
 	p.staticShare = 0.5;
+	p.skyArt = 1;
+	p.skyReach = 1024.0;
 	return p;
 }
 
@@ -169,6 +175,30 @@ namespace
 		return a.u0 <= b.u1 + slack && b.u0 <= a.u1 + slack &&
 			a.w0 <= b.w1 + slack && b.w0 <= a.w1 + slack;
 	}
+
+	/* A triangle of the sky table's open air by its centroid, world units.
+	 * Two groups' triangles whose centroids stand within kCopySlack of each
+	 * other on every axis are one face twice: the art is kept room-local in
+	 * whole units, so a face modelled into the art of two rooms can stand a
+	 * unit apart - ANDREA3's skyline in groups 66, 67, 69 and 91. */
+	struct SkyPoint
+	{
+		float c[3];
+	};
+
+	const double kCopySlack = 2.0;
+
+	// The 4-unit cell of a centroid, 21 bits a part as CellKey's.
+	long long CopyCell(long x, long y, long z)
+	{
+		return ((long long)(x + 1048576) << 42) |
+			((long long)(y + 1048576) << 21) | (long long)(z + 1048576);
+	}
+
+	long CopyAxis(double v)
+	{
+		return (long)floor(v / 4.0);
+	}
 }
 
 bool HDVisBuild(const trf::remaster::Trg& trg, const HDVisRoom* rooms,
@@ -193,6 +223,14 @@ bool HDVisBuild(const trf::remaster::Trg& trg, const HDVisRoom* rooms,
 	t.enclosedTris.assign((size_t)t.rooms, 0);
 	t.floorFirst.assign((size_t)t.rooms, 0);
 	t.floorCount.assign((size_t)t.rooms, 0);
+	t.skyFirst.assign((size_t)t.rooms, 0);
+	t.skyCount.assign((size_t)t.rooms, 0);
+	t.skyTris.assign((size_t)t.rooms, 0);
+	t.skyOverSky.assign((size_t)t.rooms, 0);
+	t.skyOverClosed.assign((size_t)t.rooms, 0);
+	t.skyBeyond.assign((size_t)t.rooms, 0);
+	t.skyCopyOf.assign((size_t)t.rooms, -1);
+	t.skyRoomClosed.assign((size_t)t.rooms, 0);
 
 	if (!rooms || roomCount <= 0)
 		return false;
@@ -392,6 +430,26 @@ bool HDVisBuild(const trf::remaster::Trg& trg, const HDVisRoom* rooms,
 				cells[CellKey(x, z)].push_back(r);
 	}
 
+	/* The rooms' whole floor plans on the sector grid, a cell past the far
+	 * edges for a point on them: the sky table's open air (HDVisInOpenAir)
+	 * asks the rooms of a point's cell alone. And per group, its triangles
+	 * in the sky - their count and box, and their centroids for the
+	 * copies. */
+	std::unordered_map<long long, std::vector<int> > plans;
+	std::vector<GuestAcc> skyAcc((size_t)roomCount);
+	std::vector<std::vector<SkyPoint> > skyPoints((size_t)roomCount);
+
+	for (int r = 0; params.skyArt && r < roomCount; r++)
+	{
+		const HDVisRoom& room = rooms[r];
+		const long sx = SectorOf((double)room.x);
+		const long sz = SectorOf((double)room.z);
+
+		for (long x = sx; x <= sx + room.xs; x++)
+			for (long z = sz; z <= sz + room.zs; z++)
+				plans[CellKey(x, z)].push_back(r);
+	}
+
 	/* The rooms standing inside another (HDVisTables::enclosedBy): per
 	 * room with an inside, the groups of the rooms linked with it whose
 	 * whole box holds that inside, and below the triangles of each one's
@@ -497,6 +555,71 @@ bool HDVisBuild(const trf::remaster::Trg& trg, const HDVisRoom* rooms,
 						cw[2] >= (double)own.z - slack && cw[2] <= z1 + slack &&
 						cw[1] >= (double)own.top - slack &&
 						cw[1] <= (double)own.bottom + slack;
+					const auto plan = params.skyArt && !inOwn ?
+						plans.find(CellKey(SectorOf(cw[0]), SectorOf(cw[2]))) :
+						plans.end();
+					/* In the open air (hd_vis.h, HDVisInOpenAir): in no
+					 * room's box and under no room - asked of the rooms
+					 * whose floor plan holds the cell -, and over the
+					 * highest room below it, if any. A triangle with no
+					 * area draws nothing and is no art there: JOBY5's
+					 * groups 19 and 80 hold 2,880 each, all three corners
+					 * at one point far out of the level. */
+					const double e1[3] = { (double)v[1][0] - v[0][0],
+						(double)v[1][1] - v[0][1], (double)v[1][2] - v[0][2] };
+					const double e2[3] = { (double)v[2][0] - v[0][0],
+						(double)v[2][1] - v[0][1], (double)v[2][2] - v[0][2] };
+					const double nx = e1[1] * e2[2] - e1[2] * e2[1];
+					const double ny = e1[2] * e2[0] - e1[0] * e2[2];
+					const double nz = e1[0] * e2[1] - e1[1] * e2[0];
+					bool open = params.skyArt && !inOwn &&
+						nx * nx + ny * ny + nz * nz > 0.0;
+					int below = -1;
+
+					for (size_t i = 0; plan != plans.end() && open &&
+						i < plan->second.size(); i++)
+					{
+						const HDVisRoom& r = rooms[plan->second[i]];
+
+						if (HDVisPointAgainstRoom(r, cw))
+							open = false;
+						else if (cw[0] >= (double)r.x &&
+							cw[0] <= (double)(r.x + ((long)r.xs << 10)) &&
+							cw[2] >= (double)r.z &&
+							cw[2] <= (double)(r.z + ((long)r.zs << 10)) &&
+							(below < 0 || r.top < rooms[below].top))
+							below = plan->second[i];
+					}
+
+					/* Of it, the sky's: over a room under the sky or past
+					 * the level's rooms. Over a closed room's roof it is
+					 * counted apart and no more: there the art may close a
+					 * space of its own that no portal reaches. */
+					if (open && below >= 0 && !(rooms[below].flags & 8))
+						t.skyOverClosed[(size_t)g]++;
+					else if (open)
+					{
+						GuestAcc& a = skyAcc[(size_t)g];
+						const SkyPoint point = { { (float)cw[0], (float)cw[1],
+							(float)cw[2] } };
+
+						a.tris++;
+						skyPoints[(size_t)g].push_back(point);
+
+						for (int c = 0; c < 3; c++)
+							for (int k = 0; k < 3; k++)
+							{
+								const float w = v[c][k] + origin[k];
+
+								if (w < a.lo[k]) a.lo[k] = w;
+								if (w > a.hi[k]) a.hi[k] = w;
+							}
+
+						if (below < 0)
+							t.skyBeyond[(size_t)g]++;
+						else
+							t.skyOverSky[(size_t)g]++;
+					}
 
 					if (cell != cells.end() &&
 						!(params.guestRule >= 1 && inOwn))
@@ -774,6 +897,156 @@ bool HDVisBuild(const trf::remaster::Trg& trg, const HDVisRoom* rooms,
 	for (int r = 0; r < roomCount; r++)
 		if (t.enclosedBy[(size_t)r] >= 0)
 			t.roomsEnclosed++;
+
+	/* The sky groups (skyArt 1): the groups of the rooms under the sky with
+	 * guestTris triangles or more in the sky, the most first, each taken
+	 * unless all but fewer than guestTris of its triangles there are copies
+	 * of those of a group taken before it. A room not under the sky is
+	 * never one: listed, it draws its inside whole and walks on through its
+	 * doors - RICH2's office room 135, standing beside the stairwell with no
+	 * link to it, 24 triangles of its ceiling slab 7 units over the
+	 * stairwell's top, filled the stairwell's opening with its lockers and
+	 * a glass block wall (105,029 pixels at #269's niche eye) - and its
+	 * sky art is mostly a copy: ANDREA2's group 50, a street under the
+	 * roofs, holds 11,234 triangles of the skyline, each a copy of one of
+	 * group 55's 13,321. Then each room under the sky takes each of them,
+	 * but its own and its twin's, whose art there stands over its floor plan
+	 * or within skyReach of it: what stands in the sky is seen from wherever
+	 * the sky is, and the walk lists it by its box inside the window the
+	 * room is seen in. */
+	if (params.skyArt)
+	{
+		std::vector<int> order;
+
+		for (int g = 0; g < groups; g++)
+		{
+			t.skyTris[(size_t)g] = skyAcc[(size_t)g].tris;
+
+			if (skyAcc[(size_t)g].tris < params.guestTris)
+				continue;
+
+			if (rooms[g].flags & 8)
+				order.push_back(g);
+			else
+			{
+				t.skyRoomClosed[(size_t)g] = 1;
+				t.skyClosed++;
+			}
+		}
+
+		std::sort(order.begin(), order.end(), [&](int a, int b)
+		{
+			return skyAcc[(size_t)a].tris != skyAcc[(size_t)b].tris ?
+				skyAcc[(size_t)a].tris > skyAcc[(size_t)b].tris : a < b;
+		});
+
+		// The taken groups' centroids by 4-unit cell (SkyPoint, CopyCell).
+		std::unordered_map<long long, std::vector<std::pair<SkyPoint, int> > >
+			taken;
+		std::vector<int> kept;
+
+		for (const int g : order)
+		{
+			std::unordered_map<int, int> shared;
+			int fresh = 0;
+
+			for (const SkyPoint& p : skyPoints[(size_t)g])
+			{
+				const long cx = CopyAxis(p.c[0]), cy = CopyAxis(p.c[1]);
+				const long cz = CopyAxis(p.c[2]);
+				int by = -1;
+
+				for (int d = 0; d < 27 && by < 0; d++)
+				{
+					const auto cell = taken.find(CopyCell(cx + d % 3 - 1,
+						cy + d / 3 % 3 - 1, cz + d / 9 - 1));
+
+					for (size_t i = 0; cell != taken.end() && by < 0 &&
+						i < cell->second.size(); i++)
+					{
+						const SkyPoint& q = cell->second[i].first;
+
+						if (fabs((double)q.c[0] - p.c[0]) <= kCopySlack &&
+							fabs((double)q.c[1] - p.c[1]) <= kCopySlack &&
+							fabs((double)q.c[2] - p.c[2]) <= kCopySlack)
+							by = cell->second[i].second;
+					}
+				}
+
+				if (by < 0)
+					fresh++;
+				else
+					shared[by]++;
+			}
+
+			if (fresh < params.guestTris)
+			{
+				int most = -1, best = 0;
+
+				for (const std::pair<const int, int>& one : shared)
+					if (one.second > best ||
+						(one.second == best && one.first < most))
+					{
+						most = one.first;
+						best = one.second;
+					}
+
+				t.skyCopyOf[(size_t)g] = most;
+				t.skyCopies++;
+				continue;
+			}
+
+			for (const SkyPoint& p : skyPoints[(size_t)g])
+				taken[CopyCell(CopyAxis(p.c[0]), CopyAxis(p.c[1]),
+					CopyAxis(p.c[2]))].push_back(std::make_pair(p, g));
+
+			kept.push_back(g);
+			t.skyGroups++;
+			t.skyArtTris += skyAcc[(size_t)g].tris;
+		}
+
+		std::sort(kept.begin(), kept.end());
+
+		for (int h = 0; h < roomCount; h++)
+		{
+			t.skyFirst[(size_t)h] = (int)t.sky.size();
+
+			if (!(rooms[h].flags & 8))
+				continue;
+
+			const HDVisRoom& room = rooms[h];
+
+			for (const int g : kept)
+			{
+				const GuestAcc& art = skyAcc[(size_t)g];
+				const double reach = params.skyReach;
+
+				if (Twins(rooms, g, h) || (reach >= 0.0 &&
+					((double)art.hi[0] < (double)room.x - reach ||
+					(double)art.lo[0] >
+					(double)(room.x + ((long)room.xs << 10)) + reach ||
+					(double)art.hi[2] < (double)room.z - reach ||
+					(double)art.lo[2] >
+					(double)(room.z + ((long)room.zs << 10)) + reach)))
+					continue;
+
+				HDVisGuest one;
+
+				one.group = g;
+				one.tris = skyAcc[(size_t)g].tris;
+
+				for (int k = 0; k < 3; k++)
+				{
+					one.lo[k] = skyAcc[(size_t)g].lo[k];
+					one.hi[k] = skyAcc[(size_t)g].hi[k];
+				}
+
+				t.sky.push_back(one);
+				t.skyCount[(size_t)h]++;
+				t.skyPairs++;
+			}
+		}
+	}
 
 	for (int r = 0; r < roomCount; r++)
 	{

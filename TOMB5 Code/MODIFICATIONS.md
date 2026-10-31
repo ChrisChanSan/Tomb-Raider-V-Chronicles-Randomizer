@@ -16984,6 +16984,146 @@ keeps while map 0 is off, as every main room is, and the original game never dra
 
 **Commits.** `9b888587`.
 
+### A room under the sky lists the art that stands in the sky beside it (#286)
+
+2026-10-31.
+
+**What.** On the visibility path (`hd_vis` 1) a room under the sky now lists, as guests,
+the rooms under the sky whose art stands in the sky beside it: in the open air - farther
+than the overhang outside its own room's box, in no room's box and under no room's floor -
+over a room under the sky or past the level's rooms, over the room's floor plan or within
+a sector of it. The walk lists such a room by the box of that art inside the window the
+room under the sky is seen in, as it lists a guest, and the room walks on through its own
+portals. A room whose art there is, all but fewer than eight triangles, a copy of another
+such room's (centroids within two units) is left out, and so is the art of a room not
+under the sky and art on a closed room's roof. In ANDREA2's rooftop courtyard by the
+griffins (room 223) the brick tower, the facade with the two barred windows, the block
+with the cornice on the roofline, the coffered ceiling of the loggia and the city beyond
+the lattice parapet with the red building now stay where they are as the eye turns and
+moves. With `-log` the `HDLOG level= vis=1` line ends in `sky_groups= sky_tris= sky_pairs=
+sky_copies= hull_sky= sky_closed=`, one `HDLOG vissky level= room= group= tris= over_sky=
+over_closed= beyond= box=` line names each pair, one ending in `refused=copy` or
+`refused=closed` each room left out, and every `HDLOG room=` line ends in `sky_art=`;
+`VISLOG` names such a room `g`, the walk being handed it as a guest. TrgProbe `-vistable`
+ends its level line in the same counts with a `skyart`, `skycopy` or `skyclosed` line per
+group, `-visroom` adds a room's `sky=` lines and `-visskyreach` sets the reach;
+RoomProbe's `-vis: tables` line ends in the counts with a `-vis: vissky` line per pair,
+`-walkfinal` names a room the sky table listed first `vis=sky`, `-vissky 0` builds no sky
+table, `-visskyreach` sets the reach and `-visyshift 1` builds the tables with the groups'
+y shifts as the engine does; ModernTest checks the rule on rooftops built by hand.
+
+**Why.** On ANDREA2's rooftops round room 223 the Remaster's art on the facades and roofs
+went out and came back, often many times over: diving over the parapet, the upper part of
+the brick tower turned into a dark block and the facade with the barred windows to the
+right was gone, sky where it stood - the tower that had popped from the other side before
+#269; standing on the sloped roof, the block on the roofline became a thin dark slab and
+two panels of the loggia's coffered ceiling showed the sky; diving along the lattice
+parapet, the red building of the skyline shrank and then was gone. The log of that run
+holds 913 changes of the room list in ANDREA2, the eye in room 223 in 298 of them. The
+walk replayed at the eye of each change (RoomProbe, the change's eye, the camera's target
+of that tick) gives the game's list in 605 of the 884 that follow a whole list, the rest
+one room or more apart; drawn there at 1,280 x 720 with the list before and after the
+change, 136 changes move 200 pixels or more, 3,213,043 in all, and three rooms make 97 per
+cent of them: room 55 (51 changes, 1,813,871 pixels, the eye in room 223), room 222 (21,
+1,189,869, the eye in rooms 221, 223 and 33) and room 7 (22, 107,190). Drawn at frames
+4,258 (eye in room 221) and 8,452 (in room 223) without room 222, the pictures are those
+of the dive and of the roof. None of the three is a guest of the rooms the eye stands in:
+their art there stands outside every room's box. Group 222, the tower's, holds 300
+triangles of the facade over the courtyard's east side above its top, 72 over room 221,
+467 of a parapet past the level's rooms, and 709 of the roofs and the coffers over the
+loggia (room 225, a closed room) above its top; group 55 holds 13,321 triangles of the
+city past the level's east edge, group 7 2,064 more of it. The guest table counts art only
+in a room's inside, between its floor and its ceiling - so the tower's 240 triangles in
+room 232 made it that room's guest - and no room's inside holds this art; each of the
+three was listed only while its own room was, through a chain of portals: room 222 from
+room 221 through the portal at the eye's back when the eye looks over the courtyard, room
+55 from room 223 through rooms 225, 3, 7 and 56.
+
+**How.** `HDVisBuild` (`specific/hd/hd_vis.cpp`) asks each triangle of a group's art that
+stands farther than `overhang` out of its own room's box, of the rooms whose floor plan
+holds its centroid's sector: in no room's box and under no room's floor it stands in the
+open air (`HDVisPointAgainstRoom`, `HDVisInOpenAir`, `specific/hd/hd_vis.h`), and the
+highest room below it, if any, says over what; a triangle with no area is no art there
+(JOBY5's rooms 19 and 80 hold 2,880 each, all corners at one point). Over a room under the
+sky or past the level's rooms it is sky art, per group its triangles and their box
+(`HDVisTables::skyTris`, `skyOverSky`, `skyBeyond`); over a closed room's roof it is
+counted apart (`skyOverClosed`): there the art may close a space of its own that no portal
+reaches - RICH2's lift shaft rises inside its own walls above its last classic room,
+188,974 triangles there at the height the engine reads. The groups of rooms under the sky
+with eight triangles or more of sky art, the most first, are taken unless all but fewer
+than eight of them are copies of a taken group's (`skyCopyOf`). A room not under the sky
+is none (`skyRoomClosed`): listed, it draws its inside and walks on through its doors -
+RICH2's office room 135, beside the stairwell with no link to it, has 24 triangles of its
+ceiling slab 7 units over the stairwell's top, and taken it filled the stairwell's opening
+with its lockers and a glass block wall (105,029 pixels at the niche eye of #269) - and
+its sky art is mostly a copy: ANDREA2's room 50, the street under the roofs, holds 11,234
+triangles of the skyline, each a copy of one of room 55's. Then each room under the sky
+takes each taken group, but its own and its twin's, whose sky art stands over its floor
+plan or within `skyReach` of it - 1,024 units, a sector, the width of a wall ring: the
+skyline stands 889 units past the courtyard's east wall (`HDVisParams::skyArt` 1,
+`skyReach`; the table `HDVisTables::sky`, `skyFirst`, `skyCount`). `hd_level.cpp` hands
+the walk a room's sky groups after its guests (`VisKeepGuests`, `HDVisRoomGuests`), a
+second shell's left out as for the guests, so `game/draw.cpp`'s walk lists them through
+`VisGuestBounds` and is not changed. The guests, the openings, the wides, the enclosure
+and the classic rooms' verdicts are those of before. The reading - art above a room's
+classic box counts for that room, the Remaster building higher than the classic level - is
+after TROne's guests' column (GPLv3, Todesengel1931); the open air, the sky, the reach and
+the copies are this engine's own.
+
+**Proof.** Along the log's run, at the eye of each of the 884 changes of the list that
+follow a whole list: with the game's lists, 136 changes move 200 pixels or more, 3,213,043
+in all; with the walk replayed under the rule at the same eyes, 37 changes, 240,353 pixels
+(92.5 per cent fewer). Rooms 55, 222 and 7 move 200 pixels or more at 51, 21 and 22
+changes before and at 0, 1 and 0 after - room 222's one with the eye in room 154, a closed
+room; between one change's eye and the next they come and go 64, 24 and 40 times before
+and 14, 2 and 19 after. At the 136 changes the pictures showed, drawn from both replays,
+2,914,074 pixels move before and 75,176 after, 108 changes and 26; what still moves is art
+not in the sky: the loggia's own (room 225), the rooms below the courtyard (21, 18, 17),
+the building west of the tower (162) and group 52's facade in room 232's box (14,324
+pixels at frame 3,739). The tables of the fifteen levels room by room (TrgProbe `-vistable
+-visroom all`): every guest, opening, wide and enclosure line as before; 501 sky pairs, 84
+sky groups a room takes - ANDREA1 33 pairs, ANDREA2 47, ANDREA3 11, ANDY1 136, ANDY2 0,
+ANDY3 111, JOBY2 34, JOBY3 0, JOBY4 82, JOBY5 1, RICH1 0, RICH2 26, RICH3 3, RICHCUT2 0,
+TITLE 17; the largest RICH2's group 26 (59,896 triangles in the sky), ANDREA3's 67
+(30,601), TITLE's 54 (28,697), ANDY3's 23 (21,532), ANDY1's 202 (15,758) and ANDREA2's 55
+(13,321); six groups left out as copies (ANDREA3's 66, 69 and 91 of 67, ANDY3's 201,
+JOBY5's 82, RICH2's 120 of 26) and 45 because their room is not under the sky. RICH2's
+table is the same with the y shift the engine reads (RoomProbe `-visyshift 1`). The parity
+set of #236, 72 of 72 pictures byte-identical (six classic, six HD, thirty census and
+thirty camera pictures); #269's seven before-and-after places 7 of 7; of its 88 card
+samples 76, the twelve others named: TITLE's room 43 four views (540 to 2,998 pixels at
+960 x 540), the sky groups 35 and 54 - the landscape past the rooms - listed there with
+room 33, a guest of theirs; ANDY1's rooms 96, 97 and 135 eight views (1 to 18 pixels), the
+same rooms in another order and wider windows, rooms 143, 159, 162 and 163 queued first by
+the sky table, at room 96 also 121, 160, 161 and 150. RICH1 has no sky pair: its tables
+and walk, and #283's three pictures, are those of before. The price at ten eyes of the
+log, at 2,560 x 1,440, every pass timed 30 times on the GPU (median): the rooms 45, 12,
+13, 12, 12, 14, 13, 18, 14 and 8 before, 49, 14, 28, 23, 24, 16, 15, 19, 17 and 12 after;
+the triangles 25,134 to 440,028 before, 71,114 to 473,073 after; the draw calls 99 to 401
+before, 173 to 451 after; the GPU time 0.189 ms on average before and 0.235 after, at most
+0.157 to 0.459 ms at frame 3,739 (13 to 28 rooms, 54,279 to 418,708 triangles, room 10's
+309,808 among them, a guest of the rooms the sky groups walk into). The log's frames ran
+at the 165 Hz cap (6.06 ms median, 5.31 of it waiting at the flip, the walk 0.11 ms, the
+HD draws 0.32 ms of the CPU). The table build costs 1,435 ms before and 1,258 after on
+ANDREA2, 480 and 588 on ANDY1. ModernTest 17,123 checks, 0 failed (`vis_sky_art`, 18),
+MenuTest 45,043, InterpTest 754, LipsTest 272, 0 failed. `hd_vis` 0 is unchanged by
+construction: the sky table is built on the visibility path alone; `hd_build` 0 is
+untouched.
+
+**Decisions.** The art of a room not under the sky is left out, all of it: the 45 groups
+so left out include ANDREA3's arena skylines (groups 16, 17, 28 and 55, 29,127 to 29,458
+triangles each), ANDY3's group 86 (39,870), RICH2's 34 and 153 (40,191) and TITLE's 0, 7,
+8 and 36. Should one of them be reported to come and go, the next step is to let a room
+under the sky take it when the two rooms are linked. The reach is a sector of the floor
+plan and not every room under the sky: so 501 pairs, every room 4,489 (ANDY1 1,660 of
+them), each one a room more listed whenever its sky art is in the window. Art over a
+closed room's roof makes no room listed, but it comes along with its group: the roofs and
+the coffers over ANDREA2's loggia are group 222's. The walk is handed the sky groups as
+guests, so `game/draw.cpp` is not touched and `VISLOG` names them `g`. No table per level:
+ANDREA2 has no entry, and the rule derives each pair from the level's own rooms and art.
+
+**Commits.** `a836e6cf`.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -17284,3 +17424,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #281 | The raising cog's lift runs to its end, a pull meanwhile is kept |
 | #282 | Skipping a Zip call ends it, and the pad skips every flyby with an end |
 | #283 | The openings take no room linked only through a flipmap twin |
+| #286 | A room under the sky lists the art that stands in the sky beside it |

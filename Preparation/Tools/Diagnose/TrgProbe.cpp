@@ -4632,7 +4632,10 @@ namespace
 	 *             >=512, and the art box's reach into other rooms' whole
 	 *             boxes (box_pairs=) and insides (inside_pairs=)
 	 *
-	 * and with -room <n> that room's guests, openings and wides. */
+	 * The first line ends in openings_state=, the openings the flipmaps'
+	 * states refused, each with a `flipstate room= face= behind=` line.
+	 * With -visroom <n> that room's guests, openings and wides; with
+	 * -visroom all every room's, and the room each stands enclosed in. */
 	void dumpVisTable(const std::string& root, const std::string& stem,
 		const std::string& folder, int focus,
 		const std::vector<double>& reaches)
@@ -4674,12 +4677,13 @@ namespace
 		std::printf("vistable: %s rooms=%d groups=%d art_rooms=%d walls=%d "
 			"bare=%d void=%d guests=%d guest_tris=%lld portals=%d wide=%d "
 			"ms=%.0f guests_unlinked=%d openings=%d openings_unlinked=%d "
-			"openings_twin=%d wide_mirror=%d guests_hanging=%d\n",
+			"openings_twin=%d wide_mirror=%d guests_hanging=%d "
+			"openings_state=%d\n",
 			stem.c_str(), (int)rooms.size(), (int)trg.groups.size(), t.artRooms,
 			t.wallFaces, t.bareFaces, t.voidFaces, t.guestPairs, t.guestTris,
 			(int)portals.size(), t.widePortals, t.ms, t.guestsUnlinked,
 			(int)t.openings.size(), t.openingsUnlinked, t.openingsTwin,
-			t.wideMirrored, t.guestsHanging);
+			t.wideMirrored, t.guestsHanging, t.openingsState);
 
 		// The guests the sky's rule refused, one line each.
 		for (const HDVisRefused& one : t.hanging)
@@ -4687,6 +4691,11 @@ namespace
 				"%.0f..%.0f %.0f..%.0f %.0f..%.0f\n", stem.c_str(), one.holder,
 				one.group, one.tris, one.lo[0], one.hi[0], one.lo[1], one.hi[1],
 				one.lo[2], one.hi[2]);
+
+		// The openings the flipmaps' states refused, one line each.
+		for (const HDVisStateRefused& one : t.stateRefused)
+			std::printf("vistable: %s flipstate room=%d face=%d behind=%d\n",
+				stem.c_str(), one.holder, one.face, one.behind);
 
 		/* The faces the art plainly covers: wholly covered at the largest
 		 * reach asked. `plain=` on each reach's line is the share of them
@@ -4834,44 +4843,69 @@ namespace
 				by[1], by[2], by[3], boxPairs, insidePairs);
 		}
 
+		// One room's guests, openings and wides.
+		const auto one = [&](int focus)
+		{
+			for (int k = 0; k < t.guestCount[(size_t)focus]; k++)
+			{
+				const HDVisGuest& g =
+					t.guests[(size_t)(t.guestFirst[(size_t)focus] + k)];
+
+				std::printf("vistable: %s room=%d guest=%d tris=%d box "
+					"%.0f..%.0f %.0f..%.0f %.0f..%.0f\n", stem.c_str(), focus,
+					g.group, g.tris, g.lo[0], g.hi[0], g.lo[1], g.hi[1],
+					g.lo[2], g.hi[2]);
+			}
+
+			for (int k = 0; k < t.openCount[(size_t)focus]; k++)
+			{
+				const HDVisOpening& o =
+					t.openings[(size_t)(t.openFirst[(size_t)focus] + k)];
+
+				std::printf("vistable: %s room=%d opening face=%d bare=%.2f "
+					"behind=%d n=%d,%d,%d v0=%d,%d,%d v2=%d,%d,%d\n",
+					stem.c_str(), focus, o.face, o.bare, o.behind, o.n[0],
+					o.n[1], o.n[2], o.v[0][0], o.v[0][1], o.v[0][2], o.v[2][0],
+					o.v[2][1], o.v[2][2]);
+			}
+
+			for (int k = 0; k < t.wideCount[(size_t)focus]; k++)
+			{
+				const HDVisWide& w =
+					t.wides[(size_t)(t.wideFirst[(size_t)focus] + k)];
+				const HDVisPortal& p = portals[(size_t)(
+					rooms[(size_t)focus].firstPortal + w.portal)];
+
+				std::printf("vistable: %s room=%d wide portal=%d to=%d portal "
+					"%d,%d,%d..%d,%d,%d opening %d,%d,%d..%d,%d,%d\n",
+					stem.c_str(), focus, w.portal, p.to, p.v[0][0], p.v[0][1],
+					p.v[0][2], p.v[2][0], p.v[2][1], p.v[2][2], w.v[0][0],
+					w.v[0][1], w.v[0][2], w.v[2][0], w.v[2][1], w.v[2][2]);
+			}
+		};
+
+		/* -visroom all: every room's lines, and the room each room stands
+		 * enclosed in (HDVisTables::enclosedBy) - the tables room by room,
+		 * the census two builds are compared by. */
+		if (focus == -2)
+		{
+			for (int r = 0; r < t.rooms; r++)
+			{
+				one(r);
+
+				if (t.enclosedBy[(size_t)r] >= 0)
+					std::printf("vistable: %s room=%d enclosed_by=%d tris=%d\n",
+						stem.c_str(), r, t.enclosedBy[(size_t)r],
+						t.enclosedTris[(size_t)r]);
+			}
+
+			return;
+		}
+
 		if (focus < 0 || focus >= t.rooms)
 			return;
 
-		for (int k = 0; k < t.guestCount[(size_t)focus]; k++)
-		{
-			const HDVisGuest& g =
-				t.guests[(size_t)(t.guestFirst[(size_t)focus] + k)];
-
-			std::printf("vistable: %s room=%d guest=%d tris=%d box %.0f..%.0f "
-				"%.0f..%.0f %.0f..%.0f\n", stem.c_str(), focus, g.group, g.tris,
-				g.lo[0], g.hi[0], g.lo[1], g.hi[1], g.lo[2], g.hi[2]);
-		}
-
-		for (int k = 0; k < t.openCount[(size_t)focus]; k++)
-		{
-			const HDVisOpening& o =
-				t.openings[(size_t)(t.openFirst[(size_t)focus] + k)];
-
-			std::printf("vistable: %s room=%d opening face=%d bare=%.2f "
-				"behind=%d n=%d,%d,%d v0=%d,%d,%d v2=%d,%d,%d\n", stem.c_str(),
-				focus, o.face, o.bare, o.behind, o.n[0], o.n[1], o.n[2],
-				o.v[0][0], o.v[0][1], o.v[0][2], o.v[2][0], o.v[2][1],
-				o.v[2][2]);
-		}
-
-		for (int k = 0; k < t.wideCount[(size_t)focus]; k++)
-		{
-			const HDVisWide& w =
-				t.wides[(size_t)(t.wideFirst[(size_t)focus] + k)];
-			const HDVisPortal& p = portals[(size_t)(
-				rooms[(size_t)focus].firstPortal + w.portal)];
-
-			std::printf("vistable: %s room=%d wide portal=%d to=%d portal "
-				"%d,%d,%d..%d,%d,%d opening %d,%d,%d..%d,%d,%d\n", stem.c_str(),
-				focus, w.portal, p.to, p.v[0][0], p.v[0][1], p.v[0][2],
-				p.v[2][0], p.v[2][1], p.v[2][2], w.v[0][0], w.v[0][1],
-				w.v[0][2], w.v[2][0], w.v[2][1], w.v[2][2]);
-		}
+		one(focus);
 	}
 
 	void dumpClassicArt(const std::string& root, const std::string& stem,
@@ -7343,7 +7377,11 @@ int main(int argc, char** argv)
 		else if (!_stricmp(argv[i], "-vistable"))
 			vis_table = true;
 		else if (!_stricmp(argv[i], "-visroom") && i + 1 < argc)
-			vis_room = std::atoi(argv[++i]);
+		{
+			// "all" asks every room (-2), a number that room.
+			++i;
+			vis_room = !_stricmp(argv[i], "all") ? -2 : std::atoi(argv[i]);
+		}
 		else if (!_stricmp(argv[i], "-visreach") && i + 1 < argc)
 		{
 			vis_reaches.clear();

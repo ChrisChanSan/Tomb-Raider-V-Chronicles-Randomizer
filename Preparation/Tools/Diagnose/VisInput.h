@@ -15,7 +15,8 @@
 /* The classic side of the visibility path's tables (hd_vis.h) out of a .TRC,
  * as hd_level.cpp's BuildRoomVis hands it in out of ROOM_INFO: per room its
  * origin (header field 24 is its y), its sectors, its box in y (field 36 is
- * the highest ceiling), its flags, its flipmap twin, its classic faces in
+ * the highest ceiling), its flags, its flipmap twin and the map that swaps
+ * the two (header byte 53, FlipNumber), its classic faces in
  * world units, its portal records room-local and its floor links (the rooms
  * its floor squares name above and below). RoomProbe and TrgProbe share
  * it. */
@@ -55,6 +56,12 @@ inline bool VisInputFromLevel(const Tr5Level& level,
 		one.bottom = rm.yBottom;
 		one.flags = (int)rm.flags;
 		one.twin = rm.altRoom;
+
+		// The flipmap of a room naming a twin: FlipNumber, header byte 53.
+		unsigned word = 0;
+
+		one.flip = rm.altRoom >= 0 && level.headerField(r, 52, word, error) ?
+			(int)((word >> 8) & 0xFF) : -1;
 		one.firstFace = (int)faces.size();
 		one.faceCount = 0;
 		one.firstPortal = (int)portals.size();

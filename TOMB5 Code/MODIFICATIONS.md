@@ -16984,6 +16984,91 @@ keeps while map 0 is off, as every main room is, and the original game never dra
 
 **Commits.** `9b888587`.
 
+### The frame a flyby ends on is drawn with the camera it leaves (#285)
+
+2026-10-31.
+
+**What.** A camera flyby whose first camera carries SNAPBACK - 49 of the 64 sequences, all
+8 of ANDREA2 - now draws the tick it ends in with the chase camera, skipped or played
+through: eye, target, room and field of view of the one camera the end hands the view back
+to. That picture used to take the flyby's view with the chase camera's room. Skipping the
+cog's flyby in Trajan's Markets with Cross showed it: one picture with the lower half
+black, the horizon as a ball in the middle and above it the cog room's walls seen from far
+outside, Lara on the rope inside them; the chase camera came a tick later. A flyby played
+to its end drew the same split from one or two speed steps before its last camera; for a
+player who lets it run, the cut to the chase camera now comes one tick, a thirtieth of a
+second, earlier, and that picture is gone. The flybys that end on the spline back to the
+chase camera (ANDY3 1, RICH1 1, RICH2 2 and the title's 5), the end by Look and the end of
+a sequence that follows Lara drew one camera before and are drawn as before. With `-log` a
+`FLYEND` line names every end.
+
+**Why.** The run that showed it skipped the cog's flyby three times, at ticks 216/217,
+367/368 and 486/487, with the same lines each time. The flyby is sequence 9 (TrgProbe
+`-flyby`): cameras 34, 35 and 36 in room 24, the first with flags 0441 (snap, snapback, no
+Lara control). At tick 216 the press jumps the spline to the end of 34's segment and the
+knots are filled for 35 to 36. At tick 217 `CalculateSpotCams` takes the spline at 0,
+camera 35 (73216,2176,35328) in room 24, with camera 35's field of view (18200), and
+`phd_LookAt` builds the view from them; the held press jumps the segment, the count passes
+the last camera and the end branch runs: the hold ends (`HOLDLOG end=flyby`), the type
+turns CHASE, SNAPBACK puts `camera.pos`, `camera.target` and `camera.pos.room_number` back
+to what they were when the flyby began - the chase camera of tick 205, room 51 - and
+`AlterFOV(LastFov)` sets 14560. Nothing builds the view again: the camera step of
+`game/control.cpp` runs `CalculateSpotCams` instead of `CalculateCamera` on a tick that
+begins in a flyby. The interpolation takes the end for a cut and draws the tick's state
+live, with the view of camera 35. `DrawRooms` walks from `camera.pos.room_number`, room 51
+(`VISLOG eye_room=51`, `ROOMLIST cam_room=51 walk_room=51 eye=(73216,2176,35328) rooms=2
+removed=24,23,224,16,159,168,162`): the eye stands in room 24, 10,000 units off and 5,000
+below, the walk follows none of room 51's portals, 51 and its guest 222 are all it lists,
+and the rest stays black. The list holds room 222, which lies under the sky (flags 0x48),
+and the sky is drawn at `camera.pos` (`SkyDrawPhase`): the horizon around the chase
+camera's place by Lara, seen from 10,000 units away - the ball. Every picture until tick
+218, five or six at 165 Hz, is this one; at tick 218 `CalculateCamera` puts the chase
+camera at its ideal (`CAMLOG tick f=218 eye=(72329,-2937,26551)/51`). A run played to its
+end reaches the same branch with the spline one or two speed steps before the last camera,
+and splits the same way. The end on the spline to the chase camera keeps the eye and the
+room of its own tick, from which the view was built; the Look end calls
+`AlterFOV(LastFov)` and `CalculateCamera`; a sequence that tracks Lara ends when its
+trigger stops arming it, on a tick whose camera step runs `CalculateCamera`. The log's end
+at tick 81 (`HOLDLOG how=level`) is the title's flyby dropped by the level load, with no
+picture after it; no flyby ran at ANDREA2's start in that run.
+
+**How.** `game/spotcam.cpp`: the SNAPBACK end calls `CalculateCamera` after
+`AlterFOV(LastFov)`, as the Look end does. With `camera.speed` 1 and `old_type`
+FIXED_CAMERA, as the end leaves them, the chase camera stands at its ideal at once and
+builds its own view, so eye, target, room, view and field of view are one state.
+`FlyEndLog` writes `FLYEND tick= how= eye=(x,y,z)/room target=(x,y,z)/room fov=` after the
+end's own camera step, with `how=end`, `skip` (a skip jumped that tick to the end) or
+`look`; `game/control.cpp`'s camera step writes `how=track` when it finds that a sequence
+which tracked Lara was let go. `game/spotcam.h` declares `FlyEndLog`.
+
+**Proof.** Tick 217 read again after the change: the same up to `AlterFOV(LastFov)`, then
+`CalculateCamera` - the chase camera at its ideal behind Lara in room 51, the place
+`CAMLOG` showed at tick 218, its `phd_LookAt` the view - and `FLYEND tick=217 how=skip`
+with that eye and room 51. The end is still a cut for the interpolation (the flyby flag
+drops, the eye jumps 10,000 units) and its pictures are drawn live with that view: the
+walk from room 51 with the eye inside it, the sky around the eye. Type and old type no
+longer change from tick 217 to 218 (CHASE and FIXED_CAMERA to CHASE and CHASE was a cut of
+its own), so the pictures after 218 are blended where they were drawn live. The census of
+TrgProbe `-flyby` over the fifteen levels: 64 sequences, 49 end by SNAPBACK (ANDREA1 6,
+ANDREA2 8, ANDREA3 5, ANDY1 1, ANDY2 6, ANDY3 2, JOBY2 1, JOBY5 1, RICH1 8, RICH2 7, RICH3
+4), 9 on the spline to the chase camera, 6 loop or track. ModernTest 17,105, MenuTest
+45,043, InterpTest 754 and LipsTest 272 checks, none failed. The rule is one call in one
+branch and has no part a test could hold without the engine; ModernTest gains no group.
+Game logic shared by every draw path: there is no `hd_build` parity to claim.
+
+**Decisions.** The end runs the chase camera rather than building a view at the snap-back
+place: the next tick's `CalculateCamera` moves to the ideal at once (speed 1), so that
+place would stand for one tick and then jump; the end shows the camera the next tick
+keeps. The ends that drew one camera are left as they were, among them the skip of a flyby
+that ends on the spline back: its last tick shows the last flyby camera's own view at the
+chase camera's field of view, one camera, before the chase camera takes over. The cutscene
+skipper ends no flyby - it never touches `bUseSpotCam`, and a cut scene that starts during
+a flyby holds it until the scene is over - so FLYEND has no `cutseq`. An anti-trigger
+(`TestTriggers`) ends a flyby in no level's data and writes no FLYEND line. Task #284 is
+on a branch of its own; this entry stands after #283's.
+
+**Commits.** `66c57ce3`.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -17284,3 +17369,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #281 | The raising cog's lift runs to its end, a pull meanwhile is kept |
 | #282 | Skipping a Zip call ends it, and the pad skips every flyby with an end |
 | #283 | The openings take no room linked only through a flipmap twin |
+| #285 | The frame a flyby ends on is drawn with the camera it leaves |

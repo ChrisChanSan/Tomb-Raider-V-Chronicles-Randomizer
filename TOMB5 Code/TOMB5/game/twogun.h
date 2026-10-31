@@ -2,6 +2,7 @@
 #include "../global/types.h"
 
 void ControlZipController(short item_number);
+void ZipCallsEndBySkip();
 void InitialiseTwogun(short item_number);
 void TwogunControl(short item_number);
 void UpdateTwogunLasers();

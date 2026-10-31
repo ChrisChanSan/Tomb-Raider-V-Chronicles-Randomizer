@@ -388,6 +388,10 @@ long ControlPhase(long nframes, long demo_mode)
 			// play role (the binding page cannot take it, and its bits,
 			// IN_OPTION and IN_DESELECT, open the inventory only on a
 			// fresh press). The title skips nothing.
+			//
+			// A Zip call running under the scene ends with the skip
+			// (ZipCallsEndBySkip, game\twogun.cpp), as under a skipped
+			// flyby.
 			{
 				static char crossWasHeld = 0;
 				const int crossFresh = SkipConfirmEdge((int)JoyConfirmDown(),
@@ -397,6 +401,7 @@ long ControlPhase(long nframes, long demo_mode)
 					(keymap[DIK_ESCAPE] || crossFresh))
 				{
 					do_cutseq_skipper_stuff();
+					ZipCallsEndBySkip();
 
 					if (crossFresh && gfLevelId != LVL5_TITLE)
 						InputSkipLatch(SKIP_LATCH_CUTSEQ);

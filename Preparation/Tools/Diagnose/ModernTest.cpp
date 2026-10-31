@@ -117,6 +117,9 @@
 // go, and the pad roles it is held against (skip_latch, skip_latch_rope).
 #include "../../../TOMB5 Code/TOMB5/game/skip_latch.h"
 #include "../../../TOMB5 Code/TOMB5/game/pad_scheme.h"
+// A Zip call's stages and ends, and the skip that ends it (zip_call_rule,
+// zip_call_skip, zip_call_wiring).
+#include "../../../TOMB5 Code/TOMB5/game/zip_call_rule.h"
 // A room group stored off its height: the count, the pick (yshift_rule).
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_scan.h"
 // The fog bulbs' body: the span, the column, the veil, the breath (fog_body),
@@ -31059,25 +31062,27 @@ static void skip_latch()
 /* The flyby's two rules for the pad (game\spotcam_math.h): when a press
  * starts the skip and which frames jump. The flags are the levels' own
  * first cameras: ANDREA2's sequence 1 (0651) and 9 (0441) take Lara's
- * control, RICH1's 11 (0201) leaves it, RICH2's 13 (0049) tracks Lara and
- * ANDY1's 5 (0008) too; 0004 is LOOPCAMERA alone. */
+ * control, RICH1's 11 (0201) and RICH2's 12 (0241) leave it - a Zip call
+ * takes it the tick after - as ANDREA3's 0 and RICH3's 10 do, RICH2's 13
+ * (0049) tracks Lara and ANDY1's 5 (0008) too; 0004 is LOOPCAMERA alone. */
 static void spot_pad_skip()
 {
-	printf("the pad's skip of a flyby: a fresh press, a flyby that holds "
-		"Lara\n");
+	printf("the pad's skip of a flyby: a fresh press, a flyby with an "
+		"end\n");
 
-	ok(SpotPadSkipStarts(1, 1, 0x0651) && SpotPadSkipStarts(1, 1, 0x0441),
+	ok(SpotPadSkipStarts(1, 0x0651) && SpotPadSkipStarts(1, 0x0441),
 		"flyby pad: a fresh press skips a flyby that holds Lara's control",
 		0, 1);
-	ok(!SpotPadSkipStarts(0, 1, 0x0651),
+	ok(!SpotPadSkipStarts(0, 0x0651) && !SpotPadSkipStarts(0, 0x0201),
 		"flyby pad: a held button does not start it", 1, 0);
-	ok(!SpotPadSkipStarts(1, 0, 0x0201),
-		"flyby pad: with Lara in control the button stays hers", 1, 0);
-	ok(!SpotPadSkipStarts(1, 1, 0x0049) && !SpotPadSkipStarts(1, 1, 0x0008) &&
-		!SpotPadSkipStarts(1, 1, 0x0004),
+	ok(SpotPadSkipStarts(1, 0x0201) && SpotPadSkipStarts(1, 0x0241),
+		"flyby pad: a fresh press skips one that leaves her playing", 0, 1);
+	ok(!SpotPadSkipStarts(1, 0x0049) && !SpotPadSkipStarts(1, 0x0008) &&
+		!SpotPadSkipStarts(1, 0x0004),
 		"flyby pad: a tracking or looping sequence takes no skip", 1, 0);
 	// The flags are a short: with SP_FLYBYONESHOT, bit 15, they arrive < 0.
-	ok(SpotPadSkipStarts(1, 1, 0x8651 - 0x10000),
+	ok(SpotPadSkipStarts(1, 0x8651 - 0x10000) &&
+		SpotPadSkipStarts(1, 0x8201 - 0x10000),
 		"flyby pad: the one-shot bit in the flags changes nothing", 0, 1);
 
 	ok(SpotSkipThisFrame(1, 0, 0) && SpotSkipThisFrame(1, 1, 0),
@@ -31218,7 +31223,7 @@ static RopeRun rope_run(const RopeSim& m)
 		{
 			const int fresh = SkipConfirmEdge((fire & cross) != 0, &held);
 
-			if (SpotPadSkipStarts(fresh, taken, m.flags))
+			if (SpotPadSkipStarts(fresh, m.flags))
 			{
 				padSkip = 1;
 				SkipLatchEngage(&latch, 1, SKIP_LATCH_FLYBY, t);
@@ -31330,14 +31335,18 @@ static void skip_latch_rope()
 		"rope 33: without a skip the latch's rule is the skipper off",
 		r.pulls, off.pulls);
 
-	// A flyby that leaves Lara her control: Cross is her Action, no skip.
+	/* A flyby that leaves Lara her control takes the pad's skip as well
+	 * (#282): the fresh press at 63 skips three segments while it is held,
+	 * the latch keeps it out of her input from the next reading on, and the
+	 * pull is not repeated. */
 	h.flags = 0x0201;
 	h.press[0][1] = 61;
 	h.press[1][0] = 63;
 	h.press[1][1] = 66;
 	r = rope_run(h);
-	ok(r.latchSet == -1, "rope: a flyby that leaves Lara control takes no "
-		"pad skip", r.latchSet, -1);
+	ok(r.latchSet == 63 && r.latchReleased == 66 && r.pulls == 1,
+		"rope: a flyby that leaves Lara control takes the pad skip",
+		r.latchSet, 63);
 }
 
 /* The latch's wiring in the engine's own text: both skippers ask the one
@@ -31358,7 +31367,7 @@ static void skip_latch_wiring()
 		hd_switch_count(control, "InputSkipLatch(SKIP_LATCH_CUTSEQ);") +
 		hd_switch_count(spot, "SkipConfirmEdge((int)JoyConfirmDown(),") +
 		hd_switch_count(spot, "InputSkipLatch(SKIP_LATCH_FLYBY);") +
-		hd_switch_count(spot, "SpotPadSkipStarts(fresh, bDisableLaraControl") +
+		hd_switch_count(spot, "SpotPadSkipStarts(fresh, s->flags)") +
 		hd_switch_count(spot, "SpotSkipThisFrame(keymap[DIK_ESCAPE] != 0,");
 	ok(right == 6, "skip latch wiring: both skippers, one edge, one latch",
 		right, 6);
@@ -31388,6 +31397,564 @@ static void skip_latch_wiring()
 	free(control);
 	free(spot);
 	free(in);
+}
+
+/* A Zip call's arithmetic (game\zip_call_rule.h), case by case: the steps
+ * of its three stages, the end by its track, the end without a track, and
+ * how an end leaves Lara and the music. */
+static void zip_call_rule()
+{
+	printf("a Zip call: its stages and its ends\n");
+
+	ok(ZipCallTick(ZIP_STAGE_TAKE, 0, 0, 0) == ZIP_STARTED &&
+		ZipCallTick(ZIP_STAGE_TAKE, 0, 1, 1) == ZIP_STARTED,
+		"zip call: stage 0 takes her control at once", 0, 1);
+	ok(ZipCallTick(ZIP_STAGE_POSE, 0, 0, 1) == ZIP_WAIT,
+		"zip call: stage 1 waits while she does not stand", 1, 0);
+	ok(ZipCallTick(ZIP_STAGE_POSE, 0, 1, 0) == ZIP_POSING,
+		"zip call: stage 1 poses her once she stands", 0, 1);
+	ok(ZipCallTick(ZIP_STAGE_LISTEN, 0, 0, 1) == ZIP_HEARD,
+		"zip call: the first tick of stage 2 hears the track", 0, 1);
+	ok(ZipCallTick(ZIP_STAGE_LISTEN, 1, 0, 1) == ZIP_WAIT &&
+		ZipCallTick(ZIP_STAGE_LISTEN, 1, 1, 1) == ZIP_WAIT,
+		"zip call: it waits while the track plays", 1, 0);
+	ok(ZipCallTick(ZIP_STAGE_LISTEN, 1, 0, 0) == ZIP_ENDED,
+		"zip call: the end by track, the first tick it is over", 0, 1);
+	ok(ZipCallTick(ZIP_STAGE_LISTEN, 0, 0, 0) == ZIP_ENDED_NO_TRACK,
+		"zip call: no track on the first tick of stage 2 ends it", 0, 1);
+	ok(ZipCallTick(3, 0, 1, 1) == ZIP_WAIT &&
+		ZipCallTick(-1, 1, 1, 0) == ZIP_WAIT,
+		"zip call: a stage outside 0 to 2 does nothing, as before", 1, 0);
+
+	ok(ZipPoseEnd(ZIP_ENDED, ZIP_AS_POSE) == ZIP_POSE_GOAL_OUT &&
+		ZipPoseEnd(ZIP_ENDED, ZIP_AS_INTO) == ZIP_POSE_GOAL_OUT &&
+		ZipPoseEnd(ZIP_ENDED, 2) == ZIP_POSE_GOAL_OUT,
+		"zip end: the end by track keeps its line, goal out", 0, 1);
+	ok(ZipPoseEnd(ZIP_ENDED_BY_SKIP, ZIP_AS_POSE) == ZIP_POSE_OUT &&
+		ZipPoseEnd(ZIP_ENDED_NO_TRACK, ZIP_AS_POSE) == ZIP_POSE_OUT,
+		"zip end: from the pose her hand comes down", 0, 1);
+	ok(ZipPoseEnd(ZIP_ENDED_BY_SKIP, ZIP_AS_INTO) == ZIP_POSE_STAND &&
+		ZipPoseEnd(ZIP_ENDED_NO_TRACK, ZIP_AS_INTO) == ZIP_POSE_STAND,
+		"zip end: her hand still going up, straight to standing", 0, 1);
+	ok(ZipPoseEnd(ZIP_ENDED_BY_SKIP, ZIP_AS_OUT) == ZIP_POSE_KEEP &&
+		ZipPoseEnd(ZIP_ENDED_BY_SKIP, 2) == ZIP_POSE_KEEP &&
+		ZipPoseEnd(ZIP_ENDED_BY_SKIP, 1) == ZIP_POSE_KEEP,
+		"zip end: not posed, or on her way out, she is left alone", 1, 0);
+
+	ok(ZipEndMusic(1, 129) == ZIP_MUSIC_ATMOSPHERE,
+		"zip end: its own track still on, back to the atmosphere", 0, 1);
+	ok(ZipEndMusic(1, 0) == ZIP_MUSIC_STOP,
+		"zip end: a level with no atmosphere, silence", 0, 1);
+	ok(ZipEndMusic(0, 129) == ZIP_MUSIC_KEEP &&
+		ZipEndMusic(0, 0) == ZIP_MUSIC_KEEP,
+		"zip end: another track on, the music left alone", 1, 0);
+
+	ok(!strcmp(ZipCallWord(ZIP_STARTED), "started") &&
+		!strcmp(ZipCallWord(ZIP_POSING), "posing") &&
+		!strcmp(ZipCallWord(ZIP_HEARD), "heard") &&
+		!strcmp(ZipCallWord(ZIP_ENDED), "ended") &&
+		!strcmp(ZipCallWord(ZIP_ENDED_BY_SKIP), "ended by skip") &&
+		!strcmp(ZipCallWord(ZIP_ENDED_NO_TRACK), "ended without track"),
+		"zip call: the six ZIPLOG words", 0, 1);
+}
+
+/* A Zip call under the flyby that carries it, tick by tick in the engine's
+ * order (ControlPhase, game\control.cpp): the input, masked while
+ * bDisableLaraControl is set; the items, the call among them from the tick
+ * after its trigger; Lara, whose zip states do nothing of their own; the
+ * trigger on tick 0, which activates the call and then starts the flyby
+ * (the order of its commands in RICH1 room 3 and RICH2 rooms 34 and 161);
+ * the camera, CalculateSpotCams with its skip and its end. The music: the
+ * call's track plays `track` ticks from the tick that poses her, and the
+ * stream goes back to the level's atmosphere at its end. Lara's zip
+ * animations as RICH1, RICH2 and RICH3 carry them: 467 (19 frames) into
+ * 468, which loops (73 frames) with its one state change, goal AS_OUT_ZIP,
+ * from any frame to 469 (25 frames), which ends in ANIM_BREATH. The
+ * track's length is not read from the audio: `track` stands for it, and
+ * the checks hold for any length longer than the skip. */
+enum
+{
+	ZIP_SIM_BEFORE,	// the call and the skippers as they were
+	ZIP_SIM_AFTER	// a skip ends the call; the pad skips each flyby's end
+};
+
+enum
+{
+	ZIP_AUDIO_NONE,		// no music device: S_CDPlay does nothing
+	ZIP_AUDIO_NOFILE,	// the track's file missing: named, nothing plays
+	ZIP_AUDIO_PLAYS
+};
+
+enum
+{
+	ZIP_LARA_MOVE,		// on the player's push
+	ZIP_LARA_STOPPING,	// coming to a stand
+	ZIP_LARA_STAND,		// AS_STOP in ANIM_BREATH
+	ZIP_LARA_IN,		// 467, AS_INTO_ZIP
+	ZIP_LARA_POSE,		// 468, AS_ZIP
+	ZIP_LARA_OUT		// 469, AS_OUT_ZIP
+};
+
+struct ZipSim
+{
+	int rule;
+	int call;		// 0: a flyby with no Zip call
+	int flags;		// the flyby's first camera
+	int segs, len;	// its segments, the ticks of one played
+	int esc[2];		// Escape held, ticks [from, to)
+	int pad[2];		// Cross held, ticks [from, to)
+	int stopIn;		// ticks she needs to stand; 0: she stands on tick 0
+	int pushTo;		// the player pushes on until this tick
+	int audio;
+	int track;		// the track's ticks
+	int loadAt;		// a savegame loaded at this tick, -1 none
+	int ticks;
+};
+
+struct ZipRun
+{
+	int flybyEnd;	// the tick the flyby ended in, -1 while it runs
+	int posedAt;	// the tick the call posed her, -1 never
+	int endAt;		// the tick the call ended in, -1 while it runs
+	int endWhy;		// ZIP_ENDED, ZIP_ENDED_BY_SKIP or ZIP_ENDED_NO_TRACK
+	int lastZip;	// the last tick she was in a zip state, -1 never
+	int heldAfter;	// ticks after the flyby posed or without her control
+	int musicEnd;	// the music at the run's end: 95 the call's, 129 not
+	int padSkip;	// the tick a press started the pad's skip, -1 none
+};
+
+static ZipRun zip_run(const ZipSim& m)
+{
+	const int track = 95, atmosphere = 129;	// RICH1's call, its level's
+	ZipRun r = { -1, -1, -1, -1, -1, 0, 0, -1 };
+	int lara = m.stopIn ? ZIP_LARA_MOVE : ZIP_LARA_STAND;
+	int frame = 0, stopLeft = 0, goalOut = 0;
+	int disable = 0, flyby = 0, seg = 0, segTick = 0, skipped = 0;
+	int padSkip = 0, stage = -1, heard = 0;
+	int xa = m.audio == ZIP_AUDIO_NONE ? -1 : atmosphere;
+	int stream = 1, trackEnd = -1;
+	char held = 0;
+
+	// The call's end: ZipCallFinish (game\twogun.cpp), or, before, the
+	// one end the controller had - goal AS_OUT_ZIP, her control back.
+	auto finish = [&](int why, int t)
+	{
+		const int state = lara == ZIP_LARA_IN ? ZIP_AS_INTO :
+			lara == ZIP_LARA_POSE ? ZIP_AS_POSE :
+			lara == ZIP_LARA_OUT ? ZIP_AS_OUT : 2;
+		const int pose = m.rule == ZIP_SIM_BEFORE ? ZIP_POSE_GOAL_OUT :
+			ZipPoseEnd(why, state);
+		const int music = m.rule == ZIP_SIM_BEFORE ? ZIP_MUSIC_KEEP :
+			ZipEndMusic(xa == track, atmosphere);
+
+		if (pose == ZIP_POSE_GOAL_OUT || pose == ZIP_POSE_OUT)
+			goalOut = 1;
+		else if (pose == ZIP_POSE_STAND)
+			lara = ZIP_LARA_STAND, frame = 0;
+
+		if (music == ZIP_MUSIC_ATMOSPHERE)
+			xa = atmosphere, stream = 1, trackEnd = -1;
+
+		disable = 0;
+		stage = -1;
+		r.endAt = t;
+		r.endWhy = why;
+	};
+
+	for (int t = 0; t < m.ticks; t++)
+	{
+		// The stream ends the track on its own thread: back to the
+		// atmosphere. A load starts the atmosphere and gives her control
+		// back (DoLevel, game\gameflow.cpp); the call keeps its stage,
+		// saved with the item.
+		if (trackEnd >= 0 && t >= trackEnd)
+			xa = atmosphere, stream = 1, trackEnd = -1;
+
+		if (t == m.loadAt)
+		{
+			if (m.audio != ZIP_AUDIO_NONE)
+				xa = atmosphere, stream = 1;
+
+			trackEnd = -1;
+			disable = 0;
+		}
+
+		const int push = t < m.pushTo && !disable;
+		const int esc = t >= m.esc[0] && t < m.esc[1];
+		const int cross = t >= m.pad[0] && t < m.pad[1];
+
+		// The items: the call, from the tick after its trigger.
+		if (stage >= 0)
+		{
+			const int stands = lara == ZIP_LARA_STAND;
+			int step = ZIP_WAIT;
+
+			if (m.rule == ZIP_SIM_AFTER)
+				step = ZipCallTick(stage, heard, stands,
+					stage == ZIP_STAGE_LISTEN && xa == track && stream);
+			else if (stage == 0)
+				step = ZIP_STARTED;
+			else if (stage == 1 && stands)
+				step = ZIP_POSING;
+			else if (stage == 2 && !heard && xa == track)
+				step = ZIP_HEARD;
+			else if (stage == 2 && heard && xa != track)
+				step = ZIP_ENDED;
+
+			if (step == ZIP_STARTED)
+				disable = 1, stage = 1;
+			else if (step == ZIP_POSING)
+			{
+				lara = ZIP_LARA_IN, frame = 0, goalOut = 0, stage = 2;
+				r.posedAt = t;
+
+				// S_CDPlay names the track at once, and a stream runs if
+				// its file is there.
+				if (m.audio != ZIP_AUDIO_NONE)
+				{
+					xa = track;
+					stream = m.audio == ZIP_AUDIO_PLAYS;
+					trackEnd = stream ? t + m.track : -1;
+				}
+			}
+			else if (step == ZIP_HEARD)
+				heard = 1;
+			else if (step == ZIP_ENDED || step == ZIP_ENDED_NO_TRACK)
+				finish(step, t);
+		}
+
+		// Lara: her zip states run lara_as_null; the rest goes by the push.
+		switch (lara)
+		{
+		case ZIP_LARA_MOVE:
+			if (!push)
+				lara = ZIP_LARA_STOPPING, stopLeft = m.stopIn;
+			break;
+
+		case ZIP_LARA_STOPPING:
+			if (push)
+				lara = ZIP_LARA_MOVE;
+			else if (--stopLeft <= 0)
+				lara = ZIP_LARA_STAND;
+			break;
+
+		case ZIP_LARA_STAND:
+			if (push)
+				lara = ZIP_LARA_MOVE;
+			break;
+
+		case ZIP_LARA_IN:
+			if (++frame >= 19)
+				lara = ZIP_LARA_POSE, frame = 0;
+			break;
+
+		case ZIP_LARA_POSE:
+			if (goalOut)
+				lara = ZIP_LARA_OUT, frame = 0;
+			break;
+
+		case ZIP_LARA_OUT:
+			if (++frame >= 25)
+				lara = ZIP_LARA_STAND, frame = 0, goalOut = 0;
+			break;
+		}
+
+		if (lara >= ZIP_LARA_IN)
+			r.lastZip = t;
+
+		// The trigger, in LaraControl on tick 0: the call, then the flyby
+		// (InitialiseSpotCam: her control taken by SP_NOLARACONTROL only,
+		// the pad's edge primed from the button as it is).
+		if (t == 0)
+		{
+			if (m.call)
+				stage = ZIP_STAGE_TAKE, heard = 0;
+
+			flyby = 1;
+			disable = (m.flags & (1 << 10)) != 0;
+			seg = segTick = skipped = padSkip = 0;
+			held = (char)cross;
+		}
+
+		// The camera: CalculateSpotCams, its skip and its end. The pad's
+		// start asked for her control taken at that moment before; it asks
+		// for a sequence with an end alone now. Its run lasts while the
+		// press is held, as the latch does.
+		if (flyby)
+		{
+			const int fresh = SkipConfirmEdge(cross, &held);
+			const int starts = m.rule == ZIP_SIM_BEFORE ? fresh && disable &&
+				!(m.flags & (SPOT_LOOPCAMERA | SPOT_TRACKCAMERA)) :
+				SpotPadSkipStarts(fresh, m.flags);
+
+			if (starts)
+			{
+				padSkip = 1;
+
+				if (r.padSkip < 0)
+					r.padSkip = t;
+			}
+
+			const int skip = SpotSkipThisFrame(esc, padSkip, cross);
+
+			if (skip)
+				skipped = 1;
+
+			if (skip || ++segTick >= m.len)
+				seg++, segTick = 0;
+
+			if (seg >= m.segs)
+			{
+				if (m.rule == ZIP_SIM_AFTER && skipped && stage >= 0)
+					finish(ZIP_ENDED_BY_SKIP, t);
+
+				flyby = 0;
+				disable = 0;
+				r.flybyEnd = t;
+			}
+		}
+
+		if (r.flybyEnd >= 0 && t > r.flybyEnd &&
+			(lara >= ZIP_LARA_IN || disable))
+			r.heldAfter++;
+	}
+
+	r.musicEnd = xa;
+	return r;
+}
+
+static bool zip_same(const ZipRun& a, const ZipRun& b)
+{
+	return a.flybyEnd == b.flybyEnd && a.posedAt == b.posedAt &&
+		a.endAt == b.endAt && a.endWhy == b.endWhy &&
+		a.lastZip == b.lastZip && a.heldAfter == b.heldAfter &&
+		a.musicEnd == b.musicEnd && a.padSkip == b.padSkip;
+}
+
+/* RICH1's first call (item 4, track 95) under flyby 11: 16 segments - 15
+ * cameras on and the spline back to her - of 100 ticks each played
+ * (speed 655), first camera 0201, which leaves her control to the call to
+ * take. She runs onto the trigger and the player lets go there; she needs
+ * 24 ticks to stand (a run's stop and ANIM_STOP into ANIM_BREATH). Escape
+ * is held from the first frame. And RICH2's second (item 225) under flyby
+ * 10: 3 segments, first camera 0651, which takes her control itself. */
+static void zip_call_skip()
+{
+	printf("a Zip call under a skipped flyby, before and after\n");
+
+	const int L = 600;	// a stand-in for the track's ticks
+	ZipSim m = { ZIP_SIM_BEFORE, 1, 0x0201, 16, 100, { 0, 30 }, { -1, -1 },
+		24, 0, ZIP_AUDIO_PLAYS, L, -1, 2400 };
+	ZipRun r = zip_run(m);
+
+	/* Before: the skip ends the flyby in its 16th tick, she stands at 24
+	 * with her control back, the call poses her at 25 and starts the track
+	 * then, and she stays posed until the track is over at 25 + L, her hand
+	 * down 25 frames later. */
+	ok(r.flybyEnd == 15 && r.posedAt == 25,
+		"zip rich1, before: the skip is over before the call poses her",
+		r.posedAt, 25);
+	ok(r.endAt == 25 + L && r.endWhy == ZIP_ENDED && r.lastZip == 49 + L &&
+		r.heldAfter == 25 + L,
+		"zip rich1, before: posed after the skip for the whole track",
+		r.heldAfter, 25 + L);
+
+	m.rule = ZIP_SIM_AFTER;
+	r = zip_run(m);
+	ok(r.flybyEnd == 15 && r.endAt == 15 && r.endWhy == ZIP_ENDED_BY_SKIP &&
+		r.posedAt == -1 && r.lastZip == -1 && r.heldAfter == 0,
+		"zip rich1, after: the skip ends the call, she is never posed",
+		r.endAt, 15);
+
+	// She stood on the trigger: posed at 2, the track started then.
+	m.stopIn = 0;
+	m.rule = ZIP_SIM_BEFORE;
+	r = zip_run(m);
+	ok(r.posedAt == 2 && r.endAt == 2 + L && r.heldAfter == 26 + L - 15,
+		"zip rich1, before: posed before the skip, held after it",
+		r.heldAfter, 26 + L - 15);
+	m.rule = ZIP_SIM_AFTER;
+	r = zip_run(m);
+	ok(r.posedAt == 2 && r.endAt == 15 && r.lastZip == 15 &&
+		r.heldAfter == 0 && r.musicEnd == 129,
+		"zip rich1, after: out of the pose and the track off at the skip",
+		r.endAt, 15);
+
+	/* No skip, no change: played through, the call ends by its track
+	 * within the flyby, or after it with a track longer than the flyby. */
+	ZipSim p = { ZIP_SIM_BEFORE, 1, 0x0201, 16, 100, { -1, -1 }, { -1, -1 },
+		24, 0, ZIP_AUDIO_PLAYS, L, -1, 2400 };
+	const ZipRun pb = zip_run(p);
+
+	p.rule = ZIP_SIM_AFTER;
+	ok(zip_same(pb, zip_run(p)) && pb.flybyEnd == 1599 && pb.endAt == 625 &&
+		pb.heldAfter == 0,
+		"zip rich1: played through, the same call before and after",
+		pb.endAt, 625);
+	p.track = 2000;
+	p.rule = ZIP_SIM_BEFORE;
+	const ZipRun lb = zip_run(p);
+
+	p.rule = ZIP_SIM_AFTER;
+	ok(zip_same(lb, zip_run(p)) && lb.endAt == 2025 &&
+		lb.heldAfter == 2049 - 1599,
+		"zip rich1: a track longer than the flyby, the same either way",
+		lb.heldAfter, 2049 - 1599);
+
+	/* The pad: a fresh press on the call's first tick. #279's start asked
+	 * for her control taken, which the call had taken by then: the press
+	 * skipped the flyby before as well, and the call held her as Escape's
+	 * skip did. */
+	m = p;
+	m.track = L;
+	m.esc[0] = m.esc[1] = -1;
+	m.pad[0] = 1;
+	m.pad[1] = 30;
+	m.rule = ZIP_SIM_BEFORE;
+	r = zip_run(m);
+	ok(r.padSkip == 1 && r.flybyEnd == 16 && r.endAt == 25 + L,
+		"zip rich1, before: the pad skipped it, the call held her",
+		r.padSkip, 1);
+	m.rule = ZIP_SIM_AFTER;
+	r = zip_run(m);
+	ok(r.padSkip == 1 && r.flybyEnd == 16 && r.endAt == 16 &&
+		r.endWhy == ZIP_ENDED_BY_SKIP && r.posedAt == -1,
+		"zip rich1, after: the pad's skip ends the call", r.endAt, 16);
+
+	// A press once the call has ended, the flyby still on: her Action
+	// before, the skip of the rest of the flyby now.
+	m.pad[0] = 700;
+	m.pad[1] = 730;
+	m.rule = ZIP_SIM_BEFORE;
+	r = zip_run(m);
+	ok(r.padSkip == -1 && r.flybyEnd == 1599,
+		"zip rich1, before: after the call Cross was her Action",
+		r.padSkip, -1);
+	m.rule = ZIP_SIM_AFTER;
+	r = zip_run(m);
+	ok(r.padSkip == 700 && r.flybyEnd == 708 && r.endAt == 625,
+		"zip rich1, after: the pad skips the rest of the flyby",
+		r.flybyEnd, 708);
+
+	// RICH2's flyby 10 holds her still itself; Escape from the first frame.
+	ZipSim c = { ZIP_SIM_BEFORE, 1, 0x0651, 3, 100, { 0, 30 }, { -1, -1 },
+		24, 0, ZIP_AUDIO_PLAYS, L, -1, 2400 };
+
+	r = zip_run(c);
+	ok(r.flybyEnd == 2 && r.posedAt == 25 && r.endAt == 25 + L,
+		"zip rich2, before: flyby 10 skipped, posed after it",
+		r.endAt, 25 + L);
+	c.rule = ZIP_SIM_AFTER;
+	r = zip_run(c);
+	ok(r.flybyEnd == 2 && r.endAt == 2 && r.posedAt == -1,
+		"zip rich2, after: the skip of flyby 10 ends the call", r.endAt, 2);
+
+	/* A track that will not play, flyby played through, she stands on the
+	 * trigger. No music device: the track is never named, and before the
+	 * call held her for good; a missing file: named, nothing plays, and
+	 * before the call heard it and waited for good. Now the first tick of
+	 * stage 2 ends the call, her hand on its way up put back down. */
+	ZipSim n = { ZIP_SIM_BEFORE, 1, 0x0201, 16, 100, { -1, -1 }, { -1, -1 },
+		0, 0, ZIP_AUDIO_NONE, L, -1, 2400 };
+
+	r = zip_run(n);
+	ok(r.posedAt == 2 && r.endAt == -1 && r.lastZip == 2399,
+		"zip, no music device, before: posed for good", r.lastZip, 2399);
+	n.rule = ZIP_SIM_AFTER;
+	r = zip_run(n);
+	ok(r.endAt == 3 && r.endWhy == ZIP_ENDED_NO_TRACK && r.lastZip == 2,
+		"zip, no music device, after: ended without track", r.endAt, 3);
+	n.audio = ZIP_AUDIO_NOFILE;
+	n.rule = ZIP_SIM_BEFORE;
+	r = zip_run(n);
+	ok(r.endAt == -1 && r.lastZip == 2399 && r.musicEnd == 95,
+		"zip, the file missing, before: heard, posed for good", r.endAt, -1);
+	n.rule = ZIP_SIM_AFTER;
+	r = zip_run(n);
+	ok(r.endAt == 3 && r.endWhy == ZIP_ENDED_NO_TRACK && r.musicEnd == 129,
+		"zip, the file missing, after: ended, the atmosphere back",
+		r.endAt, 3);
+
+	/* Before, a save and a load let her go: the load starts the level's
+	 * atmosphere, and the call, heard before the save, takes that for the
+	 * end of its track. The same with the rule, and with a missing file. */
+	m = p;
+	m.track = L;
+	m.esc[0] = 0;
+	m.esc[1] = 30;
+	m.loadAt = 300;
+	m.rule = ZIP_SIM_BEFORE;
+	r = zip_run(m);
+	n.loadAt = 300;
+	n.rule = ZIP_SIM_BEFORE;
+	ok(r.endAt == 300 && r.endWhy == ZIP_ENDED && zip_run(n).endAt == 300,
+		"zip, before: a load ends the call, the music is the level's",
+		r.endAt, 300);
+}
+
+/* The Zip call's wiring in the engine's own text: the controller asks the
+ * rule and ends in one place, both skippers end the calls, a flyby
+ * forgets its skip where it begins, the flyby's paths leave the music to
+ * the call's end, and a track plays when its stream runs. */
+static void zip_call_wiring()
+{
+	char* zip = hd_switch_text("../../game/twogun.cpp");
+	char* spot = hd_switch_text("../../game/spotcam.cpp");
+	char* control = hd_switch_text("../../game/control.cpp");
+	char* audio = hd_switch_text("../audio.cpp");
+	static char body[16384];
+
+	ok(zip && spot && control && audio, "zip call wiring: the four files",
+		0, 1);
+
+	glass_body(zip, "void ControlZipController(short item_number)", body,
+		sizeof(body));
+	ok(strstr(body, "step=ZipCallTick(") && !strstr(body, "KillItem(") &&
+		!strstr(body, "bDisableLaraControl=0") && !strstr(body, "XATrack"),
+		"zip call wiring: the controller asks the rule, ends elsewhere", 0, 1);
+	ok(hd_switch_count(zip, "ZipCallFinish(item_number, step);") == 1 &&
+		hd_switch_count(zip, "ZipCallFinish(item_number, ZIP_ENDED_BY_SKIP)")
+		== 1 && hd_switch_count(zip, "KillItem(item_number);") == 1,
+		"zip call wiring: one end for the track, no track and the skip",
+		hd_switch_count(zip, "KillItem(item_number);"), 1);
+
+	glass_body(zip, "static void ZipCallFinish(short item_number, int why)",
+		body, sizeof(body));
+	ok(strstr(body, "pose=ZipPoseEnd(why,") &&
+		strstr(body, "music=ZipEndMusic(XATrack==item->trigger_flags,") &&
+		strstr(body, "bDisableLaraControl=0;KillItem(item_number);"),
+		"zip call wiring: the end takes the pose, the music, the control",
+		0, 1);
+
+	ok(hd_switch_count(spot, "if (spot_skipped)") == 2 &&
+		hd_switch_count(spot, "ZipCallsEndBySkip();") == 2 &&
+		hd_switch_count(spot, "spot_skipped = 1;") == 1,
+		"zip call wiring: both ends of a skipped flyby end the calls",
+		hd_switch_count(spot, "ZipCallsEndBySkip();"), 2);
+
+	glass_body(spot, "void InitialiseSpotCam(short Sequence)", body,
+		sizeof(body));
+	ok(strstr(body, "spot_pad_skip=0;spot_skipped=0;") != 0,
+		"zip call wiring: a flyby forgets the skip of the one before", 0, 1);
+
+	glass_body(control, "static char crossWasHeld = 0;", body, sizeof(body));
+	ok(strstr(body, "do_cutseq_skipper_stuff();ZipCallsEndBySkip();") != 0,
+		"zip call wiring: the cutscene skipper ends the calls", 0, 1);
+
+	ok(hd_switch_count(spot, "S_CDStop") + hd_switch_count(spot, "S_CDPlay") +
+		hd_switch_count(spot, "XATrack") == 0,
+		"zip call wiring: the flyby leaves the music to the call's end",
+		hd_switch_count(spot, "S_CDPlay"), 0);
+
+	glass_body(audio, "long S_CDTrackPlaying(long track)", body,
+		sizeof(body));
+	ok(strstr(body, "playing=XATrack==track&&(audio_stream_fp||OggStream);")
+		!= 0, "zip call wiring: a track plays while its stream runs", 0, 1);
+
+	free(zip);
+	free(spot);
+	free(control);
+	free(audio);
 }
 
 int main()
@@ -31623,6 +32190,9 @@ int main()
 	spot_pad_skip();
 	skip_latch_rope();
 	skip_latch_wiring();
+	zip_call_rule();
+	zip_call_skip();
+	zip_call_wiring();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

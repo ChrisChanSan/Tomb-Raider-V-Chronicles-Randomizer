@@ -1057,6 +1057,17 @@ public:
 
     void hdMarkRoom(int room);
     void hdMarkDonor(int slot, int fromSlot, const std::string& level);
+    // The factor a copy was scaled by, kept as the two measured lengths it
+    // is the ratio of (kScales in Tr5Transfer.cpp). The sidecar carries it
+    // as `scale <slot> <num> <den>`, and the engine's HD model build
+    // shrinks the slot's .TRM by the same factor as the classic data was
+    // shrunk here - without it the HD model would stand at full size on a
+    // shrunk skeleton. The last copy into a slot decides, as with
+    // hdMarkDonor: a copy into that slot without a factor takes the mark
+    // away again (num 0).
+    void hdMarkScale(int slot, int num, int den);
+    bool hdScaleOf(int slot, int& num, int& den) const;
+    const std::map<int, std::pair<int, int>>& hdScales() const { return m_hdScales; }
     // A sound id this run imported from another game.
     //
     // The Tomb Raider III guests bring their own recordings and those go
@@ -1123,6 +1134,8 @@ private:
     // the previous level's marks.
     std::set<int>        m_hdRooms;
     std::vector<HdDonor> m_hdDonors;
+    // slot -> (num, den); a std::map, so the lines come out ascending.
+    std::map<int, std::pair<int, int>> m_hdScales;
     std::set<HdCut>      m_hdCuts;
     // A std::set again, so the same seed writes the same line.
     std::set<int>        m_hdSoundImports;

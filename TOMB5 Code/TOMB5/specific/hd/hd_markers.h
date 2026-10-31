@@ -44,12 +44,15 @@
 //     donor 386 Andrea1 386      slot 386 of this level holds the model that
 //                                is slot 386 in Andrea1
 //     donor 31 TR3 31            ... or a guest out of Tomb Raider I-III
+//     scale 472 2290 7161        the copy in slot 472 was shrunk by
+//                                2290/7161 -> shrink its .TRM alike
 //     item 279                   the item at that index of the level file
 //                                is the run's own -> never one the room art
 //                                carries (hd_object.cpp, begin_decision)
 //
 // `room` lines ascend, `cut` lines ascend by their six numbers, `donor` lines
-// ascend by slot, `item` lines ascend by index and close the file, so the
+// ascend by slot and so do the `scale` lines after them, `item` lines
+// ascend by index and close the file, so the
 // same seed gives the same file byte for byte. A line this reader does not
 // know is ignored and counted, so a later version of the randomizer can add
 // a fact without this engine refusing the file. A missing file means "no
@@ -93,6 +96,15 @@ struct HDMarkerDonor
 	int slot;		// the slot in THIS level
 	int fromSlot;		// the slot it was taken from in the donor
 	const char* level;	// the donor's level stem, or "TR3"
+
+	/* The factor the run shrank the copy by, out of the file's `scale
+	 * <slot> <num> <den>` line: the two measured lengths it is the ratio
+	 * of. 1 and 1 where the file has no such line for the slot - the copy
+	 * is the donor's own size. The HD model build shrinks the slot's .TRM
+	 * by it, so the model stands on the shrunk skeleton at the size the
+	 * classic mesh has (hd_object.cpp, HDModelSlot::scale). */
+	int scaleNum;
+	int scaleDen;
 };
 
 /* One opening the run made, as a box.

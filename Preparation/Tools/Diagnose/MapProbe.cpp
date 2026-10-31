@@ -256,7 +256,14 @@ namespace
 			if (name)
 				found = where_model(root, alt, tr3, name, guest);
 
-			std::printf("  donor %-4d %-24s <- %s:%d  %-28s %s (%s)\n",
+			// A shrunk copy says its factor at the end (the `scale` line).
+			char scaled[48] = "";
+
+			if (donor->scaleNum != donor->scaleDen)
+				std::snprintf(scaled, sizeof(scaled), " scale %d/%d",
+					donor->scaleNum, donor->scaleDen);
+
+			std::printf("  donor %-4d %-24s <- %s:%d  %-28s %s (%s)%s\n",
 				donor->slot, slotName ? slotName : "?", donor->level,
 				donor->fromSlot, name ? name : "-",
 				!name ? "classic"
@@ -264,7 +271,7 @@ namespace
 						? (guest && tr3.empty() ? "classic - I-III not given"
 							: "classic - no such .TRM")
 						: "HD if the skeleton fits"),
-				how);
+				how, scaled);
 		}
 
 		/* The items the run added, with the slot each holds in the level

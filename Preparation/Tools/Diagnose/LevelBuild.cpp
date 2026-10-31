@@ -1,5 +1,9 @@
 // Applies a patch JSON to a level - for hand-built test levels.
 // Usage: LevelBuild <source.trc> <patch.json> <target.trc> [donorFolder]
+//        [-moreitems] [-hdm]
+// -hdm also writes the run's .hdm sidecar beside the target, as the
+// randomizer does - a copied slot's `donor` line and a shrunk copy's `scale`
+// line, so the engine and ModelProbe -hdm read the test level as a run's.
 #include "core/Tr5Level.h"
 #include "core/ApplyPatch.h"
 #include "core/Json.h"
@@ -17,7 +21,7 @@ static std::wstring donor(const std::string& name, void*)
 
 int main(int argc, char** argv)
 {
-    if (argc < 4) { std::printf("usage: LevelBuild <source.trc> <patch.json> <target.trc> [donorFolder] [-moreitems]\n"); return 1; }
+    if (argc < 4) { std::printf("usage: LevelBuild <source.trc> <patch.json> <target.trc> [donorFolder] [-moreitems] [-hdm]\n"); return 1; }
     auto W = [](const char* p){ std::string s(p); return std::wstring(s.begin(), s.end()); };
 
     std::string err;
@@ -31,11 +35,12 @@ int main(int argc, char** argv)
     // viewed in trview and never loaded (wall test, key item range). The
     // result is deliberately no playable level anymore - the engine aborts
     // on load. See allowMoreThanMaxItems in Tr5Level.h.
-    bool moreItems = false;
+    bool moreItems = false, hdm = false;
     std::wstring folder = W(".");
     for (int i = 4; i < argc; ++i)
     {
         if (!std::strcmp(argv[i], "-moreitems")) moreItems = true;
+        else if (!std::strcmp(argv[i], "-hdm")) hdm = true;
         else folder = W(argv[i]);
     }
     if (moreItems)
@@ -49,6 +54,14 @@ int main(int argc, char** argv)
     for (const std::string& w : rep.warnings) std::printf("  note: %s\n", w.c_str());
 
     if (!lvl.save(W(argv[3]), err)) { std::printf("save: %s\n", err.c_str()); return 1; }
+    if (hdm)
+    {
+        int rooms = 0, donors = 0, cuts = 0;
+        if (!Patch::writeHdMarkers(lvl, W(argv[3]), err, &rooms, &donors, &cuts))
+        { std::printf("sidecar: %s\n", err.c_str()); return 1; }
+        std::printf("sidecar: %d rooms, %d donors, %d cuts, %d scale lines\n",
+                    rooms, donors, cuts, static_cast<int>(lvl.hdScales().size()));
+    }
     std::printf("done: %d edited, %d added, %d triggers, %d slots, %d sounds -> %d items\n",
                 rep.edited, rep.added, rep.triggersAdded, rep.moveablesCopied, rep.soundsCopied, lvl.itemCount());
     return 0;

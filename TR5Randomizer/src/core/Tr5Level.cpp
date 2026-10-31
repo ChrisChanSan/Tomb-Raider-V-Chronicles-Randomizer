@@ -61,6 +61,7 @@ bool Tr5Level::load(const std::wstring& path, std::string& error)
     // touched rooms - and the GUI does reuse level objects.
     m_hdRooms.clear();
     m_hdDonors.clear();
+    m_hdScales.clear();
     m_hdSoundImports.clear();
     m_hdCuts.clear();
     m_hdAddedItems.clear();
@@ -4041,6 +4042,27 @@ void Tr5Level::hdMarkDonor(int slot, int fromSlot, const std::string& level)
     d.fromSlot = (fromSlot < 0) ? slot : fromSlot;
     d.level = level;
     m_hdDonors.push_back(d);
+}
+
+void Tr5Level::hdMarkScale(int slot, int num, int den)
+{
+    if (slot < 0) return;
+
+    // num 0 (or a nonsense den) is "this copy was not scaled": an earlier
+    // mark for the slot would describe bytes that are no longer in the file.
+    if (num <= 0 || den <= 0) { m_hdScales.erase(slot); return; }
+
+    m_hdScales[slot] = std::make_pair(num, den);
+}
+
+bool Tr5Level::hdScaleOf(int slot, int& num, int& den) const
+{
+    const auto it = m_hdScales.find(slot);
+    if (it == m_hdScales.end()) return false;
+
+    num = it->second.first;
+    den = it->second.second;
+    return true;
 }
 
 //----------------------------------------------------------------------------

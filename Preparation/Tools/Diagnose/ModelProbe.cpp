@@ -731,6 +731,14 @@
  *     -model <NAME>       with -slot: that .TRM on the slot instead of the
  *                         level's own binding - a candidate held against a
  *                         classic tree.
+ *     -hdm                with -slot and -classic: the run's sidecar beside
+ *                         the classic level, through the engine's own reader
+ *                         (hd_markers.cpp). A slot it names a donor for
+ *                         binds the donor's model as hd_object.cpp binds it
+ *                         (a TR3 guest out of the -tr3 bundle) and takes
+ *                         the factor of its `scale` line - the drone's
+ *                         shrunk gunship is drawn so. -model still wins
+ *                         over the donor's name.
  *     -meshes             with -slot: the slot's classic meshes, vertices
  *                         and box per node in the node's frame, with or
  *                         without a model.
@@ -887,6 +895,7 @@
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_model.h"
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_lara.h"
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_bind.h"
+#include "../../../TOMB5 Code/TOMB5/specific/hd/hd_markers.h"
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_mods.h"
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_wardrobe.h"
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_classic.h"
@@ -2175,6 +2184,19 @@ static void PrintNodeTable(int slot, const ClassicSlot* classic, const char* nam
 
 	printf("  %d of %d nodes covered by the model, %d draw nothing\n",
 		covered, nodes, nodes - covered);
+
+	/* The skeleton test's two numbers for this slot, as the engine takes
+	 * them (hd_object.cpp): the highest node a vertex names, and how far
+	 * the model's nodes stand from the slot's bind pose - a shrunk copy
+	 * passes only if its .TRM was shrunk alike. */
+	{
+		float mean = 0.0f, worst = 0.0f;
+
+		if (HDModelBindDrift(slot, &mean, &worst))
+			printf("  skeleton: maxb %d of %d nodes, drift mean %.1f worst %.1f "
+				"(limit %.0f)\n", HDModelMaxBone(slot), nodes, (double)mean,
+				(double)worst, (double)HD_SKELETON_DRIFT_LIMIT);
+	}
 
 	if (HDModelHasHead(slot))
 		printf("  a separate HD face rides rigidly on node %d\n", HDModelHeadNode(slot));
@@ -13849,6 +13871,7 @@ int main(int argc, char** argv)
 	std::string modelAsked;
 	// -alpha: the glass rule taken apart; -noglass: the rule left off.
 	bool alphaCheck = false, noGlass = false;
+	bool hdmAsked = false;		// -hdm
 	int itemAnim = -1, itemKey = 0;
 	double itemPush = 0.0;
 	bool noPocket = false;
@@ -14407,6 +14430,8 @@ int main(int argc, char** argv)
 		}
 		else if (!_stricmp(argv[i], "-model") && i + 1 < argc)
 			modelAsked = argv[++i];
+		else if (!_stricmp(argv[i], "-hdm"))
+			hdmAsked = true;
 		else if (!_stricmp(argv[i], "-alpha"))
 			alphaCheck = true;
 		else if (!_stricmp(argv[i], "-noglass"))
@@ -14885,6 +14910,16 @@ int main(int argc, char** argv)
 			printf("classic : %s\n", path.c_str());
 		}
 
+		// -hdm: the sidecar beside it, through the engine's own reader.
+		if (hdmAsked)
+		{
+			if (HDMarkersLoad(path.c_str()))
+				printf("hdm     : %s, %d donor line(s)\n", HDMarkersPath(),
+					HDMarkersDonorCount());
+			else
+				printf("hdm     : %s - %s\n", HDMarkersPath(), HDMarkersError());
+		}
+
 		if (!levelStem.empty())
 		{
 			const std::string map = root + "\\DATA\\" + levelStem + ".MAP";
@@ -15176,6 +15211,49 @@ int main(int argc, char** argv)
 			// -model: the asked slot takes that .TRM instead of its own.
 			one.name = !modelAsked.empty() && slots[i] == slot
 				? modelAsked.c_str() : 0;
+
+			/* -hdm: the sidecar's donor and factor for the asked slot, the
+			 * way hd_object.cpp's donor plan takes them. */
+			if (hdmAsked && slots[i] == slot)
+			{
+				static std::string donorModel;
+				const HDMarkerDonor* mark = HDMarkersDonorOfSlot(slot);
+
+				if (!mark)
+					printf("hdm     : the sidecar names no donor for slot %d\n",
+						slot);
+				else
+				{
+					const char* bound = 0;
+
+					if (_stricmp(mark->level, "TR3") == 0)
+					{
+						bound = HDBindTr3Guest(slot);
+						one.fromTr3 = true;
+					}
+					else
+					{
+						HDBindKind dk = HD_BIND_MODEL;
+						bool dm = false;
+
+						bound = HDBindDonorSlot(root.c_str(), mark->level,
+							mark->fromSlot, &dk, &dm, 0);
+						if (dk != HD_BIND_MODEL)
+							bound = 0;
+					}
+
+					donorModel = bound ? bound : "";
+					if (modelAsked.empty() && bound)
+						one.name = donorModel.c_str();
+					if (mark->scaleNum > 0 && mark->scaleDen > 0)
+						one.scale = (float)mark->scaleNum / (float)mark->scaleDen;
+
+					printf("hdm     : slot %d <- %s:%d model %s scale %d/%d "
+						"(%.4f)\n", slot, mark->level, mark->fromSlot,
+						bound ? bound : "-", mark->scaleNum, mark->scaleDen,
+						(double)one.scale);
+				}
+			}
 			wanted.push_back(one);
 			order.push_back((int)i);
 		}

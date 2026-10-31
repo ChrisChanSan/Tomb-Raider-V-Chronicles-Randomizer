@@ -3756,6 +3756,27 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 			HDTrmFoldMirrored(&here.trm, slots[i].mirror, slots[i].mirrors,
 				slots[i].mirrorBar, &here.fold);
 
+		/* The shrunk copy (HDModelSlot::scale): every position by the same
+		 * factor the randomizer shrank the classic meshes, bones and frames
+		 * by, about the model's own origin - which is the skeleton's root,
+		 * so a vertex keeps its place relative to the node it rides on.
+		 * Normals are directions and stay. Before anything below measures
+		 * the vertices. */
+		if (slots[i].scale > 0.0f && slots[i].scale != 1.0f)
+		{
+			const float s = slots[i].scale;
+
+			for (int v = 0; v < here.trm.vertices; v++)
+			{
+				here.trm.vertex[v].x *= s;
+				here.trm.vertex[v].y *= s;
+				here.trm.vertex[v].z *= s;
+			}
+
+			note("%s (slot %d): %s.TRM scaled by %.4f", slot_label(slot, model),
+				slot, model, (double)s);
+		}
+
 		/* The stand-in without the pages of `standInDrop`, as a drop set:
 		 * a hand file's gun without the hands. A file that is nothing but
 		 * those pages keeps no triangle and is not built at all. */

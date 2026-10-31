@@ -16489,6 +16489,120 @@ of carriers, keep the index order within each pass and with it every chain as it
 
 **Commits.** `85c32cf8`.
 
+### A scene that holds Lara leaves her life and air as they were (#280)
+
+2026-10-31.
+
+**What.** While a cutscene plays, or a flyby runs whose camera carries the "disable Lara
+control" flag, Lara's life and air stay what they were when the scene began. The world
+goes on: the enemies keep moving and keep her as their target, their blows land, and each
+is put back before anything of the tick can read it - before the item loop, again before
+her control, and where the flyby put them back - and a last time when the scene ends,
+before her control runs again. A blow a restore cannot undo is refused while a scene holds
+her: one that takes her whole life in one tick, a place that sets her life to 0 or below,
+one that forces her into a death animation and one that sets her on fire. The enemy keeps
+its own animation and misses - the T-Rex snaps at the air. A life of 0 or less at the
+scene's start stays so, and once her own death has begun nothing is put back: a dead Lara
+stays dead. A flyby without the flag holds nothing, as Core made it: she has the controls
+there, and a blow stands. With `-log` the `HOLDLOG` lines say when a hold began and ended,
+how often her life was put back and which blows were refused.
+
+**Why.** The two kinds of scene treated her differently, and neither held her. A flyby
+with the flag remembered her life and air in `InitialiseSpotCam` and put them back at the
+top of `CalculateSpotCams`, once a tick - after the item loop and after `LaraControl`,
+which a flyby runs. A blow that took the rest of her life reached her death branch
+(`LaraControl`, `game/laramisc.cpp`: a life of 0 or less becomes -1 and the death count
+runs) before the put-back came, and the put-back then gave a Lara in her death animation
+her life back. A cutscene remembered nothing: `LaraControl` does not run during one, the
+item loop does, every place that hurts her wrote her life as always, and what it took
+stood after the scene; a life taken whole killed her on the first tick after it. The
+randomizer's enemies stand where the roll puts them, so which of the two came about was
+chance. The T-Rex's bite (`DMG_TRex_Bite`, 10000 against her 1000) takes her whole life at
+one touch, and nothing in the T-Rex decides her death: `CreatureKill` is called by no
+enemy and `DINO_KILL` is never reached. The bite is damage, and her own control does the
+rest - in a held flyby within the same tick.
+
+**How.** `game/scene_hold.h`, new and with no engine header: `SceneHoldKind` names what
+holds her - `GLOBAL_playing_cutseq`, or `bUseSpotCam` with `bDisableLaraControl`, the
+cutscene first; `SceneHoldSync` makes one look - a hold begins and remembers, a running
+one puts back, one whose scene is gone puts back a last time and ends; `SceneHoldPut` puts
+back unless her death count runs; `SceneHoldRefusesBlow` is the class rule, refused while
+held when the blow reaches `SCENE_HOLD_WHOLE_LIFE`, her maximum life (1000).
+`game/control.cpp` keeps the one memory and its four calls, declared in `control.h`:
+`SceneHoldStep` (a look), `SceneHoldRelease` (a cutscene's own end), `SceneHoldReset` (a
+level load, nothing put back) and `SceneHoldRefuses` (a blow asked: a look first, so that
+a scene begun since the last look already holds her, then the class rule, the count and
+the line). `ControlPhase` looks before `ClearDynamics` and the item loop, and again after
+the poison, before `LaraControl`. `game/spotcam.cpp`: `LaraHealth` and `LaraAir` are gone;
+the put-back at the top of `CalculateSpotCams` is a look, and so are the end of
+`InitialiseSpotCam` (where Core remembered), the camera that hands her control over
+(`SP_ENABLELARACONTROL`, `SP_NOLARACONTROL`) and the two ends of a sequence.
+`game/deltapak.cpp`: `init_cutseq_actors` looks the moment `GLOBAL_playing_cutseq` rises;
+`handle_cutseq_triggering` lets go before the scene's end hook, so that the hook's own
+changes stand - `swampy_end` caps her air at 200; `stealth3_end` and the others are
+untouched. `game/setup.cpp` `reset_cutseq_vars` drops a hold of the level before at every
+level load.
+
+A tick of `ControlPhase` now runs: the menus; the first look (a hold begins or ends, her
+life and air are put back, the tick is counted); the item loop and the effects (the blows
+land, those of class b are asked and refused); the poison (a flyby only - a cutscene skips
+it, as before); the second look; `LaraControl` (a flyby only), which never sees the tick's
+blows; the camera, where `CalculateSpotCams` looks at its top, so that what her own
+control did to her is undone before the frame; the sparks, bats and spiders, put back at
+the next tick's first look.
+
+The census covers the 47 subtractions through `lara_item`, the four through other names,
+her fall, the places that set her life to 0 or below and those that force her animation.
+Class b, where Balance.txt decides - the hit branch asks with the value it would take, and
+it is refused from 1000 on, today only the bite: `autogun.cpp:149`, `bat.cpp:245`,
+`chef.cpp:191`, `compy.cpp:273`, `crow.cpp:143`, `dog.cpp:175`, `:194`, `:214`,
+`gladiatr.cpp:258`, `huskie.cpp:188`, `:265`, `hydra.cpp:162`, `imp.cpp:243`,
+`joby.cpp:216` (the live water, 10), `lion.cpp:134`, `:149`, `minisub.cpp:275` (a torpedo
+runs on), `people.cpp:158` (every gun of the human enemies; a refused shot is a miss),
+`raptor.cpp:227`, `:268`, `romangod.cpp:374`, `:589`, `skeleton.cpp:120`,
+`spider.cpp:146`, `swampy.cpp:128`, `tower.cpp:264` (the gunship), `:385` (the iris, 12),
+`:577` (the Area 51 laser), `trex.cpp:114` (the kick, 1 and 10), `:242` (the bite, 10000),
+`twogun.cpp:599`, `willwisp.cpp:252`, `:262` - 33 places. Class b, refused whenever a
+scene holds her: `andrea.cpp:461` (the crush), `box.cpp:1519` (`CreatureKill`),
+`guardian.cpp:525`, `hitman.cpp:284` (the water he lives in), `joby.cpp:143` (a cable),
+`:223` (the live water at 32 or less), `:257` (the wrecking ball's crush), `lara.cpp:519`
+(a fall, 1000 times the speed squared over 196, or -1), `lasers.cpp:63`, `:110`, `:210`,
+`tower.cpp:376` (the iris at 72 or less), `traps.cpp:84` (`LaraBurn`, every fire at once),
+`:106` (lava), `:786` (the rolling ball, which pushes her instead), `:1360` (teeth
+spikes), `:1409` (the spiked death) and `twogun.cpp:603` - 18 places. Class a, a fixed
+value under her whole life, left as it was and put back by the looks: `camera.cpp:2301`
+(the sniper, 100), `control.cpp:762` (the poison, 32 at most), `collide.cpp:521` (the Rome
+hammer, 250), `effect2.cpp:582`, `:591`, `:596`, `:1962` (300, 200, 50, 2), `joby.cpp:262`
+(the wrecking ball, 96), `lara1gun.cpp:610` (her own grenade, 50), `laramisc.cpp:964`,
+`:1005` (gas and drowning, 5), `tomb4fx.cpp:1175` (a shockwave, 33 at most),
+`traps.cpp:173` (an explosion, 127 at most), `:419` (a dart, 25), `:694` (a flame, 5),
+`:770` (the fire on her, 7), `:1370` (teeth spikes, 8), `:1652` (300). Untouched as well:
+her death branch, `lara_col_death` and `lara_col_uwdeath`, which only read a life a hold
+no longer leaves them, the death goals of her states, the heals (the medipacks, the
+cheats, the search object that sets 640), the poison gate, the enemies' AI and their
+focus.
+
+The change is game logic in every build path, so there is no `hd_build` 0 byte identity to
+claim. ModernTest `scene_hold` (39 checks): the kind of every flag set, the arithmetic of
+a hold through its start, its blows and its end, the air, a Lara dead at the start and one
+whose death began, a cutscene over a flyby, the class rule against two made-up balance
+tables, and the engine's text - the two looks of the tick in their places, the flyby's own
+memory gone, the cutscene's look and release, the T-Rex's bite asked, and the census file
+by file.
+
+**Decisions.** The hold remembers where it begins: at a flyby's start or at the camera
+that takes her control - for a flag set by a later camera Core put back the flyby's start,
+a life she might have lost since in her own hands. Its end is seen at a look: a flyby an
+antitrigger cuts off ends at the next tick's first look, and what came in between is put
+back. A refused blow is a miss, not a blow of 0: the hit branch is skipped with its blood,
+her hit status and the enemy's hit flag, and the enemy's own animation and sounds go on.
+Fire is a death: a fire on her burns until water or her death, so `LaraBurn` refuses while
+she is held, for every caller at once. Two things stay outside the hold: the wind-up
+before a cutscene plays (the fade, `cutseq_trig` 1), and poison - a dart's 25 are put
+back, the poison it adds is a state of its own and goes on after the scene.
+
+**Commits.** `d8c2625f`.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -16784,3 +16898,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #276 | The diving suit's thrusters hang from her shoulders on the HD body |
 | #277 | The X-ray look holsters nothing at the thighs, its Uzis like its other guns |
 | #278 | A search object keeps the pickup in its reach from any enemy |
+| #280 | A scene that holds Lara leaves her life and air as they were |

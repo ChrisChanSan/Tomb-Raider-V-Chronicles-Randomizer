@@ -16984,6 +16984,176 @@ keeps while map 0 is off, as every main room is, and the original game never dra
 
 **Commits.** `9b888587`.
 
+### The bulbs' fog reaches as a field, and the mist it stands in goes (#287)
+
+2026-10-31.
+
+**What.** With `hd_fog` 1 every fog bulb's body reaches past its radius as a field: its
+density falls over four radii - the reach - with the body's own smooth fall, its strength
+is the band's top on the field's own densest line, and where the fields of neighbouring
+bulbs overlap their densities add, capped at a field's peak; the fog fades to nothing one
+reach from the last bulb. Around ANDY3's mill the five bulbs of room 105 lay one field
+over the ground between them: the meadow, the sluice and its pool, the mound of the mill
+house and the hillsides beside it. The art's mist whose box meets a bulb's sphere, or
+whose box's centre lies in a bulb's field, is left out wherever the pass draws the bulbs'
+fog: ANDY3's three mist ranges - the two lumps over the hillside and over the rocks beside
+the sluice, each drawn twice - are gone, and with them the blocky edges inside them. A
+mist that meets no bulb and no field keeps its weight (#218); in a level where the pass
+does not draw (no water square: ANDREA3, RICH1, the title; or `hd_water` 0) the bulbs keep
+the haze and the mist its weight, so the title's sand is as it was. With `-log` the frame
+line ends in `fog_field=` (the taken bulbs whose field meets another's) and `fog_dropped=`
+(the mist's draws left out), and each level's load writes an `HDLOG fogfield level= bulb=
+room= radius= reach= pass=` line per bulb and an `HDLOG fogart level= group= range=
+dropped=bulb|field meets= gap=` line per mist range left out. RoomProbe: `-fogfield`,
+`-fogfactor <k>`, `-fogdrop 0`; each `-fogart` line ends in the bulb its box meets and the
+verdict. ModernTest's group `fog_field`, 13 checks.
+
+**Why.** In play at ANDY3's sluice, with the bulbs' body of #218, two mottled grey-green
+lumps still hung in the view, on the dark hillside left of the mill and over the brown
+rocks beside the crane, and closer by rectangular, blocky edges showed inside the fog on
+the ground. The fog was wanted over the whole area around the mill, not in each bulb's
+ball alone. A third ball seen there before #218, the haze disc of the bulb at the pool's
+south-west corner (bulb 9) on the hillside beside the left lump, had become that bulb's
+body with #218.
+
+**Measured.** ANDY3's mist is three ranges of the flow material, one each in groups 10, 15
+and 17 (RoomProbe `-fogart`): group 10 spans x 33,018 to 36,790, y 7,547 to 10,263, z
+50,636 to 54,724; group 15 x 38,281 to 43,321, y 6,913 to 9,613, z 48,570 to 52,610; group
+17 x 33,018 to 43,322, y 6,913 to 10,263, z 48,568 to 54,724, the union of the two others'
+boxes. Drawn one group at a time at the eye of the sluice (37,900, 7,450, 44,000 in room
+105, towards 38,450, 9,300, 48,200; 1,280 x 720, hd_fog 1 with the level's bulbs), group
+10's mist covers 27,319 pixels of the left lump, group 15's 47,575 of the right one and
+group 17's 75,145 of both, its light on each within one per cent of the other group's:
+every lump is drawn twice, by its own room's group and by room 17's. Together the mist
+adds light to 79,698 pixels over the picture without it, p95 29.9 and most 53.6 of 255,
+and at 12,395 pixels its light changes by more than 3 from one pixel to the next - the
+edges of the two copies' layers, where each group's mist alone has 609 (group 10), 1,849
+(15) and 2,315 (17). At #218's eye by the mill (35,586, 8,448, 45,730 in room 17) the
+same: 90,955 pixels, p95 29.8, most 59.1, 12,121 steps. The bulbs there are bulbs 7 to 11
+of room 105 (radius 1,312): 7 and 9 at x 35,328 by the pool's west side, 8, 10 and 11 at x
+42,496 to 46,592 east of the mill. Group 17's box holds bulb 7's centre and meets bulb 8's
+sphere at 952 units; group 15's box meets bulb 8's at 954; group 10's box lies 1,996 from
+bulb 7's centre (1.52 radii), its centre 4,124 (3.14 radii). Of the 34 mist ranges of the
+fifteen levels the other 31 are the title's sand: 21 of their boxes meet or hold the
+sphere of bulb 14 or 15 (rooms 61 and 71), the other 10 have their centres in those bulbs'
+fields - in a level where the pass does not draw.
+
+**How.** `specific/hd/hd_fog.h` holds the rule as pure functions: `HD_FOG_FIELD` (4.0),
+`HDFogFieldReach`, `HDFogFieldDensity` (the peak times 1 - (distance / reach)^2),
+`HDFogFieldShare` (all of a field's density up to its peak, peak / sum past it),
+`HDFogFieldTau` (the shader's twin for one ray), `HDFogBoxGap` and `HDFogArtVerdict`
+(`HD_FOG_ART_KEPT`, `HD_FOG_ART_BULB`, `HD_FOG_ART_FIELD`). In `hd_render.cpp` `fog_take`
+takes each bulb with its reach - the rectangle of the field's sphere, the strength
+`HDFogStrength` gives the reach - and `fog_draw` hands each bulb's quad its own field and
+those of the taken bulbs whose fields meet it, no other reaching a point of its own (c9 to
+c29, saved and put back with c0 to c8). `hd_fog.hlsl` cuts the ray at the reach, keeps the
+breath's cells on the bulb's own radius and weights each of the four pieces with the
+bulb's share of the fields' summed density at its middle - a select, so under the peak the
+weight is the breath to the bit; the pixel shader takes 404 of ps_3_0's 512 instruction
+slots (238 before). `HDRenderFogLevel` gives every mist range (`HDFogArtMist`) its verdict
+against the level's bulbs, its box in the world (the group's origin in x and z), and the
+range keeps it in `HDRange` (`addLeft`, `addMeets`, `addGap`, not in the build's hash);
+`fog_add_left` leaves such a range out in `draw_pass` with `hd_fog` 1 where the pass
+draws, the frame's depth and the level's sheets as `fog_take` asks them. `hd_level.cpp`
+(`ReportFogLevel`, after the water sheets are built) hands in the bulbs of the rooms'
+lists in `aRoomInit`'s order and writes the load lines; RoomProbe hands in the bulbs it
+reads with `-fogbulbs`. `ROOM_MIST` is no fog flag in this engine: it marks the vertices
+of a room's floor over a downward portal that no vertex below repeats (`drawroom.cpp`,
+`IsMistVert`), the water surface's shimmer beside `ROOM_REFLECT`; nothing here reads it.
+
+**The factor.** Measured in steps of a quarter from 1 to 5 (RoomProbe `-fogfactor`) on
+three conditions. The ground between the mill's bulbs: the x/z hull of bulbs 7 to 11,
+sampled every 64 units at the heights of room 17's ground layer, lies within a bulb's
+reach everywhere from 3.0 at the layer's top (y 8,448), 3.25 at its middle (9,600) and
+3.75 at its floor bound (10,752); at 1 a quarter of the top is covered and nothing below
+it. The band: at #218's seven eyes (H by the mill in room 17, M1 over the river, C3 at the
+sluice from room 105, E1, E2 and E3 over the pond rooms, I8 inside bulb 8; 1,280 x 720)
+the 95th percentile of the light the fog adds over the picture without it stays under the
+top of 33 up to 4.25 (M1 32.9 the most) and M1 passes it at 4.5 (33.1); at 1 the eyes lie
+at 13.6 (C3) to 21.5 (M1), at 4.0 at 23.1 (E2) to 32.0 (M1), and the eye of the sluice at
+20.1 and 27.3. The price, as #218 measured it (`-gpu 3 -gpuall` at 2,560 x 1,440, three
+runs, the median): at 4.25 the pass takes 1.02 ms at I8, past the budget of 1 ms, and 0.97
+at M1; at 4.0 the most is M1's 0.92 (I8 0.88, C3 0.84, the sluice 0.82, H 0.78). 4.0 is
+the largest step that meets all three, and the same factor rules every level. Before each
+quad's cap was cut to the fields that meet it, 4.25 cost 1.14 ms at I8.
+
+**What the field reaches** (RoomProbe `-fogfield`, factor 4). ANDY3: the mill's five bulbs
+reach 5,248 and make one field (7 and 9 lie 3,072 apart, 8 and 10 3,494, 10 and 11 2,563,
+8 and 11 5,376, 7 and 8 7,241, 8 and 9 7,455, 7 and 10 10,425); the pond's two in room 34
+one more (5,120 apart), the bulbs of rooms 20, 69 and 87 a third and room 145's pair a
+fourth, reaching 7,424 to 9,344. ANDY1: 15 bulbs of radius 1,920 reach 7,680 in two
+fields, bulbs 0 to 4 with 9 to 14 (joined through 0 and 10) and 5 to 8. ANDY2: 9 bulbs,
+6,144 to 7,168, bulbs 1 to 8 one field. ANDREA1: 9 bulbs, seven of them in water rooms
+under the sheets, which the frame never hands the pass (the water's own look stands
+there), and bulbs 0 and 7 (rooms 2 and 59) reach 3,328 and 4,224 alone. ANDREA2: 16 of 17
+bulbs in water rooms under the sheets, bulb 16 (room 234) reaches 7,040 alone. RICH2: 15
+bulbs, 6,016 to 10,240, two fields (0 to 12, 13 and 14). RICH3: 4 bulbs, 7,040 to 12,288,
+one field. RICH1 (10 bulbs), ANDREA3 (15) and the title (17, its bulbs 14 and 15 in rooms
+61 and 71 reaching 10,624 each) have no water square, so the pass draws no field there and
+the bulbs keep their haze; JOBY2 to JOBY5 and RICHCUT2 hold no bulb.
+
+**Room 12.** The pale patch on the hillside between the pond rooms and the tower, seen in
+trview with its lighting off, is the classic level's own texture: of room 12's 72 classic
+faces 65 are opaque, 2 alpha tested and 5 additive (the water surface beside the channel,
+at y 10,752), and the slope west and north of the tower is opaque quads and triangles with
+no face word (texture infos 1,932, 1,941, 1,944, 2,004, 2,009 and 2,010 on pages 2 to 5).
+trview draws them unlit, so the paler, hazy grass is painted into the tiles; in the
+classic game their vertex colours, 16 to 40 of 255, darken them to the night. The HD path
+draws the room with its art: group 12 has no additive range, so no mist of the art lies
+there, and no bulb's sphere reaches the room (bulb 7's lies 4,615 from its box, 3.52
+radii); the fields of bulbs 7 and 11 reach into its box only up to z 53,900, short of its
+first faces at z 54,272. No fog rule of #218 or this entry draws the patch.
+
+**Decisions.** The cap acts on the density at a point - each bulb keeps its share of the
+fields' sum - and not on a pixel's veil: a veil capped per pixel needs every bulb in one
+quad or a second render target, the share keeps a quad per bulb, and where the fields of
+two equal bulbs overlap their sum stays at one field's peak; along a long ray through
+several fields the veil may still pass the top, which is what the band at the eyes
+measures. The strength is the band's top on the field's densest line, so a field is a
+quarter as dense at its middle as the body was and four times as wide, and where fields
+overlap the sum is held at that peak. A box lies in the field when its centre does,
+as #218 asked whether a part's centre lay in a sphere: a box only touching a field's rim
+would be left out where the field adds next to nothing (group 10's box touches bulb 7's
+field from 1.52 radii on, its centre lies in it from 3.14 on). The mist is left out only
+where the pass draws: in a level or a setting without the pass no fog stands in its place.
+The verdict takes every bulb of the level, not the frame's: a mist range keeps one verdict
+wherever the eye is, so a range never flickers in and out as bulbs come within 20,480 of
+the eye. The breath keeps its cells at half a bulb's radius, the shape of the fog as
+before. The factor, the cap and the rule are the level's data alone; no room, group, bulb
+or level number is in the engine's code.
+
+**Proof.** At the eye of the sluice the mist adds light to 79,698 pixels before (p95 29.9,
+most 53.6, 12,395 steps) and to none after: the picture's line says three mist draws left
+out, and the fog alone - the picture against the same one without the pass (`-fogpass
+0`) - adds light to every pixel, p50 19.4, p95 27.3, most 35.1, with no rectangle in it;
+at #218's eye by the mill 90,955 pixels and 12,121 steps before, none after, the fog alone
+p50 16.6, p95 28.7, most 46.4. The parity sets of #218 (79 jobs at 960 x 540, RoomProbe of
+af575431 against this entry's): without bulbs at `hd_fog` 1 and at 0, 79 of 79
+byte-identical; with the level's bulbs at `hd_fog` 0, 79 of 79; with them at 1 under
+`hd_water` 0, 36 of 36, and the classic faces 7 of 7; the rules off (`-fogfactor 1
+-fogdrop 0`) against the base at `hd_fog` 1, 79 of 79 (at 1,280 x 720 the sluice's eye
+and #218's differ by 1 of 255 at 2 and 1 pixels, the shader's compiled order; I8 not at
+all). With the bulbs at `hd_fog` 1 seven pictures change, each by the field: the census of
+rooms at `hd_water` 1 in ANDREA1 by 7,580 pixels (bulbs 0 and 7), ANDY1 91,928 (six
+bulbs), ANDY3 67,882 (two), RICH2 135,071 (nine) and RICH3 518,400 (four, the whole
+picture), the HD views of ANDY3's rooms 17 by 517,586 (five, and one mist draw left out)
+and 34 by 516,779 (five); ANDY2's census draws two bulbs whose fields lie behind its walls
+and stays the same, and the fifteen cameras draw no bulb's fog. The title's eyes of #218
+with its bulbs are byte-identical at `hd_fog` 1 and 0, its 30 and 19 ranges of sand drawn
+as before. `hd_build` 0 never runs the pass and is untouched. The price at the mill's eyes
+(medians of three runs at 2,560 x 1,440): E1 0.38 ms, E2 0.44, E3 0.24, A3mill 0.34, M1
+0.92, I8 0.88, H 0.78, C3 0.84, the sluice's eye 0.82. Beyond the mill the parity pictures
+cost at most 0.83 ms (RICH3's census).
+
+**Left.** Inside the densest fields the data holds the pass passes 1 ms: at RICH2's bulb 4
+(room 76), inside eleven fields, 2.04 ms (0.33 at the factor 1), at ANDY1's bulb 12
+(room 201) 1.14 ms (0.29); at 3.75, the least factor that covers the mill's ground, 1.57
+and 1.12. A pass that walks the summed field once per pixel instead of once per bulb would
+make that cheaper; it is not built here. The game was not run: the look and the log's
+lines wait for play.
+
+**Commits.** `eea6c21f`.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -17284,3 +17454,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #281 | The raising cog's lift runs to its end, a pull meanwhile is kept |
 | #282 | Skipping a Zip call ends it, and the pad skips every flyby with an end |
 | #283 | The openings take no room linked only through a flipmap twin |
+| #287 | The bulbs' fog reaches as a field, and the mist it stands in goes |

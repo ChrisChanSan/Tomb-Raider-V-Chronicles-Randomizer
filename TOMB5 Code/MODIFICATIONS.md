@@ -16984,6 +16984,100 @@ keeps while map 0 is off, as every main room is, and the original game never dra
 
 **Commits.** `9b888587`.
 
+### A Zip call with no scene ends on a skip as one under a scene does (#284)
+
+2026-10-31.
+
+**What.** With the *Cutscene skipper* on, a call from Zip that holds Lara while no flyby
+and no cutscene runs ends on Escape held or on a fresh press of the controller's confirm
+button, as a call under a skipped scene does: her hand comes down from her ear, or she
+stands at once while it is still on its way up, Zip falls silent, the level's music comes
+back and she moves. The press opens no inventory and does not reach her; the confirm
+button stays out of play until it is let go. A call under a flyby or a cutscene keeps the
+scene's skip, which ends it at the scene's end. A call that is not skipped plays as
+before.
+
+**Why.** On the thirteenth floor (RICH1) a trigger starts a call from Zip, and Lara stood
+with her hand at her ear for the whole line: no skip reached it. Read from the levels (the
+vanilla and the randomized `.TRC` hold the same calls and triggers) and from the code:
+
+- The calls of all fifteen levels: RICH1 item 4 (room 3, track 95) with flyby 11 and item
+  134 (room 72, track 94) with no scene; RICH2 item 56 (room 34, track 60) with flyby 12
+  and item 225 (room 161, track 77) with flyby 10. The title, ANDREA1 to 3, JOBY2 to 5,
+  ANDY1 to 3, RICHCUT2 and RICH3 have none.
+- Call 134 is started by the one-shot TRIGGER on sector (2,5) of room 72 (x 20992, z
+  43520), whose commands are the call and a Target on item 126, a CAMERA_TARGET in room 69
+  (x 23040, y -1536, z 44544); the sectors (2,2), (2,3), (2,4) and (2,6) of that walkway
+  carry the Target alone, not one-shot. No flyby, camera or cutscene. `RefreshCamera`
+  gives the camera the target on every tick she stands on one of them, and
+  `CalculateCamera` turns her head toward it and looks through a look camera while it lies
+  within her head's reach; posed, her zip states' collision fills no trigger, and the look
+  ends.
+- Tick by tick: on tick 0 the trigger activates the call (`LaraControl`); on tick 1 stage
+  0 takes her control, after tick 1's input was read; from tick 2 her input is masked to
+  the look key and `dbinput` is cleared. She comes to a stand, 20 to 40 ticks from a run;
+  that tick stage 1 poses her and plays track 94, the next hears it, and the pose loops
+  until the track is over, then goal AS_OUT_ZIP and 25 frames to ANIM_BREATH. Escape and
+  the confirm button reached nothing all that time: the mask takes the inventory's and the
+  pause menu's edges, and no skipper ran.
+- `S_CDTrackPlaying(94)` is true while the stream of track 94 runs (the language's HQ OGG,
+  HQ EN's, else `xa12_z_05.wav`); at its end the stream's tail plays the level's
+  atmosphere, 129, and the call ends. With no music device or the file missing the call
+  ends on the first tick of stage 2, as #282 made it; nothing holds her for good there
+  now.
+- A call that outlives its flyby - its track the longer, or the flyby broken off by Look -
+  holds her in the pose after the flyby's end has cleared `bDisableLaraControl`: there her
+  input is not masked, and a fresh Escape opened the inventory over the pose.
+
+**How.** `game/zip_call_rule.h`: `ZipSkipStarts` - the call holds her (posed, or her
+control taken while she comes to a stand; stage 0 holds nothing yet), no flyby, track
+camera or cutscene runs, the call does not end by itself this tick, and Escape is held or
+the confirm button freshly pressed (`SkipConfirmEdge`) - with `ZipSkipLatchKind` and
+`ZipSkipWord`. `game/skip_latch.h`: the kind `SKIP_LATCH_ZIP` and `SkipLatchWord`.
+`game/twogun.cpp`: `ZipCallSkipWithoutScene` finds the call, asks the rule with the
+controller's own terms, ends the calls through `ZipCallsEndBySkip` - the one end of #282 -
+and latches the pad's press; its edge is primed on the call's first tick.
+`game/control.cpp`: `ControlPhase` asks it once a tick after the input mask and the
+cutscene skipper and before the inventory, and masks the tick it fires on as a held tick.
+`specific/input.cpp`: the SKIPLATCH line takes its word from `SkipLatchWord`.
+
+With `-log`: `ZIPSKIP item=<i> stage=<s> tick=<n> how=escape|pad scene=0`, a new line,
+then the call's `ZIPLOG ... ended by skip`; `SKIPLATCH set=zip` for the pad. The ZIPLOG
+words and SKIPLATCH's `cutseq` and `flyby` lines are unchanged.
+
+Measured with a census of the calls and of the other holds over the fifteen vanilla and
+the fifteen randomized levels (items, their OCB, every trigger that names them), a walk of
+all of Lara's animations in the fifteen levels (64 of her 140 states have no routine that
+reads the input; the real animations that loop in one of them until a goal set from
+outside are the Zip pose, 468, the push and pull of a block, 122 and 123, and the cog
+switch, 321, besides the death poses), and the code. ModernTest: `zip_skip_rule` (15
+checks), `zip_skip_noscene` (22: call 134 and the call under flyby 11 tick by tick, before
+and after - played through the same; Escape at tick 300 ends it there, she stands at 325;
+a fresh Cross the same, latched until let go, where without the latch it reached her as
+Action for 34 ticks; under the flyby one end only; the call outliving its flyby, where
+Escape opened the ring before), `zip_skip_wiring` (8); 17,150 checks. Game logic in every
+draw path; there is no `hd_build` parity to claim.
+
+The other holds a skip cannot reach, none of them changed here: the lift buttons (a switch
+of OCB 1000 or more, which `InitialiseSwitch` makes 6; RICH1 2, RICH3 3), released by
+their LIFT_TELEPORTER 30 ticks after it runs, for good only if a button's trigger named no
+lift, which none does; RICH2's puzzle hole 2, Core's level-bound hold, released by
+teleporter 217 (OCB 512) after its 128-tick charge; RICH2's teleporter 76 (OCB 666), which
+keeps her in ANIM_ELEVATOR_RECOVER for 150 ticks; the walk to an object's place
+(`lara.IsMoving`), at most 90 ticks. Each ends by itself; none stays past its end in the
+data.
+
+**Decisions.** The skip follows the *Cutscene skipper* option, as both scene skips do.
+Escape skips while held, the confirm button on a fresh press only, as at a scene; a press
+already down when the call begins does not skip it. A skip on the tick the call ends by
+its own track is no skip. Every call running ends with the skip, as at a scene's end. The
+pop from AS_INTO_ZIP to ANIM_BREATH and the plain music triggers with Zip's voice, which a
+skip leaves playing, stay as #282 left them. A call with no scene is no scene for #280's
+hold: her life is not held while she is posed there. Task #285, built on a branch of its
+own at the same time, stands after this one; this entry stands after #283's.
+
+**Commits.** `7343d52b`.
+
 ### The frame a flyby ends on is drawn with the camera it leaves (#285)
 
 2026-10-31.
@@ -17064,8 +17158,8 @@ that ends on the spline back: its last tick shows the last flyby camera's own vi
 chase camera's field of view, one camera, before the chase camera takes over. The cutscene
 skipper ends no flyby - it never touches `bUseSpotCam`, and a cut scene that starts during
 a flyby holds it until the scene is over - so FLYEND has no `cutseq`. An anti-trigger
-(`TestTriggers`) ends a flyby in no level's data and writes no FLYEND line. Task #284 is
-on a branch of its own; this entry stands after #283's.
+(`TestTriggers`) ends a flyby in no level's data and writes no FLYEND line. This entry
+stands after #284's, built on a branch of its own at the same time.
 
 **Commits.** `66c57ce3`.
 
@@ -17369,4 +17463,5 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #281 | The raising cog's lift runs to its end, a pull meanwhile is kept |
 | #282 | Skipping a Zip call ends it, and the pad skips every flyby with an end |
 | #283 | The openings take no room linked only through a flipmap twin |
+| #284 | A Zip call with no scene ends on a skip as one under a scene does |
 | #285 | The frame a flyby ends on is drawn with the camera it leaves |

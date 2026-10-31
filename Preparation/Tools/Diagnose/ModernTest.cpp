@@ -124,7 +124,8 @@
 // (raising_cog, raising_cog_rope).
 #include "../../../TOMB5 Code/TOMB5/game/raising_cog_rule.h"
 // A Zip call's stages and ends, and the skip that ends it (zip_call_rule,
-// zip_call_skip, zip_call_wiring).
+// zip_call_skip, zip_call_wiring), with or without a scene (zip_skip_rule,
+// zip_skip_noscene, zip_skip_wiring).
 #include "../../../TOMB5 Code/TOMB5/game/zip_call_rule.h"
 // A room group stored off its height: the count, the pick (yshift_rule).
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_scan.h"
@@ -32940,6 +32941,631 @@ static void zip_call_wiring()
 	free(audio);
 }
 
+/* The skip of a Zip call with no scene (game\zip_call_rule.h,
+ * ZipSkipStarts): each term on its own - the call holding her, no scene,
+ * Escape or a fresh press, not ending by itself, the option - then every
+ * combination against the rule written out once more, the latch it takes
+ * and the words of its lines. */
+static void zip_skip_rule()
+{
+	printf("a Zip call with no scene: when a skip ends it\n");
+
+	ok(ZipSkipStarts(1, ZIP_STAGE_LISTEN, 1, ZIP_WAIT, 0, 1, 0) ==
+		ZIP_SKIP_ESCAPE && ZipSkipStarts(1, ZIP_STAGE_LISTEN, 0, ZIP_WAIT, 0,
+		1, 0) == ZIP_SKIP_ESCAPE,
+		"zip skip: posed, Escape held ends it, her control taken or not",
+		0, 1);
+	ok(ZipSkipStarts(1, ZIP_STAGE_LISTEN, 1, ZIP_HEARD, 0, 0, 1) ==
+		ZIP_SKIP_PAD, "zip skip: posed, a fresh press of the pad ends it",
+		0, 1);
+	ok(ZipSkipStarts(1, ZIP_STAGE_LISTEN, 1, ZIP_WAIT, 0, 1, 1) ==
+		ZIP_SKIP_ESCAPE && ZipSkipLatchKind(1) == SKIP_LATCH_ZIP,
+		"zip skip: both at once, Escape's word and the pad's latch", 0, 1);
+	ok(ZipSkipStarts(1, ZIP_STAGE_LISTEN, 1, ZIP_WAIT, 0, 0, 0) ==
+		ZIP_SKIP_NONE, "zip skip: no key, no skip", 1, 0);
+	ok(ZipSkipStarts(1, ZIP_STAGE_POSE, 1, ZIP_WAIT, 0, 1, 0) ==
+		ZIP_SKIP_ESCAPE && ZipSkipStarts(1, ZIP_STAGE_POSE, 1, ZIP_POSING,
+		0, 0, 1) == ZIP_SKIP_PAD,
+		"zip skip: her control taken, coming to a stand, before the pose",
+		0, 1);
+	ok(ZipSkipStarts(1, ZIP_STAGE_POSE, 0, ZIP_WAIT, 0, 1, 1) ==
+		ZIP_SKIP_NONE,
+		"zip skip: not posed and her control not taken, she is free", 1, 0);
+	ok(ZipSkipStarts(1, ZIP_STAGE_TAKE, 1, ZIP_STARTED, 0, 1, 1) ==
+		ZIP_SKIP_NONE && ZipSkipStarts(1, -1, 1, ZIP_WAIT, 0, 1, 1) ==
+		ZIP_SKIP_NONE && ZipSkipStarts(1, 3, 1, ZIP_WAIT, 0, 1, 1) ==
+		ZIP_SKIP_NONE,
+		"zip skip: stage 0 holds nothing yet, a stage outside 0 to 2 none",
+		1, 0);
+	ok(ZipSkipStarts(1, ZIP_STAGE_LISTEN, 1, ZIP_ENDED, 0, 1, 1) ==
+		ZIP_SKIP_NONE && ZipSkipStarts(1, ZIP_STAGE_LISTEN, 1,
+		ZIP_ENDED_NO_TRACK, 0, 1, 1) == ZIP_SKIP_NONE,
+		"zip skip: on the tick the call ends by itself, its own end", 1, 0);
+	ok(ZipSkipStarts(0, ZIP_STAGE_LISTEN, 1, ZIP_WAIT, 0, 1, 1) ==
+		ZIP_SKIP_NONE, "zip skip: the Cutscene skipper off, no skip", 1, 0);
+
+	// Never under a scene: every stage, key and step.
+	int under = 0;
+
+	for (int stage = -1; stage <= 3; stage++)
+		for (int step = ZIP_WAIT; step <= ZIP_ENDED_NO_TRACK; step++)
+			for (int keys = 0; keys < 8; keys++)
+				under += ZipSkipStarts(1, stage, keys & 1, step, 1,
+					(keys >> 1) & 1, (keys >> 2) & 1) != ZIP_SKIP_NONE;
+	ok(under == 0, "zip skip: never while a flyby or a cutscene runs",
+		under, 0);
+
+	// The rule once more in words, over all 2 x 5 x 2 x 7 x 2 x 2 x 2.
+	int wrong = 0, fired = 0;
+
+	for (int on = 0; on <= 1; on++)
+	for (int stage = -1; stage <= 3; stage++)
+	for (int taken = 0; taken <= 1; taken++)
+	for (int step = ZIP_WAIT; step <= ZIP_ENDED_NO_TRACK; step++)
+	for (int scene = 0; scene <= 1; scene++)
+	for (int esc = 0; esc <= 1; esc++)
+	for (int fresh = 0; fresh <= 1; fresh++)
+	{
+		const bool holds = stage == 2 || (stage == 1 && taken);
+		const bool ends = step == ZIP_ENDED || step == ZIP_ENDED_NO_TRACK;
+		const int want = !on || scene || !holds || ends ? ZIP_SKIP_NONE :
+			esc ? ZIP_SKIP_ESCAPE : fresh ? ZIP_SKIP_PAD : ZIP_SKIP_NONE;
+		const int got = ZipSkipStarts(on, stage, taken, step, scene, esc,
+			fresh);
+
+		wrong += got != want;
+		fired += got != ZIP_SKIP_NONE;
+	}
+	ok(wrong == 0 && fired == 45,
+		"zip skip: all 1120 cases as the rule says, 45 of them skip",
+		fired, 45);
+
+	ok(ZipSkipLatchKind(0) == 0 && ZipSkipLatchKind(1) == SKIP_LATCH_ZIP &&
+		SKIP_LATCH_ZIP != SKIP_LATCH_CUTSEQ &&
+		SKIP_LATCH_ZIP != SKIP_LATCH_FLYBY && SKIP_LATCH_ZIP != 0,
+		"zip skip: the pad's press latched as a kind of its own, Escape none",
+		0, 1);
+
+	SKIP_LATCH l = { SKIP_LATCH_OFF, 0, 0 };
+
+	SkipLatchEngage(&l, 1, ZipSkipLatchKind(1), 40);
+	ok(SkipLatchHolds(&l, 0) && SkipLatchHolds(&l, SKIP_LATCH_ZIP) &&
+		!SkipLatchHolds(&l, SKIP_LATCH_FLYBY) &&
+		!SkipLatchHolds(&l, SKIP_LATCH_CUTSEQ) && l.since == 40,
+		"zip skip: its latch holds as itself, not as a flyby's", 0, 1);
+
+	ok(!strcmp(SkipLatchWord(SKIP_LATCH_CUTSEQ), "cutseq") &&
+		!strcmp(SkipLatchWord(SKIP_LATCH_FLYBY), "flyby") &&
+		!strcmp(SkipLatchWord(SKIP_LATCH_ZIP), "zip"),
+		"zip skip: SKIPLATCH set= cutseq and flyby as before, zip new", 0, 1);
+	ok(!strcmp(ZipSkipWord(ZIP_SKIP_ESCAPE), "escape") &&
+		!strcmp(ZipSkipWord(ZIP_SKIP_PAD), "pad") &&
+		!strcmp(ZipSkipWord(ZIP_SKIP_NONE), "none"),
+		"zip skip: the ZIPSKIP words", 0, 1);
+}
+
+/* A Zip call tick by tick in the engine's order (ControlPhase,
+ * game\control.cpp), the call with no scene of RICH1 room 72 (item 134,
+ * track 94) and the one under flyby 11 of RICH1 room 3 (item 4): the
+ * reading - the pad's confirm bit through the skip latch, Escape's fresh
+ * edge for the ring; the mask while bDisableLaraControl is set; the skip
+ * without a scene (after only); the ring, opened by a fresh Escape the mask
+ * left; the call, from the tick after its trigger; Lara; the trigger on
+ * tick 0; the flyby, with its skip, its latch and its end, which ends the
+ * calls when a skip jumped it. The track plays `track` ticks from the tick
+ * that poses her; Lara's zip animations as zip_call_skip has them (19, 73
+ * looping, 25 frames). Cross is Action, as on every default pad page. */
+enum
+{
+	ZNS_BEFORE,	// #282: only a skipped scene ends a call
+	ZNS_AFTER	// a skip ends it, with or without a scene
+};
+
+struct ZnsSim
+{
+	int rule;
+	int skipper;	// the Cutscene skipper option
+	int segs;		// the flyby's segments of 100 ticks, 0 no scene
+	int flags;		// its first camera
+	int esc[2];		// Escape held, ticks [from, to)
+	int pad[2];		// Cross held, ticks [from, to)
+	int pad2[2];	// a second press
+	int stopIn;		// ticks she needs to stand; 0: she stands on tick 0
+	int audio;		// ZIP_AUDIO_*
+	int track;		// the track's ticks
+	int latch;		// 0: the latch left out, to see what it keeps out
+	int ticks;
+};
+
+struct ZnsRun
+{
+	int posedAt, endAt, endWhy, ends;	// ends: how often the call ended
+	int lastZip;	// the last tick she was in a zip state, -1 never
+	int skipAt, skipHow;	// the ZIPSKIP line's tick and word, -1 none
+	int latchSet, latchKind, latchFree;	// set and released, -1 none
+	int ringAt;		// the tick the ring opened first, -1 never
+	int action;		// ticks Cross reached her as Action while she was free
+	int flybyEnd;	// the tick the flyby ended in, -1 none
+	int music;		// at the end: 94 the call's track, 129 the level's
+	int held;		// ticks her input was masked or she was posed
+};
+
+static bool zns_in(const int span[2], int t)
+{
+	return t >= span[0] && t < span[1];
+}
+
+static ZnsRun zns_run(const ZnsSim& m)
+{
+	const int track = 94, atmosphere = 129;	// RICH1 item 134, its level's
+	ZnsRun r = { -1, -1, -1, 0, -1, -1, ZIP_SKIP_NONE, -1, 0, -1, -1, 0,
+		-1, 0, 0 };
+	SKIP_LATCH latch = { SKIP_LATCH_OFF, 0, 0 };
+	int lara = m.stopIn ? ZIP_LARA_MOVE : ZIP_LARA_STAND;
+	int frame = 0, stopLeft = 0, goalOut = 0, disable = 0;
+	int stage = -1, heard = 0, flyby = 0, seg = 0, segTick = 0;
+	int skipped = 0, padSkip = 0, escWas = 0;
+	int xa = m.audio == ZIP_AUDIO_NONE ? -1 : atmosphere;
+	int stream = 1, trackEnd = -1;
+	char zipHeld = 0, spotHeld = 0;
+
+	// ZipCallFinish (game\twogun.cpp), the one end of a call.
+	auto finish = [&](int why, int t)
+	{
+		const int state = lara == ZIP_LARA_IN ? ZIP_AS_INTO :
+			lara == ZIP_LARA_POSE ? ZIP_AS_POSE :
+			lara == ZIP_LARA_OUT ? ZIP_AS_OUT : 2;
+		const int pose = ZipPoseEnd(why, state);
+
+		if (pose == ZIP_POSE_GOAL_OUT || pose == ZIP_POSE_OUT)
+			goalOut = 1;
+		else if (pose == ZIP_POSE_STAND)
+			lara = ZIP_LARA_STAND, frame = 0;
+
+		if (ZipEndMusic(xa == track, atmosphere) == ZIP_MUSIC_ATMOSPHERE)
+			xa = atmosphere, stream = 1, trackEnd = -1;
+
+		disable = 0;
+		stage = -1;
+		r.endAt = t;
+		r.endWhy = why;
+		r.ends++;
+	};
+
+	auto engage = [&](long kind, int t)
+	{
+		if (!m.latch)
+			return;
+
+		SkipLatchEngage(&latch, 1, kind, t);
+		r.latchSet = t;
+		r.latchKind = (int)kind;
+	};
+
+	for (int t = 0; t < m.ticks; t++)
+	{
+		// The stream's own end: back to the atmosphere.
+		if (trackEnd >= 0 && t >= trackEnd)
+			xa = atmosphere, stream = 1, trackEnd = -1;
+
+		// S_UpdateInput: the pad's bit 1 through the latch; Escape's edge.
+		int released = 0;
+		const unsigned long fire = SkipLatchApply(&latch,
+			zns_in(m.pad, t) || zns_in(m.pad2, t) ? 2UL : 0UL, &released);
+		const int cross = (fire & 2) != 0;	// JoyConfirmDown
+		const int esc = zns_in(m.esc, t);
+		int ring = esc && !escWas;	// dbinput & IN_OPTION
+		int action = cross;		// input & IN_ACTION
+
+		escWas = esc;
+
+		if (released && r.latchFree < 0)
+			r.latchFree = t;
+
+		// ControlPhase: her input masked while her control is taken.
+		if (disable)
+			ring = 0, action = 0;
+
+		// The skip without a scene, after the mask, before the ring.
+		if (m.rule == ZNS_AFTER && stage >= 0)
+		{
+			const int fresh = SkipConfirmEdge(cross, &zipHeld);
+			const int step = ZipCallTick(stage, heard,
+				lara == ZIP_LARA_STAND,
+				stage == ZIP_STAGE_LISTEN && xa == track && stream);
+			const int how = ZipSkipStarts(m.skipper, stage, disable, step,
+				flyby, esc, fresh);
+
+			if (how != ZIP_SKIP_NONE)
+			{
+				r.skipAt = t;
+				r.skipHow = how;
+				finish(ZIP_ENDED_BY_SKIP, t);
+
+				if (ZipSkipLatchKind(fresh))
+					engage(ZipSkipLatchKind(fresh), t);
+
+				ring = 0, action = 0;
+			}
+		}
+
+		// The ring is modal; the run notes the tick it would open.
+		if (ring && r.ringAt < 0)
+			r.ringAt = t;
+
+		if (disable || lara >= ZIP_LARA_IN)
+			r.held++;
+
+		// The items: the call, from the tick after its trigger.
+		if (stage >= 0)
+		{
+			const int step = ZipCallTick(stage, heard,
+				lara == ZIP_LARA_STAND,
+				stage == ZIP_STAGE_LISTEN && xa == track && stream);
+
+			if (step == ZIP_STARTED)
+				disable = 1, stage = ZIP_STAGE_POSE;
+			else if (step == ZIP_POSING)
+			{
+				lara = ZIP_LARA_IN, frame = 0, goalOut = 0;
+				stage = ZIP_STAGE_LISTEN;
+				r.posedAt = t;
+
+				if (m.audio != ZIP_AUDIO_NONE)
+				{
+					xa = track;
+					stream = m.audio == ZIP_AUDIO_PLAYS;
+					trackEnd = stream ? t + m.track : -1;
+				}
+			}
+			else if (step == ZIP_HEARD)
+				heard = 1;
+			else if (step == ZIP_ENDED || step == ZIP_ENDED_NO_TRACK)
+				finish(step, t);
+		}
+
+		// Lara: the zip states do nothing of their own; Action reaches her
+		// when she is free.
+		if (action && lara < ZIP_LARA_IN)
+			r.action++;
+
+		switch (lara)
+		{
+		case ZIP_LARA_MOVE:
+			lara = ZIP_LARA_STOPPING, stopLeft = m.stopIn;
+			break;
+
+		case ZIP_LARA_STOPPING:
+			if (--stopLeft <= 0)
+				lara = ZIP_LARA_STAND;
+			break;
+
+		case ZIP_LARA_IN:
+			if (++frame >= 19)
+				lara = ZIP_LARA_POSE, frame = 0;
+			break;
+
+		case ZIP_LARA_POSE:
+			if (goalOut)
+				lara = ZIP_LARA_OUT, frame = 0;
+			break;
+
+		case ZIP_LARA_OUT:
+			if (++frame >= 25)
+				lara = ZIP_LARA_STAND, frame = 0, goalOut = 0;
+			break;
+		}
+
+		if (lara >= ZIP_LARA_IN)
+			r.lastZip = t;
+
+		// The trigger, in LaraControl on tick 0: the call, then the flyby
+		// (InitialiseSpotCam primes its edge from the button as it is).
+		if (t == 0)
+		{
+			stage = ZIP_STAGE_TAKE, heard = 0;
+
+			if (m.segs)
+			{
+				flyby = 1;
+				disable = (m.flags & (1 << 10)) != 0;
+				seg = segTick = skipped = padSkip = 0;
+				spotHeld = (char)cross;
+			}
+		}
+
+		// The camera: CalculateSpotCams, its skip, its latch and its end.
+		if (flyby)
+		{
+			const int fresh = SkipConfirmEdge(cross, &spotHeld);
+
+			if (m.skipper && SpotPadSkipStarts(fresh, m.flags))
+			{
+				padSkip = 1;
+				engage(SKIP_LATCH_FLYBY, t);
+			}
+
+			const int skip = m.skipper && SpotSkipThisFrame(esc, padSkip,
+				SkipLatchHolds(&latch, SKIP_LATCH_FLYBY));
+
+			if (skip)
+				skipped = 1;
+
+			if (skip || ++segTick >= 100)
+				seg++, segTick = 0;
+
+			if (seg >= m.segs)
+			{
+				if (skipped && stage >= 0)
+					finish(ZIP_ENDED_BY_SKIP, t);
+
+				flyby = 0;
+				disable = 0;
+				r.flybyEnd = t;
+			}
+		}
+	}
+
+	r.music = xa;
+	return r;
+}
+
+static bool zns_same(const ZnsRun& a, const ZnsRun& b)
+{
+	return a.posedAt == b.posedAt && a.endAt == b.endAt &&
+		a.endWhy == b.endWhy && a.ends == b.ends && a.lastZip == b.lastZip &&
+		a.skipAt == b.skipAt && a.latchSet == b.latchSet &&
+		a.ringAt == b.ringAt && a.action == b.action &&
+		a.flybyEnd == b.flybyEnd && a.music == b.music && a.held == b.held;
+}
+
+/* RICH1 room 72: she runs onto sector (2,5), whose one-shot trigger
+ * activates the call and turns her look to its camera target; she needs 24
+ * ticks to stand. Before, nothing but the track's end let her go; after,
+ * Escape or a fresh Cross does, once, and the press stays out of play
+ * until it is let go. Played through, nothing changes. Then the call under
+ * flyby 11 (16 segments of 100 ticks, first camera 0201): its skip is the
+ * scene's alone and ends it once; and the call that outlives its flyby,
+ * where a fresh Escape opened the ring before. */
+static void zip_skip_noscene()
+{
+	printf("a Zip call with no scene, skipped, tick by tick\n");
+
+	const int L = 600;	// a stand-in for track 94's ticks
+	ZnsSim m = { ZNS_BEFORE, 1, 0, 0, { -1, -1 }, { -1, -1 }, { -1, -1 },
+		24, ZIP_AUDIO_PLAYS, L, 1, 1400 };
+	const ZnsRun pb = zns_run(m);
+
+	// Played through: posed at 25, the track over at 25 + L, her hand down
+	// 25 frames later; the same before and after.
+	m.rule = ZNS_AFTER;
+	ok(zns_same(pb, zns_run(m)) && pb.posedAt == 25 && pb.endAt == 25 + L &&
+		pb.endWhy == ZIP_ENDED && pb.lastZip == 49 + L && pb.skipAt == -1,
+		"zip no scene: played through, the same call before and after",
+		pb.endAt, 25 + L);
+	ok(pb.held == 49 + L,
+		"zip no scene: held from tick 2 until her hand is down", pb.held,
+		49 + L);
+
+	// Escape held at 300, in the pose.
+	m.esc[0] = 300;
+	m.esc[1] = 330;
+	m.rule = ZNS_BEFORE;
+	ZnsRun r = zns_run(m);
+	ok(zns_same(r, pb) && r.ringAt == -1,
+		"zip no scene, before: Escape does nothing, the ring stays shut",
+		r.endAt, 25 + L);
+	m.rule = ZNS_AFTER;
+	r = zns_run(m);
+	ok(r.skipAt == 300 && r.skipHow == ZIP_SKIP_ESCAPE && r.endAt == 300 &&
+		r.endWhy == ZIP_ENDED_BY_SKIP && r.ends == 1,
+		"zip no scene, after: Escape ends the call, once", r.endAt, 300);
+	ok(r.lastZip == 324 && r.music == 129 && r.ringAt == -1 &&
+		r.latchSet == -1,
+		"zip no scene, after: her hand down, the music back, no ring, no "
+		"latch", r.lastZip, 324);
+
+	// A fresh Cross at 300, held to 360; and the latch left out.
+	m.esc[0] = m.esc[1] = -1;
+	m.pad[0] = 300;
+	m.pad[1] = 360;
+	m.rule = ZNS_BEFORE;
+	r = zns_run(m);
+	ok(zns_same(r, pb), "zip no scene, before: Cross reaches nothing",
+		r.endAt, 25 + L);
+	m.rule = ZNS_AFTER;
+	r = zns_run(m);
+	ok(r.skipAt == 300 && r.skipHow == ZIP_SKIP_PAD && r.endAt == 300 &&
+		r.ends == 1 && r.lastZip == 324,
+		"zip no scene, after: a fresh Cross ends the call, once",
+		r.skipAt, 300);
+	ok(r.latchSet == 300 && r.latchKind == SKIP_LATCH_ZIP &&
+		r.latchFree == 360 && r.action == 0,
+		"zip no scene, after: the press kept out of play until let go",
+		r.action, 0);
+	m.latch = 0;
+	r = zns_run(m);
+	ok(r.skipAt == 300 && r.action == 34,
+		"zip no scene: without the latch it reached her as Action",
+		r.action, 34);
+	m.latch = 1;
+
+	// Cross held from before the call: no skip until a fresh press.
+	m.pad[0] = 0;
+	m.pad[1] = 200;
+	m.pad2[0] = 400;
+	m.pad2[1] = 410;
+	r = zns_run(m);
+	ok(r.skipAt == 400 && r.endAt == 400 && r.ends == 1,
+		"zip no scene, after: a press held from before is no fresh press",
+		r.skipAt, 400);
+	m.pad[0] = m.pad[1] = m.pad2[0] = m.pad2[1] = -1;
+
+	// Escape while she still comes to a stand: never posed, no track.
+	m.esc[0] = 2;
+	m.esc[1] = 20;
+	r = zns_run(m);
+	ok(r.skipAt == 2 && r.posedAt == -1 && r.lastZip == -1 &&
+		r.music == 129 && r.ends == 1,
+		"zip no scene, after: a skip before the pose, she is never posed",
+		r.skipAt, 2);
+
+	// Escape from tick 0: stage 0 holds nothing, the skip waits for stage 1.
+	m.esc[0] = 0;
+	r = zns_run(m);
+	ok(r.skipAt == 2 && r.endAt == 2,
+		"zip no scene, after: the call's first tick is no skip", r.skipAt, 2);
+
+	// On the tick the track ends a press is late: the call's own end.
+	m.esc[0] = 25 + L;
+	m.esc[1] = 40 + L;
+	r = zns_run(m);
+	ok(r.skipAt == -1 && r.endAt == 25 + L && r.endWhy == ZIP_ENDED &&
+		r.ends == 1, "zip no scene, after: a skip on its own end is no skip",
+		r.skipAt, -1);
+
+	// The Cutscene skipper off: as before.
+	m.esc[0] = 300;
+	m.esc[1] = 330;
+	m.skipper = 0;
+	r = zns_run(m);
+	ok(zns_same(r, pb), "zip no scene: the Cutscene skipper off, no skip",
+		r.endAt, 25 + L);
+	m.skipper = 1;
+
+	// No music device, the track's file missing: ended without track on
+	// the first tick of stage 2, a skip later finds no call.
+	m.audio = ZIP_AUDIO_NONE;
+	r = zns_run(m);
+	ok(r.endAt == 26 && r.endWhy == ZIP_ENDED_NO_TRACK && r.skipAt == -1 &&
+		r.ends == 1, "zip no scene, no music device: ended without track",
+		r.endAt, 26);
+	m.audio = ZIP_AUDIO_NOFILE;
+	r = zns_run(m);
+	ok(r.endAt == 26 && r.endWhy == ZIP_ENDED_NO_TRACK && r.music == 129,
+		"zip no scene, the file missing: ended, the atmosphere back",
+		r.endAt, 26);
+	m.audio = ZIP_AUDIO_PLAYS;
+
+	/* RICH1 item 4 under flyby 11, Escape from the first frame: the flyby's
+	 * skip ends the call at its end, once; the skip without a scene never
+	 * fires under it, nor after it, as there is no call left. */
+	ZnsSim f = { ZNS_AFTER, 1, 16, 0x0201, { 0, 30 }, { -1, -1 },
+		{ -1, -1 }, 24, ZIP_AUDIO_PLAYS, L, 1, 2400 };
+
+	r = zns_run(f);
+	ok(r.flybyEnd == 15 && r.endAt == 15 && r.endWhy == ZIP_ENDED_BY_SKIP &&
+		r.ends == 1 && r.skipAt == -1,
+		"zip under a flyby: Escape's skip ends it once, at the flyby's end",
+		r.skipAt, -1);
+	f.rule = ZNS_BEFORE;
+	ok(zns_same(r, zns_run(f)), "zip under a flyby: as #282 had it",
+		r.endAt, 15);
+
+	// The pad's fresh press on tick 1: the flyby's latch, one end.
+	f.esc[0] = f.esc[1] = -1;
+	f.pad[0] = 1;
+	f.pad[1] = 30;
+	f.rule = ZNS_AFTER;
+	r = zns_run(f);
+	ok(r.flybyEnd == 16 && r.endAt == 16 && r.ends == 1 &&
+		r.skipAt == -1 && r.latchKind == SKIP_LATCH_FLYBY &&
+		r.latchSet == 1 && r.latchFree == 30,
+		"zip under a flyby: the pad skips the flyby, the call ends once",
+		r.ends, 1);
+	f.rule = ZNS_BEFORE;
+	ok(zns_same(r, zns_run(f)), "zip under a flyby, the pad: as #282 had it",
+		r.endAt, 16);
+
+	/* A track longer than the flyby (2000 ticks): the flyby ends at 1599
+	 * and gives her control back, the pose holds her to 2025. A fresh
+	 * Escape at 1700 opened the ring before; now it ends the call. */
+	f.pad[0] = f.pad[1] = -1;
+	f.track = 2000;
+	f.esc[0] = 1700;
+	f.esc[1] = 1710;
+	r = zns_run(f);
+	ok(r.flybyEnd == 1599 && r.endAt == 2025 && r.ringAt == 1700 &&
+		r.skipAt == -1,
+		"zip outliving its flyby, before: posed on, Escape opens the ring",
+		r.ringAt, 1700);
+	f.rule = ZNS_AFTER;
+	r = zns_run(f);
+	ok(r.skipAt == 1700 && r.endAt == 1700 && r.ends == 1 &&
+		r.ringAt == -1 && r.lastZip == 1724 && r.music == 129,
+		"zip outliving its flyby, after: Escape ends it, the ring shut",
+		r.skipAt, 1700);
+}
+
+/* The skip without a scene in the engine's own text: ControlPhase asks it
+ * after her input is masked and the cutscene skipper has run, before the
+ * ring, and masks the tick it fires on; it asks the rule with the
+ * controller's own terms, ends the calls through the one end, latches the
+ * pad's press as its own kind and says so in its line; SKIPLATCH takes
+ * the kind's word. */
+static void zip_skip_wiring()
+{
+	char* zip = hd_switch_text("../../game/twogun.cpp");
+	char* control = hd_switch_text("../../game/control.cpp");
+	char* in = hd_switch_text("../input.cpp");
+	static char body[16384];
+	static char ctl[16384];
+
+	ok(zip && control && in, "zip skip wiring: the three files", 0, 1);
+
+	const char* phase = control ? strstr(control, "long ControlPhase(") : 0;
+	const char* mask = phase ? strstr(phase, "input &= IN_LOOK;") : 0;
+	const char* cut = phase ? strstr(phase, "do_cutseq_skipper_stuff();") : 0;
+	const char* ask = phase ? strstr(phase, "if (ZipCallSkipWithoutScene())")
+		: 0;
+	const char* ring = phase ? strstr(phase, "S_CallInventory2()") : 0;
+
+	ok(hd_switch_count(control, "ZipCallSkipWithoutScene()") == 1 &&
+		mask && cut && ask && ring && mask < cut && cut < ask && ask < ring,
+		"zip skip wiring: asked after the mask and the cutscene skipper, "
+		"before the ring", hd_switch_count(control,
+		"ZipCallSkipWithoutScene()"), 1);
+
+	glass_body(ask, "if (ZipCallSkipWithoutScene())", body, sizeof(body));
+	ok(!strcmp(body, "dbinput=0;input&=IN_LOOK;"),
+		"zip skip wiring: the tick it fires on stays a held tick", 0, 1);
+
+	glass_body(zip, "long ZipCallSkipWithoutScene()", body, sizeof(body));
+	glass_body(zip, "void ControlZipController(short item_number)", ctl,
+		sizeof(ctl));
+
+	const char* terms = "ZipCallTick(item->item_flags[0],item->item_flags[1],"
+		"lara_item->current_anim_state==AS_STOP&&lara_item->anim_number=="
+		"ANIM_BREATH,item->item_flags[0]==ZIP_STAGE_LISTEN&&"
+		"S_CDTrackPlaying(item->trigger_flags));";
+
+	ok(strstr(body, terms) && strstr(ctl, terms),
+		"zip skip wiring: the call's step asked with the controller's terms",
+		0, 1);
+	ok(strstr(body, "fresh=SkipConfirmEdge((int)JoyConfirmDown(),"
+		"&zip_confirm_held);") && strstr(body, "how=ZipSkipStarts("
+		"tomb5.cutseq_skipper&&gfLevelId!=LVL5_TITLE,item->item_flags[0],"
+		"bDisableLaraControl!=0,step,bUseSpotCam||bTrackCamInit||"
+		"cutseq_trig||GLOBAL_playing_cutseq,keymap[DIK_ESCAPE]!=0,fresh);"),
+		"zip skip wiring: the rule asked with its seven terms", 0, 1);
+	ok(strstr(body, "ZipCallsEndBySkip();") && !strstr(body,
+		"ZipCallFinish(") && !strstr(body, "KillItem(") && !strstr(body,
+		"bDisableLaraControl=0"),
+		"zip skip wiring: it ends the calls through the one end", 0, 1);
+	ok(strstr(body, "InputSkipLatch(ZipSkipLatchKind(fresh));") != 0 &&
+		hd_switch_count(zip, "\"ZIPSKIP item=%d stage=%d tick=%d how=%s "
+		"scene=0\"") == 1,
+		"zip skip wiring: the pad's latch, and the ZIPSKIP line", 0, 1);
+
+	glass_body(in, "void InputSkipLatch(long kind)", body, sizeof(body));
+	ok(strstr(body, "SkipLatchWord(kind)") && !strstr(body, "\"cutseq\""),
+		"zip skip wiring: SKIPLATCH says the kind's word", 0, 1);
+
+	free(zip);
+	free(control);
+	free(in);
+}
+
 int main()
 {
 	printf("ModernTest - the arithmetic of the modern control\n");
@@ -33181,6 +33807,9 @@ int main()
 	zip_call_rule();
 	zip_call_skip();
 	zip_call_wiring();
+	zip_skip_rule();
+	zip_skip_noscene();
+	zip_skip_wiring();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

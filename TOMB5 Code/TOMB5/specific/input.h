@@ -50,7 +50,7 @@ long JoyBitBack();
 /* The skip latch (game\skip_latch.h). JoyConfirmDown: the pad's confirm
  * button in the last reading, as the latch left it. InputSkipLatch: a
  * skipper fired on it, so it stays out of the input until it is released.
- * InputSkipLatchHolds: not released yet; kind 0 asks about either skipper. */
+ * InputSkipLatchHolds: not released yet; kind 0 asks about any skipper. */
 long JoyConfirmDown();
 void InputSkipLatch(long kind);
 long InputSkipLatchHolds(long kind);

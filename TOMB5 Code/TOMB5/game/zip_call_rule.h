@@ -35,8 +35,16 @@
  * the flyby ended, the call posed her wherever she next stood still. A
  * skip now ends the call with the scene.
  *
- * Pure, with no engine header, so that
+ * A call can hold her with no scene at all: one that comes without a
+ * flyby, and one that outlives the flyby it came with - its track the
+ * longer, or the flyby broken off by Look. No skipper runs there, so
+ * nothing but the track's end let her go. Such a call now ends on the
+ * skip as well, through the same end (ZipSkipStarts below).
+ *
+ * Pure, with no engine header (skip_latch.h is pure too), so that
  * Preparation\Tools\Diagnose\ModernTest.cpp includes this file itself. */
+
+#include "skip_latch.h"
 
 /* Lara's zip states, the values of game\lara_states.h (twogun.cpp asserts
  * that they agree). */
@@ -173,4 +181,68 @@ inline const char* ZipCallWord(int step)
 	}
 
 	return "waiting";
+}
+
+/* The skip of a call without a scene. With the Cutscene skipper on, a call
+ * that holds Lara while no flyby and no cutscene runs ends on Escape held
+ * or on a fresh press of the pad's confirm button, as a skipped scene ends
+ * it (ZipCallsEndBySkip, game\twogun.cpp, asked once a tick by
+ * game\control.cpp). */
+
+// How a skip without a scene fired, the ZIPSKIP word.
+enum
+{
+	ZIP_SKIP_NONE,
+	ZIP_SKIP_ESCAPE,	// Escape held
+	ZIP_SKIP_PAD		// a fresh press of the pad's confirm button
+};
+
+/* Whether the skip without a scene ends the call this tick, and how. `on`:
+ * the Cutscene skipper is on and this is not the title; `stage`: the
+ * call's stage; `taken`: her control is taken (bDisableLaraControl);
+ * `step`: what the call's own tick does now (ZipCallTick); `scene`: a
+ * flyby or a cutscene runs; `escape`: Escape is held; `fresh`: the confirm
+ * button went down on this reading (SkipConfirmEdge).
+ *
+ * The call holds her once it has posed her, and before that while her
+ * control is taken and she comes to a stand; stage 0, the tick that takes
+ * it, holds nothing yet. Under a scene the scene's skip ends the call at
+ * the scene's end, so this one asks nothing there: one press never skips
+ * twice. On the tick the call ends by itself - its track over, or none -
+ * that end is the end. With both, Escape is the word. */
+inline int ZipSkipStarts(int on, int stage, int taken, int step, int scene,
+	int escape, int fresh)
+{
+	if (!on || scene)
+		return ZIP_SKIP_NONE;
+
+	if (stage != ZIP_STAGE_LISTEN && !(stage == ZIP_STAGE_POSE && taken))
+		return ZIP_SKIP_NONE;
+
+	if (step == ZIP_ENDED || step == ZIP_ENDED_NO_TRACK)
+		return ZIP_SKIP_NONE;
+
+	if (escape)
+		return ZIP_SKIP_ESCAPE;
+
+	return fresh ? ZIP_SKIP_PAD : ZIP_SKIP_NONE;
+}
+
+/* The latch the skip engages (skip_latch.h): the confirm button's whenever
+ * its fresh press was there, Escape held beside it or not - play comes
+ * back on the next tick, and the button is Action there. Escape takes
+ * none: it is no play role, and the ring opens on a fresh press of it
+ * only. 0: no latch. */
+inline long ZipSkipLatchKind(int fresh)
+{
+	return fresh ? SKIP_LATCH_ZIP : 0;
+}
+
+// The word of a skip in the ZIPSKIP line (game\twogun.cpp).
+inline const char* ZipSkipWord(int how)
+{
+	if (how == ZIP_SKIP_ESCAPE)
+		return "escape";
+
+	return how == ZIP_SKIP_PAD ? "pad" : "none";
 }

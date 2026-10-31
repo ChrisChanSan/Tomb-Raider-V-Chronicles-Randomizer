@@ -4017,11 +4017,14 @@ static bool g_vis_logged = false;
  * listed by the portals, the openings and the wide portals alone, never as
  * a guest. Made once a level, at the first walk after the build has marked
  * the hulls; `g_vis_hull_guests` the (room, hull) pairs left out, for the
- * HDLOG vis line. */
+ * HDLOG vis line, and `g_vis_hull_sky` the sky table's pairs left out so.
+ * The sky table's groups (hd_vis.h) are handed in after a room's own
+ * guests: listed as a guest is, by the box of their art in the sky. */
 static std::vector<HDVisGuest> g_vis_guests;
 static std::vector<int> g_vis_guest_first, g_vis_guest_count;
 static bool g_vis_guests_made = false;
 static int g_vis_hull_guests = 0;
+static int g_vis_hull_sky = 0;
 static std::vector<short> g_vis_main;
 /* Per room, where its statics begin in the list handed to hd_vis.cpp
  * (HDVisLevelStatics): every MESH_INFO of every room, in the rooms' order
@@ -8386,7 +8389,9 @@ static void HDLevelBuildHD()
 	 * path's openings no longer name, linked with the room whose bare face
 	 * it stands behind only through a flipmap twin, in no state that has
 	 * both in the world, ends in `refused=flipstate` (hd_vis.h,
-	 * HDVisTables::stateRefused). */
+	 * HDVisTables::stateRefused). Every line ends in `sky_art`, the
+	 * triangles of the room's art in the sky (hd_vis.h, the sky table; 0
+	 * off the visibility path). */
 	const std::vector<int> copied = ArtCopiedPerRoom();
 	const HDVisTables* vis = HDVisLevelTables();
 
@@ -8418,7 +8423,7 @@ static void HDLevelBuildHD()
 		Log("HDLOG room=%d group=%d tris=%d/%d/%d overhang=%d cut=%d "
 			"ranges=%d statics=%d hd=%d reason=%s stand=%d covered=%d "
 			"carrier=%d faces=%d faces_covered=%d floors_kept=%d shadow=%d "
-			"drawn=%d copied=%d%s",
+			"drawn=%d copied=%d%s sky_art=%d",
 			r, r, HDRenderGroupTriangles(r, 0), HDRenderGroupTriangles(r, 1),
 			HDRenderGroupTriangles(r, 2), HDRenderGroupOverhangTriangles(r),
 			cuts[(size_t)r], HDRenderGroupRanges(r, -1),
@@ -8429,7 +8434,9 @@ static void HDLevelBuildHD()
 			here && (g_group_hd[r] || g_group_stand_shadow[r]) ? 1 : 0,
 			here && (g_group_hd[r] || g_group_hollow[r]) ? 1 : 0,
 			(size_t)r < copied.size() ? copied[(size_t)r] : 0,
-			refused ? " refused=flipstate" : "");
+			refused ? " refused=flipstate" : "",
+			vis && (size_t)r < vis->skyTris.size() ?
+			vis->skyTris[(size_t)r] : 0);
 	}
 
 	/* The hollow groups (HDRenderHollowText): where their art stands and
@@ -9341,9 +9348,14 @@ static int SurfaceRoom()
  *   HDLOG level=<stem> vis=1 rooms= art_rooms= walls= bare= void= guests=
  *         guest_tris= wide= ms= twin= wide_bare= edge= statics_held=
  *         statics_ms= enclosed= hull_guests= hollow_hidden= guests_hanging=
- *         openings_state=
+ *         openings_state= sky_groups= sky_tris= sky_pairs= sky_copies=
+ *         hull_sky= sky_closed=
  *   HDLOG visguest level=<stem> room= group= tris= box= refused=hanging
  *   HDLOG visopening level=<stem> room= face= behind= refused=flipstate
+ *   HDLOG vissky level=<stem> room= group= tris= over_sky= over_closed=
+ *         beyond= box=
+ *   HDLOG vissky level=<stem> group= tris= copy_of= refused=copy
+ *   HDLOG vissky level=<stem> group= tris= refused=closed
  *
  * art_rooms the rooms whose walls were asked, walls their classic wall
  * faces, bare those the art leaves bare (the openings), void those with no
@@ -9364,7 +9376,17 @@ static int SurfaceRoom()
  * whose room, while the holder is drawn, is linked with it in no state of
  * the maps that has both in the world (HDVisTables::stateRefused), each
  * with a visopening line of the holder, its bare face and the room
- * behind. */
+ * behind; sky_groups the groups whose art stands in the sky, which the
+ * rooms under the sky beside it take (hd_vis.h, the sky table), sky_tris
+ * their triangles there, sky_pairs the (room, group) pairs, sky_copies
+ * the groups left out because their art there copies a sky group's, and
+ * hull_sky the pairs whose group is a hull, which the walk is not handed;
+ * a vissky line per pair: the room, the group, the group's triangles in
+ * the sky - over a room under the sky and over no room - and in the open
+ * air over a closed room's roof, counted apart, and the box of the first
+ * two; one per group left out as a copy, with the sky group it copies;
+ * and sky_closed the groups with art in the sky whose room is not under
+ * the sky, left out, one line each. */
 
 static int VisContents(int roomIndex)
 {
@@ -9385,6 +9407,7 @@ static void VisKeepGuests(const HDVisTables* t)
 	g_vis_guest_first.assign((size_t)t->rooms, 0);
 	g_vis_guest_count.assign((size_t)t->rooms, 0);
 	g_vis_hull_guests = 0;
+	g_vis_hull_sky = 0;
 
 	for (int c = 0; c < t->rooms; c++)
 	{
@@ -9399,6 +9422,25 @@ static void VisKeepGuests(const HDVisTables* t)
 			if (HDRenderGroupHull(guest.group, &air, &covered))
 			{
 				g_vis_hull_guests++;
+				continue;
+			}
+
+			g_vis_guests.push_back(guest);
+			g_vis_guest_count[(size_t)c]++;
+		}
+
+		/* And the room's sky groups (hd_vis.h, the sky table), listed as
+		 * guests by the box of their art in the sky. */
+		for (int k = 0; (size_t)c < t->skyCount.size() &&
+			k < t->skyCount[(size_t)c]; k++)
+		{
+			const HDVisGuest& guest =
+				t->sky[(size_t)(t->skyFirst[(size_t)c] + k)];
+			int air = 0, covered = 0;
+
+			if (HDRenderGroupHull(guest.group, &air, &covered))
+			{
+				g_vis_hull_sky++;
 				continue;
 			}
 
@@ -9433,12 +9475,14 @@ bool HDVisWalkOn()
 			"void=%d guests=%d guest_tris=%lld wide=%d ms=%.0f twin=%d "
 			"wide_bare=%.2f edge=%.5f statics_held=%d statics_ms=%.0f "
 			"enclosed=%d hull_guests=%d hollow_hidden=%d guests_hanging=%d "
-			"openings_state=%d",
+			"openings_state=%d sky_groups=%d sky_tris=%lld sky_pairs=%d "
+			"sky_copies=%d hull_sky=%d sky_closed=%d",
 			g_stem, t->rooms, t->artRooms, t->wallFaces, t->bareFaces,
 			t->voidFaces, t->guestPairs, t->guestTris, t->widePortals, t->ms,
 			t->openingsTwin, p.wideBare, p.edge, t->staticsHeld, t->staticMs,
 			t->roomsEnclosed, g_vis_hull_guests, hollow_hidden,
-			t->guestsHanging, t->openingsState);
+			t->guestsHanging, t->openingsState, t->skyGroups, t->skyArtTris,
+			t->skyPairs, t->skyCopies, g_vis_hull_sky, t->skyClosed);
 
 		// The guests the sky's rule refused (HDVisRefused), one line each.
 		for (const HDVisRefused& one : t->hanging)
@@ -9452,6 +9496,31 @@ bool HDVisWalkOn()
 		for (const HDVisStateRefused& one : t->stateRefused)
 			Log("HDLOG visopening level=%s room=%d face=%d behind=%d "
 				"refused=flipstate", g_stem, one.holder, one.face, one.behind);
+
+		// The sky table's pairs, then the groups left out as copies.
+		for (int r = 0; r < t->rooms && (size_t)r < t->skyCount.size(); r++)
+			for (int k = 0; k < t->skyCount[(size_t)r]; k++)
+			{
+				const HDVisGuest& one =
+					t->sky[(size_t)(t->skyFirst[(size_t)r] + k)];
+				const size_t g = (size_t)one.group;
+
+				Log("HDLOG vissky level=%s room=%d group=%d tris=%d "
+					"over_sky=%d over_closed=%d beyond=%d "
+					"box=%.0f..%.0f,%.0f..%.0f,%.0f..%.0f", g_stem, r,
+					one.group, one.tris, t->skyOverSky[g], t->skyOverClosed[g],
+					t->skyBeyond[g], one.lo[0], one.hi[0], one.lo[1],
+					one.hi[1], one.lo[2], one.hi[2]);
+			}
+
+		for (size_t g = 0; g < t->skyCopyOf.size(); g++)
+			if (t->skyCopyOf[g] >= 0)
+				Log("HDLOG vissky level=%s group=%d tris=%d copy_of=%d "
+					"refused=copy", g_stem, (int)g, t->skyTris[g],
+					t->skyCopyOf[g]);
+			else if (g < t->skyRoomClosed.size() && t->skyRoomClosed[g])
+				Log("HDLOG vissky level=%s group=%d tris=%d refused=closed",
+					g_stem, (int)g, t->skyTris[g]);
 	}
 
 	return true;

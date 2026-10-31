@@ -16590,6 +16590,96 @@ stands after #277's.
 
 **Commits.** `51c78576`.
 
+### The raising cog's lift runs to its end, a pull meanwhile is kept (#281)
+
+2026-10-31.
+
+**What.** A lift of the raising cog that has begun runs to its end, whatever its rope does
+meanwhile. A pull while the cog still rises is kept for a lift to come, and when the
+running lift ends the next one begins in the same tick, with flyby 9 as every lift
+begins; two pulls during one lift are two lifts to come. The cog still lifts three times
+and no more, 2 units a tick and 256 units a lift, and never moves back; its third lift
+engages it with the gear above, frees the other rope and wakes the trigger triggerer as
+before, and a pull with no lift left for it is dropped. With `-log` a `COGLOG` line marks
+each lift's begin and end and each pull the cog kept or dropped.
+
+**Why.** ANDREA2, Trajan's Markets: the rope in room 51 (item 36, OCB 1) raises the cog
+(item 18) in three lifts, the residual case #279 left open. The rope's floor trigger is a
+SWITCH, which toggles its targets' code bits, and `ControlRaisingCog` (`game/andrea.cpp`)
+returned at once while `TriggerActive` was false. The pull that started a lift turned the
+cog's bits on and the cog turned them off itself when the lift ended - but a pull while
+it still rose turned them off first: the lift stood still half way, and only one more
+pull set it going again. Core hid that behind flyby 9, which every lift starts and which
+holds Lara still for about 200 ticks, longer than a lift's 128. Since the *Cutscene
+skipper* can end that flyby, a new press within about 70 ticks of a counted pull lands
+its pull while the cog still rises (#279, Decisions), and a fast player needed more than
+three pulls.
+
+Tick by tick, with the first pull counted at tick 59 (the press at 0) and the cog's first
+2 units and its flyby at 60, derived from the code and the level, the game not started:
+
+- Before: a second pull counted at 118 (the held button before #279) stopped the cog at
+  118 of 256 units; one at 129, 70 ticks on, at 140; one at 187, on the lift's last unit,
+  left the lift at 256 uncounted, so that the next pull only ended it. Three pulls 59
+  ticks apart gave one lift, ended at 247.
+- After: the same pulls are kept (`COGLOG item=18 lift=1 at=118 pulls_pending=1 kept`),
+  lift 1 ends at 188 (`... at=256 pulls_pending=1 done`) and lift 2 begins in that tick
+  (`... lift=2 at=0 pulls_pending=0 started from pending`). Three pulls 59 ticks apart
+  give three lifts, the third ending at 444 with the cog engaged, 768 units in all; a
+  fourth is dropped. Pulls that wait for each lift's end give Core's ticks.
+
+**How.** `game/raising_cog_rule.h`, new and with no engine header: `COG_STATE`, the lift
+count, the units of the running lift and the pulls kept, as `item_flags[0]`, `[2]` and
+`[3]` hold them; `RaisingCogTick`, one tick in the order pull, end, step - lifted out the
+cog turns while its trigger is on (`COG_TURN`); with no lift running and the trigger off
+nothing happens; with a lift running and the bits off, a pull since the tick before, it
+is `COG_KEPT` while a lift is left for it and `COG_DROPPED` after, both `COG_REARM`; at
+256 units `COG_DONE`, at the third lift `COG_ENGAGE` and nothing kept, `COG_SLEEP` with
+nothing kept, else `COG_FROM_PENDING` and the next lift; `COG_BEGIN` at 0 units, and the
+step `COG_RISE`; and `RaisingCogVolume`, Core's ramp of the raise sound.
+`game/andrea.cpp`: `ControlRaisingCog` reads the state, asks `TriggerActive` once as
+before and hands its answer to the rule, writes the state back and does what the mask
+says - the bits on again on `COG_REARM`; the pulleys and the trigger triggerer on
+`COG_ENGAGE`, the loop unchanged; `RemoveActiveItem`, `ITEM_INACTIVE` and the bits off on
+`COG_SLEEP`; flyby 9 on `COG_BEGIN`; the sound and the step on `COG_RISE`. The project
+files list the header; `game/init.cpp` is unchanged.
+
+The pull is seen in the cog, not in the rope or the trigger: each change of its bits to
+off while a lift runs is one pull, and the cog turns them on again, so that the next pull
+turns them off once more. That needs no more than one pull a tick, which Lara's pulling
+never comes near. `item_flags[3]` is a slot the cog never used (`InitialiseRaisingCog`
+sets `[1]`, `InitialiseItem` zeroes all four), and the savegame writes it for every item
+it saves when it is not 0 and reads 0 where it was not written (`SaveLevelData`,
+`RestoreLevelData`); the cog is saved, with its flags, from its first pull on
+(`IFL_TRIGGERED`). A savegame from before therefore reads as nothing kept. A cog it left
+stopped half way - its bits off in mid-lift - rises on at once and keeps the pull that
+stopped it, so its two pulls are two lifts. Without a pull during a lift every tick does
+what Core's did and the slot stays 0, and the savegame is the same as before.
+
+With `-log`: `COGLOG item=<i> lift=<n> at=<units> pulls_pending=<p> <word>`, the word
+`begin`, `kept`, `dropped`, `done` or `started from pending`.
+
+ItemCheck over the sixteen vanilla level files finds the raising cog in ANDREA2 alone
+(item 18, room 24, flags 0, OCB 0). ModernTest: `raising_cog` (20 checks),
+`raising_cog_rope` (16 - the rope and the cog tick by tick, Core's control beside the
+rule, and 2860 timings of three pulls, three lifts every time with the rule and before
+only the 396 with no pull in a lift) and `raising_cog_wiring` (13). The change is game
+logic in every draw path; there is no `hd_build` parity to claim.
+
+**Decisions.** A count, not a flag: two pulls during one lift are two lifts to come, up
+to the lifts that are left; a pull beyond them is dropped, as a pull after the third lift
+does nothing. The cog turns its bits on again rather than reading both edges, so every
+pull is a change to off; the cap holds even a trigger timer - which this trigger does not
+carry, and which once run out would read as a pull on every tick - to the lifts that are
+left. The next lift begins in the tick the last one ends, so that no tick stands between
+with a pull kept and no lift running. Every lift starts flyby 9, a kept pull's too: where
+the flyby of the lift before still plays - a pull under way when it began still counts
+at its frame - it begins again from its first camera. This takes back the last decision
+of #279, which left the toggle as the level has it. Tasks #280, #282 and #283 run on
+branches of their own; this entry stands after #279's.
+
+**Commits.** `35a91179`.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -16886,3 +16976,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #277 | The X-ray look holsters nothing at the thighs, its Uzis like its other guns |
 | #278 | A search object keeps the pickup in its reach from any enemy |
 | #279 | The button that skipped a scene does nothing more until it is released |
+| #281 | The raising cog's lift runs to its end, a pull meanwhile is kept |

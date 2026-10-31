@@ -16425,6 +16425,108 @@ Eagle in hand, 0. The census of the fifteen levels is the head's (1,791 rows). M
 
 **Commits.** `0f28d980`.
 
+### The button that skipped a scene does nothing more until it is released (#279)
+
+2026-10-31.
+
+**What.** With the *Cutscene skipper* on, the controller's confirm button - Cross, A -
+skips a cutscene and a camera flyby, and every default pad page binds the Action role to
+the same button. The press that skips now stays out of the input until the button is let
+go: Lara neither pulls, grabs nor acts with it, and no menu takes it as a confirm,
+whatever role the binding page put on that button. A flyby is skipped by the button only
+on a fresh press, as a cutscene is (*Skipping cutscenes and the intro flyby with the
+controller*), so the button still held from the rope pull that set a flyby off no longer
+skips it; the frames jump while that press is held, and letting go ends the run, as
+letting go of Escape does. The button skips only a flyby that holds Lara still; one that
+leaves her playing leaves her the button as Action. Escape is unchanged in both skippers:
+it skips while it is held.
+
+**Why.** ANDREA2, Trajan's Markets. The pull rope in room 51 (item 36, OCB 1) is pulled
+three times to raise the cog (item 18, RAISING_COG) to the gear above it; the rope in
+room 33 (item 27) then turns the gears and opens trapdoor 11. With the skipper on, the
+room 51 rope wanted more than three pulls, and the first pull of the room 33 rope moved
+only the big wheel (item 117); the trapdoor opened on the pull after. Read from the level
+(the vanilla and the randomized `ANDREA2.TRC` hold the same triggers, items and cameras;
+only the music differs) and from the code:
+
+- Both ropes' floor triggers are SWITCH triggers with all five code bits, and a SWITCH
+  trigger toggles each target's bits (`_TestTriggers`, `item->flags ^= flags &
+  IFL_CODEBITS`). Room 51, sector 2,2: `8204 3E00 0024 8012`, the rope and the cog. Room
+  33, sector 2,2, behind the trigger triggerer (item 28, enabled when the cog's third rise
+  ends): `8204 3E00 001B 000B 0010 000F 0011 3001 0100 8012` - the rope, trapdoor 11, the
+  gears 16, 15 and 17, flyby 1 played once (`0100`), the cog.
+- Room 33's trigger starts flyby 1 in the pull's own tick. Room 51's has no scene of its
+  own, but the cog's control (`ControlRaisingCog`, `game/andrea.cpp`) starts flyby 9 the
+  tick after a pull sets it rising. Both flybys hold Lara still (SP_NOLARACONTROL on their
+  first cameras, flags 0651 and 0441) and so mask her input while they play.
+- A pulley with OCB 1 is armed again after every pull, and `lara_as_pulley` keeps the
+  goal on the pull while the interact bit is in her input. The level's animation 340, the
+  pull (59 frames), counts the pull at frame 44 and loops into itself unless the goal is
+  the stand on its last two frames (its one state change, frames 58 and 59, to 341).
+- The flyby skip fired on the button held, with no edge. The button is held through the
+  pull, so the flyby the pull set off was skipped from its first frame and over in 9 ticks
+  (flyby 1) or 2 (flyby 9) - before frame 58, 13 ticks after frame 44 - and the still-held
+  button was Action again there: Lara pulled once more. That second pull in room 33 shut
+  the trapdoor again and stopped the gears and the cog; the big wheel stayed, set by flyby
+  1's own heavy test (camera 7, room 52), which is no toggle. The second pull in room 51
+  turned the rising cog off half-way (it rises 2 units a tick for 128 ticks), and the next
+  pull set it going again. Played through, both flybys outlast frame 58 with Lara's input
+  masked, and she stops after one pull.
+
+ModernTest's `skip_latch_rope` runs both ropes tick by tick in the engine's order. Before:
+the pull is counted at tick 59, the held skip ends flyby 1 at tick 67, the pull loops on
+frames 58 and 59 at ticks 72 and 73 and counts again at 118; for flyby 9, started at 60,
+the skip ends it at 61 and the second pull counts at 118 as well. After: one pull, the
+flyby played through; or, with the button let go and pressed again to skip, the flyby
+over in 9 ticks (2 for flyby 9) and the press out of the input until it is let go.
+
+**How.** `game/skip_latch.h` (new, pure): `SKIP_LATCH` (the bit, the skipper, the tick),
+`SkipLatchEngage` (bits 0 to 23 only), `SkipLatchApply` (one reading of the pad: the
+latched bit taken out while it is down, the latch dropped on the first reading with it
+up), `SkipLatchHolds`, `SkipLatchDrop`, and `SkipConfirmEdge`, the fresh-press rule both
+skippers ask. `game/spotcam_math.h`: `SpotPadSkipStarts` (a fresh press, Lara's control
+taken, no LOOPCAMERA or TRACKCAMERA on the first camera) and `SpotSkipThisFrame` (Escape
+held, or the pad's skip of this flyby with its press still latched). `specific/input.cpp`:
+the latch's state; `InputSkipLatch`, which engages it on `JoyBitConfirm()`;
+`InputSkipLatchHolds`; `JoyConfirmDown`, the skippers' one read of the button, as the
+latch leaves it; the latch applied in `S_UpdateInput` right after the pad is read and
+before any role is read - every pad role comes out of that one word (`JoyRole`,
+`PadRoleFires`), so the mask follows the binding page and leaves every other button
+alone; and dropped in `InputModeLatchReset`, at every level start and savegame restore.
+`game/control.cpp`: the cutscene skipper asks `SkipConfirmEdge` and engages the latch when
+the press skipped, not on the title. `game/spotcam.cpp`: `InitialiseSpotCam` primes the
+flyby's edge from the button as it is when the flyby begins; `CalculateSpotCams` asks the
+two rules and engages the latch when a press starts the skip.
+
+With `-log`: `SKIPLATCH set=cutseq|flyby bit=<n> tick=<t>` when a skip engages the latch,
+`SKIPLATCH released held=<ticks> tick=<t>` when the button is let go, `SKIPLATCH dropped
+held=<ticks> tick=<t>` when a level start lets go first; `FLYLOG` ends in `latch=on|off`.
+
+Measured with TrgProbe `-flyby`, SectorCheck, ItemCheck and a probe of Lara's three pulley
+animations (339, 340, 341: 14, 59 and 14 frames). The census of the fifteen levels is
+unchanged, 64 sequences and 359 cameras. Of the 59 outside the title, 45 take the pad's
+skip; 8 leave Lara her control (ANDREA3 0 and 3, RICH1 11, RICH2 0, 1 and 12, RICH3 10
+and 15) and 6 track her (ANDY1 5, ANDY2 2, ANDY3 9, RICH2 7 and 13, RICH3 7), and those
+14 are skipped by Escape alone. ModernTest: `skip_latch` (15 checks), `spot_pad_skip`
+(10), `skip_latch_rope` (12), `skip_latch_wiring` (6). Game logic in every draw path;
+there is no `hd_build` parity to claim.
+
+**Decisions.** The button skips only a flyby that holds Lara's control. Before, it skipped
+any: in one that leaves her playing - an expanding platform in RICH1 and RICH2 - Cross is
+her Action, a skip there was a camera jump on every Action press, and with the latch the
+press that grabbed a ledge would have been taken from her a tick later. Escape skips
+those as before. Escape needs no latch: it is the inventory key of both default rows and
+the binding page cannot put it on any other role (the capture gives up on it,
+`game/menu_frame.cpp`), and its bits, IN_OPTION and IN_DESELECT, open the inventory or
+go back in a menu on a fresh press only. A skipped flyby no longer masks Lara's input for
+as long as it would have played, so in room 51 a new press within 70 ticks (2.3 seconds)
+of a pull's count still lands its pull while the cog is rising and stops it; one more
+pull sets it going. That is the SWITCH toggle as the level has it, and it is left so.
+Task #278 (`game/setup.cpp`, `GetCarriedItems`) is on a branch of its own; this entry
+stands after #277's.
+
+**Commits.** `51c78576`.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -16719,3 +16821,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #275 | An item the run added to a baked slot takes the art of another placement |
 | #276 | The diving suit's thrusters hang from her shoulders on the HD body |
 | #277 | The X-ray look holsters nothing at the thighs, its Uzis like its other guns |
+| #279 | The button that skipped a scene does nothing more until it is released |

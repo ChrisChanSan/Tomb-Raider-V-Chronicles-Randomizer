@@ -16590,6 +16590,94 @@ stands after #277's.
 
 **Commits.** `51c78576`.
 
+### The openings take no room linked only through a flipmap twin (#283)
+
+2026-10-31.
+
+**What.** On the visibility path (`hd_vis` 1) a room listed behind a bare classic wall
+face of a listed room - an opening - must now be linked with that room in a state of the
+flipmaps that has both rooms in the world: by a portal or a floor link of one of them,
+read as the flipmaps swap the rooms at a number. A room the links join with it only
+through its flipmap twin's records, which hold in the twin's state alone, is no longer
+listed there. From the landing in front of RICH1's vent shaft (rooms 21 and 96) the shaft
+(room 89) is drawn by its own art again; before, the art of room 85 stood in it, a second
+set of walls and floor fighting the shaft's, and closed it with a wall three squares in.
+With `-log` the `HDLOG level= vis=1` line ends in `openings_state=`, one `HDLOG visopening
+level= room= face= behind= refused=flipstate` line names each opening so refused, and the
+`HDLOG room=` line of the room behind ends in `refused=flipstate`. TrgProbe `-vistable`
+ends its level line in `openings_state=` with a `flipstate room= face= behind=` line per
+refusal and takes `-visroom all`; RoomProbe's `-vis: tables` line ends in
+`openings_state=` with a `-vis: visopening` line each; ModernTest checks the rule on three
+flipmap pairs built by hand.
+
+**Why.** In play, looking from the landing into the vent shaft, the shaft's walls and
+floor showed a second, beige texture through the grey one, flickering as the eye moved,
+and a beige wall closed the shaft at the end of its grating; from inside the shaft it
+looked right. Room 85 is the main room of a pair on flipmap 0, as are rooms 21, 89 and 18
+with their twins 96, 94 and 97: a box of three squares at the shaft's place (x 30,720 to
+31,744, z 45,056 to 48,128, y -4,352 to -3,328) with no portal and no floor link of its
+own, closed on all six sides by fourteen classic quads of one texture; its twin 86 is the
+chute that 96's portal leads into while map 0 is on. No portal ever reaches room 85
+itself: with the map off only 96 names its number, and 96 is not in the world then; with
+the map on, 86 stands at that number. Its art (group 85, 252 triangles) models the box
+where group 89's shaft (288 triangles) stands. Room 21's art leaves the two wall faces
+beside the shaft's portal half bare (faces 4 and 15, 0.50 and 0.51 of their samples), the
+point 512 units behind them lies in the boxes of rooms 89, 94, 85 and 86, and the
+openings' link test, closed over the twins so that a room counts as linked with what its
+twin's records name, took 85 for linked with 21 through 96's portal and through 86's
+portal to 21's number. The opening listed 85 beside 89, and group 85's art was drawn whole
+inside the shaft: art against art. At 1,280 x 720 the pixels that change when group 89 is
+pushed by 1/2,000 of its distance either way were 66,953 at an eye over the landing (GA,
+in room 53) and 346,357 at head height behind Lara (GB, in room 21). Inside the shaft (GC)
+the walk starts in room 89, which has no opening, and 85 was never listed. From the
+shaft's other end, room 18, nothing lists 85: the openings keep a room only when it is
+linked with the room that lists it ("Art in the air of an unlinked room draws inside its
+own window", #181), and no portal of 18, 97, 85 or 86 joins them. The closure over the
+twins got round that test from 21's side.
+
+**How.** `HDVisRoom::flip` (`specific/hd/hd_vis.h`) is the flipmap a room naming a twin
+flips by: `ROOM_INFO` `FlipNumber` in `BuildRoomVis` (`hd_level.cpp`), header byte 53 in
+the tools' `VisInput.h`, -1 for none or not known. `HDVisBuild` (`hd_vis.cpp`) keeps
+beside the closed link table a second one, `together`: a portal or a floor link of a room
+names a number, which holds a pair's main room while its map is off and the twin while it
+is on; a room of a pair is in the world in its own state only, so its record reaches the
+room the number holds then when the two rooms flip by one map, and either room of the pair
+when by another map or by none. An opening still names a pair by its main room's number,
+after the link test as before, and keeps that number only when the room the number holds
+while the opening's room is drawn - the one that room's own state gives when both flip by
+one map, either one otherwise - is linked with it in `together` (`inWorldAt`). Each
+refusal is noted once per holder, face and number (`HDVisTables::stateRefused`,
+`openingsState`). The guests, the enclosure, the wides and the walk are unchanged.
+
+**Proof.** The tables of the fifteen levels room by room (TrgProbe `-vistable -visroom
+all`, 1,181 lines of guests, openings, wides and enclosures on the vanilla levels): two
+lines go, RICH1 room 21's openings behind room 85 (faces 4 and 15), RICH1's level line
+counts 56 openings instead of 58, and `void=` and every other line stay; the randomized
+RICH1 gives the same tables and the same two refusals. At GA the union of the pixels that
+change when each listed group is pushed by 1/500 of its distance either way falls from
+67,809 to 975, at GB from 346,990 to 1,273, and group 89's own from 66,953 to 76 and from
+346,357 to 733; GC and the three eyes with map 0 on draw the same picture before and
+after. The static census of #274 and the card census of #269 on the fifteen levels
+(RoomProbe `-statictable`, `hd_vis` 1 and 0): 2,845 statics answered alike, 1,138
+one-sided card triangles as before, RICH2's nine art copies alike. #269's views: 88 of 88
+card-sample pictures and 7 of 7 before-and-after places byte-identical; the parity set of
+#236, 72 of 72 (six classic, six HD, thirty census and thirty camera pictures). Of the
+HDLOG room lines of the 2,709 rooms of the fifteen levels one changes, RICH1 room 85's,
+which ends in `refused=flipstate`; each level's `HDLOG level= vis=1` line ends in
+`openings_state=0`, RICH1's in `openings_state=2` with two `HDLOG visopening` lines.
+`hd_vis` 0 builds no tables and is unchanged.
+
+**Decisions.** The rule is the openings' alone. On the guests the same test would refuse
+14 pairs, six in ANDY2, four in RICH2 and four in RICH3, each a main room and the twin of
+another pair on the same map - never in the world together, so `HDVisRoomOfGroup` lists
+none of them while the holder is drawn and no frame would change; on the enclosure it
+would move or drop the room 17 rooms stand enclosed in (JOBY5's room 42 from 69 to 41,
+RICH3's room 24 from 9 to none among them), a question of its own. Room 85 is no data
+error of the level, so `game/levelfix.h` has no entry for it: it is the place its pair
+keeps while map 0 is off, as every main room is, and the original game never draws it.
+
+**Commits.** `9b888587`.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -16886,3 +16974,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #277 | The X-ray look holsters nothing at the thighs, its Uzis like its other guns |
 | #278 | A search object keeps the pickup in its reach from any enemy |
 | #279 | The button that skipped a scene does nothing more until it is released |
+| #283 | The openings take no room linked only through a flipmap twin |

@@ -125,7 +125,7 @@ never set anywhere, so alpha test and blend never saw real per-pixel texture alp
 `D3DTA_TEXTURE`, which is what removed the menu text ghosting and the black boxes around
 foliage and vines.
 
-**Commits.** `05e3b2c`, `d943e07`, `fcf8664`, `dded076`, `74e0123`, `7774945`, `09f9816`,
+**Commits.** `05e3b2c`, `d943e07`, `fcf8664`, `dded076`, `74e0123`, `14b4ea91`, `09f9816`,
 `103eb75`, `a659e96`, `3c9e395`, `2e22d92`, `92c8bc5`, `e5bb808`, `3f7cd6a`, `e7c0363`,
 `8fc6f7f`, `cb7b941`, `b6d2f70`, `2cb5434`, `6e41063`, `a819765`
 
@@ -143,7 +143,7 @@ black screen. This is also why `Ddraw.lib` has to remain on the linker line.
 
 **How.** `specific/fmv.cpp`.
 
-**Commits.** `7774945`, `0db6681`, `3c9e395`
+**Commits.** `14b4ea91`, `0db6681`, `3c9e395`
 
 ### Savegames: the screen grab, the folder, and the check on read
 2026-07-30 - 2026-08-22
@@ -184,7 +184,7 @@ duplicate-buffer-per-play model had nothing worth keeping.
 hundredths-of-a-decibel convention at the call sites and are converted to XAudio2's linear
 gain inside this file.
 
-**Commits.** `8291574`
+**Commits.** `6873c53d`
 
 ### Music and FMV sound off DirectSound
 2026-08-17 - 2026-08-21
@@ -588,7 +588,7 @@ no extra model is needed, and `CreatureDie` also does everything a death animati
 Monster this replaces a stopgap, because Core never finished that death and the lying pose
 sinks into the floor. The fade in `game/draw.cpp` is what `after_death` drives.
 
-**Commits.** `e59d89c`, `0d5a78c`, `6204552`, `f4824ba`, `7fab020`, `614805c`, `8b86e3f`,
+**Commits.** `e59d89c`, `0d5a78c`, `0473fda6`, `f4824ba`, `7fab020`, `614805c`, `8b86e3f`,
 `ee464f6`, `ca29432`, `df34902`, `c7b5f09`
 
 ### The VCI cyborg as a pool enemy on a slot of his own
@@ -1343,8 +1343,8 @@ corrections. The textures are appended by `TR5Randomizer/src/core/Tr5Transfer.cp
 same place a TR5 transfer inserts them, with texinfos and sprites drawn along after: pages
 are only appended, never moved.
 
-**Commits.** `82864fe`, `11798f6`, `5703685`, `3688ecc`, `d474d2d`, `bd351f7`, `4044991`,
-`1b30305`, `8123127`, `6528139`, `8b9e176`, `967d98b`, `fedca9e`, `8280cbe`, `79075a0`,
+**Commits.** `82864fe`, `11798f6`, `29482e1b`, `3688ecc`, `d474d2d`, `bd351f7`, `4044991`,
+`1b30305`, `02a7a4ac`, `7fea45b9`, `8b9e176`, `967d98b`, `fedca9e`, `8280cbe`, `79075a0`,
 `a82d979`, `f2f825f`, `7fb0a96`, `bae6ed6`
 
 ## 2.4 HD art from the Remaster, read at run time
@@ -1571,7 +1571,7 @@ a given camera into a picture file without starting the game, with `-groups`, `-
 `-noblend`, `-paritycheck`, and a device-state check reading 58 states before and after an
 HD block; `Preparation/Tools/Diagnose/TrgProbe.cpp` (`-mat`, `-parts`, `-flat`, `-seam`).
 
-**Commits.** `2435068`, `ae6c1e5`, `a44d6eb`, `b006b6f`, `196849a`, `05aeddc`, `34dcb15`,
+**Commits.** `eecbe2b9`, `ae6c1e5`, `a44d6eb`, `b006b6f`, `196849a`, `05aeddc`, `34dcb15`,
 `e2c8d29`, `82e1b12`
 
 ### The room shader, and a build that needs no shader compiler
@@ -1618,7 +1618,7 @@ slots, the model pair at 348 and 553.
 **Decisions.** A shader out of step is rebuilt rather than reported, because a build that
 quietly draws the wrong thing is the failure the check exists to stop.
 
-**Commits.** `2435068`, `1087750`, `893f999`, `05aeddc`
+**Commits.** `eecbe2b9`, `cd156183`, `893f999`, `05aeddc`
 
 ### The engine's own per-vertex lighting, as shader arithmetic
 2026-09-05 - 2026-09-07
@@ -1751,7 +1751,7 @@ the level's `motion=` line with the weighted parts, the smallest weight and the 
 parts. Tools: `RoomProbe` (`-paritycheck`, the `additive:` line, a bulb dropped at the new
 maximum) and `ModelProbe -name SWAT -shade N`.
 
-**Commits.** `1087750`, `a250791`, `a44d6eb`, `b006b6f`, `e12f8e8`, `e6debb7`
+**Commits.** `cd156183`, `a250791`, `a44d6eb`, `b006b6f`, `e12f8e8`, `e6debb7`
 
 ### The light shafts compose as screen, a stacked sea is drawn once, a fast swing stands still
 2026-09-26
@@ -2116,7 +2116,7 @@ ANDREA2 room 150 seen in play are that level's own opaque storm sheet 7109 drawn
 files say, and ANDREA1's night sky matches a reference picture supplied for this project;
 no rule changes for the clouds. The volumetric layer is not on the game's path.
 
-**Commits.** `1087750`, `e12f8e8`, `e2c8d29`, `2341a7f` (comparison base), `b654c174`
+**Commits.** `cd156183`, `e12f8e8`, `e2c8d29`, `2341a7f` (comparison base), `b654c174`
 (comparison base), `00cde6a0`, `db5a08b9`, `986631f9`, `0344eaea`, `37ffe727`, `3f4d68c1`,
 `578ebab9`, `baba72b2` (comparison base), `e05e64a1`, `3e34a6e7` (the layers' `hd_water` 0
 case), `838748f2` (comparison base), `6beaac58`, `ebc1525f` (the cap comments), `79ef9e4f`
@@ -2216,7 +2216,7 @@ written into the item needs the -1 scale `CalcLaraMatrices(2)` gives Lara and
 the z plane of `Draw_Mirror_Lara` does not serve. A reflected item casts no shadow of its
 own and its effects are not reflected; the lobby floor shows its static copy only.
 
-**Commits.** `e77fc52`, `a8ff098`, `12250e8`, `c0d6e3c`, `aa676dd`, `1093689`
+**Commits.** `e77fc52`, `a8ff098`, `12250e8`, `c0d6e3c`, `aa676dd`, `753af370`
 
 ### The reflection stays behind the glass
 2026-09-29
@@ -3209,7 +3209,7 @@ narrower rule - a holder counts as listed only when it is the seed or has a wind
 own - was tried in RoomProbe and not adopted.
 
 **Commits.** `9a621d2` (comparison base), `1669e6c` (its answer later taken back),
-`1d2a4ad` (takes that answer back), `3884153`, `fb386ab`, `413452f`, `fe9ecf8`
+`1d2a4ad` (takes that answer back), `16650988`, `fb386ab`, `413452f`, `fe9ecf8`
 
 ### The reach can be switched off
 2026-09-28
@@ -3615,14 +3615,14 @@ reach, #123), `23ca9ca` (covered faces drawn behind), `bc9ea38` (carrying list p
 opening beyond window), `38d70a0` (visibility list and tables), `ca3bfe4` (listed art
 drawn whole), `1c60d14` (guests' count credited), `dcd70f9a` (merge of #204), `37db7d8`
 (path keeps depth pushes), `70a5dd5` (flipmap opening names main), `8e6ef61` (broken wall
-widens portal), `50c1539` (portal at window edge), `9924788` (suite for the tables),
+widens portal), `50c1539` (portal at window edge), `f387c92c` (suite for the tables),
 `06ea59f` (both portal records widen), `9d295aa` (walk's portal comment), `1fece1b`
 (RoomProbe `-viscams`), `5bd916e8` (merge of #197 water work), `b654c174` (task table
-rows), `5fd0407` (window on standing art), `2711317` (portal at the camera), `2782323`
+rows), `5fd0407` (window on standing art), `2e7657ac` (portal at the camera), `e513dec4`
 (RoomProbe `-viswin`, `-visnear`), `baba72b2` (merge of #213), `8357acd` (wall of a
 claimed face), `b64bfd4` (plane rule, hidden room), `2768ee8` (RoomProbe `-visplane` and
-more), `890e9ab` (record, ledger, manual, tools), `838748f2` (merge of #209), `0293717` /
-`02937171` (`hd_vis` defaults to 1), `801fbc1` (static left to art), `8f4c255` (enclosed
+more), `890e9ab` (record, ledger, manual, tools), `838748f2` (merge of #209), `c144a121`
+(`hd_vis` defaults to 1), `801fbc1` (static left to art), `8f4c255` (enclosed
 classic room left out), `196b989` (art held by height), `d494585` (height rule, wall
 plane), `a45ede4` (statics' sampling step), `1e5f160` (record, ledger, manual, tools),
 `c37d83c9` (shares at step 64), `a68a9de0` (merge of #209 glass), `a917e518` (`hd_vis`
@@ -4316,7 +4316,7 @@ of it; it is built x86 and `/LARGEADDRESSAWARE` like the engine, without which t
 process reads 1995 MiB of free address space instead of 3986. `tomb5.vcxproj` sets
 `LargeAddressAware` on both Win32 configurations.
 
-**Commits.** `ec20d77` (loaders, discovery, binding), `2435068` (room renderer, page
+**Commits.** `ec20d77` (loaders, discovery, binding), `eecbe2b9` (room renderer, page
 cache), `3f4afea` (texture budget, missing pages), `7ffb871` (walk capacity, reach
 budget), `0b23074` (outfit changer asks both), `eadc929` (PoolProbe measures the pools),
 `de89861` (record and README limit), `572eccc` (record on the card side)
@@ -4844,8 +4844,8 @@ whose line her face has no file for, and in the credits, where the cutscenes rep
 without their lines, the firing face and the loop come next in the order: there she
 blinks, and after the scripted shots she bares her teeth with the classic head.
 
-**Commits.** `8321293` (base of the comparison), `6ce284e` (block place, loop, streaming),
-`11026db` (blink loop, firing face), `026be9e` (ModelProbe draws both)
+**Commits.** `385d952f` (base of the comparison), `6ce284e` (block place, loop,
+streaming), `11026db` (blink loop, firing face), `026be9e` (ModelProbe draws both)
 
 ### Statics: baked into the room, shot to pieces, or drawn classic where the art does not cover them
 2026-09-05 - 2026-09-08
@@ -5103,8 +5103,8 @@ for this project goes into the table, recorded in the ledger as OWN.
 `b654c174` (comparison base), `0da74ce7` (a pane takes its piece), `150a9ba4` (RoomProbe
 -smashpiece), `4f5fce77` (comparison base), `ead55264` (the grid goes with break),
 `dd8bda29` (record of the break), `f85dab8e` (bars' readings drawn), `838748f2`
-(comparison base), `60097611` (clear texels drawn whole), `362c8764` (the glass comment),
-`9fdd6498` (comparison base), `5d64c17d` (the split), `42611668` (RoomProbe -calltrace,
+(comparison base), `631d655e` (clear texels drawn whole), `362c8764` (the glass comment),
+`9fdd6498` (comparison base), `5d64c17d` (the split), `98cfb0f5` (RoomProbe -calltrace,
 -lumaat, -gpuall), `e89f4aa2` (ModernTest glass split), `ab6eb131` (records of the split),
 `1bb4c14d` (additive glass added whole), `9fbbc651` (RoomProbe -gpu line), `eb71cc0f`
 (ModernTest holds rule bodies), `a68a9de0` (comparison base), `d9e637bd` (classic pieces
@@ -5241,7 +5241,7 @@ hides a broken static's art only where the `.TRG` gives it a part of its own (ma
 15 with the static's ordinal in bits 8 to 14), so nothing of it is taken for these 30.
 
 **Commits.** `9fdd6498` (comparison base), `2341a7f` (comparison base), `8735c17e` (the
-rule and the draw), `091ee90d` (the tools), `caeb52e6` (the records), `32797348` (break's
+rule and the draw), `091ee90d` (the tools), `caeb52e6` (the records), `00967b62` (break's
 glue into debris.cpp), `1f1dafa6` (records follow the glue), `d9e637bd` (classic pieces
 take ambient), `3a469090` (the glass pieces' look), `f80e567e` (ModernTest), `a68a9de0`
 (comparison base), `b170d09d` (ambient only without prelight), `8235f46e` (the shade's
@@ -5600,7 +5600,7 @@ would mean a lift per item.
 **Commits.** `ed39081` (pickups bound by EXTRA prefix), `a0bfcad` (grappling gun in the
 hand), `7d87cd2` (headset, RICH2's HK by level), `084e88d` (a mod's inventory model),
 `e5e99cd` (inventory question made cheaper), `a594bc1` (ring fit reads the shape),
-`0947713` (three numbers re-measured), `cfa31ed` (comment continuations), `7964b3c` (ring
+`52d76044` (three numbers re-measured), `cfa31ed` (comment continuations), `7964b3c` (ring
 fit's picture), `2850c54` (footstep mod needs no bank), `eab9e37` (classic reader closes
 file), `b9c8798` (one floor rule), `a253f40` (floor passages rewritten), `b904973` (floor
 picture reads), `d2dcc62` (floor rule in drawn frame), `0775caa` (whole campaign
@@ -5941,9 +5941,9 @@ a copy. Files: `specific/hd/hd_laradraw.cpp`/`.h`, `hd_lara.cpp`/`.h`,
 
 **Commits.** `f31d62b` (Lara's composite loaded), `321504d` (the seam for Lara), `0f83858`
 (Desert Eagle, gloves, mirror), `77db026` (holster rig, braid, sheen), `893f999` (the
-braid's roll), `bf8b9fe` (holster table, braid halves), `6520654` (pack box, anchor,
+braid's roll), `bf8b9fe` (holster table, braid halves), `27f39c13` (pack box, anchor,
 hands), `84ce969` (neck cut, wrist), `36964e9` (collar cut, hand seam), `6a2bef2` (bare
-hands, weights folded), `635419e` (counts recounted), `0947713` (three numbers
+hands, weights folded), `635419e` (counts recounted), `52d76044` (three numbers
 re-measured), `ce0fe19` (two numbers corrected), `036fc33` (the fold counters kept)
 
 ### First person: Lara's head and neck cut away, and the lid that closes the opening
@@ -6019,9 +6019,9 @@ strap, a shoulder piece or a flap is one layer of triangles whose two sides sit 
 same depth to the bit, the inward draw won that tie, and the piece came out in one flat
 texel with its normal turned round, per pixel where float precision differed.
 
-**Commits.** `6520654` (pack box, neck cap, hands), `84ce969` (neck cut, wrist), `36964e9`
-(collar cut, inner skin), `23ce371` (cut reaches the neck), `73819d5` (first person, cut
-plane), `e6debb7` (neck plane with lid), `c021cf6` (no head, skin cap)
+**Commits.** `27f39c13` (pack box, neck cap, hands), `84ce969` (neck cut, wrist),
+`36964e9` (collar cut, inner skin), `23ce371` (cut reaches the neck), `73819d5` (first
+person, cut plane), `e6debb7` (neck plane with lid), `c021cf6` (no head, skin cap)
 
 ### Lara's HD wardrobe: a scan of the installed art, its properties, and which outfit is worn
 2026-09-05 - 2026-09-25
@@ -6353,7 +6353,7 @@ joint 1 and finds a body joint where `neck_bone_of` finds none in the two `PATRI
 **Commits.** `dc44597` (base of the face comparison), `f31d62b` (Lara's composite loaded),
 `321504d` (the seam for Lara), `0dd40a5` (engine reads HD markers), `0f83858` (Desert
 Eagle, gloves, mirror), `77db026` (holster rig, braid, sheen), `bf8b9fe` (holster rig by
-table), `6520654` (pack box, neck cap), `84ce969` (neck cut, wrist), `36964e9` (collar
+table), `27f39c13` (pack box, neck cap), `84ce969` (neck cut, wrist), `36964e9` (collar
 cut, hand seam), `9011283` (the wardrobe is a scan), `78bb4f3` (randomizer rolls from
 scan), `95a5555` (docs: outfits from mods), `ce54ab0` (randomizer knows no scanned
 outfits), `be48b67` (outfit is a registry key), `5743211` (docs: the engine's wardrobe),
@@ -7469,9 +7469,9 @@ wherever its body came from so that the two wear pages from one source. Files:
 level; sharing the slot would be safe, but the rule that a mod's model never shares a slot
 with a vanilla one is worth more than 1.5 per cent of a wardrobe.
 
-**Commits.** `8156128` (the Mods folder), `1ca834e` (docs: a Mods section), `d67ea4a`
+**Commits.** `629fd694` (the Mods folder), `1ca834e` (docs: a Mods section), `d67ea4a`
 (crafted .wav cannot crash), `20318c7` (format block where stated), `6a2bef2` (bare hands,
-weights folded), `0947713` (three numbers re-measured), `260a844` (donor game's frame 0),
+weights folded), `52d76044` (three numbers re-measured), `260a844` (donor game's frame 0),
 `247fee5` (ModelProbe prints the pose), `b80c407` (what an origin buys), `f48e890`
 (classic reader's cost)
 
@@ -8593,21 +8593,21 @@ the mirror), `31a6e892` (models' mask, clip planes), `7643450e` (census refit),
 under water), `39372345` (models' shaders at load), `baf8f943` (RoomProbe -wetstep),
 `e76bf795` (the record), `c9b2359c` (RoomProbe -wetcut), `4ba26aa6` (comments set right),
 `6020d3bd` (the record's corrections), `ba7f330` (the spring of room 194), `ab312b7`,
-`9bdecfd`, `1b47cbe`, `dcffa71`, `dc4cc90`, `8b0ea2c`, `d4ddb89`, `6508500`, `8447444`,
-`1ea4a5b`, `1867877` (the water's life), `b87cb0c` (comparison base), `98eeb0e`,
-`cf98385`, `bfcabe2`, `5712057`, `9778ec4`, `a343112`, `3ac09ac`, `086cd90`, `a407db6`,
+`9bdecfd`, `1b47cbe`, `dcffa71`, `dc4cc90`, `8b0ea2c`, `d4ddb89`, `6bf3b1b2`, `5f3749f6`,
+`1ea4a5b`, `0ec7591d` (the water's life), `b87cb0c` (comparison base), `98eeb0e`,
+`cf98385`, `bfcabe2`, `f9fc8b8f`, `9778ec4`, `a343112`, `3ac09ac`, `086cd90`, `a407db6`,
 `a2751d1` (life: ends, darts, drops), `7dbd8eb` (comparison base), `0d83b8a`, `f7e0d87`,
-`2485257`, `b0139a7`, `a329735` (life: tank, rings, depth), `e70280c`, `b3a705e`,
+`1408ed2a`, `b0139a7`, `a329735` (life: tank, rings, depth), `e70280c`, `b3a705e`,
 `196fc31`, `f0a634d`, `6c2c6e8`, `665ea11` (life: edge, tank, roam), `e764fcf` (comparison
 base), `11f3f9e`, `a374b1c`, `b74f1fd`, `cd29a12`, `0b83c25` (highlight, surface, light
 glide), `4f4b65a` (Lara's light glide), `d3393648` (comparison base), `f3559db`,
-`0434457`, `b933521`, `be77093` (bend, canal end, foam, gate), `8697749`, `38a3941`
+`61740068`, `b933521`, `be77093` (bend, canal end, foam, gate), `9a30378e`, `38a3941`
 (deeper bent place, bulbs), `5bd916e8` (comparison base), `90cd9bfb` (a reach, reverted),
 `6e879034` (its revert), `b654c174` (comparison base), `44a309dd` (the sea's vanishing),
 `f4404fe2` (the look study), `baba72b2` (comparison base), `3e34a6e7` (rim, strengths,
 walk guard), `e05e64a1` (the look in the game), `52c20e93` (the dive walked), `4f5fce77`
 (comparison base), `f9b1c1ed` (surface drawn always), `4072e772`, `ab99b2cc` (the record),
-`f4ef793d` (deep look needs a surface), `9fdd6498` (comparison base), `83020629` (the
+`f4ef793d` (deep look needs a surface), `9fdd6498` (comparison base), `91dc0f98` (the
 sea's sheet), `b594efc5` (the look stronger), `9421887d` (the record), `99bd96f6`
 (RoomProbe -sea), `049efa37` (RoomProbe -gpuadd), `859ad33d` (the knobs' comment),
 `9b83a009` (art kept, ripple 0.8), `d846bfa5` (the record), `a68a9de0` (comparison base),
@@ -9454,9 +9454,9 @@ less, so the read and the decode start at the top of the load.
 level's log), `39047e97` (merge: load measured), `7217fec` (-loadtime -reload steps),
 `062a97cb` (record on B and C1), `d9803eb1` (merge: HD data built), `3b1ac1f0` (springs
 built with HD data), `48bce13` (HD key, ModernTest table), `84049b7` (HD data kept, same
-level), `2163672` (RoomProbe -reload), `5024414` (.TRG read once), `a2440d8` (.TRG, pages
-read ahead), `be48429` (model folders listed once), `5164802` (key reads values),
-`9689393` (key once, read-ahead returned), `8c48066` (RoomProbe -reloadas), `254a0ce2`
+level), `a03773c5` (RoomProbe -reload), `b7755217` (.TRG read once), `a2440d8` (.TRG,
+pages read ahead), `be48429` (model folders listed once), `411a283c` (key reads values),
+`5f14c34a` (key once, read-ahead returned), `8c48066` (RoomProbe -reloadas), `254a0ce2`
 (merge: load kept, read ahead), `7038947` (bar full at once), `9d930b3` (classic pages
 kept), `02af3e7` (HD loading picture kept), `5a31ec2` (picture under every bar frame),
 `87f9afc` (ModernTest counts keeps, frames), `de4cbca` (one stage-0 lock), `df6e266`
@@ -9639,8 +9639,8 @@ pixels for an X8R8G8B8 buffer, about 11 ms against about 41 at 2560 x 1440.
 `476d822`, `2bb2a85`, `ac89d49`, `7a451e4` (the capture's comment), `21c9406` (thread
 share from build gate), `b168f88` (join frames, ticks, tables), `48e239b` (no reset
 between build steps), `21c41715` (comparison base), `41676a4` (off only for short loads),
-`91ce5478` (comparison base), `f167ab2` (comments on screen state), `2947690` (the level's
-name), `2fd94258` (comparison base), `1dcd9fd` (TR4 view dropped)
+`91ce5478` (comparison base), `f167ab2` (comments on screen state), `d16590ca` (the
+level's name), `2fd94258` (comparison base), `1dcd9fd` (TR4 view dropped)
 
 ## 2.5 Sixty frames a second
 
@@ -9706,7 +9706,7 @@ a `title_cadence` section that runs the title's two-ticks-a-present accumulator 
 start values of `framecount` and checks that no frame of either is a tween frame and that
 the logic tick count is unchanged.
 
-**Commits.** `290c66f`, `ab139d8`, `5301765`, `e0448e4`, `73819d5`
+**Commits.** `290c66f`, `ab139d8`, `bdd56fdb`, `e0448e4`, `73819d5`
 
 ### VSync and the rate the monitor sets
 2026-09-07
@@ -9967,7 +9967,7 @@ offset, at most about 20 units early on one axis, which is the share of the step
 refused change draws at thirty hertz, while the pose on those frames is the new
 animation's own.
 
-**Commits.** `339ab2a`, `0316088`, `860389c`, `9b63884`, `8253932`, `1655847`, `0ce621f`,
+**Commits.** `339ab2a`, `0316088`, `860389c`, `9b63884`, `50063aab`, `1655847`, `0ce621f`,
 `6f776dc`, `109566b`, `e6aaec1`, `b5efdbf`
 
 ### The pose between two ticks
@@ -10822,7 +10822,7 @@ the key-mapping screen are idempotent. One counter behind the title needed the g
 rest of the build has: `DoCredits`' roll (`StartPos--`, `specific/alexstuff.cpp`) is one
 pixel a present and asks `InterpIsTweenFrame()` now.
 
-**Commits.** `5301765`, `d0e8c74`, `6bd0ed3`
+**Commits.** `bdd56fdb`, `d0e8c74`, `6bd0ed3`
 
 ### The cut scenes at the frame rate
 2026-09-28
@@ -10979,7 +10979,7 @@ vertex declaration, and Windows paging the process in.
 what is drawn. Its numbers and the `first_frame` and low-`sec=` late lines that answer for
 the rest are documented with the profile seams.
 
-**Commits.** `ab139d8`, `5301765`
+**Commits.** `ab139d8`, `bdd56fdb`
 
 ### The frame-rate seams and the offline proofs
 2026-09-07 - 2026-09-15
@@ -11062,7 +11062,7 @@ vanilla's own `if (nframes > 10)` cap discards), the particle walk-back against 
 whose previous state really is remembered, and the ring's cadence and the title's shadow.
 The recipes are in `docs/Engine-Manual.md` under *Frame rate*.
 
-**Commits.** `ab139d8`, `5301765`, `9b4f7b8`, `078aa8e`, `e0448e4`, `8975d1d`, `6bd0ed3`
+**Commits.** `ab139d8`, `bdd56fdb`, `9b4f7b8`, `078aa8e`, `e0448e4`, `8975d1d`, `6bd0ed3`
 
 ### The zoom at the frame rate (#225)
 2026-10-19
@@ -11311,7 +11311,7 @@ checks on what the level-start reset is worth, and the groups `reversal`, `spin_
 mutations of the scheme were tried against the finished tests and all 34 were caught.
 `TOMB5 Code/tomb5.vcxproj` lists the new files and `Preparation/Tools/README.md` the test.
 
-**Commits.** `7d5bc1d`, `4557d81`, `d24be08`, `a690964`, `7407748`, `765c19c`, `1d32be2`,
+**Commits.** `7d5bc1d`, `4557d81`, `d24be08`, `a690964`, `67fdc46f`, `765c19c`, `1d32be2`,
 `77630af`, `4b668d1`, `5b6add1`, `96ecefb`, `a712a98`, `02b44fe`, `f13ef14`, `cc428ab`,
 `4458b63`, `adc1dad`, `caf306c`, `35bb41e`, `1d50d72`, `6951aea`, `e5f9d69`, `196c687`,
 `58d51d6`, `41fe965`, `e640a08`, `a2eab75`, `f70c40e`
@@ -12826,7 +12826,7 @@ chase camera, and that is left as it is, since the trigger there has already bee
 RICH2's sequence 3 jumps from camera 5 to 7 (SP_JUMPTO), so camera 7's test (music 14) is
 never armed, played or skipped - a data fact, left as it is.
 
-**Commits.** `12340cc`, `9f4a1ec`, `96267ef`, `6176647`, `c05ed61`, `59ac2096`,
+**Commits.** `12340cc`, `9f4a1ec`, `96267ef`, `917c25aa`, `c05ed61`, `59ac2096`,
 `91a58a09`, `a2874372`
 
 ### The HD/SD switch: F12 and a pad chord (#202)
@@ -13046,10 +13046,10 @@ row at 0 sees the classic loading screens until F12 or the row, by the uniform r
 
 **Commits.** `1fafd47b`, `2341a7f`, `704a10f` (earlier builds compared against),
 `f2c717b`, `cf3b9dd`, `911a7de`, `75118b1`, `153c36c`, `52b96d8` (the key, chord and
-state), `b5d39ba`, `a24dd9b`, `7b836b8`, `7779464` (the gates wired), `7887938`,
+state), `b5d39ba`, `a24dd9b`, `7b836b8`, `7779464` (the gates wired), `d1ed10e7`,
 `fff824b`, `2409d71`, `25c2320` (the row sets the switch), `254a0ce2` (the gates' census
-base), `d9803eb1` (the springs' merge base), `8eb0c2a` (build gate, draw gates), `6366176`
-(row and switch one state), `c440b8e` (the build gate's comment)
+base), `d9803eb1` (the springs' merge base), `8eb0c2a` (build gate, draw gates),
+`5685de1e` (row and switch one state), `c440b8e` (the build gate's comment)
 
 ### The installation gate: the HD build row and the TR3 sources (#230)
 2026-10-21 - 2026-10-22
@@ -13708,7 +13708,7 @@ became 19.
 seven unmarked files (`0fad390`). Origin sentences throughout the engine and in
 `THIRD-PARTY.md` were rewritten to name TRForge (MIT), TROne (GPLv3) by Todesengel1931 -
 https://github.com/todesengel1931 with file and line, or a measurement on the player's own
-files (`8219710`, `8cf9e11`). The save/load page footers (`0fef53c`) and the CP-1252
+files (`c1e7679c`, `8cf9e11`). The save/load page footers (`0fef53c`) and the CP-1252
 accent table of `game/text.cpp` (`f64271a`) were repaired byte for byte. The eleven log
 lines of `specific/hqsfx.cpp` now sit inside `if (gLogEnabled)` (`f4b43e4`). Three
 miscounting or misnaming comments and the parked comment items were swept (`5f6b4f2`,
@@ -13741,13 +13741,13 @@ Contributors row, and the GPLv3 obligation for the twenty-one source files carry
 author's copyright is met by those file headers and by the entries in `THIRD-PARTY.md` and
 `Preparation/Credits/Credits.txt`. The document commits, covering `README.md`,
 `docs/Engine-Manual.md`, `docs/Randomizer-Manual.md`, `Preparation/Verification.md` and
-`TOMB5 Code/MODIFICATIONS.md`, are `04359b1`, `f2c2573`, `1400796`, `f379ef6`, `4ec5553`,
+`TOMB5 Code/MODIFICATIONS.md`, are `04359b1`, `f2c2573`, `4e153453`, `f379ef6`, `4ec5553`,
 `d904800`, `011337c` and `3534f68`.
 
-**Commits.** `0fad390`, `8219710`, `8cf9e11`, `0fef53c`, `f64271a`, `f4b43e4`, `5f6b4f2`,
+**Commits.** `0fad390`, `c1e7679c`, `8cf9e11`, `0fef53c`, `f64271a`, `f4b43e4`, `5f6b4f2`,
 `6171d48`, `942e750`, `9bbe1b7`, `7fea6e6`, `277e7be`, `248060c`, `941bf7b`, `ed19514`,
 `098e0f6`, `28380e8`, `a886a1b`, `332dedd` (the four that moved enemies), `70b9785`,
-`b053a92`, `a82f514`, `5965873`, `4415ce7`, `e119d2a`, `04359b1`, `f2c2573`, `1400796`,
+`b053a92`, `a82f514`, `5965873`, `4415ce7`, `e119d2a`, `04359b1`, `f2c2573`, `4e153453`,
 `f379ef6`, `4ec5553`, `d904800`, `011337c`, `3534f68`
 
 ## 2.9 The cleanup before the public push
@@ -13843,7 +13843,7 @@ entries on the mouse and the movement keys; the rows of #173, #198, #205, #207, 
 #210 naming the headings of the entries that hold them; the two #194 rows one; #208 before
 #209), every title in its rows is a heading of the record, and the rope entry's date line
 is 2026-09-24, the date of its first commit, `0034725`. The Commits lines of eight entries
-cite `30bee21`, `96b10de`, `1093689`, `b3d67a7`, `46f9d9e`, `ca369f4`, `8501082`,
+cite `30bee21`, `96b10de`, `753af370`, `b3d67a7`, `46f9d9e`, `ca369f4`, `8501082`,
 `e69455b` and `885ef33`; one sentence each corrects `5ad3689`'s subject (the tightrope
 entry), `c07031b`'s check counts (the projected shadow's first entry) and the commit that
 bounds the sheen (the shine's light field entry). No tracked file names a recording, a
@@ -13875,7 +13875,7 @@ German and that of `4c8050a1` names the test machine's GPU; this record repeats 
 it.
 
 **Commits.** `0fad390` (the earlier notices), `8a599fd9` (the suite counts' base),
-`0034725` (the rope's first commit), `30bee21`, `96b10de`, `1093689`, `b3d67a7`,
+`0034725` (the rope's first commit), `30bee21`, `96b10de`, `753af370`, `b3d67a7`,
 `46f9d9e`, `ca369f4`, `8501082`, `e69455b`, `885ef33` (now cited), `5ad3689`, `c07031b`
 (texts corrected), `a10e0712`, `c8098660`, `58eff466`, `d7684639`, `73a69fde`, `1b660a38`,
 `4c8050a1` (texts that cannot change), `399d073` (the delta's base), `5734ae1`, `14908b3`,
@@ -15033,7 +15033,7 @@ would gain next to nothing back. The car's roof at the top (room 39) is not draw
 shaft's top room, since the walk never lists it from there: a walk question, outside this
 rule.
 
-**Commits.** `b848c417` (the base), `86812994` (scans, drop, refusals, logs, checks),
+**Commits.** `b848c417` (the base), `d0240d6c` (scans, drop, refusals, logs, checks),
 `60c92991` (the header comment), `fafa1b38` (flipmap: either state, reverted), `2d99daa5`
 (flipmap: every state, `twin_covered=`).
 
@@ -15347,7 +15347,7 @@ dialog is the window's size at the next start, so it drops the remembered place.
 **Commits.** `dc646d02` (the arithmetic and its tests), `f46ebf6e` (the window, the keys
 and the remembered place), `1931a40a` (the dialog), `74d93b7c` (the manual, the tools'
 README and this entry), `cc2f6bf9` (the pages after a refused device), `ce96392b` and
-`02252971` (`DXChangeVideoMode` removed; the second commit removes a stray line the first
+`1ade40fe` (`DXChangeVideoMode` removed; the second commit removes a stray line the first
 left, which kept `dxshell.cpp` from compiling at `ce96392b`), `6e29d3f6` (this list) and
 `9c501b5d` (the manual's stale line on the dialog's defaults removed, the resize log line
 once per wait, Alt+Space opens the system menu).

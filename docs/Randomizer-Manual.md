@@ -4,7 +4,7 @@
 
 # TR5 Randomizer — the manual
 
-**Beta_4.1**
+**Beta_5.0**
 
 Everything the program does, in the order you will meet it. If you only read
 one section, read [Your first run](#your-first-run) — the rest you can look
@@ -122,7 +122,7 @@ which is not code at all. The same
 seed on two different builds is two different games.
 
 That is why both numbers stand at the top of the window and in `spoiler.txt`:
-`Beta_4.1` is the release, `Build 0.23` is the placement data. Nothing stops
+`Beta_5.0` is the release, `Build 0.23` is the placement data. Nothing stops
 you mixing a randomizer and an engine of different versions — the numbers are
 there to be read, not enforced.
 

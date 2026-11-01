@@ -231,6 +231,18 @@ Copy-Item "$RandoRoot\README.txt" "$OutDir\README.txt" -Force
 # screens folders -
 # it has no business in a player's folder.
 Copy-Item "$RandoRoot\package\*" $OutDir -Recurse -Force
+
+# The manuals and the pictures they show, beside Background.jpg in docs: the
+# package reads like the repository's docs folder, without the README's
+# forty other pictures.
+$docsOut = Join-Path $OutDir "docs"
+New-Item -ItemType Directory -Force $docsOut | Out-Null
+foreach ($d in @("Engine-Manual.md", "Randomizer-Manual.md", "banner.jpg", "engine-settings.jpg",
+                 "features-3.jpg", "gui-main.jpg", "gui-outfits-enemies.jpg", "ingame-08.jpg",
+                 "menu-tomb5-options.jpg", "outfit-changer.jpg", "setup-dialog.jpg")) {
+    Copy-Item (Join-Path (Join-Path $Root "docs") $d) $docsOut -Force
+}
+Say "Docs          : docs (the two manuals, their nine pictures, Background.jpg)"
 # The engine's own words in the other languages: read at start from the game
 # folder beside the EXE (game/gameflow.cpp, LoadExtraStrings), so the file
 # travels with the package.

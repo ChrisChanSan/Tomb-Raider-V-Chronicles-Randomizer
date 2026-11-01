@@ -89,7 +89,7 @@ namespace
     bool                    g_windowDragged = false;   // WM_EXITSIZEMOVE seen
     ID3D11RenderTargetView* g_rtv = nullptr;
 
-    // Background picture: the banner, as Background.jpg beside the EXE
+    // Background picture: the banner, as docs\Background.jpg beside the EXE
     // (TR5Randomizer.rc says why it is not embedded). Read and unpacked once
     // at startup, then drawn at window size every frame. Without the file
     // g_background stays null and the window is plain.
@@ -107,7 +107,7 @@ namespace
         if (dir.empty()) return;
 
         FILE* f = nullptr;
-        const std::wstring path = PathUtil::join(dir, L"Background.jpg");
+        const std::wstring path = PathUtil::join(dir, L"docs\\Background.jpg");
         if (_wfopen_s(&f, path.c_str(), L"rb") != 0 || !f) return;
 
         int channels = 0;

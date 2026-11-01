@@ -14,8 +14,8 @@ IDI_APPICON ICON "TR5Randomizer.ico"
 
 // The interface's background picture - the same project banner, from
 // Logos\Tomb5 Rando Logo 1920x1080.png - is NOT embedded here. It ships as
-// Background.jpg beside the EXE (TR5Randomizer\package\, which the release
-// copies next to it), and Main.cpp reads it from the EXE's folder at start.
+// docs\Background.jpg beside the EXE (TR5Randomizer\package\docs\, which the
+// release copies next to it), and Main.cpp reads it from that folder at start.
 // A block of a megabyte at an entropy near 8 bits a byte inside an
 // executable is what virus scanners' heuristics take for a packed program;
 // beside it as a file, the executable's sections read as plain code and
@@ -42,8 +42,8 @@ CREATEPROCESS_MANIFEST_RESOURCE_ID RT_MANIFEST "..\\Program.manifest"
 // strings; keep both in step with RANDO_VERSION_STRING in BuildId.h, and
 // with src\Tools.rc, which carries the same block for the CLI programs.
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION 4,1,0,0
- PRODUCTVERSION 4,1,0,0
+ FILEVERSION 5,0,0,0
+ PRODUCTVERSION 5,0,0,0
  FILEFLAGSMASK 0x3fL
  FILEFLAGS 0x0L
  FILEOS 0x40004L
@@ -56,12 +56,12 @@ BEGIN
         BEGIN
             VALUE "CompanyName", "ChrisChanSan"
             VALUE "FileDescription", "Randomizer for Tomb Raider Chronicles"
-            VALUE "FileVersion", "Beta_4.1"
+            VALUE "FileVersion", "Beta_5.0"
             VALUE "InternalName", "TR5Randomizer.exe"
             VALUE "LegalCopyright", "GPLv3. Copyright 2026 ChrisChanSan."
             VALUE "OriginalFilename", "TR5Randomizer.exe"
             VALUE "ProductName", "TR5 Randomizer"
-            VALUE "ProductVersion", "Beta_4.1"
+            VALUE "ProductVersion", "Beta_5.0"
         END
     END
     BLOCK "VarFileInfo"

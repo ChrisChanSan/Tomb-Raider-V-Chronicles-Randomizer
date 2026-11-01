@@ -17490,6 +17490,32 @@ pictures stay, the pictures named as such. The TROne credits stand as they were.
 `e8bc3702` (the READMEs, the manuals and the notices), `68018f8f` (two test messages,
 #289's defaults).
 
+### A missing SCRIPT.DAT ends the game with a message, and the code section is read-only (#298)
+
+2026-11-01.
+
+**What.** Started from a folder without its data, the engine no longer dies in a crash
+dump: a missing `SCRIPT.DAT` ends the game with the fatal-error dialog, which names the
+file and says to start the game from its own folder. The executable's code section is
+read-only, as a linker normally makes it.
+
+**Why.** `LoadFile` returns 0 for a file that is not there, and `LoadGameflow` read on
+through that null pointer, so a start from the wrong folder produced a crash dump and a
+Windows error report instead of a word to the player. The four configurations of
+`tomb5.vcxproj` linked the engine with `/SECTION:.text,RWE`, a leftover of the time TOMB5
+was injected into the original executable and patched its code; nothing in this engine
+writes into its code at run time, and a writable code section is what scanners' heuristics
+weigh as packing.
+
+**How.** `specific/file.cpp` gains `FatalFileMissing`, beside the dialog for unusable
+level data: it logs `FATAL: <file> not found`, shows the message and ends the process;
+`specific/file.h` declares it; `game/gameflow.cpp` calls it when `LoadFile` returned no
+`SCRIPT.DAT`. `tomb5.vcxproj` loses the `/SECTION:.text,RWE` option in all four
+configurations, so the code section carries read and execute only, as the randomizer's
+does.
+
+**Commits.** `f33e57d0`.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -17866,3 +17892,4 @@ entries above.
 | #294 | The record in its one form again, and comments without task numbers |
 | #296 | section 3 (the randomizer) |
 | #297 | section 3 (the randomizer) |
+| #298 | A missing SCRIPT.DAT ends the game with a message, and the code section is read-only |

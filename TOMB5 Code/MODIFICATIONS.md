@@ -17516,6 +17516,25 @@ does.
 
 **Commits.** `f33e57d0`.
 
+### The engine builds with Control Flow Guard (#299)
+
+2026-11-01.
+
+**What.** The release build of the engine compiles and links with Control Flow Guard, as
+the randomizer's build already did: every indirect call is checked against the
+executable's table of valid targets before it is taken, and the executable carries the
+`GUARD_CF` flag beside dynamic base and NX.
+
+**Why.** The engine's own indirect calls all go to named functions of the engine or to
+exports of the system's libraries, so the check changes nothing in play; a scanner's
+heuristics read the flag as a modern, unpacked build, which an unsigned executable needs
+on its side.
+
+**How.** `tomb5.vcxproj`: the Release Win32 configuration sets `ControlFlowGuard` to
+`Guard` for the compiler and `/guard:cf` for the linker. No source file changes.
+
+**Commits.** `e73c9471`.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -17893,3 +17912,4 @@ entries above.
 | #296 | section 3 (the randomizer) |
 | #297 | section 3 (the randomizer) |
 | #298 | A missing SCRIPT.DAT ends the game with a message, and the code section is read-only |
+| #299 | The engine builds with Control Flow Guard |

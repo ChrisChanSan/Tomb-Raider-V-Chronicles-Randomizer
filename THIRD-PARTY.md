@@ -3411,21 +3411,20 @@ carries the tables.
     RoomProbe.cpp`) - the line as it was, `-gpuall` named at its end. OWN.
 343. **RICH2's floor-laser triggers and what wakes and kills the lasers**
     (`LevelFix.h`, `kTriggerOneShots`, the entry's comment;
-    `MODIFICATIONS.md`, 2.2, "A trigger Core left without its one-shot
-    bit") - the two TRIGGERs of room 5 on (3,1) and (3,2), each
-    `[8004 3E00 8022]` (timer 0, mask 31, no one-shot, object 34), the
-    only triggers naming item 34 (FLOOR_LASERS, slot 392, OCB 44, flags
-    0); the fish tank, item 33 (FISHTANK, slot 413, flags 0x100), with
-    the HEAVY trigger `[8504 3E00 0021 8C03]` under it on room 23 (1,2)
-    and (1,3) (the tank and flipmap 3, room 23's twin 32); switch 38
-    (SWITCH_TYPE2, room 23 (1,4)), whose SWITCH trigger stands only in
-    room 32 (1,4) and opens doors 36, 37, 39, 40 and 41. DATA, read with
-    the randomizer's own `Tr5Level` out of the classic `.TRC`. CLASSIC,
-    the mechanism: `_TestTriggers`' TO_OBJECT test and its one-shot line,
-    `AddActiveItem`, `KillItem`, `GetFishTank`, `ControlFloorLasers`,
-    `ControlFishtank`, `PrintObjects` and the save's killed-item record
-    (`control.cpp`, `items.cpp`, `lasers.cpp`, `tower.cpp`, `draw.cpp`,
-    `savegame.cpp`).
+    `MODIFICATIONS.md`, section 3, #223) - the two TRIGGERs of room 5 on
+    (3,1) and (3,2), each `[8004 3E00 8022]` (timer 0, mask 31, no
+    one-shot, object 34), the only triggers naming item 34 (FLOOR_LASERS,
+    slot 392, OCB 44, flags 0); the fish tank, item 33 (FISHTANK, slot
+    413, flags 0x100), with the HEAVY trigger `[8504 3E00 0021 8C03]`
+    under it on room 23 (1,2) and (1,3) (the tank and flipmap 3, room
+    23's twin 32); switch 38 (SWITCH_TYPE2, room 23 (1,4)), whose SWITCH
+    trigger stands only in room 32 (1,4) and opens doors 36, 37, 39, 40
+    and 41. DATA, read with the randomizer's own `Tr5Level` out of the
+    classic `.TRC`. CLASSIC, the mechanism: `_TestTriggers`' TO_OBJECT
+    test and its one-shot line, `AddActiveItem`, `KillItem`,
+    `GetFishTank`, `ControlFloorLasers`, `ControlFishtank`,
+    `PrintObjects` and the save's killed-item record (`control.cpp`,
+    `items.cpp`, `lasers.cpp`, `tower.cpp`, `draw.cpp`, `savegame.cpp`).
 344. **The place of the fix** (`LevelFix.h`, `kTriggerOneShots`) - RICH2,
     room 5, the corridor whose door sectors (0,1) and (0,2) lead into
     room 23; its sectors (3,1) and (3,2), the trigger at x 41,472,
@@ -3698,7 +3697,7 @@ carries the tables.
     `hd_vis` moved to 1 and both written back; from the revision on the
     value is kept as set, above 1 read as 0. OWN, read in this engine's own
     settings code and its history - the first-run block of the earlier
-    builds wrote 0 until `02937171`, which wrote and read 1, none wrote a
+    builds wrote 0 until `c144a121`, which wrote and read 1, none wrote a
     revision,
     `REG_ReadLong` writes an absent value's default, the option has no row
     and the settings carry no version. OWN: a revision beside the one key

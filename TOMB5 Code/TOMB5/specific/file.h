@@ -17,6 +17,7 @@ FILE* FileOpen(const char* Filename);
 void FileClose(FILE* fp);
 long FileSize(FILE* fp);
 long LoadFile(const char* name, char** dest);
+void FatalFileMissing(const char* name);
 bool Decompress(char* pDest, char* pCompressed, long compressedSize, long size);
 void AdjustUV(long num);
 void DoMonitorScreen();

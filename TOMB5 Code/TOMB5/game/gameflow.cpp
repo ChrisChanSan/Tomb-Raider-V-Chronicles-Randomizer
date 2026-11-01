@@ -2127,6 +2127,9 @@ void LoadGameflow()
 
 	s = 0;
 	l = LoadFile("SCRIPT.DAT", &s);
+
+	if (!l || !s)
+		FatalFileMissing("SCRIPT.DAT");
 	const long scriptSize = l;
 
 	gfScriptFile = (uchar*)s;

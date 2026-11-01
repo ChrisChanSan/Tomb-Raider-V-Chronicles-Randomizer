@@ -1433,16 +1433,17 @@ static void FatalLevelData(const char* what)
 	ExitProcess(1);
 }
 
-// A file the game cannot start without is not beside the executable: the
-// game was started from a folder without its data. Say so and close,
-// rather than read on through a null pointer into a crash dump.
+// A file the game cannot start without is not in the folder the game was
+// started from: the bare name opens against the current folder, which then
+// holds no data. Say so and close, rather than read on through a null
+// pointer into a crash dump.
 void FatalFileMissing(const char* name)
 {
 	char msg[512];
 
 	Log("FATAL: %s not found", name);
 	sprintf(msg,
-		"%s was not found beside PCtomb5.exe.\r\n\r\n"
+		"%s was not found in the folder the game was started from.\r\n\r\n"
 		"Start the game from its own folder, the one that holds the data "
 		"folder and SCRIPT.DAT.\r\n\r\n"
 		"The game cannot continue and must close.", name);

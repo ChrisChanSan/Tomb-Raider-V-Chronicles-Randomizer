@@ -17197,8 +17197,8 @@ freed; the shot that took its last hit point counted the kill, as for every enem
 model build reads a new sidecar line, `scale <slot> <num> <den>`, and shrinks the donor's
 `.TRM` by it, so GUNSHIP.TRM stands on the shrunk skeleton. With `-log`, a `DRONELOG item=
 tick= state= dist= los= fire=` line at every change of state and one per shot, which ends
-in `shot= dmg=`; the `HDLOG donor` line of a shrunk slot ends in `scale=`. Both are
-`Balance.txt` defaults: 100 hit points and 50 a hit.
+in `shot= dmg=`; the `HDLOG donor` line of a shrunk slot ends in `scale=`. The defaults
+are 100 hit points and 50 a hit.
 
 **Why.** At home the gunship is a set piece: seven sectors long, it runs along one wall on
 a path of its own and nothing can hurt it. As an enemy in a random level none of that

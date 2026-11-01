@@ -34558,7 +34558,8 @@ static void zip_skip_noscene()
 		"zip under a flyby: Escape's skip ends it once, at the flyby's end",
 		r.skipAt, -1);
 	f.rule = ZNS_BEFORE;
-	ok(zns_same(r, zns_run(f)), "zip under a flyby: as #282 had it",
+	ok(zns_same(r, zns_run(f)),
+		"zip under a flyby: alike if only a scene's skip ends it",
 		r.endAt, 15);
 
 	// The pad's fresh press on tick 1: the flyby's latch, one end.
@@ -34573,7 +34574,8 @@ static void zip_skip_noscene()
 		"zip under a flyby: the pad skips the flyby, the call ends once",
 		r.ends, 1);
 	f.rule = ZNS_BEFORE;
-	ok(zns_same(r, zns_run(f)), "zip under a flyby, the pad: as #282 had it",
+	ok(zns_same(r, zns_run(f)),
+		"zip under a flyby, the pad: alike if only a scene's skip ends it",
 		r.endAt, 16);
 
 	/* A track longer than the flyby (2000 ticks): the flyby ends at 1599

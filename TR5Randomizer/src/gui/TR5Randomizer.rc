@@ -1,7 +1,10 @@
 // The randomizer's program icon. The logo is the project's own (drawn
 // outside the repository, Logos\ - not tracked);
-// TR5Randomizer.ico carries it in six sizes (16 to 256) as PNG entries -
-// Windows picks the fitting one depending on the display.
+// TR5Randomizer.ico carries it in six sizes (16 to 256) as uncompressed
+// 32-bit bitmaps - Windows picks the fitting one depending on the display.
+// Bitmaps and not PNG entries: compressed data at an entropy near 8 bits a
+// byte inside an executable is what virus scanners' heuristics take for a
+// packed program, and the bitmaps' pixels read as plain data.
 //
 // 101 is the first icon number: for the window and the taskbar Windows
 // takes the icon with the SMALLEST number from the EXE unless code sets

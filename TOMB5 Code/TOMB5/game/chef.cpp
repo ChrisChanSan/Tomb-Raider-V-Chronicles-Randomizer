@@ -21,6 +21,10 @@
 #include "effects.h"
 #include "control.h"
 #include "lara.h"
+#include "sphere.h"
+#include "delstuff.h"
+#include "draw.h"
+#include "../specific/function_stubs.h"
 #include "chef_rule.h"
 
 static BITE_INFO knife = { 0, 200, 0, 13 };
@@ -31,6 +35,78 @@ static BITE_INFO knife = { 0, 200, 0, 13 };
 // and 5 of joby2's slot 439); the knife's point above, 200 units down
 // the hand, would lie 115 units past his knuckles.
 static BITE_INFO fist = { 4, 72, 15, 13 };
+
+// The chef's swing distance, vanilla's: 682 squared, the AI's distance
+// (CreatureAIInfo) below which he strikes and his walk ends. The brawler
+// has his own (chef_rule.h, BrawlerSwingSquared).
+#define CHEF_SWING	0x718E4
+
+// The seam: one line when the brawler's swing starts, one when it lands or
+// ends without landing (-log).
+static void BrawlLog(short item_number, const char* state, long dist,
+	bool ahead, long frame, bool touch, bool reach, bool hit)
+{
+	if (!gLogEnabled)
+		return;
+
+	Log("BRAWLLOG item=%d tick=%d state=%s dist=%ld ahead=%d frame=%ld "
+		"touch=%d reach=%d hit=%d", item_number, GlobalCounter, state, dist,
+		ahead ? 1 : 0, frame, touch ? 1 : 0, reach ? 1 : 0, hit ? 1 : 0);
+}
+
+/* Whether the brawler's fist reaches Lara this frame (chef_rule.h,
+ * BrawlerFistReaches): her pivot against his, her direction off his arm -
+ * his facing turned by the torso's twist, joint 0, which the control aims
+ * at half her angle - and her frame's box against the fist's height, on a
+ * living Lara (the swing begins only on one, info.bite). The fist reaches
+ * 445, and a convex wall corner can stand between two pivots from 286 on
+ * (his 102 and her 100 off the walls), so a line of sight from his torso
+ * to hers guards it, the drone's precedent (drone.cpp); the touch bits
+ * stay as they are. `dist` and `ahead` come back for the seam. */
+static bool BrawlerReaches(ITEM_INFO* item, CREATURE_INFO* chef, long* dist,
+	bool* ahead)
+{
+	GAME_VECTOR from, to;
+	PHD_VECTOR pos;
+	long long d2;
+	short* bounds;
+	long dx, dy, dz;
+	short angle;
+
+	dx = lara_item->pos.x_pos - item->pos.x_pos;
+	dy = lara_item->pos.y_pos - item->pos.y_pos;
+	dz = lara_item->pos.z_pos - item->pos.z_pos;
+	d2 = (long long)dx * dx + (long long)dz * dz;
+	*dist = (long)phd_sqrt(d2 > 0x7FFFFFFF ? 0x7FFFFFFF : (ulong)d2);
+	angle = short(phd_atan(dz, dx) - item->pos.y_rot);
+	*ahead = angle > -0x4000 && angle < 0x4000;
+	angle = short(angle - chef->joint_rotation[0]);
+	bounds = GetBestFrame(lara_item);
+
+	if (lara_item->hit_points <= 0 ||
+		item->anim_number != objects[item->object_number].anim_index + BRAWLER_STRIKE_ANIM ||
+		!BrawlerFistReaches(item->frame_number - anims[item->anim_number].frame_base, d2, angle, dy, bounds[2]))
+		return false;
+
+	pos.x = 0;
+	pos.y = 0;
+	pos.z = 0;
+	GetJointAbsPosition(item, &pos, BRAWLER_TORSO_MESH);
+	from.x = pos.x;
+	from.y = pos.y;
+	from.z = pos.z;
+	from.room_number = item->room_number;
+	GetFloor(from.x, from.y, from.z, &from.room_number);
+	pos.x = 0;
+	pos.y = 0;
+	pos.z = 0;
+	GetLaraJointPos(&pos, LMX_TORSO);
+	to.x = pos.x;
+	to.y = pos.y;
+	to.z = pos.z;
+	to.room_number = lara_item->room_number;
+	return LOS(&from, &to) != 0;
+}
 
 void InitialiseChef(short item_number)
 {
@@ -54,9 +130,9 @@ void ChefControl(short item_number)
 	CREATURE_INFO* chef;
 	AI_INFO info;
 	AI_INFO larainfo;
-	long dx, dz;
+	long dx, dz, swing, dist;
 	short angle, head, torso_y, torso_x;
-	bool brawler;
+	bool brawler, touch, reach, ahead;
 
 	if (!CreatureActive(item_number))
 		return;
@@ -64,6 +140,7 @@ void ChefControl(short item_number)
 	item = &items[item_number];
 	chef = (CREATURE_INFO*)item->data;
 	brawler = item->object_number == BRAWLER;
+	swing = brawler ? BrawlerSwingSquared() : CHEF_SWING;
 	head = 0;
 	torso_y = 0;
 	torso_x = 0;
@@ -207,8 +284,26 @@ void ChefControl(short item_number)
 		// mesh 13 (touch bit 0x2000), with a fist of his own: his own line
 		// in Balance.txt and his own point for the blood.
 		//
+		// The touch bits alone often let his fist miss, its sphere being
+		// small, so his hit also lands where the fist reaches by measure:
+		// frames 15 and 16 of the strike, Lara within his reach, cone and
+		// band (chef_rule.h, BrawlerFistReaches). Once a swing, whichever
+		// comes first; the chef's hit is the touch bits as ever (reach
+		// stays false for him).
+		//
 		// Refused while a scene holds Lara (scene_hold.h).
-		if (!chef->flags && item->touch_bits & 0x2000 && item->frame_number > anims[item->anim_number].frame_base + 10 &&
+		touch = item->touch_bits & 0x2000 && item->frame_number > anims[item->anim_number].frame_base + 10;
+		reach = false;
+		dist = 0;
+		ahead = false;
+
+		if (brawler && !chef->flags)
+			reach = BrawlerReaches(item, chef, &dist, &ahead);
+
+		if (brawler && item->frame_number == anims[item->anim_number].frame_base)
+			BrawlLog(item_number, "start", dist, ahead, 0, touch, reach, false);
+
+		if (!chef->flags && (touch || reach) &&
 			!SceneHoldRefuses(EnemyDamage(brawler ? balance.dmgBrawlerFist : balance.dmgChefKnife),
 				item->object_number, brawler ? "brawler" : "chef"))
 		{
@@ -217,7 +312,14 @@ void ChefControl(short item_number)
 			CreatureEffectT(item, brawler ? &fist : &knife, 20, item->pos.y_rot, DoBloodSplat);
 			SoundEffect(SFX_LARA_THUD, &item->pos, SFX_DEFAULT);
 			chef->flags = 1;
+
+			if (brawler)
+				BrawlLog(item_number, "hit", dist, ahead, item->frame_number - anims[item->anim_number].frame_base,
+					touch, reach, true);
 		}
+		else if (brawler && !chef->flags && item->frame_number == anims[item->anim_number].frame_end)
+			BrawlLog(item_number, "miss", dist, ahead, item->frame_number - anims[item->anim_number].frame_base,
+				touch, reach, false);
 
 		break;
 
@@ -225,7 +327,9 @@ void ChefControl(short item_number)
 		chef->flags = 0;
 		chef->maximum_turn = 364;
 
-		if (info.distance < 0x718E4)
+		// He swings within his distance - the chef's 682 or the brawler's
+		// own, which his fist reaches (chef_rule.h).
+		if (info.distance < swing)
 		{
 			if (info.bite)
 				item->goal_anim_state = 3;
@@ -240,7 +344,9 @@ void ChefControl(short item_number)
 	case 5:
 		chef->maximum_turn = 1274;
 
-		if (info.distance < 0x718E4 || info.angle > 0x5000 || info.angle < -0x5000 || chef->mood != ATTACK_MOOD)
+		// The walk ends at the same distance: the brawler walks on to where
+		// he strikes instead of standing short of it.
+		if (info.distance < swing || info.angle > 0x5000 || info.angle < -0x5000 || chef->mood != ATTACK_MOOD)
 			item->goal_anim_state = 4;
 
 		break;

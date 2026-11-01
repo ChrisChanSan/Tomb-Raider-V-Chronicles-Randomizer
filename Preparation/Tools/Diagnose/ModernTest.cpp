@@ -130,7 +130,7 @@
 // zip_skip_noscene, zip_skip_wiring).
 #include "../../../TOMB5 Code/TOMB5/game/zip_call_rule.h"
 // The chef's control on two slots: the hunt no OCB turns off and the
-// brawler's animation anchor (brawler_rule).
+// brawler's animation anchor (brawler_rule); his reach (brawler_reach).
 #include "../../../TOMB5 Code/TOMB5/game/chef_rule.h"
 // A room group stored off its height: the count, the pick (yshift_rule).
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_scan.h"
@@ -34360,6 +34360,190 @@ static void brawler_rule()
 	free(balance);
 }
 
+/* The brawler's reach (game\chef_rule.h, #291): the numbers against the
+ * measurement they came from (BoneCheck -reach on his fist, frames 15 and
+ * 16 of the chef's strike), the swing distance against the table that
+ * gave it, the rule on the window, the reach, the cone and the band - and
+ * the engine's own text: chef.cpp's constant for the chef, vanilla's 682
+ * squared, the rule's for the brawler alone, the touch-bit hit as it was,
+ * the line of sight, the seam, and the inputs the table took from the
+ * engine (pivot_length, the AI's look-ahead, Lara's radius). */
+static void brawler_reach()
+{
+	printf("the brawler's reach: where his fist is, measured\n");
+
+	// BoneCheck -reach, joby3 87 anim +2 with joby2 439's mesh 13 (and the
+	// same rows on slot 471 of a randomized level): front = sphere z + r
+	// ahead of his pivot, angle in 65536ths, the band y - r .. y + r.
+	struct Frame { int frame; long front, angle, top, bottom; };
+	static const Frame slash[] =
+	{
+		{ 15, 344, 296, -515, -413 },
+		{ 16, 345, 4029, -483, -381 },
+	};
+	long front = 0, cone = 0, top = 0, bottom = 100000;
+
+	for (const Frame& f : slash)
+	{
+		front = f.front > front ? f.front : front;
+		cone = labs(f.angle) > cone ? labs(f.angle) : cone;
+		top = -f.top > top ? -f.top : top;
+		bottom = -f.bottom < bottom ? -f.bottom : bottom;
+	}
+
+	ok(BRAWLER_STRIKE_ANIM == 2 && BRAWLER_HIT_FIRST == slash[0].frame &&
+		BRAWLER_HIT_LAST == slash[1].frame,
+		"brawler reach: the window is the slash, frames 15 and 16 of +2",
+		BRAWLER_HIT_FIRST, slash[0].frame);
+	ok(BRAWLER_FIST_FRONT == front,
+		"brawler reach: the fist's front is the measured 345", BRAWLER_FIST_FRONT,
+		front);
+	ok(BRAWLER_CONE == cone,
+		"brawler reach: the cone is the arm's measured 22.1 degrees",
+		BRAWLER_CONE, cone);
+	ok(BRAWLER_FIST_TOP == top && BRAWLER_FIST_BOTTOM == bottom,
+		"brawler reach: the band is the fist's measured 381..515",
+		BRAWLER_FIST_TOP * 1000 + BRAWLER_FIST_BOTTOM, top * 1000 + bottom);
+	ok(BRAWLER_REACH == BRAWLER_FIST_FRONT + BRAWLER_LARA_RADIUS &&
+		BRAWLER_REACH == 445,
+		"brawler reach: the reach is the fist's front plus her radius",
+		BRAWLER_REACH, BRAWLER_FIST_FRONT + BRAWLER_LARA_RADIUS);
+	ok(BRAWLER_LARA_BACK == 10,
+		"brawler reach: her walk back is animation 40's 10 a frame",
+		BRAWLER_LARA_BACK, 10);
+
+	// The table: a swing begun at the AI's distance D is checked on frame
+	// 15 sixteen ticks later. Standing she is at D + 50; walking back the
+	// AI saw her 14 frames ahead and she has walked 16.
+	const long ticks = BRAWLER_HIT_FIRST + 1;
+	const long stand = BRAWLER_SWING + BRAWLER_AI_PIVOT;
+	const long back = BRAWLER_SWING + BRAWLER_AI_PIVOT -
+		BRAWLER_AI_AHEAD * BRAWLER_LARA_BACK + ticks * BRAWLER_LARA_BACK;
+
+	ok(BRAWLER_SWING == BRAWLER_REACH - BRAWLER_AI_PIVOT -
+		BRAWLER_LARA_BACK * (ticks - BRAWLER_AI_AHEAD) && BRAWLER_SWING == 375,
+		"brawler reach: the swing distance is the table's largest, 375",
+		BRAWLER_SWING, 375);
+	ok(stand <= BRAWLER_REACH,
+		"brawler reach: a swing begun lands on a standing Lara", stand,
+		BRAWLER_REACH);
+	ok(back <= BRAWLER_REACH,
+		"brawler reach: and still on one walking back", back, BRAWLER_REACH);
+	ok(back + BRAWLER_LARA_BACK > BRAWLER_REACH,
+		"brawler reach: one unit further and the walk back escapes it",
+		back + BRAWLER_LARA_BACK, BRAWLER_REACH);
+	ok(BRAWLER_SWING < 682,
+		"brawler reach: he swings closer in than the chef's 682",
+		BRAWLER_SWING, 682);
+	ok(BrawlerSwingSquared() == 375L * 375,
+		"brawler reach: the squared distance the control compares",
+		BrawlerSwingSquared(), 375L * 375);
+	ok(BRAWLER_CONE > 0 && BRAWLER_CONE < 0x4000 &&
+		BRAWLER_FIST_TOP > BRAWLER_FIST_BOTTOM && BRAWLER_FIST_BOTTOM > 0,
+		"brawler reach: the cone and the band above zero, the cone ahead",
+		BRAWLER_CONE, 4029);
+
+	// The rule on its edges, Lara's box measured (BoneCheck -reach all):
+	// 777 high standing (animation 103), 347 crouched (222).
+	const long long r2 = (long long)BRAWLER_REACH * BRAWLER_REACH;
+	const long stands = -777, ducks = -347;
+	long right = 0;
+
+	for (int f = 0; f <= 45; f++)
+		right += BrawlerFistReaches(f, 0, 0, 0, stands);
+	ok(right == 2, "brawler reach: two of the strike's 46 frames strike",
+		right, 2);
+	ok(BrawlerFistReaches(15, r2, 0, 0, stands) &&
+		BrawlerFistReaches(16, r2, 0, 0, stands) &&
+		!BrawlerFistReaches(15, r2 + 1, 0, 0, stands),
+		"brawler reach: 445 reaches, a unit past it does not", 1, 1);
+	ok(BrawlerFistReaches(15, 0, BRAWLER_CONE, 0, stands) &&
+		BrawlerFistReaches(16, 0, -BRAWLER_CONE, 0, stands) &&
+		!BrawlerFistReaches(15, 0, BRAWLER_CONE + 1, 0, stands) &&
+		!BrawlerFistReaches(16, 0, -BRAWLER_CONE - 1, 0, stands),
+		"brawler reach: the cone's edges, either side", 1, 1);
+	ok(BrawlerFistReaches(15, 0, 0, -515, stands) &&
+		BrawlerFistReaches(15, 0, 0, 396, stands) &&
+		!BrawlerFistReaches(15, 0, 0, -516, stands) &&
+		!BrawlerFistReaches(15, 0, 0, 397, stands),
+		"brawler reach: a standing Lara from 515 above to 396 below", 1, 1);
+	ok(!BrawlerFistReaches(15, 0, 0, 0, ducks) &&
+		BrawlerFistReaches(15, 0, 0, -34, ducks),
+		"brawler reach: crouched on his floor she ducks under the slash", 1, 1);
+
+	// The engine's own text.
+	char* chef = hd_switch_text("../../game/chef.cpp");
+	char* setup = hd_switch_text("../../game/setup.cpp");
+	char* box = hd_switch_text("../../game/box.cpp");
+	char* lara = hd_switch_text("../../game/lara.cpp");
+	static char body[32768];
+	const char* d = chef ? strstr(chef, "#define CHEF_SWING") : 0;
+	const long chefSwing = d ? strtol(d + strlen("#define CHEF_SWING"), 0, 0) : -1;
+
+	ok(chefSwing == 682L * 682,
+		"brawler reach: chef.cpp keeps the chef's 682 squared", chefSwing,
+		682L * 682);
+	ok(hd_switch_count(chef, "0x718E4") == 1,
+		"brawler reach: and writes it once, in its #define",
+		hd_switch_count(chef, "0x718E4"), 1);
+
+	glass_body(chef, "void ChefControl(short item_number)", body, sizeof(body));
+	ok(strstr(body, "swing=brawler?BrawlerSwingSquared():CHEF_SWING;") &&
+		strstr(body, "if(info.distance<swing)if(info.bite)") &&
+		strstr(body, "if(info.distance<swing||info.angle>0x5000||"),
+		"brawler reach: states 4 and 5 compare the slot's own distance", 0, 1);
+	ok(strstr(body, "touch=item->touch_bits&0x2000&&item->frame_number>"
+		"anims[item->anim_number].frame_base+10;reach=false;") &&
+		strstr(body, "if(brawler&&!chef->flags)reach=BrawlerReaches(item,"
+		"chef,&dist,&ahead);") &&
+		strstr(body, "if(!chef->flags&&(touch||reach)&&!SceneHoldRefuses("),
+		"brawler reach: the chef's hit is the touch bits, reach his alone", 0, 1);
+	ok(strstr(body, "SoundEffect(SFX_LARA_THUD,&item->pos,SFX_DEFAULT);"
+		"chef->flags=1;") != 0,
+		"brawler reach: sound and the once-a-swing flag as they were", 0, 1);
+	ok(strstr(body, "BrawlLog(item_number,\"start\",") &&
+		strstr(body, "BrawlLog(item_number,\"hit\",") &&
+		strstr(body, "BrawlLog(item_number,\"miss\","),
+		"brawler reach: the seam's three lines", 0, 1);
+	ok(strstr(chef, "Log(\"BRAWLLOG item=%d tick=%d state=%s dist=%ld "
+		"ahead=%d frame=%ld \"") != 0,
+		"brawler reach: BRAWLLOG's fields", 0, 1);
+
+	glass_body(chef, "static bool BrawlerReaches(", body, sizeof(body));
+	ok(strstr(body, "if(lara_item->hit_points<=0||item->anim_number!="
+		"objects[item->object_number].anim_index+BRAWLER_STRIKE_ANIM||"
+		"!BrawlerFistReaches(") &&
+		strstr(body, "angle=short(angle-chef->joint_rotation[0]);"
+		"bounds=GetBestFrame(lara_item);") &&
+		strstr(body, "frame_base,d2,angle,dy,bounds[2]))") &&
+		strstr(body, "GetJointAbsPosition(item,&pos,BRAWLER_TORSO_MESH);") &&
+		strstr(body, "GetLaraJointPos(&pos,LMX_TORSO);") &&
+		strstr(body, "returnLOS(&from,&to)!=0;"),
+		"brawler reach: a living Lara, his strike, his arm's twist, a sight", 0, 1);
+
+	// The table's inputs, the engine's.
+	glass_body(setup, "if (objects[BRAWLER].loaded)", body, sizeof(body));
+	ok(strstr(body, "obj->pivot_length=50;obj->radius=102;") != 0 &&
+		BRAWLER_AI_PIVOT == 50,
+		"brawler reach: his pivot_length is the table's 50", BRAWLER_AI_PIVOT, 50);
+	glass_body(box, "void CreatureAIInfo(ITEM_INFO* item, AI_INFO* info)", body,
+		sizeof(body));
+	ok(strstr(body, "x=enemy->pos.x_pos+(14*enemy->speed*phd_sin(ang)") &&
+		strstr(body, "-(pivot*phd_sin(item->pos.y_rot)>>W2V_SHIFT)") &&
+		BRAWLER_AI_AHEAD == 14,
+		"brawler reach: the AI looks 14 frames ahead from pivot_length", 0, 1);
+	glass_body(lara, "void LaraAboveWater(ITEM_INFO* item, COLL_INFO* coll)",
+		body, sizeof(body));
+	ok(strstr(body, "coll->radius=100;") != 0 && BRAWLER_LARA_RADIUS == 100,
+		"brawler reach: her radius is LaraAboveWater's 100", BRAWLER_LARA_RADIUS,
+		100);
+
+	free(chef);
+	free(setup);
+	free(box);
+	free(lara);
+}
+
 int main()
 {
 	printf("ModernTest - the arithmetic of the modern control\n");
@@ -34608,6 +34792,7 @@ int main()
 	zip_skip_noscene();
 	zip_skip_wiring();
 	brawler_rule();
+	brawler_reach();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

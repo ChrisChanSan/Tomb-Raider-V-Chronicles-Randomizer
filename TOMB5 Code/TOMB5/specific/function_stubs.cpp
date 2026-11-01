@@ -43,6 +43,12 @@ void init_game_malloc()
 	malloc_ptr = malloc_buffer;
 	malloc_free = MALLOC_SIZE;
 	malloc_used = 0;
+
+	// Where the pool lies in this run: it moves at every start (bottom-up
+	// address randomisation), which is what game\save_pointer_rule.h has
+	// to survive - two logs' POOL lines show by how much.
+	Log("POOL base=0x%08lX size=%ld", (unsigned long)(uintptr_t)malloc_buffer,
+		(long)MALLOC_SIZE);
 }
 
 void* game_malloc(long size)

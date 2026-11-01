@@ -556,6 +556,7 @@
     <ClInclude Include="TOMB5\game\romangod.h" />
     <ClInclude Include="TOMB5\game\rope.h" />
     <ClInclude Include="TOMB5\game\sas.h" />
+    <ClInclude Include="TOMB5\game\save_pointer_rule.h" />
     <ClInclude Include="TOMB5\game\savegame.h" />
     <ClInclude Include="TOMB5\game\scene_hold.h" />
     <ClInclude Include="TOMB5\game\setup.h" />

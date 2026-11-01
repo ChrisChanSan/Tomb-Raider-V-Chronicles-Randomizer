@@ -32,6 +32,7 @@
 #include "bat.h"
 #include "spider.h"
 #include "lara2gun.h"
+#include "save_pointer_rule.h"	// the save's two pointers into the pool
 
 SAVEGAME_INFO savegame;
 static char* SGpoint = 0;
@@ -41,6 +42,47 @@ tomb5_save_info tomb5_save;
 ulong tomb5_save_size;
 ulong savegame_bytes_read;
 bool  savegame_checksum_ok;	// built in S_LoadGame, see there
+
+// The 22 bytes a save writes of a creature end with its enemy, the field
+// save_pointer_rule.h fills.
+static_assert(offsetof(CREATURE_INFO, enemy) + sizeof(ITEM_INFO*) == 22,
+	"the savegame's 22 bytes of CREATURE_INFO end with enemy");
+
+/* An address as save_pointer_rule.h reads it. */
+static unsigned long SaveAddress(const void* p)
+{
+	return (unsigned long)(uintptr_t)p;
+}
+
+/* The game_malloc pool as save_pointer_rule.h reads it: this level's
+ * items[] and baddie_slots, their distances from the pool's start. */
+static SavePtrPool SavePointerPool()
+{
+	SavePtrPool pool;
+
+	pool.base = SaveAddress(malloc_buffer);
+	pool.size = MALLOC_SIZE;
+	pool.items = SaveAddress(items) - pool.base;
+	pool.itemSize = sizeof(ITEM_INFO);
+	pool.maxItems = MAX_ITEMS;
+	pool.slots = SaveAddress(baddie_slots) - pool.base;
+	pool.slotSize = sizeof(CREATURE_INFO);
+	pool.maxSlots = MAX_LOT;
+	pool.aiOffset = offsetof(CREATURE_INFO, ai_target);
+	return pool;
+}
+
+/* SAVELOG's pool line: the pool and its layout at a save or a load. */
+static void SavePointerPoolLog(const char* when, const SavePtrPool* pool)
+{
+	char line[128];
+
+	if (!gLogEnabled)
+		return;
+
+	SavePtrPoolLine(line, sizeof(line), when, pool);
+	Log("%s", line);
+}
 
 void WriteSG(void* pointer, long size)
 {
@@ -120,21 +162,37 @@ static void load_tomb5_data()
 void SaveLaraData()
 {
 	ITEM_INFO* item;
+	SavePtrPool pool;
+	unsigned long general, side;
+	long field;
 
 	for (int i = 0; i < 15; i++)
 		lara.mesh_ptrs[i] = (short*)((long)lara.mesh_ptrs[i] - (long)mesh_base);
 
 	lara.left_arm.frame_base = (short*)((long)lara.left_arm.frame_base - (long)objects[PISTOLS_ANIM].frame_base);
 	lara.right_arm.frame_base = (short*)((long)lara.right_arm.frame_base - (long)objects[PISTOLS_ANIM].frame_base);
-	lara.GeneralPtr = (void*)((long)lara.GeneralPtr - (long)malloc_buffer);
 	memcpy(&savegame.Lara, &lara, sizeof(savegame.Lara));
+
+	/* GeneralPtr goes into the copy by save_pointer_rule.h, and its item's
+	 * number beside it into the copy's target, which every load sets to 0;
+	 * lara's own value is never touched. */
+	pool = SavePointerPool();
+	general = SaveAddress(lara.GeneralPtr);
+	field = SavePtrGeneralField(&pool, general);
+	side = SavePtrGeneralSide(&pool, general, field);
+	savegame.Lara.GeneralPtr = (void*)(intptr_t)field;
+
+	if (side)
+		savegame.Lara.target = (ITEM_INFO*)(uintptr_t)side;
+
+	if (gLogEnabled)
+		Log("SAVELOG save general stored=0x%08lX side=0x%08lX", (unsigned long)field, side);
 
 	for (int i = 0; i < 15; i++)
 		lara.mesh_ptrs[i] = (short*)((long)lara.mesh_ptrs[i] + (long)mesh_base);
 
 	lara.left_arm.frame_base = (short*)((long)lara.left_arm.frame_base + (long)objects[PISTOLS_ANIM].frame_base);
 	lara.right_arm.frame_base = (short*)((long)lara.right_arm.frame_base + (long)objects[PISTOLS_ANIM].frame_base);
-	lara.GeneralPtr = (void*)((long)lara.GeneralPtr + (long)malloc_buffer);
 
 	if (lara.weapon_item != NO_ITEM)
 	{
@@ -154,6 +212,9 @@ void SaveLaraData()
 void RestoreLaraData(long FullSave)
 {
 	ITEM_INFO* item;
+	SavePtrPool pool;
+	SavePtrDecoded general;
+	char line[128];
 	char flag;
 
 	if (!FullSave)
@@ -172,7 +233,18 @@ void RestoreLaraData(long FullSave)
 	lara.spaz_effect = 0;
 	lara.left_arm.frame_base = (short*)((long)lara.left_arm.frame_base + (long)objects[PISTOLS_ANIM].frame_base);
 	lara.right_arm.frame_base = (short*)((long)lara.right_arm.frame_base + (long)objects[PISTOLS_ANIM].frame_base);
-	lara.GeneralPtr = (void*)((long)lara.GeneralPtr + (long)malloc_buffer);
+
+	/* GeneralPtr out of the field and the item number beside it in the save's
+	 * target (save_pointer_rule.h): built from this run's items[], or 0. */
+	pool = SavePointerPool();
+	general = SavePtrDecodeGeneral(&pool, (long)(intptr_t)savegame.Lara.GeneralPtr, SaveAddress(savegame.Lara.target));
+	lara.GeneralPtr = (void*)(uintptr_t)general.value;
+
+	if (gLogEnabled)
+	{
+		SavePtrGeneralLine(line, sizeof(line), (long)(intptr_t)savegame.Lara.GeneralPtr, SaveAddress(savegame.Lara.target), &general);
+		Log("%s", line);
+	}
 
 	if (lara.burn)
 	{
@@ -221,13 +293,19 @@ void SaveLevelData(long FullSave)
 	BAT_STRUCT* bat;
 	MESH_INFO* mesh;
 	CREATURE_INFO* creature;
+	SavePtrPool pool;
 	ulong flags;
-	long k, flare_age;
+	unsigned long enemy, ownAi;
+	long k, flare_age, field;
+	int kind;
 	ushort packed;
 	short pos, word, objnum, maxval;
 	uchar byte;
 	char lflags;
+	char head[22];	// a creature's head as the save writes it
 
+	pool = SavePointerPool();
+	SavePointerPoolLog("save", &pool);
 	WriteSG(&FmvSceneTriggered, sizeof(long));
 	WriteSG(&GLOBAL_lastinvitem, sizeof(long));
 	word = 0;
@@ -449,10 +527,18 @@ void SaveLevelData(long FullSave)
 
 					if (flags & 0x80000000)
 					{
+						/* The enemy goes into a copy of the head by
+						 * save_pointer_rule.h, who it was into bits 5 and 6
+						 * of the LOT flags below; the creature itself is
+						 * never touched. */
 						creature = (CREATURE_INFO*)item->data;
-						creature->enemy = (ITEM_INFO*)((long)creature->enemy - (long)malloc_buffer);
-						WriteSG(item->data, 22);
-						creature->enemy = (ITEM_INFO*)((long)creature->enemy + (long)malloc_buffer);
+						enemy = SaveAddress(creature->enemy);
+						ownAi = SaveAddress(&creature->ai_target);
+						field = SavePtrEnemyField(&pool, enemy);
+						kind = SavePtrEnemyKind(enemy, SaveAddress(lara_item), ownAi);
+						memcpy(head, creature, sizeof(head));
+						memcpy(head + offsetof(CREATURE_INFO, enemy), &field, sizeof(field));
+						WriteSG(head, sizeof(head));
 						WriteSG(&creature->ai_target.object_number, sizeof(short));
 						WriteSG(&creature->ai_target.room_number, sizeof(short));
 						WriteSG(&creature->ai_target.box_number, sizeof(ushort));
@@ -464,7 +550,11 @@ void SaveLevelData(long FullSave)
 						lflags |= creature->LOT.is_amphibious << 2;
 						lflags |= creature->LOT.is_jumping << 3;
 						lflags |= creature->LOT.is_monkeying << 4;
+						lflags |= kind << SAVE_PTR_KIND_SHIFT;
 						WriteSG(&lflags, sizeof(char));
+
+						if (gLogEnabled)
+							Log("SAVELOG save item=%d stored=0x%08lX kind=%s", i, (unsigned long)field, SavePtrKindName(kind));
 					}
 				}
 
@@ -672,13 +762,18 @@ void RestoreLevelData(long FullSave)
 	RAT_STRUCT* rat;
 	BAT_STRUCT* bat;
 	MESH_INFO* mesh;
+	SavePtrPool pool;
+	SavePtrDecoded decoded;
 	ulong flags;
-	long k, flare_age;
+	long k, flare_age, field;
 	ushort word, packed, uroom_number, uword;
 	short sword, item_number, room_number, req, goal, current, objnum;
 	uchar numberof;
 	char byte, anim, lflags;
+	char line[128];
 
+	pool = SavePointerPool();
+	SavePointerPoolLog("load", &pool);
 	ReadSG(&FmvSceneTriggered, sizeof(long));
 	ReadSG(&GLOBAL_lastinvitem, sizeof(long));
 	ReadSG(&sword, sizeof(short));	//FlipMap sets flip_stats
@@ -894,34 +989,18 @@ void RestoreLevelData(long FullSave)
 
 					if (creature)
 					{
+						/* The enemy's four bytes are set aside and decoded
+						 * once the LOT flags byte with its kind is read
+						 * (save_pointer_rule.h). Adding this run's pool start
+						 * to them, as before, gave a null enemy back as the
+						 * difference of two starts - and the pool lies
+						 * elsewhere at every start of the game. The guard
+						 * the original had, `(long)enemy < 0`, would blank
+						 * every address above 2 GB under /LARGEADDRESSAWARE;
+						 * the rule asks the pool's bounds, unsigned. */
 						ReadSG(creature, 22);
-						creature->enemy = (ITEM_INFO*)((long)creature->enemy + (long)malloc_buffer);
-
-						// `if (creature->enemy < 0) creature->enemy = 0;` never
-						// did anything here: with the compiler this engine is
-						// built with, `pointer < 0` compares against the null
-						// pointer constant, which MSVC compiles as an unsigned
-						// compare - false for every address there is, including
-						// 0x90000000. The guard the original C had was
-						// `(long)creature->enemy < 0`, and the cast was lost in
-						// the decompilation.
-						//
-						// Removed rather than repaired, for two reasons.
-						//
-						// 1. It is not needed. The save writes
-						//    enemy - malloc_buffer, so a null enemy comes back as
-						//    exactly 0 through the line above, and nothing
-						//    measured says any other value arrives here.
-						// 2. Repairing it would break the game under
-						//    /LARGEADDRESSAWARE: with the cast back in,
-						//    `(long)pointer < 0` is true for every address above
-						//    2 GB - also measured - and every enemy pointer in a
-						//    reloaded save would be blanked, which is exactly the
-						//    kind of address this executable may now be handed.
-						//
-						// If a guard is ever wanted here, it has to be written
-						// unsigned - against the bounds of the game_malloc pool -
-						// and never as a signed comparison of an address.
+						memcpy(&field, (char*)creature + offsetof(CREATURE_INFO, enemy), sizeof(field));
+						creature->enemy = 0;
 						ReadSG(&creature->ai_target.object_number, sizeof(short));
 						ReadSG(&creature->ai_target.room_number, sizeof(short));
 						ReadSG(&creature->ai_target.box_number, sizeof(ushort));
@@ -934,6 +1013,14 @@ void RestoreLevelData(long FullSave)
 						creature->LOT.is_amphibious = (lflags & 4) == 4;
 						creature->LOT.is_jumping = (lflags & 8) == 8;
 						creature->LOT.is_monkeying = (lflags & 16) == 16;
+						decoded = SavePtrDecodeEnemy(&pool, field, SavePtrKindOf(lflags), lara.item_number, i, SaveAddress(&creature->ai_target));
+						creature->enemy = (ITEM_INFO*)(uintptr_t)decoded.value;
+
+						if (gLogEnabled)
+						{
+							SavePtrEnemyLine(line, sizeof(line), i, field, &decoded);
+							Log("%s", line);
+						}
 					}
 					else
 						SGpoint += 51;

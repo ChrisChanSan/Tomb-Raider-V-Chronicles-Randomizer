@@ -5009,6 +5009,13 @@ The key was gone from the inventory, the keyhole came back "unused", and the
 door could never be opened again. If a door has ever refused to open after a
 reload, that was probably why. Fixed here.
 
+An enemy's target and the thing Lara is busy with are kept in a save by
+number, not by their address: the game's memory lies somewhere else at every
+start, and an empty target kept as an address came back as a wild one, which
+crashed the game in the first moment after the load. Saves from earlier builds
+load as before; a target in them that no longer fits is dropped, and the enemy
+finds it again.
+
 Keys count like puzzle items — a second key of the same type is kept
 instead of being thrown away, and the ring shows how many you carry; the save
 format grew with it, which is what makes every Beta 1.0 save too short for
@@ -5201,6 +5208,7 @@ wrote it, and each seam answers a different question:
 | …and if it was clipped | `CLIPDETAIL` — the actual window and the camera it was measured against |
 | an item is in the wrong place, or vanishes | `ITEMLOG` — slot, room, OCB and flags per item at load |
 | …and something moved it later | `ITEMWATCH` — who wrote which room number, and when |
+| the game crashes in the first moment after a savegame is loaded, or an enemy loses its target with the load | `SAVELOG` — at a load one line per enemy: `item=`, the four bytes the save holds (`stored=`), how they were read (`how=null`, by number `tag_item` and `tag_ai`, by distance for a save from an earlier build `legacy_ok` and `legacy_null`) and what its target is now (`enemy=item n`, `ai n` or `null`); a `SAVELOG general` line for the thing Lara is busy with (`side=`, `general=`, and `how=tag_num` for an item's number); `SAVELOG save pool` and `load pool` with the memory pool's start and where its items and AI slots lie, and `POOL base=` once at the start of the game - two logs show whether it moved |
 | an enemy carries an item off, or does not | `CARRYLOG` — at the level start, one line per pickup within a carrier's reach: the carrier, the item, its OCB and offset, whether it was carried or left on its wall, and the carrier's pass: `pass=search` for a search object, `pass=enemy` for an enemy - the search objects take what is in their reach first, so an enemy gets only what no search object holds |
 | the outfit looks wrong, a limb is misplaced | `SKINLOG` — the skin's bone stack; `OBJLOG skinning done` ends in the seam pieces sewn and, by joint number, those left out (`joints_used=`, `left_out=`) |
 | the first person view sits wrong | `FPHEAD`, `ALTERFOV` — the head bone per frame, and the field of view |

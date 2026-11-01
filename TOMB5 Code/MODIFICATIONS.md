@@ -17755,6 +17755,72 @@ construction and ModernTest reads it out of `chef.cpp`.
 
 **Commits.** `84681cb0` (BoneCheck -reach), `68c44d94` (the reach, the seam, ModernTest).
 
+### A savegame's pointers survive a moved pool, and null stays null (#292)
+
+2026-11-01.
+
+**What.** A savegame keeps its two pointers into the `game_malloc` pool - a creature's
+enemy and Lara's `GeneralPtr` - so that a load in another run, another build or another
+layout of the pool gives each back as what it was, or null, and never as a wild pointer.
+The rule is `game/save_pointer_rule.h`, functions of plain numbers. The field the save
+always had stays what an older build understands: an address in the pool is still its
+distance from the pool's start; null is now -1, and an item number in `GeneralPtr` 0x7E in
+the top byte over the number - no distance is either, the pool being 20,000,000 bytes
+(0x01312D00). Who the pointer named goes beside the field, by number, where no build reads
+anything: bits 5 and 6 of a creature's LOT flags byte (the LOT takes bits 0 to 4) say
+null, Lara or its own `ai_target`, and the save's copy of `lara.target`, which every load
+sets to 0, names `GeneralPtr`'s item (0x7D, the item's number, the field's low twelve bits
+as a check). A load builds the pointer from that number and this run's `items[]` or the
+creature, wherever the pool lies and however it is laid out. A save without it - every
+save made before this build - is read by distance: an item exactly there, or the
+`ai_target` of a creature slot exactly there, taken as the creature's own; anything else
+is null. A save no longer subtracts and adds back on the live values: the creature's 22
+bytes and Lara's record are copied, and the copies take the rule. The save's layout and
+size are unchanged. With `-log`: `POOL base= size=` where the pool is made at the start;
+at a save and a load `SAVELOG save pool` and `SAVELOG load pool` with the pool's base and
+the distances of `items[]` and the slots; at a load one `SAVELOG item= stored= how=
+enemy=` line per creature and one `SAVELOG general stored= side= how= general=` line,
+`how=` being `null`, `tag_item`, `tag_ai`, `tag_num`, `legacy_ok` or `legacy_null`; at a
+save `SAVELOG save item= stored= kind=` and `SAVELOG save general stored= side=`.
+
+**Why.** The crash dump of 2026-10-31 23:41: in the first tick after a savegame was loaded
+into ANDY3, `GetAITarget` read through the swamp witch's (item 20) `enemy`, 0xFFFF6000.
+The save wrote `enemy - malloc_buffer` and the load added its own `malloc_buffer`, so a
+null enemy came back as the difference of two pool starts, -40,960 there. The entry
+"Address space, the page cache and what the machine can pay for" (September) said a null
+enemy "already comes back as 0"; that holds inside one process only. The pool is a
+`malloc` of a `DYNAMIC_BASE` program: eight starts of a probe linked as the engine is
+(`/DYNAMICBASE /LARGEADDRESSAWARE`, the static runtime) gave eight bases between
+0x00AF9020 and 0x015DE020 in page steps, so every load after a restart and every load in
+another build meets a moved pool. What the two pointers hold was counted from every
+assignment in `game/`: an enemy is null (7), Lara (30) or the creature's own `ai_target`
+(1, `FindAITargetObject`), nothing else; `GeneralPtr` holds an item number cast to a
+pointer in 34 places and an item of `items[]` in 4 - the pulley, the parallel bars, the
+cog switch's door and the crow-dove switch - which `lara_as_pulley`, `lara_as_pbleapoff`
+and `CogSwitchControl` read through. A distance survives a moved pool but not a moved
+layout: `items[]` lies behind the level's rooms, meshes, boxes and texture infos,
+`baddie_slots` also behind the samples, which are loaded only with sound on, so another
+build or level file moves them; a number survives both. A tag in the field itself would
+have cost every older build its enemies, since such a build adds its base to whatever the
+field holds: hence the number beside the field, and a new save loads on an older build as
+an old save does there - Lara, items and slots found by distance, a null or a number
+garbage as with any moved pool.
+
+**How.** `game/save_pointer_rule.h` (new), `game/savegame.cpp` (`SaveLaraData`,
+`RestoreLaraData`, `SaveLevelData`, `RestoreLevelData`: the six calls, and a
+`static_assert` that the 22 bytes end with `enemy`), `specific/function_stubs.cpp`
+(`init_game_malloc`, the `POOL` line), `tomb5.vcxproj` and `.filters`. ModernTest's
+`save_pointer` (62 checks).
+
+**Left.** The game was not run: the `SAVELOG` and `POOL` lines wait for play. A save made
+before this build in the middle of the pulley, the parallel bars or the cog switch, loaded
+in a build whose pool is laid out otherwise before `items[]`, gets `GeneralPtr` 0, and the
+three readers do not check for it. The rope's `PENDULUM.Rope` is saved as a distance from
+`RopeList`, a static array; it is 0 only between a grab and the rope's next control, which
+sets it.
+
+**Commits.** `c407dfdc`.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -18109,3 +18175,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #289 | RICH3's gunship flies after Lara as a drone at the vulture's size |
 | #290 | The bulbs' fog in one pass a frame, and the mill's old sheets of mist go |
 | #291 | The brawler's strike starts and lands where his fist reaches |
+| #292 | A savegame's pointers survive a moved pool, and null stays null |

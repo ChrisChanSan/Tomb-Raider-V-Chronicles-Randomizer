@@ -16,10 +16,11 @@ small local fixes that predate this repository and are documented in the files t
 (`dxsound.cpp` LOCSOFTWARE, `function_stubs.cpp` DO_LOG).
 
 Measured on **2026-11-01** by comparing every file under `TOMB5/` against that first
-commit: **135 files changed, 199 entirely new - 334 in all**, none deleted,
-**284** of them carrying the modification notice at the top, which `grep -rl
-"Modified 2026 by ChrisChanSan" TOMB5/` lists. The project file `tomb5.vcxproj` carries
-the same notice as an XML comment.
+commit: **135 files changed, 199 entirely new - 334 in all**, none deleted, **284** of
+them carrying the modification notice at the top, which `grep -rl "Modified 2026 by
+ChrisChanSan" TOMB5/` lists. The project file `tomb5.vcxproj` and its filters file carry
+the same notice as an XML comment, and `resource.h` and `tomb5.rc` beside them as comment
+lines.
 
 50 of the 334 do not carry the notice, and none of them should:
 

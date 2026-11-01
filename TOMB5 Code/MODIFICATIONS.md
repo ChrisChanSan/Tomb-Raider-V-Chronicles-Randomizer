@@ -60,14 +60,14 @@ the native Windows port, 2.2 the engine's support for the randomizer, 2.3 the To
 III enemies, 2.4 the HD art read from the player's own Remaster files, 2.5 sixty frames a
 second, 2.6 modern controls and the options menu, 2.7 the first person view, the cheats
 and the `-log` seams, 2.8 and 2.9 the corrections and the cleanup before the first public
-push, 2.10 the rounds after it that extend no area of their own - a round after the
-cleanup that extends an area stands in that area); section 3 lists the randomizer's own
-changes since Beta 1.0 as short rows; section 4 says how to build; the appendix maps the
-task numbers that the commit subjects since Beta 1.0 carry to the entries. Every entry has
-one form: What was changed, Why, How, the Decisions where a choice was made, and the
-Commits that made it - and nothing else. Where a number in the code carries a rule, the
-entry gives the number and its reason; the measurements behind it are not part of this
-record.
+push, 2.10 the rounds from #215 on in task order, but for #220 to #222, #224 to #226, #230
+and #232, which stand in the area they extend, as #205 and #209 do); section 3 lists the
+randomizer's own changes since Beta 1.0 as short rows; section 4 says how to build; the
+appendix maps the task numbers that the commit subjects since Beta 1.0 carry to the
+entries. Every entry has one form: What was changed, Why, How, the Decisions where a
+choice was made, and the Commits that made it - and nothing else. Where a number in the
+code carries a rule, the entry gives the number and its reason; the measurements behind it
+are not part of this record.
 
 ## 2.1 Native Windows 11 port
 
@@ -14008,8 +14008,9 @@ EXE's own folder (`_get_pgmptr`), then from the working directory.
 ## 2.10 Rounds after the cleanup (2026-10-16 to 2026-11-01)
 
 The rounds that followed the cleanup of section 2.9, each one change to the engine with
-its reason, recorded in the same form as the entries above. Rounds after the cleanup that
-extend an area stand in that area; the others are here in task order.
+its reason, recorded in the same form as the entries above. Every round from #215 on
+stands here in task order, also where it extends an area; only #205, #209, #220 to #222,
+#224 to #226, #230 and #232 stand in the area they extend.
 
 ### The speaking heads of the cutscenes on the HD path (#215)
 2026-10-17
@@ -14442,15 +14443,17 @@ is the one that stands. Commit texts of the rounds after the cleanup cannot chan
 suite counts stand in the bodies of `7e4b9792`, `9e6add2d`, `c407dfdc`, `b8ae7cab`,
 `d815cd73`, `04ce5f10`, `7587bbc3`, `ee99cc56`, `987200a5`, `2999d664`, `a37160b3`,
 `080e1ac2`, `51c78576`, `85c32cf8`, `1d63294d`, `90088857`, `90b4c21a`, `9b459672`,
-`e2a7e65e`, `94ef93a1` and `f8b6a5a1`; parity runs and pixel counts in those of
-`d815cd73`, `04ce5f10`, `2ad0038f`, `484d382d`, `47a40a8a`, `9b888587`, `e58151a3`,
-`57830aac`, `eea6c21f`, `a836e6cf`, `0da437b2`, `88f2f9a1`, `c8cb7cd0`, `42fa38ed` and
-`bb26f34e`; randomizer runs by seed in those of `c8cb7cd0`, `42fa38ed`, `bb26f34e` and
-`ae4a45bd`; a session's dump or log in those of `c407dfdc`, `9e6add2d`, `79c7a7fa`,
-`67e2445b`, `7b23e79e`, `57830aac`, `2ad0038f`, `a836e6cf`, `04ce5f10` and `66c57ce3`;
-what was seen in play in those of `e99184c5`, `9da367d4`, `68a0352a` and `442660d5`; the
-test screen's figures in those of `484d382d`, `eea6c21f` and `23b54aab`; and the Remaster
-named as the model of a look in those of `03fa2e66` and `8eabbf14`. This record repeats
+`e2a7e65e`, `94ef93a1`, `f8b6a5a1`, `603154df`, `5bd415ea`, `d8c2625f`, `2f2ff605`,
+`90d93375`, `af575431`, `7343d52b`, `cd24dda6`, `6f892196`, `0c678ef7` and `68c44d94`;
+parity runs and pixel counts in those of `d815cd73`, `04ce5f10`, `2ad0038f`, `484d382d`,
+`47a40a8a`, `9b888587`, `e58151a3`, `57830aac`, `eea6c21f`, `a836e6cf`, `0da437b2`,
+`88f2f9a1`, `c8cb7cd0`, `42fa38ed` and `bb26f34e`; randomizer runs by seed in those of
+`c8cb7cd0`, `42fa38ed`, `bb26f34e` and `ae4a45bd`; a session's dump or log in those of
+`c407dfdc`, `9e6add2d`, `79c7a7fa`, `67e2445b`, `7b23e79e`, `57830aac`, `2ad0038f`,
+`a836e6cf`, `04ce5f10` and `66c57ce3`; what was seen in play in those of `e99184c5`,
+`9da367d4`, `68a0352a`, `442660d5` and `7bde37e2`; the test screen's figures in those of
+`484d382d`, `eea6c21f` and `23b54aab`; and the Remaster named as the model of a look in
+those of `03fa2e66` and `8eabbf14`. This record repeats
 none of it, and its wording is the one that stands.
 
 **Commits.** `8a599fd9` (the tree first checked), `97c05067` (the last commit checked),
@@ -15786,9 +15789,11 @@ install's hand files: CROW_MIP in ANDY1 to HAND_BARE_CATAPULT, MESHSWAP2 in ANDY
 HAND_BARE_IRON_CLAPPER, MESHSWAP3 in RICH1 to HAND_BARE_HAMMER, MAFIA_MIP in ANDY3 to
 HAND_BARE_CHALK - holders with her fifteen-node tree and no item, each file's hand bone 10
 to 25 units from the holder's mesh. The suit's hips have no model and stay her own, as
-#261 left them. The state models, the lending slot's node and the prop hands are TROne's
-rules. `HDLOG cutseq actor` ends in `swap=`, every borrowed node with its slot, mesh and
-what drew it; a change later in the cutscene writes `HDLOG cutswap`; `SWAPLOG` ends in
+#261 left them. The state models, the lending slot's node, its rigid binding and the prop
+hands are rules of TROne (GPLv3) by Todesengel1931 - https://github.com/todesengel1931 -
+credited in THIRD-PARTY.md, entries 493 to 496; no code was taken. `HDLOG cutseq actor`
+ends in `swap=`, every borrowed node with its slot, mesh and what drew it; a change later
+in the cutscene writes `HDLOG cutswap`; `SWAPLOG` ends in
 `shows=` and finds a mesh's slot in the load-time table, which also names the catapult's
 holder after the exchange. `specific/hd/hd_object.h` and `specific/hd/hd_model.h` declare
 the calls. ModelProbe takes `-meshes` and `-borrow`. With `hd_build` 0 nothing of it runs.
@@ -15889,11 +15894,12 @@ the length of the draw, and otherwise draws the classic figure as before. The tr
 is the file's own additive run through `hd_model`'s additive pass, as every additive part
 is drawn (one plus one, no depth write, weighed by the texel's alpha): the green of the
 figure is the art's own and the room's light, and no shader changed.
-`specific/hd/hd_object.cpp` makes room for the block in the plan. The rule is TROne's
-(TROne-main, copy of 2026-10-23, commit a3c0c633: S_InitialisePolyList in
-`hostglue_draw5.cpp`, `lara_build_models` and `lara_head_for_outfit` in
-`game_renderer.cpp`); no code was taken. `docs/Engine-Manual.md` says it. With `hd_build`
-0 none of it runs: the X-ray set exists only inside the HD draw of Lara.
+`specific/hd/hd_object.cpp` makes room for the block in the plan. The rule is TROne's -
+TROne (GPLv3) by Todesengel1931 - https://github.com/todesengel1931 - (TROne-main, copy
+of 2026-10-23, commit a3c0c633: S_InitialisePolyList in `hostglue_draw5.cpp`,
+`lara_build_models` and `lara_head_for_outfit` in `game_renderer.cpp`), credited in
+THIRD-PARTY.md, entry 497; no code was taken. `docs/Engine-Manual.md` says it. With
+`hd_build` 0 none of it runs: the X-ray set exists only inside the HD draw of Lara.
 `specific/hd/hd_model.cpp`: a model whose plan entry asks for it
 (`HDModelSlot::additiveOneSided`) draws its additive run from the front alone - the
 winding turned away from the eye culled, the other one under a mirrored matrix, as the
@@ -16820,9 +16826,9 @@ refusal is noted once per holder, face and number (`HDVisTables::stateRefused`,
 another pair on the same map - never in the world together, so `HDVisRoomOfGroup` lists
 none of them while the holder is drawn and no frame would change; on the enclosure it
 would move or drop the room 17 rooms stand enclosed in, a question of its own. Room 85 is
-no data error of the level, so `game/levelfix.h` has no entry for it: it is the place its
-pair keeps while map 0 is off, as every main room is, and the original game never draws
-it.
+no data error of the level, so the randomizer's `core/LevelFix.h` has no entry for it: it
+is the place its pair keeps while map 0 is off, as every main room is, and the original
+game never draws it.
 
 **Commits.** `9b888587`.
 
@@ -17010,8 +17016,10 @@ wall (`HDVisParams::skyArt` 1, `skyReach`; the table `HDVisTables::sky`, `skyFir
 `game/draw.cpp`'s walk lists them through `VisGuestBounds` and is not changed. The guests,
 the openings, the wides, the enclosure and the classic rooms' verdicts are those of
 before. The reading - art above a room's classic box counts for that room, the Remaster
-building higher than the classic level - is after TROne's guests' column (GPLv3,
-Todesengel1931); the open air, the sky, the reach and the copies are this engine's own.
+building higher than the classic level - is after TROne's guests' column
+(`pv5_pairs_build`) - TROne (GPLv3) by Todesengel1931 - https://github.com/todesengel1931
+- credited in THIRD-PARTY.md, entry 509; no code was taken. The open air, the sky, the
+reach and the copies are this engine's own.
 `specific/hd/hd_level.h`'s comment on a group room's tables names the sky groups after its
 guests. `hd_vis` 0 is unchanged by construction: the sky table is built on the visibility
 path alone; `hd_build` 0 is untouched.
@@ -17270,8 +17278,8 @@ fog: six additive, double-sided classic faces at y 8,448 of rooms 107 (four) and
 as it restores water, the `.TRG` covering none of them. They hung as flat grey-green panes
 with straight edges over the sluice and its bank and lay over the slope by the mill house,
 a bright cross where room 104's two diagonal neighbours met. And in the densest groups of
-bulbs #287's pass cost more than a millisecond: eleven quads at RICH2's bulb 4, each
-walking its own fields, the breath hashed per pixel the most of it.
+bulbs #287's pass was the fog's measured price: a quad per bulb, each walking its own
+fields, the breath hashed per pixel the most of it.
 
 **How.** `specific/hd/hd_fog.h`: `HDFogHash` fused (`fmaf`), `HD_FOG_PASS_SLOTS` (16),
 `HD_FOG_TABLE` (64), `HDFogPassCount` (the shader's loop bound), `HDFogUnion` (the one
@@ -17299,9 +17307,9 @@ RoomProbe: the one pass's line after the picture, `-fogquads` and `-fogsheets` (
 `hd_build` 0 never runs the pass.
 
 **Decisions.** One draw a frame instead of a quad per bulb, and the breath's lattice read
-from a table instead of hashed per pixel: of #287's 1.77 ms at RICH2's bulb 4 the hashed
-breath took 1.05 and the eleven quads without their columns 0.14, so the table saves the
-most and the one quad about a tenth of a millisecond. The frame is blended once, eight
+from a table instead of hashed per pixel: the hashed breath was the larger part of #287's
+price and the quads' own share was small, so the table saves the most and the one quad
+the rest; the one pass's price, measured, is small. The frame is blended once, eight
 bits after the last bulb, where #287 blended after every bulb. A sheet is told by its
 room's branch and not by its texture: the rooms with `ROOM_MIST` stand in ANDY3 alone,
 only two of them carry sheets, and the faces of the animated ranges elsewhere are flat
@@ -17441,13 +17449,13 @@ which sets it.
 ### The record in its one form again, and comments without task numbers (#294)
 2026-11-01
 
-**What.** The entries of the rounds after the cleanup, #252 to #292, and the rows of
-section 3 are back in the record's one form: What, Why, How, Decisions and Commits, the
-date under the heading, no measurement, proof, parity, price or to-do paragraph, no
-narration of a run, a log, a dump or a picture, no branch sentence. Every file their How
-paragraphs named is still named, and the headers, includes and commits that no entry named
-are named. Forty-five commit hashes written with digits only, which named commits as they
-were before the last rewrite of the history, name the commits they became. The appendix
+**What.** The entries of the rounds after the cleanup, #252 to #292, are back in the
+record's one form: What, Why, How, Decisions and Commits, the date under the heading, no
+measurement, proof, parity, price or to-do paragraph, no narration of a run, a log, a
+dump or a picture, no branch sentence. Every file their How paragraphs named is still
+named, and the headers, includes and commits that no entry named are named. Forty-five
+commit hashes written with digits only, which named commits as they were before the last
+rewrite of the history, name the commits they became. The appendix
 covers the task numbers of the commit subjects since Beta 1.0, #259 and #265 have rows in
 section 3, and the sentence on commit texts that cannot change names, by class, the bodies
 of these rounds whose wording the record does not repeat. In the engine and the tools a
@@ -17490,13 +17498,13 @@ pictures stay, the pictures named as such. The TROne credits stand as they were.
 `e8bc3702` (the READMEs, the manuals and the notices), `68018f8f` (two test messages,
 #289's defaults).
 
-### A missing SCRIPT.DAT ends the game with a message, and the code section is read-only (#298)
-
-2026-11-01.
+### A missing SCRIPT.DAT ends with a message; the code section is read-only (#298)
+2026-11-01
 
 **What.** Started from a folder without its data, the engine no longer dies in a crash
-dump: a missing `SCRIPT.DAT` ends the game with the fatal-error dialog, which names the
-file and says to start the game from its own folder. The executable's code section is
+dump: a missing `SCRIPT.DAT` ends the game with the fatal-error dialog, which says that
+the file was not found in the folder the game was started from and to start the game
+from its own folder. The executable's code section is
 read-only, as a linker normally makes it.
 
 **Why.** `LoadFile` returns 0 for a file that is not there, and `LoadGameflow` read on
@@ -17517,18 +17525,18 @@ does.
 **Commits.** `f33e57d0`.
 
 ### The engine builds with Control Flow Guard (#299)
-
-2026-11-01.
+2026-11-01
 
 **What.** The release build of the engine compiles and links with Control Flow Guard, as
 the randomizer's build already did: every indirect call is checked against the
 executable's table of valid targets before it is taken, and the executable carries the
 `GUARD_CF` flag beside dynamic base and NX.
 
-**Why.** The engine's own indirect calls all go to named functions of the engine or to
-exports of the system's libraries, so the check changes nothing in play; a scanner's
-heuristics read the flag as a modern, unpacked build, which an unsigned executable needs
-on its side.
+**Why.** The engine's indirect calls - through function pointers and through the COM
+interfaces of Direct3D 9, DirectInput 8 and XAudio2 - all reach functions of the engine
+or of the system's libraries that are valid targets, so the check changes nothing in
+play; a scanner's heuristics read the flag as a modern, unpacked build, which an unsigned
+executable needs on its side.
 
 **How.** `tomb5.vcxproj`: the Release Win32 configuration sets `ControlFlowGuard` to
 `Guard` for the compiler and `/guard:cf` for the linker. No source file changes.
@@ -17712,26 +17720,25 @@ thirty-nine modified, one moved out into `package/`.
   were. A new pool member changes every cross draw after it; a run with no switches is
   unchanged. `LevelBuild -hdm` writes the sidecar of a test level. `core/BuildId.h`:
   `RANDO_BUILD_ID` 22 to 23, `0.23` (`df83b76f`).
-
 - **#296 - the background picture beside the program.** `gui/Main.cpp`,
-  `gui/TR5Randomizer.rc`, `gui/TR5Randomizer.ico`, `package/docs/Background.jpg`,
+  `gui/TR5Randomizer.rc`, `gui/TR5Randomizer.ico`, `package/Background.jpg`,
   `README.txt`: the interface's background picture is no longer embedded in
-  `TR5Randomizer.exe`. It moves from `src/gui` into `package/docs/`, which the release
-  copies beside the EXE, and `loadBackground` reads it at start from the `docs` folder
-  beside the EXE, never from the current directory; a missing or unreadable file is no
-  error, and the window keeps its plain dark background. The program icon keeps its six
+  `TR5Randomizer.exe`. It moves from `src/gui` into `package/`, which the release copies
+  beside the EXE, and `loadBackground` reads it at start from beside the EXE, never from
+  the current directory; a missing or unreadable file is no error, and the window keeps
+  its plain dark background. The program icon keeps its six
   sizes and its pixels, now stored as uncompressed 32-bit bitmaps instead of PNG entries.
   The reason for both: a megabyte of compressed data at an entropy near 8 bits a byte
   inside an executable is what virus scanners' heuristics take for a packed program.
   `THIRD-PARTY.md` names the picture's new path (`cad68af7`, `0f80eb00`).
-- **#297 - Beta 5.0 and the package's docs folder.** `core/BuildId.h`,
+- **#297 - Beta 5.0 and the package's docs folder.** `core/BuildId.h`, `gui/Main.cpp`,
   `gui/TR5Randomizer.rc`, `Tools.rc`, `README.txt`, `package/docs/`,
   `Preparation/Tools/BuildRelease.ps1` and `TOMB5 Code/tomb5.rc`: the version strings read
   Beta_5.0 and 5,0,0,0; the build id stays 23, since the placement data did not change;
   the engine's version block gains a CompanyName line. The package gets a `docs` folder:
   `Background.jpg` moves into `package/docs/` and `loadBackground` reads it from there,
   and the release copies the two manuals with the nine pictures they show beside it, so
-  the package reads like the repository's docs folder. Commits: `9ce96228`.
+  the package reads like the repository's docs folder (`9ce96228`).
 
 ## 4. Building this yourself
 
@@ -17741,7 +17748,7 @@ The published binary need not be trusted. Either:
   platform `x86`; the result is `release/PCtomb5.exe`. `Release|x64` builds the
   same sources (#143) and is there for whoever wants it; `x86` is the shipped
   configuration and the one every measurement in this record was made on. The
-  39 `TOMB5/specific/hd/hd_shader/*.inc` are `fxc` output of the eleven `.hlsl`
+  40 `TOMB5/specific/hd/hd_shader/*.inc` are `fxc` output of the eleven `.hlsl`
   beside them and are tracked, so nothing has to be regenerated to get a working
   binary - but after editing a shader, run
   `Preparation/Tools/Diagnose/bshader.bat` (`be.bat` carries the same guard and
@@ -17777,7 +17784,7 @@ entries above.
 | #117 | Optional high quality sound bank from the player's remaster |
 | #123 | Finding an installed Remaster, reading what it holds for a level, and the settings that steer it; The second renderer, the seam where the engine draws HD rooms, and what a .TRG material means; The room shader, and a build that needs no shader compiler; The engine's own per-vertex lighting, as shader arithmetic; The sky; The portal walk, the window on intruding art, and the doorway a randomized run opens; Art in the air of an unlinked room draws inside its own window; Water in the HD rooms; Address space, the page cache and what the machine can pay for; HD models for items, enemies and machinery; Statics: baked into the room, shot to pieces, or drawn classic where the art does not cover them; HD models for the pickups: the EXTRA prefix, a mod's own inventory model, and lying on the floor; The grappling gun in the hand, and the Desert Eagle in the revolver's slot; The inventory ring and the pickup display in HD; The seam for Lara: the HD composite drawn by the engine; First person: Lara's head and neck cut away, and the lid that closes the opening; Lara's HD wardrobe: a scan of the installed art, its properties, and which outfit is worn; The font in HD; The frame rate option and the clock; The pose between two ticks; The arms between two ticks; The camera on the in-between frame; The first person view; The -log switch and the diagnostic seams; section 3 (the randomizer) |
 | #137 | section 3 (the randomizer) |
-| #141 | Licence notices, origin sentences and the corrections made before the public push |
+| #141 | Licence notices, origin sentences and the corrections made before the public push; section 3 (the randomizer) |
 | #142 | section 3 (the randomizer) |
 | #144 | section 3 (the randomizer) |
 | #146 | Engine-only object slots beyond the original 460; An enemy's animations come from its own slot; The VCI cyborg as a pool enemy on a slot of his own; Balance.txt: every weapon, enemy, attack and hazard settable; Licence notices, origin sentences and the corrections made before the public push; section 3 (the randomizer) |
@@ -17909,7 +17916,8 @@ entries above.
 | #291 | The brawler's strike starts and lands where his fist reaches |
 | #292 | A savegame's pointers survive a moved pool, and null stays null |
 | #294 | The record in its one form again, and comments without task numbers |
+| #295 | no entry: the origin ledger's entries 484 to 515 and its trimmed entries (THIRD-PARTY.md) |
 | #296 | section 3 (the randomizer) |
 | #297 | section 3 (the randomizer) |
-| #298 | A missing SCRIPT.DAT ends the game with a message, and the code section is read-only |
+| #298 | A missing SCRIPT.DAT ends with a message; the code section is read-only |
 | #299 | The engine builds with Control Flow Guard |

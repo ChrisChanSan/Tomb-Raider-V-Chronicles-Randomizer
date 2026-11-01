@@ -16458,8 +16458,7 @@ of carriers, keep the index order within each pass and with it every chain as it
 
 **Commits.** `85c32cf8`.
 ### The button that skipped a scene does nothing more until it is released (#279)
-
-2026-10-31.
+2026-10-31
 
 **What.** With the *Cutscene skipper* on, the controller's confirm button - Cross, A -
 skips a cutscene and a camera flyby, and every default pad page binds the Action role to
@@ -16473,44 +16472,27 @@ letting go of Escape does. The button skips only a flyby that holds Lara still; 
 leaves her playing leaves her the button as Action. Escape is unchanged in both skippers:
 it skips while it is held.
 
-**Why.** ANDREA2, Trajan's Markets. The pull rope in room 51 (item 36, OCB 1) is pulled
-three times to raise the cog (item 18, RAISING_COG) to the gear above it; the rope in
-room 33 (item 27) then turns the gears and opens trapdoor 11. With the skipper on, the
-room 51 rope wanted more than three pulls, and the first pull of the room 33 rope moved
-only the big wheel (item 117); the trapdoor opened on the pull after. Read from the level
-(the vanilla and the randomized `ANDREA2.TRC` hold the same triggers, items and cameras;
-only the music differs) and from the code:
-
-- Both ropes' floor triggers are SWITCH triggers with all five code bits, and a SWITCH
-  trigger toggles each target's bits (`_TestTriggers`, `item->flags ^= flags &
-  IFL_CODEBITS`). Room 51, sector 2,2: `8204 3E00 0024 8012`, the rope and the cog. Room
-  33, sector 2,2, behind the trigger triggerer (item 28, enabled when the cog's third rise
-  ends): `8204 3E00 001B 000B 0010 000F 0011 3001 0100 8012` - the rope, trapdoor 11, the
-  gears 16, 15 and 17, flyby 1 played once (`0100`), the cog.
-- Room 33's trigger starts flyby 1 in the pull's own tick. Room 51's has no scene of its
-  own, but the cog's control (`ControlRaisingCog`, `game/andrea.cpp`) starts flyby 9 the
-  tick after a pull sets it rising. Both flybys hold Lara still (SP_NOLARACONTROL on their
-  first cameras, flags 0651 and 0441) and so mask her input while they play.
-- A pulley with OCB 1 is armed again after every pull, and `lara_as_pulley` keeps the
-  goal on the pull while the interact bit is in her input. The level's animation 340, the
-  pull (59 frames), counts the pull at frame 44 and loops into itself unless the goal is
-  the stand on its last two frames (its one state change, frames 58 and 59, to 341).
-- The flyby skip fired on the button held, with no edge. The button is held through the
-  pull, so the flyby the pull set off was skipped from its first frame and over in 9 ticks
-  (flyby 1) or 2 (flyby 9) - before frame 58, 13 ticks after frame 44 - and the still-held
-  button was Action again there: Lara pulled once more. That second pull in room 33 shut
-  the trapdoor again and stopped the gears and the cog; the big wheel stayed, set by flyby
-  1's own heavy test (camera 7, room 52), which is no toggle. The second pull in room 51
-  turned the rising cog off half-way (it rises 2 units a tick for 128 ticks), and the next
-  pull set it going again. Played through, both flybys outlast frame 58 with Lara's input
-  masked, and she stops after one pull.
-
-ModernTest's `skip_latch_rope` runs both ropes tick by tick in the engine's order. Before:
-the pull is counted at tick 59, the held skip ends flyby 1 at tick 67, the pull loops on
-frames 58 and 59 at ticks 72 and 73 and counts again at 118; for flyby 9, started at 60,
-the skip ends it at 61 and the second pull counts at 118 as well. After: one pull, the
-flyby played through; or, with the button let go and pressed again to skip, the flyby
-over in 9 ticks (2 for flyby 9) and the press out of the input until it is let go.
+**Why.** ANDREA2, Trajan's Markets: the pull rope in room 51 (item 36, OCB 1) is pulled
+three times to raise the cog (item 18, RAISING_COG) to the gear above it; the rope in room
+33 (item 27) then turns the gears and opens trapdoor 11. With the skipper on, the room 51
+rope wanted more than three pulls, and the first pull of the room 33 rope moved only the
+big wheel (item 117); the trapdoor opened on the pull after. In the level (`ANDREA2.TRC`,
+vanilla and randomized alike) both ropes' floor triggers are SWITCH triggers, and a SWITCH
+trigger toggles each target's code bits (`_TestTriggers`); room 33's starts flyby 1 in the
+pull's own tick, and the cog's control (`ControlRaisingCog`, `game/andrea.cpp`) starts
+flyby 9 the tick after a pull sets it rising. Both flybys hold Lara still
+(SP_NOLARACONTROL on their first cameras) and so mask her input while they play. A pulley
+with OCB 1 is armed again after every pull, and `lara_as_pulley` keeps the goal on the
+pull while the interact bit is in her input; the level's pull animation counts the pull at
+frame 44 and loops into itself unless the goal is the stand on its last two frames, 58
+and 59. The flyby skip fired on the button held, with no edge, and the button is held
+through the pull: the flyby the pull set off was skipped from its first frame and over
+before frame 58, and the still-held button was Action again there - Lara pulled once more.
+That second pull in room 33 shut the trapdoor again and stopped the gears and the cog; the
+big wheel stayed, set by flyby 1's own heavy test, which is no toggle. The second pull in
+room 51 turned the rising cog off half-way, and the next pull set it going again. Played
+through, both flybys outlast frame 58 with Lara's input masked, and she stops after one
+pull.
 
 **How.** `game/skip_latch.h` (new, pure): `SKIP_LATCH` (the bit, the skipper, the tick),
 `SkipLatchEngage` (bits 0 to 23 only), `SkipLatchApply` (one reading of the pad: the
@@ -16523,41 +16505,37 @@ the latch's state; `InputSkipLatch`, which engages it on `JoyBitConfirm()`;
 `InputSkipLatchHolds`; `JoyConfirmDown`, the skippers' one read of the button, as the
 latch leaves it; the latch applied in `S_UpdateInput` right after the pad is read and
 before any role is read - every pad role comes out of that one word (`JoyRole`,
-`PadRoleFires`), so the mask follows the binding page and leaves every other button
-alone; and dropped in `InputModeLatchReset`, at every level start and savegame restore.
+`PadRoleFires`), so the mask follows the binding page and leaves every other button alone;
+and dropped in `InputModeLatchReset`, at every level start and savegame restore.
 `game/control.cpp`: the cutscene skipper asks `SkipConfirmEdge` and engages the latch when
 the press skipped, not on the title. `game/spotcam.cpp`: `InitialiseSpotCam` primes the
 flyby's edge from the button as it is when the flyby begins; `CalculateSpotCams` asks the
-two rules and engages the latch when a press starts the skip.
+two rules and engages the latch when a press starts the skip. `specific/input.h` declares
+`JoyConfirmDown`, `InputSkipLatch` and `InputSkipLatchHolds` and takes in
+`game/skip_latch.h`.
 
 With `-log`: `SKIPLATCH set=cutseq|flyby bit=<n> tick=<t>` when a skip engages the latch,
 `SKIPLATCH released held=<ticks> tick=<t>` when the button is let go, `SKIPLATCH dropped
 held=<ticks> tick=<t>` when a level start lets go first; `FLYLOG` ends in `latch=on|off`.
 
-Measured with TrgProbe `-flyby`, SectorCheck, ItemCheck and a probe of Lara's three pulley
-animations (339, 340, 341: 14, 59 and 14 frames). The census of the fifteen levels is
-unchanged, 64 sequences and 359 cameras. Of the 59 outside the title, 45 take the pad's
-skip; 8 leave Lara her control (ANDREA3 0 and 3, RICH1 11, RICH2 0, 1 and 12, RICH3 10
-and 15) and 6 track her (ANDY1 5, ANDY2 2, ANDY3 9, RICH2 7 and 13, RICH3 7), and those
-14 are skipped by Escape alone. ModernTest: `skip_latch` (15 checks), `spot_pad_skip`
-(10), `skip_latch_rope` (12), `skip_latch_wiring` (6). Game logic in every draw path;
-there is no `hd_build` parity to claim.
+ModernTest: `skip_latch`, `spot_pad_skip`, `skip_latch_rope` (both ropes tick by tick in
+the engine's order) and `skip_latch_wiring`. Game logic in every draw path; there is no
+`hd_build` parity to claim.
 
 **Decisions.** The button skips only a flyby that holds Lara's control. Before, it skipped
 any: in one that leaves her playing - an expanding platform in RICH1 and RICH2 - Cross is
 her Action, a skip there was a camera jump on every Action press, and with the latch the
-press that grabbed a ledge would have been taken from her a tick later. Escape skips
-those as before. Escape needs no latch: it is the inventory key of both default rows and
-the binding page cannot put it on any other role (the capture gives up on it,
-`game/menu_frame.cpp`), and its bits, IN_OPTION and IN_DESELECT, open the inventory or
-go back in a menu on a fresh press only. A skipped flyby no longer masks Lara's input for
-as long as it would have played, so in room 51 a new press within 70 ticks (2.3 seconds)
-of a pull's count still lands its pull while the cog is rising and stops it; one more
-pull sets it going. That is the SWITCH toggle as the level has it, and it is left so.
-Task #278 (`game/setup.cpp`, `GetCarriedItems`) is on a branch of its own; this entry
-stands after #277's.
+press that grabbed a ledge would have been taken from her a tick later. Escape skips those
+as before. Escape needs no latch: it is the inventory key of both default rows and the
+binding page cannot put it on any other role (the capture gives up on it,
+`game/menu_frame.cpp`), and its bits, IN_OPTION and IN_DESELECT, open the inventory or go
+back in a menu on a fresh press only. A skipped flyby no longer masks Lara's input for as
+long as it would have played, so in room 51 a new press within 70 ticks (2.3 seconds) of a
+pull's count still lands its pull while the cog is rising and stops it; one more pull sets
+it going. That is the SWITCH toggle as the level has it, and it is left so.
 
-**Commits.** `51c78576`.
+**Commits.** `51c78576`, `e35fa1f7` (ModernTest's carrier checks closed before the
+latch's).
 
 ### A scene that holds Lara leaves her life and air as they were (#280)
 2026-10-31
@@ -16680,8 +16658,7 @@ back, the poison it adds is a state of its own and goes on after the scene.
 `lasers.cpp`).
 
 ### The raising cog's lift runs to its end, a pull meanwhile is kept (#281)
-
-2026-10-31.
+2026-10-31
 
 **What.** A lift of the raising cog that has begun runs to its end, whatever its rope does
 meanwhile. A pull while the cog still rises is kept for a lift to come, and when the
@@ -16703,19 +16680,6 @@ holds Lara still for about 200 ticks, longer than a lift's 128. Since the *Cutsc
 skipper* can end that flyby, a new press within about 70 ticks of a counted pull lands
 its pull while the cog still rises (#279, Decisions), and a fast player needed more than
 three pulls.
-
-Tick by tick, with the first pull counted at tick 59 (the press at 0) and the cog's first
-2 units and its flyby at 60, derived from the code and the level, the game not started:
-
-- Before: a second pull counted at 118 (the held button before #279) stopped the cog at
-  118 of 256 units; one at 129, 70 ticks on, at 140; one at 187, on the lift's last unit,
-  left the lift at 256 uncounted, so that the next pull only ended it. Three pulls 59
-  ticks apart gave one lift, ended at 247.
-- After: the same pulls are kept (`COGLOG item=18 lift=1 at=118 pulls_pending=1 kept`),
-  lift 1 ends at 188 (`... at=256 pulls_pending=1 done`) and lift 2 begins in that tick
-  (`... lift=2 at=0 pulls_pending=0 started from pending`). Three pulls 59 ticks apart
-  give three lifts, the third ending at 444 with the cog engaged, 768 units in all; a
-  fourth is dropped. Pulls that wait for each lift's end give Core's ticks.
 
 **How.** `game/raising_cog_rule.h`, new and with no engine header: `COG_STATE`, the lift
 count, the units of the running lift and the pulls kept, as `item_flags[0]`, `[2]` and
@@ -16748,30 +16712,26 @@ what Core's did and the slot stays 0, and the savegame is the same as before.
 With `-log`: `COGLOG item=<i> lift=<n> at=<units> pulls_pending=<p> <word>`, the word
 `begin`, `kept`, `dropped`, `done` or `started from pending`.
 
-ItemCheck over the sixteen vanilla level files finds the raising cog in ANDREA2 alone
-(item 18, room 24, flags 0, OCB 0). ModernTest: `raising_cog` (20 checks),
-`raising_cog_rope` (16 - the rope and the cog tick by tick, Core's control beside the
-rule, and 2860 timings of three pulls, three lifts every time with the rule and before
-only the 396 with no pull in a lift) and `raising_cog_wiring` (13). The change is game
-logic in every draw path; there is no `hd_build` parity to claim.
+The raising cog stands in ANDREA2 alone. ModernTest: `raising_cog`, `raising_cog_rope`
+(the rope and the cog tick by tick, Core's control beside the rule, three pulls at every
+timing) and `raising_cog_wiring`. Game logic in every draw path; there is no `hd_build`
+parity to claim.
 
-**Decisions.** A count, not a flag: two pulls during one lift are two lifts to come, up
-to the lifts that are left; a pull beyond them is dropped, as a pull after the third lift
+**Decisions.** A count, not a flag: two pulls during one lift are two lifts to come, up to
+the lifts that are left; a pull beyond them is dropped, as a pull after the third lift
 does nothing. The cog turns its bits on again rather than reading both edges, so every
 pull is a change to off; the cap holds even a trigger timer - which this trigger does not
 carry, and which once run out would read as a pull on every tick - to the lifts that are
 left. The next lift begins in the tick the last one ends, so that no tick stands between
 with a pull kept and no lift running. Every lift starts flyby 9, a kept pull's too: where
-the flyby of the lift before still plays - a pull under way when it began still counts
-at its frame - it begins again from its first camera. This takes back the last decision
-of #279, which left the toggle as the level has it. Tasks #280, #282 and #283 run on
-branches of their own; this entry stands after #280's.
+the flyby of the lift before still plays - a pull under way when it began still counts at
+its frame - it begins again from its first camera. This takes back the last decision of
+#279, which left the toggle as the level has it.
 
 **Commits.** `35a91179`.
 
 ### Skipping a Zip call ends it, and the pad skips every flyby with an end (#282)
-
-2026-10-31.
+2026-10-31
 
 **What.** With the *Cutscene skipper* on, skipping the flyby that comes with a call from
 Zip - Zip on Lara's headset in the VCI levels - ends the call with it: her hand comes down
@@ -16785,95 +16745,68 @@ that leave Lara playing too; the fresh press and the latch of #279 stay. A flyby
 follows her or loops is left to Escape.
 
 **Why.** In RICH1 and RICH2, after a skipped flyby, Lara stood with her hand at her ear
-and could not move; a save and a load gave her control back. Read from the levels (the
-vanilla and the randomized `.TRC` hold the same calls) and from the code:
-
-- A call is an item of the slot the data name EXPANDING_PLATFORM, whose control is
-  `ControlZipController` (`game/twogun.cpp`); its OCB is the call's track. The campaign
-  has four: RICH1 item 4 (room 3, track 95) with flyby 11 and item 134 (room 72, track
-  94) with no scene; RICH2 item 56 (room 34, track 60, from six sectors) with flyby 12
-  and item 225 (room 161, track 77) with flyby 10. Each is a one-shot TRIGGER that
-  activates the call and then starts the flyby. RICH3 has none: its line from Zip (track
-  59, room 136) is a plain music trigger without the pose, as are RICH1's tracks 48, 52,
-  54 and 67 and RICH2's 79 and 90.
-- Stage 0 takes her control; stage 1 waits until she stands in ANIM_BREATH, poses her
-  (ANIM_ZIP_IN, AS_INTO_ZIP) and starts the track; stage 2 waits until the track is the
-  music and then until it is not, and only then sets her goal AS_OUT_ZIP, gives her
-  control back and kills the item. Her three zip states run `lara_as_null` with no
-  collision, and the pose (animation 468, 73 frames, in all three levels) loops until
-  goal AS_OUT_ZIP: the line that held her is stage 2's `else if (XATrack !=
-  item->trigger_flags)`, false for as long as the track plays.
-- No skip path touches the music: the flyby's skip, its two ends and the cutscene skipper
-  call neither `S_CDStop` nor `S_CDPlay`. Escape held from the first frame ends flyby 11
-  (16 segments of 100 ticks: 15 cameras and the spline back to her) in its 16th tick and
-  flyby 10 in its 3rd. Lara, who reaches the trigger walking or running, needs about 20
-  to 40 ticks to stand (her stop and ANIM_STOP before ANIM_BREATH), so the skipped flyby
-  handed her control back first, and the call posed her the first tick she stood still,
-  started the track then and held her for the whole of it. Played through, flyby 11 runs
-  1600 ticks, over 53 seconds, and the call plays under it.
-- A load lets her go because a savegame keeps the call's stage and not the music: the
-  load starts the level's atmosphere, and the call, which has heard its track, takes that
-  for its end. With no music device `S_CDPlay` does nothing and the call never hears its
-  track; with the track's file missing `ACMEmulateCDPlay` names the track and opens
-  nothing, so the call hears it and never sees it end. Both held her for good, the second
-  until a load.
-- The pad: #279 asked for Lara's control taken at the moment of the press. The two flybys
-  with a call that leave her the control by their flags (RICH1 11, RICH2 12) had it taken
-  by the call from their second tick, so Cross skipped them there before as well; it was
-  refused once the call had ended, and throughout the six flybys without a call that
-  leave her playing.
-
-ModernTest's `zip_call_skip` runs both flybys tick by tick. Before: Escape ends flyby 11
-at tick 15, Lara stands at 24, the call poses her at 25 and ends the track's length later.
-After: the skip ends the call at tick 15, before it poses her; standing on the trigger
-she is posed at 2 and back on her feet at 15, the track off.
+and could not move; a save and a load gave her control back. A call is an item of the slot
+the data name EXPANDING_PLATFORM, whose control is `ControlZipController`
+(`game/twogun.cpp`); its OCB is the call's track. The campaign has four: RICH1 item 4
+(room 3, track 95) with flyby 11 and item 134 (room 72, track 94) with no scene, RICH2
+item 56 (room 34, track 60) with flyby 12 and item 225 (room 161, track 77) with flyby 10,
+each started by a one-shot TRIGGER that activates the call and then starts the flyby;
+RICH3 has none, and Zip's other lines are plain music triggers without the pose. Stage 0
+takes her control; stage 1 waits until she stands in ANIM_BREATH, poses her (ANIM_ZIP_IN,
+AS_INTO_ZIP) and starts the track; stage 2 waits until the track is the music and then
+until it is not, and only then sets her goal AS_OUT_ZIP, gives her control back and kills
+the item; the pose (animation 468) loops until that goal. No skip path touches the music:
+the flyby's skip, its two ends and the cutscene skipper call neither `S_CDStop` nor
+`S_CDPlay`. A skipped flyby ended before Lara, who reaches the trigger walking or running,
+came to a stand, so it handed her control back first; the call posed her the first tick
+she stood still, started the track then and held her for the whole of it. A load let her
+go because a savegame keeps the call's stage and not the music: the load starts the
+level's atmosphere, and the call, which has heard its track, takes that for its end. With
+no music device `S_CDPlay` does nothing and the call never hears its track; with the
+track's file missing `ACMEmulateCDPlay` names the track and opens nothing, so the call
+hears it and never sees it end - both held her for good, the second until a load. And the
+pad's skip of #279 asked for Lara's control taken at the moment of the press, which the
+two flybys with a call that leave her the control by their flags (RICH1 11, RICH2 12) had
+only once the call had taken it, and the six flybys without a call that leave her playing
+never had.
 
 **How.** `game/zip_call_rule.h` (new, pure): `ZipCallTick` (one tick of a stage: started,
-posing, heard, waiting, ended, ended without track - decided on the first tick of stage
-2, because `S_CDPlay` has named the track and opened its stream before it returns),
+posing, heard, waiting, ended, ended without track - decided on the first tick of stage 2,
+because `S_CDPlay` has named the track and opened its stream before it returns),
 `ZipPoseEnd` (the end by track keeps goal AS_OUT_ZIP; a cut end takes her from AS_ZIP
 through AS_OUT_ZIP, from AS_INTO_ZIP straight to standing, and leaves any other state),
-`ZipEndMusic` (the level's atmosphere, looped, while the music is still the call's
-track; silence in a level without one; otherwise nothing) and `ZipCallWord`.
-`game/twogun.cpp`: `ControlZipController` steps through the rule; `ZipCallFinish` is the
-one end of a call, whatever ends it; `ZipCallsEndBySkip` ends every active item whose
-control is the call's. `specific/audio.cpp`: `S_CDTrackPlaying`, whether a track is the
-music and its stream runs. `game/spotcam.cpp`: a flyby notes that a skip jumped one of
-its frames, forgets it where it begins, and ends the calls at its end, before the last
-camera's test, and when Look breaks it off; `SpotPadSkipStarts` (`game/spotcam_math.h`)
-no longer asks whether her control is taken. `game/control.cpp`: the cutscene skipper
-ends the calls as well.
+`ZipEndMusic` (the level's atmosphere, looped, while the music is still the call's track;
+silence in a level without one; otherwise nothing) and `ZipCallWord`. `game/twogun.cpp`:
+`ControlZipController` steps through the rule; `ZipCallFinish` is the one end of a call,
+whatever ends it; `ZipCallsEndBySkip` ends every active item whose control is the call's.
+`specific/audio.cpp`: `S_CDTrackPlaying`, whether a track is the music and its stream
+runs. `game/spotcam.cpp`: a flyby notes that a skip jumped one of its frames, forgets it
+where it begins, and ends the calls at its end, before the last camera's test, and when
+Look breaks it off; `SpotPadSkipStarts` (`game/spotcam_math.h`) no longer asks whether her
+control is taken. `game/control.cpp`: the cutscene skipper ends the calls as well.
+`specific/audio.h` declares `S_CDTrackPlaying`, `game/twogun.h` `ZipCallsEndBySkip`.
 
 With `-log`: `ZIPLOG item=<i> stage=<s> track=<t> tick=<n>` and `started`, `posing`,
 `heard`, `ended`, `ended by skip` or `ended without track`. SKIPLATCH and FLYLOG are
 unchanged.
 
-Measured with TrgProbe `-flyby`, a census of the calls and their triggers over the
-fifteen levels, a probe of Lara's zip animations (467, 468, 469: 19, 73 and 25 frames)
-and of her stops, and the levels' music bytes in `SCRIPT.DAT` (129 for the three Rich
-levels). The flyby census is unchanged, 64 sequences and 359 cameras. Of the 59 outside
-the title the pad now skips 53 (ANDREA1 6, ANDREA2 8, ANDREA3 5, ANDY1 1, ANDY2 6, ANDY3
-3, JOBY2 1, JOBY5 1, RICH1 9, RICH2 9, RICH3 4) against #279's 45; the 6 that track Lara
-(ANDY1 5, ANDY2 2, ANDY3 9, RICH2 7 and 13, RICH3 7) are left to Escape. ModernTest:
-`zip_call_rule` (16 checks), `zip_call_skip` (18), `zip_call_wiring` (9); `spot_pad_skip`
-and `skip_latch_rope` hold the new table. Game logic in every draw path; there is no
-`hd_build` parity to claim.
+ModernTest: `zip_call_rule`, `zip_call_skip` (both flybys tick by tick) and
+`zip_call_wiring`; `spot_pad_skip` and `skip_latch_rope` hold the new table. Game logic in
+every draw path; there is no `hd_build` parity to claim.
 
-**Decisions.** The skip ends the call when the flyby ends, not on its first skipped
-frame: a short press jumps a few cameras and the flyby plays on, and the call ends with it
-then. Every call running when a skipped scene ends ends with it, whatever its stage; one
-not yet posed would otherwise pose her wherever she next stood still. Her hand on its way
-up goes straight back to standing rather than up and down again, 44 frames more of a pose
-the skip was meant to end; the call's own end keeps its goal. RICH1's call 134 comes with
-no scene, so no skip reaches it, and it plays as before. The track's length is not read -
-the audio lies outside the level data - and the test stands a length in for it.
-Tasks #280, #281 and #283 are on branches of their own; this entry stands after #281's.
+**Decisions.** The skip ends the call when the flyby ends, not on its first skipped frame:
+a short press jumps a few cameras and the flyby plays on, and the call ends with it then.
+Every call running when a skipped scene ends ends with it, whatever its stage; one not yet
+posed would otherwise pose her wherever she next stood still. Her hand on its way up goes
+straight back to standing rather than up and down again, 44 frames more of a pose the skip
+was meant to end; the call's own end keeps its goal. RICH1's call 134 comes with no scene,
+so no skip reaches it, and it plays as before. The track's length is not read - the audio
+lies outside the level data - and the test stands a length in for it.
 
-**Commits.** `a37160b3`.
+**Commits.** `a37160b3`, `2c4020eb` (the notice in `game/twogun.h`).
 
 ### The openings take no room linked only through a flipmap twin (#283)
-
-2026-10-31.
+2026-10-31
 
 **What.** On the visibility path (`hd_vis` 1) a room listed behind a bare classic wall
 face of a listed room - an opening - must now be linked with that room in a state of the
@@ -16891,30 +16824,23 @@ refusal and takes `-visroom all`; RoomProbe's `-vis: tables` line ends in
 `openings_state=` with a `-vis: visopening` line each; ModernTest checks the rule on three
 flipmap pairs built by hand.
 
-**Why.** In play, looking from the landing into the vent shaft, the shaft's walls and
-floor showed a second, beige texture through the grey one, flickering as the eye moved,
-and a beige wall closed the shaft at the end of its grating; from inside the shaft it
-looked right. Room 85 is the main room of a pair on flipmap 0, as are rooms 21, 89 and 18
-with their twins 96, 94 and 97: a box of three squares at the shaft's place (x 30,720 to
-31,744, z 45,056 to 48,128, y -4,352 to -3,328) with no portal and no floor link of its
-own, closed on all six sides by fourteen classic quads of one texture; its twin 86 is the
-chute that 96's portal leads into while map 0 is on. No portal ever reaches room 85
-itself: with the map off only 96 names its number, and 96 is not in the world then; with
-the map on, 86 stands at that number. Its art (group 85, 252 triangles) models the box
-where group 89's shaft (288 triangles) stands. Room 21's art leaves the two wall faces
-beside the shaft's portal half bare (faces 4 and 15, 0.50 and 0.51 of their samples), the
-point 512 units behind them lies in the boxes of rooms 89, 94, 85 and 86, and the
-openings' link test, closed over the twins so that a room counts as linked with what its
-twin's records name, took 85 for linked with 21 through 96's portal and through 86's
-portal to 21's number. The opening listed 85 beside 89, and group 85's art was drawn whole
-inside the shaft: art against art. At 1,280 x 720 the pixels that change when group 89 is
-pushed by 1/2,000 of its distance either way were 66,953 at an eye over the landing (GA,
-in room 53) and 346,357 at head height behind Lara (GB, in room 21). Inside the shaft (GC)
-the walk starts in room 89, which has no opening, and 85 was never listed. From the
-shaft's other end, room 18, nothing lists 85: the openings keep a room only when it is
-linked with the room that lists it ("Art in the air of an unlinked room draws inside its
-own window", #181), and no portal of 18, 97, 85 or 86 joins them. The closure over the
-twins got round that test from 21's side.
+**Why.** Room 85 is the main room of a pair on flipmap 0, as are rooms 21, 89 and 18 with
+their twins 96, 94 and 97: a box of three squares at the shaft's place with no portal and
+no floor link of its own, closed on all six sides by fourteen classic quads of one
+texture; its twin 86 is the chute that 96's portal leads into while map 0 is on. No portal
+ever reaches room 85 itself: with the map off only 96 names its number, and 96 is not in
+the world then; with the map on, 86 stands at that number. Its art (group 85, 252
+triangles) models the box where group 89's shaft (288 triangles) stands. Room 21's art
+leaves the two wall faces beside the shaft's portal half bare (faces 4 and 15), the point
+512 units behind them lies in the boxes of rooms 89, 94, 85 and 86, and the openings' link
+test, closed over the twins so that a room counts as linked with what its twin's records
+name, took 85 for linked with 21 through 96's portal and through 86's portal to 21's
+number. The opening listed 85 beside 89, and group 85's art was drawn whole inside the
+shaft: art against art. Inside the shaft the walk starts in room 89, which has no opening,
+and 85 was never listed. From the shaft's other end, room 18, nothing lists 85: the
+openings keep a room only when it is linked with the room that lists it ("Art in the air
+of an unlinked room draws inside its own window", #181), and no portal of 18, 97, 85 or 86
+joins them. The closure over the twins got round that test from 21's side.
 
 **How.** `HDVisRoom::flip` (`specific/hd/hd_vis.h`) is the flipmap a room naming a twin
 flips by: `ROOM_INFO` `FlipNumber` in `BuildRoomVis` (`hd_level.cpp`), header byte 53 in
@@ -16929,39 +16855,21 @@ while the opening's room is drawn - the one that room's own state gives when bot
 one map, either one otherwise - is linked with it in `together` (`inWorldAt`). Each
 refusal is noted once per holder, face and number (`HDVisTables::stateRefused`,
 `openingsState`). The guests, the enclosure, the wides and the walk are unchanged.
-
-**Proof.** The tables of the fifteen levels room by room (TrgProbe `-vistable -visroom
-all`, 1,181 lines of guests, openings, wides and enclosures on the vanilla levels): two
-lines go, RICH1 room 21's openings behind room 85 (faces 4 and 15), RICH1's level line
-counts 56 openings instead of 58, and `void=` and every other line stay; the randomized
-RICH1 gives the same tables and the same two refusals. At GA the union of the pixels that
-change when each listed group is pushed by 1/500 of its distance either way falls from
-67,809 to 975, at GB from 346,990 to 1,273, and group 89's own from 66,953 to 76 and from
-346,357 to 733; GC and the three eyes with map 0 on draw the same picture before and
-after. The static census of #274 and the card census of #269 on the fifteen levels
-(RoomProbe `-statictable`, `hd_vis` 1 and 0): 2,845 statics answered alike, 1,138
-one-sided card triangles as before, RICH2's nine art copies alike. #269's views: 88 of 88
-card-sample pictures and 7 of 7 before-and-after places byte-identical; the parity set of
-#236, 72 of 72 (six classic, six HD, thirty census and thirty camera pictures). Of the
-HDLOG room lines of the 2,709 rooms of the fifteen levels one changes, RICH1 room 85's,
-which ends in `refused=flipstate`; each level's `HDLOG level= vis=1` line ends in
-`openings_state=0`, RICH1's in `openings_state=2` with two `HDLOG visopening` lines.
 `hd_vis` 0 builds no tables and is unchanged.
 
 **Decisions.** The rule is the openings' alone. On the guests the same test would refuse
 14 pairs, six in ANDY2, four in RICH2 and four in RICH3, each a main room and the twin of
 another pair on the same map - never in the world together, so `HDVisRoomOfGroup` lists
 none of them while the holder is drawn and no frame would change; on the enclosure it
-would move or drop the room 17 rooms stand enclosed in (JOBY5's room 42 from 69 to 41,
-RICH3's room 24 from 9 to none among them), a question of its own. Room 85 is no data
-error of the level, so `game/levelfix.h` has no entry for it: it is the place its pair
-keeps while map 0 is off, as every main room is, and the original game never draws it.
+would move or drop the room 17 rooms stand enclosed in, a question of its own. Room 85 is
+no data error of the level, so `game/levelfix.h` has no entry for it: it is the place its
+pair keeps while map 0 is off, as every main room is, and the original game never draws
+it.
 
 **Commits.** `9b888587`.
 
 ### A Zip call with no scene ends on a skip as one under a scene does (#284)
-
-2026-10-31.
+2026-10-31
 
 **What.** With the *Cutscene skipper* on, a call from Zip that holds Lara while no flyby
 and no cutscene runs ends on Escape held or on a fresh press of the controller's confirm
@@ -16972,37 +16880,17 @@ button stays out of play until it is let go. A call under a flyby or a cutscene 
 scene's skip, which ends it at the scene's end. A call that is not skipped plays as
 before.
 
-**Why.** On the thirteenth floor (RICH1) a trigger starts a call from Zip, and Lara stood
-with her hand at her ear for the whole line: no skip reached it. Read from the levels (the
-vanilla and the randomized `.TRC` hold the same calls and triggers) and from the code:
-
-- The calls of all fifteen levels: RICH1 item 4 (room 3, track 95) with flyby 11 and item
-  134 (room 72, track 94) with no scene; RICH2 item 56 (room 34, track 60) with flyby 12
-  and item 225 (room 161, track 77) with flyby 10. The title, ANDREA1 to 3, JOBY2 to 5,
-  ANDY1 to 3, RICHCUT2 and RICH3 have none.
-- Call 134 is started by the one-shot TRIGGER on sector (2,5) of room 72 (x 20992, z
-  43520), whose commands are the call and a Target on item 126, a CAMERA_TARGET in room 69
-  (x 23040, y -1536, z 44544); the sectors (2,2), (2,3), (2,4) and (2,6) of that walkway
-  carry the Target alone, not one-shot. No flyby, camera or cutscene. `RefreshCamera`
-  gives the camera the target on every tick she stands on one of them, and
-  `CalculateCamera` turns her head toward it and looks through a look camera while it lies
-  within her head's reach; posed, her zip states' collision fills no trigger, and the look
-  ends.
-- Tick by tick: on tick 0 the trigger activates the call (`LaraControl`); on tick 1 stage
-  0 takes her control, after tick 1's input was read; from tick 2 her input is masked to
-  the look key and `dbinput` is cleared. She comes to a stand, 20 to 40 ticks from a run;
-  that tick stage 1 poses her and plays track 94, the next hears it, and the pose loops
-  until the track is over, then goal AS_OUT_ZIP and 25 frames to ANIM_BREATH. Escape and
-  the confirm button reached nothing all that time: the mask takes the inventory's and the
-  pause menu's edges, and no skipper ran.
-- `S_CDTrackPlaying(94)` is true while the stream of track 94 runs (the language's HQ OGG,
-  HQ EN's, else `xa12_z_05.wav`); at its end the stream's tail plays the level's
-  atmosphere, 129, and the call ends. With no music device or the file missing the call
-  ends on the first tick of stage 2, as #282 made it; nothing holds her for good there
-  now.
-- A call that outlives its flyby - its track the longer, or the flyby broken off by Look -
-  holds her in the pose after the flyby's end has cleared `bDisableLaraControl`: there her
-  input is not masked, and a fresh Escape opened the inventory over the pose.
+**Why.** On the thirteenth floor (RICH1) call 134 is started by a one-shot TRIGGER on room
+72's walkway whose commands are the call and a Target on a CAMERA_TARGET in room 69 - no
+flyby, camera or cutscene - so no skip reached it, and Lara stood with her hand at her ear
+for the whole line. From the tick after the trigger the call masks her input to the look
+key and clears `dbinput`, so Escape and the confirm button reached nothing: the mask takes
+the inventory's and the pause menu's edges, and no skipper ran. `S_CDTrackPlaying(94)` is
+true while the stream of track 94 runs; at its end the stream's tail plays the level's
+atmosphere, and the call ends. A call that outlives its flyby - its track the longer, or
+the flyby broken off by Look - holds her in the pose after the flyby's end has cleared
+`bDisableLaraControl`: there her input is not masked, and a fresh Escape opened the
+inventory over the pose.
 
 **How.** `game/zip_call_rule.h`: `ZipSkipStarts` - the call holds her (posed, or her
 control taken while she comes to a stand; stage 0 holds nothing yet), no flyby, track
@@ -17015,32 +16903,16 @@ and latches the pad's press; its edge is primed on the call's first tick.
 `game/control.cpp`: `ControlPhase` asks it once a tick after the input mask and the
 cutscene skipper and before the inventory, and masks the tick it fires on as a held tick.
 `specific/input.cpp`: the SKIPLATCH line takes its word from `SkipLatchWord`.
+`game/twogun.h` declares `ZipCallSkipWithoutScene`, and `specific/input.h` gives the
+latch's calls their kind.
 
 With `-log`: `ZIPSKIP item=<i> stage=<s> tick=<n> how=escape|pad scene=0`, a new line,
 then the call's `ZIPLOG ... ended by skip`; `SKIPLATCH set=zip` for the pad. The ZIPLOG
 words and SKIPLATCH's `cutseq` and `flyby` lines are unchanged.
 
-Measured with a census of the calls and of the other holds over the fifteen vanilla and
-the fifteen randomized levels (items, their OCB, every trigger that names them), a walk of
-all of Lara's animations in the fifteen levels (64 of her 140 states have no routine that
-reads the input; the real animations that loop in one of them until a goal set from
-outside are the Zip pose, 468, the push and pull of a block, 122 and 123, and the cog
-switch, 321, besides the death poses), and the code. ModernTest: `zip_skip_rule` (15
-checks), `zip_skip_noscene` (22: call 134 and the call under flyby 11 tick by tick, before
-and after - played through the same; Escape at tick 300 ends it there, she stands at 325;
-a fresh Cross the same, latched until let go, where without the latch it reached her as
-Action for 34 ticks; under the flyby one end only; the call outliving its flyby, where
-Escape opened the ring before), `zip_skip_wiring` (8); 17,150 checks. Game logic in every
-draw path; there is no `hd_build` parity to claim.
-
-The other holds a skip cannot reach, none of them changed here: the lift buttons (a switch
-of OCB 1000 or more, which `InitialiseSwitch` makes 6; RICH1 2, RICH3 3), released by
-their LIFT_TELEPORTER 30 ticks after it runs, for good only if a button's trigger named no
-lift, which none does; RICH2's puzzle hole 2, Core's level-bound hold, released by
-teleporter 217 (OCB 512) after its 128-tick charge; RICH2's teleporter 76 (OCB 666), which
-keeps her in ANIM_ELEVATOR_RECOVER for 150 ticks; the walk to an object's place
-(`lara.IsMoving`), at most 90 ticks. Each ends by itself; none stays past its end in the
-data.
+ModernTest: `zip_skip_rule`, `zip_skip_noscene` (call 134 and the call under flyby 11 tick
+by tick, before and after) and `zip_skip_wiring`. Game logic in every draw path; there is
+no `hd_build` parity to claim.
 
 **Decisions.** The skip follows the *Cutscene skipper* option, as both scene skips do.
 Escape skips while held, the confirm button on a fresh press only, as at a scene; a press
@@ -17048,8 +16920,9 @@ already down when the call begins does not skip it. A skip on the tick the call 
 its own track is no skip. Every call running ends with the skip, as at a scene's end. The
 pop from AS_INTO_ZIP to ANIM_BREATH and the plain music triggers with Zip's voice, which a
 skip leaves playing, stay as #282 left them. A call with no scene is no scene for #280's
-hold: her life is not held while she is posed there. Task #285, built on a branch of its
-own at the same time, stands after this one; this entry stands after #283's.
+hold: her life is not held while she is posed there. The other holds a skip cannot reach -
+the lift buttons, RICH2's puzzle hole 2 and its teleporter 76, the walk to an object's
+place - each end by themselves and stay as they were.
 
 **Commits.** `7343d52b`.
 
@@ -17424,8 +17297,7 @@ and factor and prints the skeleton test's numbers.
 **Commits.** `f6bbae70`, `ee99cc56`.
 
 ### The bulbs' fog in one pass a frame, and the mill's old sheets of mist go (#290)
-
-2026-11-01.
+2026-11-01
 
 **What.** With `hd_fog` 1 the fog bulbs' pass is one draw a frame: one quad over the union
 of the rectangles of the taken bulbs' fields - the whole screen where one of them reaches
@@ -17448,26 +17320,14 @@ frame line ends in ` fog_pass=N fog_sheets=N`, an `HDLOG fogsheet level= room= f
 dropped= meets= gap=` line names each sheet left out at the load, and PROFLOG's lines end
 in the pass's own times, ` fog=` the processor's and ` fog_gpu=` the card's.
 
-**Why.** In play at ANDY3's mill with the field (#287), flat grey-green panes with
-straight edges hung in the air over the sluice and its bank and lay over the slope by the
-mill house, a bright cross where two of them met; and in the densest groups of bulbs the
-pass cost more than a millisecond (RICH2's bulb 4 2.04 ms, ANDY1's bulb 12 1.14).
-
-**Measured.** The panes are classic faces at y 8,448 of rooms 107 (its faces 35, 36, 37
-and 49 in the classic order) and 104 (faces 0 and 3), 1,024 square, texinfos 2312, 2313
-and 2295, additive, double-sided and in no animated range - the classic shimmer of the
-mist's marked corners moves them; the level's log restores them ("restored=4 of 4 face(s)
-at y=8448", "restored=2 of 2"), the .TRG covering none. Room 104's two are diagonal
-neighbours: the cross is their shared corner. The census of the fifteen levels (RoomProbe
-`-fogsheets`): rooms with `ROOM_MIST` stand in ANDY3 alone (28, 69, 87, 104, 105, 107 and
-210), and only 104 and 107 carry sheets, all six restored over the HD room, none in a room
-without art; the faces of the animated ranges lie in water rooms or in rooms of neither
-branch - flat water in thirteen levels, the falls tilted or upright in ANDREA3 (8), ANDY1
-(2), JOBY3 (1), JOBY5 (1) and RICHCUT2 (30) - none of them mist: the data tells mist by
-the room's branch, not by its texture. The price of #287's pass at RICH2's bulb 4 (1.77 ms
-at 2,560 x 1,440): 0.14 ms of it the eleven quads without their columns, 1.05 the hashed
-breath, 0.12 the fields' sum - one quad instead of eleven saves about a tenth of a
-millisecond, the table the most of the rest.
+**Why.** At ANDY3's mill, with the field of #287, the classic mist sheets stood in the
+fog: six additive, double-sided classic faces at y 8,448 of rooms 107 (four) and 104
+(two), 1,024 square and in no animated range, which the HD path restores over the HD room
+as it restores water, the `.TRG` covering none of them. They hung as flat grey-green panes
+with straight edges over the sluice and its bank and lay over the slope by the mill house,
+a bright cross where room 104's two diagonal neighbours met. And in the densest groups of
+bulbs #287's pass cost more than a millisecond: eleven quads at RICH2's bulb 4, each
+walking its own fields, the breath hashed per pixel the most of it.
 
 **How.** `specific/hd/hd_fog.h`: `HDFogHash` fused (`fmaf`), `HD_FOG_PASS_SLOTS` (16),
 `HD_FOG_TABLE` (64), `HDFogPassCount` (the shader's loop bound), `HDFogUnion` (the one
@@ -17487,36 +17347,21 @@ branch held against the bulbs as the art's mist is, its verdict into
 the clock round `HDRenderFrameEnd`; `specific/drawroom.cpp`: `InsertRoomWater` leaves a
 fogged face out while the pass stands in; `specific/profile.cpp`: `ProfileNoteFog`.
 RoomProbe: the one pass's line after the picture, `-fogquads` and `-fogsheets` (namespace
-`probesheets`). ModernTest: `fog_pass`, 9 checks.
+`probesheets`). ModernTest: `fog_pass`, 9 checks. `specific/hd/hd_level.h` declares
+`HDRoomWaterFace.fogged` and `HDRoomWaterFaceFogged`, `specific/hd/hd_render.h` gives
+`HDFogLast` the pass's draws and its rectangle, `specific/profile.h` declares
+`ProfileNoteFog`; `bshader.bat` compiles the shader into `hd_shader/hd_fog_ps.inc` and
+`hd_fog_vs.inc`. `hd_fog` 0 and a frame without bulbs are unchanged by construction;
+`hd_build` 0 never runs the pass.
 
-**Proof.** The parity sets of #287 (79 jobs at 960 x 540, RoomProbe of cd24dda6 against
-this entry's): without bulbs at `hd_fog` 1 and at 0, 79 of 79 byte-identical; with the
-level's bulbs at `hd_fog` 0, 79 of 79; at 1 the 72 that #287 left as they were
-byte-identical, and the 7 its field changed within 4 of 255 per channel - ANDREA1's census
-47 pixels by 1; ANDY1's 66,889 by 1 and 2,298 by 2; ANDY3's 19,535 and 1,528; RICH2's
-26,022, 899 and 6 by 1 to 3; RICH3's 358,810, 30,591 and 29; the HD view of ANDY3's room
-17 371,587, 43,244, 1,611 and 80 by 1 to 4, of its room 34 371,207, 18,082 and 2. The same
-shader one bulb a draw, the frame blended after each bulb as the quads blended it
-(`-fogquads`), lies within 1 of 255 of #287 but for 1, 9, 45 and 10 pixels by 2 (ANDY3's
-census, RICH3's, the two views; by 1 47, 664, 813, 902, 6,633, 16,338 and 9,966 pixels):
-the rest is the blend - eight bits after every bulb before, once at the end now. The price
-(medians of three runs at 2,560 x 1,440, #287 then this): E1 0.38 / 0.16 ms, E2 0.44 /
-0.18, E3 0.24 / 0.12, A3mill 0.34 / 0.19, M1 0.93 / 0.43, I8 0.88 / 0.39, H 0.78 / 0.35,
-C3 0.85 / 0.39, the sluice's eye 0.82 / 0.36, RICH2's bulb 4 1.78 / 0.94, ANDY1's bulb 12
-1.14 / 0.53, and a lone bulb (ANDREA1's bulb 0, the eye in its field) 0.27 / 0.10.
-
-**The stutters.** The play test's log at the mill: the seconds with a frame of 13 to 14 ms
-(20, 43 and 49 s into the level) spent it in the present (`flip` at most 11.7, 13.1 and
-11.8 ms), every phase of the frame's own work as in the seconds around them - a frame that
-waited out a second refresh of the 165 Hz screen; the pass is no phase there and costs the
-card under half a millisecond at the mill. The two long frames (46 s, 904 ms; 98 s, 760
-ms) lie outside the work (2.86 and 2.15 ms in their late lines): the two pictures taken.
-None of it is the fog's; what holds the present is not in the log, which now carries the
-pass's times to rule it in or out.
-
-**Left.** The game was not run: the look, the `fogsheet` lines and the profile's fog times
-wait for play. The pass's bytecode is 54 KB, its `.inc` 413 KB of text (#287's 49 KB): the
-bulbs and the fields unrolled. RICH2's bulb 4 is the tightest eye at 0.94 ms.
+**Decisions.** One draw a frame instead of a quad per bulb, and the breath's lattice read
+from a table instead of hashed per pixel: of #287's 1.77 ms at RICH2's bulb 4 the hashed
+breath took 1.05 and the eleven quads without their columns 0.14, so the table saves the
+most and the one quad about a tenth of a millisecond. The frame is blended once, eight
+bits after the last bulb, where #287 blended after every bulb. A sheet is told by its
+room's branch and not by its texture: the rooms with `ROOM_MIST` stand in ANDY3 alone,
+only two of them carry sheets, and the faces of the animated ranges elsewhere are flat
+water and falls, none of them mist.
 
 **Commits.** `668a5140`.
 

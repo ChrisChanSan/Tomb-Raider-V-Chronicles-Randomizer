@@ -54,17 +54,19 @@ Original credits are unchanged and remain with the upstream project: Troye (main
 programmer, project leader), ChocolateFan, thatguyfrombb, Raildex. The work recorded
 below is layered on top of theirs.
 
-How this record is laid out: section 2 holds the engine's modifications in ten areas
-(2.1 the native Windows port, 2.2 the engine's support for the randomizer, 2.3 the Tomb
-Raider III enemies, 2.4 the HD art read from the player's own Remaster files, 2.5 sixty
-frames a second, 2.6 modern controls and the options menu, 2.7 the first person view,
-the cheats and the `-log` seams, 2.8 and 2.9 the corrections and the cleanup before the
-first public push, 2.10 the rounds after it); section 3 lists the randomizer's own
+How this record is laid out: section 2 holds the engine's modifications in ten areas (2.1
+the native Windows port, 2.2 the engine's support for the randomizer, 2.3 the Tomb Raider
+III enemies, 2.4 the HD art read from the player's own Remaster files, 2.5 sixty frames a
+second, 2.6 modern controls and the options menu, 2.7 the first person view, the cheats
+and the `-log` seams, 2.8 and 2.9 the corrections and the cleanup before the first public
+push, 2.10 the rounds after it that extend no area of their own - a round after the
+cleanup that extends an area stands in that area); section 3 lists the randomizer's own
 changes since Beta 1.0 as short rows; section 4 says how to build; the appendix maps the
-task numbers that the commit subjects carry to the entries. Every entry has one form:
-What was changed, Why, How, the Decisions where a choice was made, and the Commits that
-made it - and nothing else. Where a number in the code carries a rule, the entry gives
-the number and its reason; the measurements behind it are not part of this record.
+task numbers that the commit subjects since Beta 1.0 carry to the entries. Every entry has
+one form: What was changed, Why, How, the Decisions where a choice was made, and the
+Commits that made it - and nothing else. Where a number in the code carries a rule, the
+entry gives the number and its reason; the measurements behind it are not part of this
+record.
 
 ## 2.1 Native Windows 11 port
 
@@ -14002,10 +14004,11 @@ EXE's own folder (`_get_pgmptr`), then from the working directory.
 
 **Commits.** `402b671`, `e98d954`, `7575bd8`, `df9302b`, `b17c1a8`, `739f60f`
 
-## 2.10 Rounds after the cleanup (2026-10-16 to 2026-10-27)
+## 2.10 Rounds after the cleanup (2026-10-16 to 2026-11-01)
 
 The rounds that followed the cleanup of section 2.9, each one change to the engine with
-its reason, recorded in the same form as the entries above.
+its reason, recorded in the same form as the entries above. Rounds after the cleanup that
+extend an area stand in that area; the others are here in task order.
 
 ### The speaking heads of the cutscenes on the HD path (#215)
 2026-10-17
@@ -14434,7 +14437,20 @@ normal is OWN, re-derived on this project's own A/B in #233 (entries 31 and 475)
 texts cannot change: the bodies of `a10e0712`, `c8098660`, `58eff466`, `d7684639`,
 `73a69fde`, `1b660a38`, `4c8050a1`, `0de47f24`, `681ea020` and `6d6ca6b1` hold wording
 that this record and the ledger do not repeat, and the record's and the ledger's wording
-is the one that stands.
+is the one that stands. Commit texts of the rounds after the cleanup cannot change either:
+suite counts stand in the bodies of `7e4b9792`, `9e6add2d`, `c407dfdc`, `b8ae7cab`,
+`d815cd73`, `04ce5f10`, `7587bbc3`, `ee99cc56`, `987200a5`, `2999d664`, `a37160b3`,
+`080e1ac2`, `51c78576`, `85c32cf8`, `1d63294d`, `90088857`, `90b4c21a`, `9b459672`,
+`e2a7e65e`, `94ef93a1` and `f8b6a5a1`; parity runs and pixel counts in those of
+`d815cd73`, `04ce5f10`, `2ad0038f`, `484d382d`, `47a40a8a`, `9b888587`, `e58151a3`,
+`57830aac`, `eea6c21f`, `a836e6cf`, `0da437b2`, `88f2f9a1`, `c8cb7cd0`, `42fa38ed` and
+`bb26f34e`; randomizer runs by seed in those of `c8cb7cd0`, `42fa38ed`, `bb26f34e` and
+`ae4a45bd`; a session's dump or log in those of `c407dfdc`, `9e6add2d`, `79c7a7fa`,
+`67e2445b`, `7b23e79e`, `57830aac`, `2ad0038f`, `a836e6cf`, `04ce5f10` and `66c57ce3`;
+what was seen in play in those of `e99184c5`, `9da367d4`, `68a0352a` and `442660d5`; the
+test screen's figures in those of `484d382d`, `eea6c21f` and `23b54aab`; and the Remaster
+named as the model of a look in those of `03fa2e66` and `8eabbf14`. This record repeats
+none of it, and its wording is the one that stands.
 
 **Commits.** `8a599fd9` (the tree first checked), `97c05067` (the last commit checked),
 `63b3d921` (origins in the engine), `61344a8e` (the HD gate comments), `5703a537` (the
@@ -15232,17 +15248,17 @@ behind the hosts' walls.
 
 **What.** The change record, the origin ledger, the manuals and the READMEs are brought
 back to what an outside reader needs: what was changed, when, why and how. Every entry of
-this record has one form (What, Why, How, Decisions where a choice was made, Commits);
-the measurements, rounds and reviews behind the entries live outside the repository.
-Section 2.9 keeps the cleanup before the first public push and section 2.10 holds the
-rounds after it; the randomizer-only tasks #214, #223 and #244 are rows of section 3,
-#230's randomizer half has its row, and the appendix maps every task number of a commit
-subject to its entry. In the engine the second-shell scans of the level build
-(`hd_render.cpp`, `MarkSecondShells`; `hd_level.cpp`) examine every group of a level: the
-exemption of groups carrying the flag `0x40000` is gone, with its `flagged=` field of the
-`HDLOG shell level=` line and of RoomProbe's level line. The four places that carry a
-rule read in TROne name its credit in the ledger's form (`hd_render.cpp/.h`, the shells;
-`hd_level.cpp` with `hd_vis.h`, a hollow group's window; `hd_scan.h`; `game/
+this record has one form (What, Why, How, Decisions where a choice was made, Commits); the
+measurements, rounds and reviews behind the entries live outside the repository. Section
+2.9 keeps the cleanup before the first public push and section 2.10 holds the rounds after
+it that extend no area of their own; the randomizer-only tasks #214, #223 and #244 are
+rows of section 3, #230's randomizer half has its row, and the appendix maps every task
+number of a commit subject to its entry. In the engine the second-shell scans of the level
+build (`hd_render.cpp`, `MarkSecondShells`; `hd_level.cpp`) examine every group of a
+level: the exemption of groups carrying the flag `0x40000` is gone, with its `flagged=`
+field of the `HDLOG shell level=` line and of RoomProbe's level line. The four places that
+carry a rule read in TROne name its credit in the ledger's form (`hd_render.cpp/.h`, the
+shells; `hd_level.cpp` with `hd_vis.h`, a hollow group's window; `hd_scan.h`; `game/
 lift_door_rule.h`), and `tomb5.vcxproj` with its filters file lists `game/
 lift_door_rule.h` and `specific/hd/hd_install_names.h`. The picture
 `docs/hd-loading-screen.jpg` and its caption are removed from the README. The version is
@@ -15395,7 +15411,8 @@ nor moves, so the click that takes the mouse back is not a shot. The `MOUSELOG c
 line ends with `free=`. `docs/Engine-Manual.md` says so.
 
 **Commits.** `1d96c038` and `41c9e7b8` (the second makes the first build: the term was
-declared after the Alt+Enter handler that clears it, which now goes through a function).
+declared after the Alt+Enter handler that clears it, which now goes through a function),
+`ec411414` (a prototype comment within the width).
 
 ### The game ends when its window is closed from the taskbar (#255)
 2026-10-27
@@ -15413,7 +15430,7 @@ and only the task manager could end the process.
 quit; the wait at the end of `WinMain` sleeps instead of spinning and gives up after five
 seconds with `ExitProcess`, so a thread stuck anywhere cannot hold the process either.
 
-**Commits.** `7b77e0ea`.
+**Commits.** `7b77e0ea`, `fe11f16f` (a log line within the width).
 
 ### The visibility path's room walk ends (#256)
 2026-10-27
@@ -15893,8 +15910,13 @@ it hands the set by it, the ambient of every node and every light, after the sha
 decision and the light log, and the `XRAYLOG` line ends in `tone=`. Every model outside
 the set is lit as before. `specific/hd/hd_laradraw.h` declares `HDLaraDrawXray`.
 
+`Preparation/Tools/Diagnose/ModelProbe.cpp`: `-xray` draws Lara in the X-ray set with its
+tone on her light, `-bg r,g,b` clears the picture to a colour, so that an additive layer
+is measured against a dark one, and `-passes solid|additive` draws the opaque or the
+additive runs alone.
+
 **Commits.** `a62561ea`, `753df221`, `0d6713d7`, `354cee0b`, `3c0c289b`, `03fa2e66`,
-`92cff2d9`.
+`92cff2d9`, `97de3331` (ModelProbe's options in two chains).
 
 ### Cut-out cards back to back are one-sided; a hanging guest is refused (#269)
 2026-10-29
@@ -16051,7 +16073,8 @@ read before. `DeathLogStep` writes the line: `open` with `load=`, `scheme=` and
 bits of the last call (`InputPadDirection`). MenuTest's `death_menu_pad` holds the rule;
 `docs/Engine-Manual.md` says it.
 
-**Commits.** `94ef93a1`.
+**Commits.** `94ef93a1`, `9b459672` (MenuTest reads the title's predicate with the death
+menu's flag).
 
 ### The diving suit's thrusters on the HD body (#272)
 2026-10-29
@@ -17130,11 +17153,13 @@ Remaster carries (`MapProbe -hdm` on a randomized ANDREA1: HD if the skeleton fi
 `donor_map`; `ModelProbe` draws the model on its slot 471 with all 15 nodes covered), so
 he takes no hand-table line; without the installation he draws classic. The strike's
 sounds stay the chef's: 89 and 187 from his anim commands, which every campaign level
-carries, 190, the chef's cry, which the import brings from joby3, and the hard-wired thud
-70. His items save like the chef's - position, hit points, flags, animation - and an older
-savegame holds no item of the slot. `ModernTest` gains the group `brawler_rule`, 22
+carries, 190, the chef's cry, which the import brings from joby3, and the hard-wired
+thud 70. His items save like the chef's - position, hit points, flags, animation - and an
+older savegame holds no item of the slot. `ModernTest` gains the group `brawler_rule`, 22
 checks, the two rules and the engine's own text. No draw path changed: the classic and the
 HD drawing of the slot are the generic ones, so there is no `hd_build` parity to claim.
+`Preparation/Tools/Diagnose/bbone.bat` builds BoneCheck, which holds two slots' bone trees
+against each other.
 
 **Decisions.** The randomizer writes OCB 0 for him and no spawn row, since his hunt does
 not read it. The strike range stays the chef's: the control starts a strike when Lara is
@@ -17160,18 +17185,18 @@ line while it sees her, backs off nearer than two, hangs a sector over her head 
 box clear of floor and ceiling, turns its nose to her four degrees a tick and banks into a
 strafe. It fires the gunship's gun - the flash, the HK's report, a hit test every other
 tick along a ray past the aim point - in bursts of 12 ticks in every 48, its nose within
-30 degrees of her and she within eight sectors; a hit takes `DMG_Drone` (5, half the
-gunship's 10, through `EnemyDamage`) behind `SceneHoldRefuses`, and it smashes glass
-statics and smashable objects as the gunship does. It has 60 hit points (`HP_Drone`, the
-chef's), sparks where Lara's bullets strike it and carries no pickup. At zero it explodes
-on the motion sensors' pattern - the bang and two bursts of explosion sparks - and goes
-through `CreatureDie` with its explode flag: the body flies apart, the item ends, the AI
-slot is freed; the shot that took its last hit point counted the kill, as for every enemy.
-The HD model build reads a new sidecar line, `scale <slot> <num> <den>`, and shrinks the
-donor's `.TRM` by it, so GUNSHIP.TRM stands on the shrunk skeleton. With `-log`, a
-`DRONELOG item= tick= state= dist= los= fire=` line at every change of state and one per
-shot, which ends in `shot= dmg=`; the `HDLOG donor` line of a shrunk slot ends in
-`scale=`. The defaults are 100 hit points and 50 a hit.
+30 degrees of her and she within eight sectors; a hit takes `DMG_Drone` (50, five times
+the gunship's 10, through `EnemyDamage`) behind `SceneHoldRefuses`, and it smashes glass
+statics and smashable objects as the gunship does. It has 100 hit points (`HP_Drone`),
+sparks where Lara's bullets strike it and carries no pickup. At zero it explodes on the
+motion sensors' pattern - the bang and two bursts of explosion sparks - and goes through
+`CreatureDie` with its explode flag: the body flies apart, the item ends, the AI slot is
+freed; the shot that took its last hit point counted the kill, as for every enemy. The HD
+model build reads a new sidecar line, `scale <slot> <num> <den>`, and shrinks the donor's
+`.TRM` by it, so GUNSHIP.TRM stands on the shrunk skeleton. With `-log`, a `DRONELOG item=
+tick= state= dist= los= fire=` line at every change of state and one per shot, which ends
+in `shot= dmg=`; the `HDLOG donor` line of a shrunk slot ends in `scale=`. Both are
+`Balance.txt` defaults: 100 hit points and 50 a hit.
 
 **Why.** At home the gunship is a set piece: seven sectors long, it runs along one wall on
 a path of its own and nothing can hurt it. As an enemy in a random level none of that
@@ -17199,8 +17224,19 @@ line), `specific/hd/hd_object.cpp`, `specific/hd/hd_model.cpp` and `.h`
 (`HDModelSlot::scale`), `tomb5.vcxproj`. ModernTest's `drone_rule` (39 checks) holds the
 table and the control's text; `ModelProbe -hdm` draws a slot through the sidecar's donor
 and factor and prints the skeleton test's numbers.
+`Preparation/Tools/Diagnose/HdmDump.cpp` lists the sidecar's `scale` lines, and
+`MapProbe.cpp` ends a shrunk slot's donor line in its factor.
 
-**Commits.** `f6bbae70`, `ee99cc56`.
+**Decisions.** The flight's numbers in `game/drone_rule.h` - the band of 2,048 to 4,096
+units with a slack of 512, the range of 8,192, the cone of 30 degrees, the height of 1,024
+over her head with 64 units of clearance, the burst of 12 ticks with a pause of 36, the
+strafe leg of 75, the speeds 48, 32 and 24, the turn of 4 degrees a tick, the bank of 10
+degrees at 1 a tick and the spread of 160 - are this project's free choices for a flyer of
+the vulture's size, left to play; the factor, the frame box's centre and the rotor's turn
+are measured on the data, and the gun follows the classic `tower.cpp`.
+
+**Commits.** `f6bbae70`, `ee99cc56`, `7bde37e2` (the defaults), `442660d5` (their
+comment).
 
 ### The bulbs' fog in one pass a frame, and the mill's old sheets of mist go (#290)
 2026-11-01
@@ -17362,28 +17398,27 @@ enemy=` line per creature and one `SAVELOG general stored= side= how= general=` 
 `how=` being `null`, `tag_item`, `tag_ai`, `tag_num`, `legacy_ok` or `legacy_null`; at a
 save `SAVELOG save item= stored= kind=` and `SAVELOG save general stored= side=`.
 
-**Why.** The crash dump of 2026-10-31 23:41: in the first tick after a savegame was loaded
-into ANDY3, `GetAITarget` read through the swamp witch's (item 20) `enemy`, 0xFFFF6000.
-The save wrote `enemy - malloc_buffer` and the load added its own `malloc_buffer`, so a
-null enemy came back as the difference of two pool starts, -40,960 there. The entry
-"Address space, the page cache and what the machine can pay for" (September) said a null
-enemy "already comes back as 0"; that holds inside one process only. The pool is a
-`malloc` of a `DYNAMIC_BASE` program: eight starts of a probe linked as the engine is
-(`/DYNAMICBASE /LARGEADDRESSAWARE`, the static runtime) gave eight bases between
-0x00AF9020 and 0x015DE020 in page steps, so every load after a restart and every load in
-another build meets a moved pool. What the two pointers hold was counted from every
-assignment in `game/`: an enemy is null (7), Lara (30) or the creature's own `ai_target`
-(1, `FindAITargetObject`), nothing else; `GeneralPtr` holds an item number cast to a
-pointer in 34 places and an item of `items[]` in 4 - the pulley, the parallel bars, the
-cog switch's door and the crow-dove switch - which `lara_as_pulley`, `lara_as_pbleapoff`
-and `CogSwitchControl` read through. A distance survives a moved pool but not a moved
-layout: `items[]` lies behind the level's rooms, meshes, boxes and texture infos,
-`baddie_slots` also behind the samples, which are loaded only with sound on, so another
-build or level file moves them; a number survives both. A tag in the field itself would
-have cost every older build its enemies, since such a build adds its base to whatever the
-field holds: hence the number beside the field, and a new save loads on an older build as
-an old save does there - Lara, items and slots found by distance, a null or a number
-garbage as with any moved pool.
+**Why.** In the first tick after a savegame was loaded into ANDY3, `GetAITarget` read
+through the swamp witch's (item 20) `enemy`, 0xFFFF6000. The save wrote `enemy -
+malloc_buffer` and the load added its own `malloc_buffer`, so a null enemy came back as
+the difference of two pool starts, -40,960 there. The entry "Address space, the page cache
+and what the machine can pay for" (September) said a null enemy "already comes back as 0";
+that holds inside one process only. The pool is a `malloc` of a `DYNAMIC_BASE` program:
+eight starts of a probe linked as the engine is (`/DYNAMICBASE /LARGEADDRESSAWARE`, the
+static runtime) gave eight bases between 0x00AF9020 and 0x015DE020 in page steps, so every
+load after a restart and every load in another build meets a moved pool. What the two
+pointers hold was counted from every assignment in `game/`: an enemy is null (7), Lara
+(30) or the creature's own `ai_target` (1, `FindAITargetObject`), nothing else;
+`GeneralPtr` holds an item number cast to a pointer in 34 places and an item of `items[]`
+in 4 - the pulley, the parallel bars, the cog switch's door and the crow-dove switch -
+which `lara_as_pulley`, `lara_as_pbleapoff` and `CogSwitchControl` read through. A
+distance survives a moved pool but not a moved layout: `items[]` lies behind the level's
+rooms, meshes, boxes and texture infos, `baddie_slots` also behind the samples, which are
+loaded only with sound on, so another build or level file moves them; a number survives
+both. A tag in the field itself would have cost every older build its enemies, since such
+a build adds its base to whatever the field holds: hence the number beside the field, and
+a new save loads on an older build as an old save does there - Lara, items and slots found
+by distance, a null or a number garbage as with any moved pool.
 
 **How.** `game/save_pointer_rule.h` (new), `game/savegame.cpp` (`SaveLaraData`,
 `RestoreLaraData`, `SaveLevelData`, `RestoreLevelData`: the six calls, and a
@@ -17518,22 +17553,33 @@ new.
   `24ea0290` and the new one, over the thirteen campaign levels, once with no switches and
   once with `mix cross allsanity 8 weapons items20 weather`: all 78 `.trc`, `.hdm` and log
   files byte-identical.
-- **#258 - no pickup under a carrier.** `core/Randomizer.cpp`: the roll bars the
-  sector of every enemy and every searchable crate that stands there at level
-  start, since the engine hands a pickup within half a sector to that carrier at
-  the first frame and a dormant enemy never gives it back - a key under one was
-  a lost playthrough. The burning roots of Gallows Tree go invisible when the
-  heart has left them, because the engine finds the heart by its kind and would
-  lift it to the roots' height wherever it lies. `core/Randomizer.h`: the list
-  of carriers is the engine's own now - it lacked SWAT_PLUS, Mafia, Sailor,
-  Crane Guy, Scientist and the two slots past the file boundary. Trajan's
-  Markets' puzzle 4 keeps its OCB 5 when it travels and the guardian's trigger
-  stays as Core wrote it: the guardian sets the puzzle's height by item number
-  when it explodes, and a puzzle moved with OCB 0 sank into its new floor;
-  hidden until the guardian falls, it now lands where the roll put it. The
-  earlier void of that trigger is gone (`core/LevelFix.h`,
-  `Preparation/Tools/ZoneAnalysis.ps1`). `docs/Randomizer-Manual.md` says all
-  three.
+- **#258 - no pickup under a carrier.** `core/Randomizer.cpp`: the roll bars the sector of
+  every enemy and every searchable crate that stands there at level start, since the
+  engine hands a pickup within half a sector to that carrier at the first frame and a
+  dormant enemy never gives it back - a key under one was a lost playthrough. The burning
+  roots of Gallows Tree go invisible when the heart has left them, because the engine
+  finds the heart by its kind and would lift it to the roots' height wherever it lies.
+  `core/Randomizer.h`: the list of carriers is the engine's own now - it lacked SWAT_PLUS,
+  Mafia, Sailor, Crane Guy, Scientist and the two slots past the file boundary. Trajan's
+  Markets' puzzle 4 keeps its OCB 5 when it travels and the guardian's trigger stays as
+  Core wrote it: the guardian sets the puzzle's height by item number when it explodes,
+  and a puzzle moved with OCB 0 sank into its new floor; hidden until the guardian falls,
+  it now lands where the roll put it. The earlier void of that trigger is gone
+  (`core/LevelFix.h`, `core/LevelFix.cpp`, `Preparation/Tools/ZoneAnalysis.ps1`), and
+  `core/EmbeddedData.cpp` carries the fifteen zone exports baked again, all with one
+  curation stamp. `docs/Randomizer-Manual.md` says all three (`ae4a45bd`, `165298aa`,
+  `6ff94f09`).
+- **#259 - the secret lists.** `Preparation/Curation/Secrets/ChrisChanSan_Glitchless.txt`
+  opens Old Mill's third passage, `Make_Portal@Room183(x0,z5)->Room208(x4,z5)`: ANDY3's
+  room 34 flips to 183 and its secret room 36 to 208, so the passage opened at
+  Room34(x0,z5) was gone after the flip. The headers of both lists name the pitfall: a
+  room with a flipmap twin needs its portal on the twin too, since `Make_Portal` goes by
+  room number. `docs/Engine-Manual.md` counts three doorways (`665e13c6`, `e99184c5`).
+- **#265 - the added items in the sidecar.** `core/Tr5Level.cpp` / `.h` record every index
+  `addItem` appends, and `core/ApplyPatch.cpp` / `.h` write one `item <index>` line for
+  each at the end of the `.hdm`, so that the engine can tell the items a run added from
+  those Core placed (2.10, "An item the randomizer adds is drawn, its slot baked or not";
+  `c8cb7cd0`).
 - **#288 - the brawler, a two-donor composite.** `core/Tr5Level.h`,
   `core/Tr5Transfer.cpp`: `copyMoveableFrom` takes a mesh source beside its source - the
   meshes, their texinfos and texture pages out of one slot, the bones, animations, state
@@ -17548,7 +17594,9 @@ new.
   measured by the anim donor's rest pose, no clone rule for a composite, so joby2 may take
   him, "Brawler" in the enemy list ("Raufbold" in German), 471 a carrier. A new pool
   member changes every cross draw after it; a run without the cross mix is unchanged, and
-  joby3's item 186 keeps type 87 and OCB 0 (`bb26f34e`).
+  joby3's item 186 keeps type 87 and OCB 0 (`bb26f34e`). `core/BuildId.h`:
+  `RANDO_BUILD_ID` 21 to 22, `0.22`, because the pool changes what a seed writes
+  (`707564af`); `TR5Randomizer/README.txt` counts the slots `types.json` names.
 - **#289 - the drone.** `core/Tr5Level.cpp` / `.h`, `core/Tr5Transfer.cpp`,
   `core/ApplyPatch.cpp`, `core/Randomizer.cpp`, `gui/Language.cpp`: a copy can come out
   shrunk. `copyMoveableFrom` scales it by the factor the table `kScales`
@@ -17563,7 +17611,8 @@ new.
   German "Drohne", measured by the height rule at its shrunk 784 rather than the gunship's
   2451; RICH3 never takes it, so its own helicopter, item 147, and its script stay as they
   were. A new pool member changes every cross draw after it; a run with no switches is
-  unchanged. `LevelBuild -hdm` writes the sidecar of a test level.
+  unchanged. `LevelBuild -hdm` writes the sidecar of a test level. `core/BuildId.h`:
+  `RANDO_BUILD_ID` 22 to 23, `0.23` (`df83b76f`).
 
 ## 4. Building this yourself
 
@@ -17601,23 +17650,24 @@ the game is needed to play.
 
 ## Appendix: task numbers in commit subjects
 
-Commit subjects carry task numbers (`#NNN`). This table maps them to the entries above.
+Commit subjects since Beta 1.0 carry task numbers (`#NNN`). This table maps them to the
+entries above.
 
 | task | entries whose commits carry it |
 |---|---|
 | #117 | Optional high quality sound bank from the player's remaster |
-| #123 | Finding an installed Remaster, reading what it holds for a level, and the settings that steer it; The second renderer, the seam where the engine draws HD rooms, and what a .TRG material means; The room shader, and a build that needs no shader compiler; The engine's own per-vertex lighting, as shader arithmetic; The sky; The portal walk, the window on intruding art, and the doorway a randomized run opens; Art in the air of an unlinked room draws inside its own window; Water in the HD rooms; Address space, the page cache and what the machine can pay for; HD models for items, enemies and machinery; Statics: baked into the room, shot to pieces, or drawn classic where the art does not cover them; HD models for the pickups: the EXTRA prefix, a mod's own inventory model, and lying on the floor; The grappling gun in the hand, and the Desert Eagle in the revolver's slot; The inventory ring and the pickup display in HD; The seam for Lara: the HD composite drawn by the engine; First person: Lara's head and neck cut away, and the lid that closes the opening; Lara's HD wardrobe: a scan of the installed art, its properties, and which outfit is worn; The font in HD; The frame rate option and the clock; The pose between two ticks; The arms between two ticks; The camera on the in-between frame; The first person view; The -log switch and the diagnostic seams |
+| #123 | Finding an installed Remaster, reading what it holds for a level, and the settings that steer it; The second renderer, the seam where the engine draws HD rooms, and what a .TRG material means; The room shader, and a build that needs no shader compiler; The engine's own per-vertex lighting, as shader arithmetic; The sky; The portal walk, the window on intruding art, and the doorway a randomized run opens; Art in the air of an unlinked room draws inside its own window; Water in the HD rooms; Address space, the page cache and what the machine can pay for; HD models for items, enemies and machinery; Statics: baked into the room, shot to pieces, or drawn classic where the art does not cover them; HD models for the pickups: the EXTRA prefix, a mod's own inventory model, and lying on the floor; The grappling gun in the hand, and the Desert Eagle in the revolver's slot; The inventory ring and the pickup display in HD; The seam for Lara: the HD composite drawn by the engine; First person: Lara's head and neck cut away, and the lid that closes the opening; Lara's HD wardrobe: a scan of the installed art, its properties, and which outfit is worn; The font in HD; The frame rate option and the clock; The pose between two ticks; The arms between two ticks; The camera on the in-between frame; The first person view; The -log switch and the diagnostic seams; section 3 (the randomizer) |
 | #137 | section 3 (the randomizer) |
 | #141 | Licence notices, origin sentences and the corrections made before the public push |
 | #142 | section 3 (the randomizer) |
 | #144 | section 3 (the randomizer) |
-| #146 | Engine-only object slots beyond the original 460; An enemy's animations come from its own slot; The VCI cyborg as a pool enemy on a slot of his own; Balance.txt: every weapon, enemy, attack and hazard settable; Licence notices, origin sentences and the corrections made before the public push |
+| #146 | Engine-only object slots beyond the original 460; An enemy's animations come from its own slot; The VCI cyborg as a pool enemy on a slot of his own; Balance.txt: every weapon, enemy, attack and hazard settable; Licence notices, origin sentences and the corrections made before the public push; section 3 (the randomizer) |
 | #147 | section 3 (the randomizer) |
 | #148 | The second renderer, the seam where the engine draws HD rooms, and what a .TRG material means; The engine's own per-vertex lighting, as shader arithmetic; The portal walk, the window on intruding art, and the doorway a randomized run opens; HD models for items, enemies and machinery; First person: Lara's head and neck cut away, and the lid that closes the opening; The frame rate option and the clock; VSync and the rate the monitor sets; The in-between frame: the root snapshot; The pose between two ticks; The arms between two ticks; The camera on the in-between frame; Particles on the same time axis; Every per-frame counter on the logic tick; The title menu at the frame rate, one tap one row; The level warm-up; The frame-rate seams and the offline proofs; The first person view; The -log switch and the diagnostic seams |
 | #149 | HD loading screens from the Remaster, when they are there; The logo screen and the title menu wordmark |
 | #150 | Keys are counted, not flagged |
 | #151 | The logo screen and the title menu wordmark |
-| #153 | Level Select, a keyhole that survives a save, and the underwater pickup animation; HD models for the pickups: the EXTRA prefix, a mod's own inventory model, and lying on the floor; The seam for Lara: the HD composite drawn by the engine; Lara's HD wardrobe: a scan of the installed art, its properties, and which outfit is worn; F4 changes Lara's outfit inside the level; The outfit chooses the footsteps, and a bare foot silences the floor layer; The Mods folder: models, texture pages and sounds from a mod; Imported enemy sounds are named in the sidecar, not guessed at by length |
+| #153 | Level Select, a keyhole that survives a save, and the underwater pickup animation; HD models for the pickups: the EXTRA prefix, a mod's own inventory model, and lying on the floor; The seam for Lara: the HD composite drawn by the engine; Lara's HD wardrobe: a scan of the installed art, its properties, and which outfit is worn; F4 changes Lara's outfit inside the level; The outfit chooses the footsteps, and a bare foot silences the floor layer; The Mods folder: models, texture pages and sounds from a mod; Imported enemy sounds are named in the sidecar, not guessed at by length; section 3 (the randomizer) |
 | #154 | The inventory ring at the frame rate; The title menu at the frame rate, one tap one row; The frame-rate seams and the offline proofs |
 | #155 | HD models for the pickups: the EXTRA prefix, a mod's own inventory model, and lying on the floor; The Mods folder: models, texture pages and sounds from a mod |
 | #156 | Lara's HD wardrobe: a scan of the installed art, its properties, and which outfit is worn |
@@ -17631,7 +17681,7 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #164 | Address space, the page cache and what the machine can pay for |
 | #169 | The in-between frame: the root snapshot |
 | #171 | The modern camera: a free orbit on the right stick; Combat, Sprint, Duck and Grab: hold or toggle; Ledge hang: an automatic turn and lowering at an edge; The record completed before the push |
-| #172 | Optional high quality sound bank from the player's remaster; The -log switch and the diagnostic seams; Licence notices, origin sentences and the corrections made before the public push; The record completed before the push |
+| #172 | Optional high quality sound bank from the player's remaster; The -log switch and the diagnostic seams; Licence notices, origin sentences and the corrections made before the public push; The record completed before the push; section 3 (the randomizer) |
 | #173 | Comments in the engine, the randomizer and the tools say what, why and what for; String literals, a build script's working directory, and two questions measured; The record completed before the push |
 | #174 | Lara blanked out in the half turn on a rope: the ROPELOG seam; Lara facing the wrong way for one tick in the jump twists: the early half turn; Lara squeezed to a sliver in the tightrope turn: the far key-frame pair; HD models for items, enemies and machinery; Lara's HD wardrobe: a scan of the installed art, its properties, and which outfit is worn; The in-between frame: the root snapshot; The animation's root offset on a refused frame; The pose between two ticks; The record completed before the push |
 | #175 | A camera cut keeps the held course until the stick is let go |
@@ -17679,8 +17729,8 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #224 | The search objects' binding and the double doors |
 | #225 | The zoom at the frame rate |
 | #226 | The translucent parts of HD models and JOBY2's window |
-| #230 | The installation gate: the HD build row and the TR3 sources |
-| #231 | Audit round B1 |
+| #230 | The installation gate: the HD build row and the TR3 sources; section 3 (the randomizer) |
+| #231 | Audit round B1; section 3 (the randomizer) |
 | #232 | Lara's footstep follows the draw and her outfit, and nobody else's does |
 | #233 | The glow's normal, re-derived |
 | #234 | The captions in German, and Lara's weapon item steps as she does |
@@ -17705,14 +17755,14 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #255 | The game ends when its window is closed from the taskbar |
 | #256 | The visibility path's room walk ends |
 | #257 | A frozen game names where its thread stands |
-| #258 | No pickup under a carrier; the roots let the heart go |
-| #259 | Old Mill's secret list opens a third passage |
+| #258 | section 3 (the randomizer) |
+| #259 | section 3 (the randomizer) |
 | #260 | The submarine's grilles, benches and diving suits |
 | #261 | The diving suits, their console and Lara in the suit |
 | #262 | The suit's console states and Lara's legs inside the suit |
 | #263 | Lara's legs inside the suit, on the classic path |
 | #264 | The title menu's sliders follow the pad |
-| #265 | An item the randomizer adds is drawn, its slot baked or not |
+| #265 | An item the randomizer adds is drawn, its slot baked or not; section 3 (the randomizer) |
 | #266 | What a cutscene puts into a hand, in HD |
 | #267 | The classic holsters hide with her thighs, a left-out seam keeps its place |
 | #268 | Lara in the X-ray scanner and the X-ray outfit, in HD |
@@ -17735,7 +17785,7 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #286 | A room under the sky lists the art that stands in the sky beside it |
 | #287 | The bulbs' fog reaches as a field, and the mist it stands in goes |
 | #288 | JOBY2's cutscene soldier as a pool enemy: the brawler on a slot of his own; section 3 (the randomizer) |
-| #289 | RICH3's gunship flies after Lara as a drone at the vulture's size |
+| #289 | RICH3's gunship flies after Lara as a drone at the vulture's size; section 3 (the randomizer) |
 | #290 | The bulbs' fog in one pass a frame, and the mill's old sheets of mist go |
 | #291 | The brawler's strike starts and lands where his fist reaches |
 | #292 | A savegame's pointers survive a moved pool, and null stays null |

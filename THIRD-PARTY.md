@@ -16,6 +16,8 @@ Everything under `TOMB5 Code/TOMB5/` is a modified copy of that decompilation.
 What was changed and why is recorded area by area in
 [TOMB5 Code/MODIFICATIONS.md](TOMB5%20Code/MODIFICATIONS.md), which is also the
 dated notice of modification GPLv3 section 5(a) asks for.
+The engine's program icon, `TOMB5 Code/icon.ico`, is upstream TOMB5's icon,
+unchanged, and comes under TOMB5's licence like the code.
 Full text: `TOMB5 Code/LICENSE`.
 
 **tomb3** — Troye / Trxyebeep, <https://github.com/Trxyebeep/tomb3> — **GPLv3**.
@@ -1288,10 +1290,9 @@ carries the tables.
     lengths, depth, widths and drift are free choices, set by eye on RoomProbe pictures
     against the lattice measure. DATA: the lattice is the light on the surface - with
     every body's refraction off it stays, with the rows' heights 0 it is gone; the
-    surface light of six views holds 15.7 to 30.5 % of its power in its six strongest
-    frequencies against 6.1 to 12.7 % with random directions; after this design four
-    views of places seen in play fall from 22.6, 10.1, 19.2 and 15.8 % to 18.5, 5.4,
-    11.3 and 11.0 % (RoomProbe pictures at 1, 3 and 5 seconds). The pieces stand at no
+    surface light holds a larger share of its power in its six strongest
+    frequencies than random directions give, and this design lowers that share
+    (RoomProbe pictures at 1, 3 and 5 seconds). The pieces stand at no
     fixed step: the place along the crest is bent by two slow curves of Wave2's kind,
     0.15 of a turn deep at 0.37 of the piece's frequency along the crest and 0.3 deep at
     0.61 across it (`HD_CREST_*`), so a piece runs from 0.75 to 1.5 of its mean length
@@ -1984,16 +1985,13 @@ carries the tables.
     screen-space march with a binary search and a thickness test); the
     numbers are set on RoomProbe's march debugger (`-tankmarch`) against
     a march of 8-unit steps halved ten times, which matches the scene
-    seen from the eye mirrored in the floor: 93 to 98 per cent of the
-    hits within 2 pixels of its, at RICH2's tank views. The march does not run where the
-    art carries its own copy of the room under the floor (entry 203). As the march
-    stands: 22 steps, each 1.2 times the last (8,700 units), the crossing halved 8 times
-    - a longer step passed a thin thing by, a machine's foot or a bench's rail, and took
-    what lay behind it; set on the same debugger and on the true mirror at views of the
-    corridor seen in play and a 10-degree fan round two of them: 0 to 2.2 per cent of
-    the fine march's hits more than 2 pixels off where the game marches (0 to 3.5 at 16
-    steps of 1.3 halved 5 times), a tighter tolerance or the first crossing taken behind
-    an edge no better.
+    seen from the eye mirrored in the floor, at RICH2's tanks. The march does not run
+    where the art carries its own copy of the room under the floor (entry 203). As the
+    march stands: 22 steps, each 1.2 times the last (8,700 units), the crossing halved 8
+    times - a longer step passed a thin thing by, a machine's foot or a bench's rail, and
+    took what lay behind it; set on the same debugger and on the true mirror in the
+    corridor, closer to the fine march than 16 steps of 1.3 halved 5 times, a tighter
+    tolerance or the first crossing taken behind an edge no better.
 197. **The mirror's place in the frame** - the wet floor draws twice a
     frame: its darkening over the opaque frame, where the sheets' copy is
     taken first, and its mirror after the rooms' glass and glows and
@@ -2089,10 +2087,10 @@ carries the tables.
     square loses the light field's stand-in for the march too and keeps
     the darkening and the lamps' highlight; at the corridor's mouth its
     floor is opaque, so the copy does not show there. The mirror marched there out
-    of the frame showed the ceiling glows as yellow bands (1,446 to 5,194 pixels at
-    views seen in play, 0 after). A square counts as copied only where its floor is a
-    clear floor as well (`wet_clear`, `HDGroup::clearFlats`), the one kind of floor a
-    copy shows through: the corridor's mouth, opaque over its copy, marches again. The
+    of the frame showed the ceiling glows as yellow bands, none after. A square counts
+    as copied only where its floor is a clear floor as well (`wet_clear`,
+    `HDGroup::clearFlats`), the one kind of floor a copy shows through: the corridor's
+    mouth, opaque over its copy, marches again. The
     bands are the cove lights' true mirror, not a glow without depth (entry 215).
 204. **The sloping floors under a wet floor** - the run crosses an edge
     where the next square's edge stands level or a click under the one
@@ -2193,8 +2191,8 @@ carries the tables.
     holder's inside, 2,377 eight or more; every such triangle counted lists
     JOBY2's room 24 in rooms 30, 31 and 33 by the slabs of its ceiling (32
     units over its box) and covers the stairwell's art with its marble at
-    all ten stair cameras seen in play; with no link test ANDREA3's room
-    92 puts a beam into room 63 (400,730 pixels at one camera); 128 is
+    the stair cameras; with no link test ANDREA3's room 92 puts a beam
+    into room 63; 128 is
     `HD_OVERHANG_SLACK`; under the count of eight lie 294 pairs, stray
     triangles. Under the rule: 430 guests over the fifteen levels,
     175 more taken out by the link test.
@@ -2243,11 +2241,10 @@ carries the tables.
     mirroring what the frame holds with depth; the yellow bands at RICH2's
     corridor mouth are the mirror of the corridor's cove lights, opaque art
     that writes its depth. OWN, a decision on a measurement: the additive
-    pass alone draws nothing at those views (at two views seen in play it holds a few
-    pixels, at most 28 of 255, away from the mouth's floor), the glass left as an alpha
-    test changes no pixel, and of the bands' pixels 94 to 99 per cent lie within 2
-    pixels of the fine march's hit (`-tankmarch`), on its surface, none showing what the
-    later copy adds over the opaque frame.
+    pass alone draws next to nothing there, and nothing on the mouth's floor; the glass
+    left as an alpha test changes no pixel; and the bands lie on the fine march's hit
+    (`-tankmarch`), on its surface, none showing what the later copy adds over the
+    opaque frame.
 216. **The models in the wet floor's mirror** (`hd_render.cpp`,
     `HDRenderWaterWetModels`; `hd_wet.hlsl`, `WetModelAt`) - the frame's
     object list drawn twice more into a target and an INTZ depth of the
@@ -2295,16 +2292,15 @@ carries the tables.
     alone, so the other is never in the world. DATA (TrgProbe `-vistable`,
     `openings_twin=`): 68 such openings, ANDREA1 7, ANDY3 3, JOBY2 1, RICH1
     4, RICH2 16, RICH3 37; JOBY2's room 53 drew the crane hall's second
-    state at a view seen in play (32,590 pixels).
+    state.
 220. **A broken-out wall beside a portal** (`hd_vis.cpp`, `wideBare` 0.3) -
     a wall face beside a portal widens it from 0.3 of its samples bare, the
     openings keeping 0.5. OWN. DATA (RoomProbe `-vis 1 -viswidebare`): JOBY2's
     broken pillar beside the portal of rooms 123 and 124 lies between 0.3 and
     0.4 bare on room 124's side, and at 0.3 room 124's record of that portal
     widens; 53, 55, 64, 72, 82 and 113 wide portals at 0.5, 0.4, 0.3, 0.25,
-    0.2 and 0.1. Alone it did not mend a view seen in play (the walk from
-    room 123 reads room 123's record; at the rule's own commit the fight
-    stayed 20,290 pixels): entry 222 does, with this share.
+    0.2 and 0.1. Alone it did not mend the view from room 123 (the walk
+    from room 123 reads room 123's record): entry 222 does, with this share.
 221. **The window's edge** (`game/draw.cpp`, `VisFollowPortal`; `edge`
     2/2,560) - a portal whose projection meets the window it is seen through
     on an edge, or stops within 2 pixels of it at 2,560, lists the room
@@ -2325,8 +2321,8 @@ carries the tables.
     whole rectangle made 781 wide portals, its bare faces alone 55. DATA
     (TrgProbe `-vistable`, `wide_mirror=`): 119 wide portals, 55 of them by
     the record leading back (ANDREA1 7, ANDREA2 3, ANDY1 9, ANDY3 2, JOBY2 9,
-    JOBY4 1, RICH1 9, RICH2 12, RICH3 1, TITLE 2); nine views seen in play draw the old
-    path's picture at 1,280 and at its 2,560.
+    JOBY4 1, RICH1 9, RICH2 12, RICH3 1, TITLE 2); with them the old path's
+    picture is drawn at 1,280 as at its 2,560.
 223. **The room behind the models** (`hd_render.cpp`,
     `HDRenderWaterWetRoomCopy`; `hd_wet.hlsl`, `WetMarch` why 4) - the
     frame's colour copied before the objects are drawn, while the last
@@ -2334,11 +2330,9 @@ carries the tables.
     model's place and met nothing after it takes that copy's colour at its
     first such place. OWN, a design of this project from general graphics
     knowledge (a screen-space reflection's hidden region filled from a
-    layer without the occluder). DATA: RoomProbe `-wetlara` at a view seen in play and
-    four round it, the floor pixels the march left to the stand-in because of her,
-    34,446 before and as without her after (probe pitch +4.3); at the pitch the camera
-    looks in play, -4.3: 40,972 before, 1,173
-    after. The copy: 0.016 ms of GPU at 2560 x 1440.
+    layer without the occluder). DATA: RoomProbe `-wetlara`, the floor the march left
+    to the stand-in because of her: after, as without her at the probe's pitch (+4.3),
+    and nearly so at the camera's own (-4.3). The copy: 0.016 ms of GPU at 2560 x 1440.
 224. **The wet floor warmed before its first frame** (`hd_render.cpp`,
     `HDRenderWaterWarmUp`, `wet_warm_models`) - the wet floor's targets made
     at the frame's size and its pixel shader drawn once at the water's
@@ -2466,9 +2460,9 @@ carries the tables.
     it the depth for the extinction, in place of the depth that puts every
     point in the water; an eye over that surface keeps the whole way. OWN,
     from the level's own water data (the body and the deep look's share);
-    DATA: RoomProbe `-underwater`, the frame with and without room 19, a view seen in
-    play in room 6 0 to 116,979 surface pixels, one in room 123 and the
-    other levels unchanged. ModernTest `water_under`.
+    DATA: RoomProbe `-underwater`, the frame with and without room 19: the surface
+    comes back in room 6, room 123 and the other levels unchanged. ModernTest
+    `water_under`.
 239. **The sea seen from below, a study** (`hd_water_look.hlsl`, `LookPS`,
     `LookShaft`; `hd_render.cpp`, `HDRenderWaterProbeLook`; RoomProbe
     `-underlook`, `-underlookset`) - the sun's disc through the surface by
@@ -2496,7 +2490,7 @@ carries the tables.
     all thirteen sky levels and the vertex blocks keep it (`-skycensus`); the
     cause, the band's depth over its empty half, from the build's range sort
     and the blend's depth write. OWN, the painter's rule over that order;
-    measured at a JOBY2 view seen in play: the pixels left clear 105,937 to 0.
+    measured in JOBY2: no pixel left clear after.
 242. **The layers where the HD sky does not stand for them** (`game/draw.cpp`,
     `SkyDrawPhase`; `hd_level.cpp`, `HDFrameSkyCoversLayers`; `hd_render.cpp`,
     `HDRenderSkyCoversLayers`) - the classic flat layers left out only where a
@@ -2516,10 +2510,9 @@ carries the tables.
     page is alpha 255 on every texel of ANDY2 and ANDY3 (the `.TRC`'s misc
     block), the PSX path's tiles are 65 x 65 windows of the `SKY_GRAPHICS`
     sprites on shared object pages (the `.TRC`'s sprite table), which a sheet
-    page has no stand-in for; at an ANDY3 view seen in play 1,128 of 311,355 sky
-    pixels stayed as the dome draws them with the flat page, 229,933 with the
-    sheet's page, and the PSX tiles changed 150,748 (RoomProbe `-skylayer`,
-    `-skylayerpage psx`).
+    page has no stand-in for; in ANDY3 the sky stays nearly as the dome draws it
+    with the flat page, and changes over most of it with the sheet's page and
+    with the PSX tiles (RoomProbe `-skylayer`, `-skylayerpage psx`).
 244. **RoomProbe's layer twin and the volumetric clouds measured**
     (`hd_render.cpp`, `HDRenderSkyLayerProbe`, `HDRenderSkyCloudProbe`;
     `hd_sky.hlsl`, `LayerVS`, `LayerPS`, `CloudVS`, `CloudPS`; RoomProbe
@@ -2541,12 +2534,9 @@ carries the tables.
     pair claims is drawn this frame; the rest of the room's art stays whole.
     It replaces entry 218's 'every piece answered whole'; the pushes of 218
     stay. OWN: this project's pieces and their answer (the #181 entry), applied to the
-    visibility path's list. DATA (RoomProbe `-vis 1 -viswin`, five candidates measured
-    at places seen in play and a set of 99 cameras from play): ANDREA1's brick block of
-    room 93 at one view 8,957 pixels changed against the old path down to 0 (7,112 of
-    them the block), three ANDREA1 ghosts seen in play 4,853, 41,998 and 74,183 down to
-    0, JOBY2's bars by the pillar 9,339 down to 103; over the 99 cameras no view worse
-    than the path before by more than 500 pixels.
+    visibility path's list. DATA (RoomProbe `-vis 1 -viswin`): ANDREA1's brick block of
+    room 93 and three ANDREA1 ghosts draw as on the old path, JOBY2's bars by the pillar
+    nearly so, and no camera draws noticeably worse than the path before.
 246. **The portal the eye stands at** (`game/draw.cpp`, `VisNearPortals`) -
     a portal whose four corners' box, grown by the art's reach of 128 units
     (`HDVisDefaults`, how far art stands off a classic face), holds the eye
@@ -2717,9 +2707,9 @@ carries the tables.
     in) each lie under a face of its own group 16 units and more higher
     leaves the mirror: what is left of a copy. OWN, the rule and the
     eighth a free choice; DATA: RICH2 4,558 faces and ANDREA1 12 (squares
-    under rooms 174 and 175's tops), no other level; the planes -22527 and
-    1536 of two views seen in play gone. The centroid alone took ANDREA1 room 175's
-    visible floor at -5592 (63,266 pixels at 960 x 540).
+    under rooms 174 and 175's tops), no other level; the stray planes -22527
+    and 1536 gone. The centroid alone took ANDREA1 room 175's visible floor
+    at -5592.
 262. **One floor, one height** (`hd_render.cpp`, `marble_build`,
     `kMarbleHeightJoin`) - heights within 2 units of the next are one
     plane, at the height most faces hold. DATA: entry 259's spread (two
@@ -3077,9 +3067,8 @@ carries the tables.
     before, 44,754 after.
     OWN, this project's tool.
 302. **The visibility path by default** (`tomb5/tomb5.cpp`, `hd_vis` 1 at the
-    first run and for an absent key) - OWN, the decision of 2026-10-18, after the path
-    had been run in play since 2026-10-14; 0 keeps the portal
-    walk with the room-art rules.
+    first run and for an absent key) - OWN, the decision of 2026-10-18; 0 keeps the
+    portal walk with the room-art rules.
 303. **The art that lies on a static** (`hd_vis.h`, `HDVisStatic`,
     `HDVisStaticCovers`, `HDVisStaticDrawnByArt`, `staticReach` 32,
     `staticStep` 64 (`HD_COVER_STEP`), `staticShare` 0.5; `hd_vis.cpp`; `hd_level.cpp`,
@@ -3160,10 +3149,9 @@ carries the tables.
 312. **The marble planes scored by what shows** (`hd_render.cpp`,
     `marble_seen_ask`, `marble_seen_read`; `hd_marble_math.h`,
     `HDMarbleSeenCover`) - an occlusion query a plane against the frame's
-    depth, read the next frame. OWN, the rule; DATA: ANDREA1's church at a view seen in
-    play, -5592 and -6120 drawn with 0 and 1 pixels shown, -6144 left with 34,057; over
-    52 steps of the game in the church the steps with under 1,000 pixels of reflection
-    23 before, 4 after.
+    depth, read the next frame. OWN, the rule; DATA: in ANDREA1's church the planes
+    -5592 and -6120 were drawn with next to nothing of them showing and -6144 was left
+    out though it shows; with the score, frames there with almost no reflection are rare.
 313. **The marble places and their fade** (`hd_marble_math.h`,
     `HDMarbleSlotsStep`, `HDMarbleFadeStep`, `HD_MARBLE_HOLD` 0.5;
     `hd_render.cpp`, `kMarbleFadeMs` 8000/60, `kMarbleFadeLongest` 50) -
@@ -3301,8 +3289,8 @@ carries the tables.
     the shafts 24 and the lit underside 0.24 in place of 0.2, 8 and 0.12. PICTURE (the
     reference pictures as above, each cut to the picture and 960 wide): their brightest
     tenth 7.7 times their darkest, their mean luma 116 and 53, their pattern's spread
-    (16-pixel windows over the mean luma) 0.071 and 0.156 against 0.118 in two views of
-    the art seen in play with Lara cut out. OWN: the band, 0.60 to 1.33 of each view's
+    (16-pixel windows over the mean luma) 0.071 and 0.156 against 0.118 in the art with
+    Lara cut out. OWN: the band, 0.60 to 1.33 of each view's
     spread before (the reference pictures over the art), and the strengths: the carry
     1.5 to 3.0 (1.5 to 2.3 before), the mean luma at most 96 of 255, every view's spread
     inside its band at 0.61 to 0.81 of before (RoomProbe; `MODIFICATIONS.md`, "The water
@@ -3356,8 +3344,8 @@ carries the tables.
     windows"; nothing in the code) - item 183, `BRIDGE_TILT2`, is `DUMMY` in `RICH2.MAP`
     and baked into room group 125 (part 2, material 14 in the additive run, weight
     0.8181, page 16103). DATA (the `.MAP`, the `.TRG`, the page's texels, the classic
-    mesh 495's 16 additive quads); PICTURE (RoomProbe `-glow -addmat 14` at the trview
-    camera of a view seen in play: 5.7 levels on average over 10,861 pixels).
+    mesh 495's 16 additive quads); PICTURE (RoomProbe `-glow -addmat 14` at a trview
+    camera: 5.7 levels on average).
 337. **The 74 see-through parts' classic faces** (`MODIFICATIONS.md`, "The destroyable
     windows"; nothing in the code) - per part the classic room faces and static faces at
     its place, by draw type, and its pixels at a census view before and after. DATA,
@@ -4784,7 +4772,7 @@ carries the tables.
     more on every texel (DdsProbe), so the additive pass's weight by alpha changes
     nothing, and the part's `param[0]` of 0.5 is material 6's alpha reference (entry
     38), not a weight. OWN: the bones keep both sides, their right half wound the other
-    way round (culled, up to 8.5 per cent of their pixels change); every other additive
+    way round (culled, which changes few of their pixels); every other additive
     run keeps both sides, as the classic draws those by each face's own flag, which a
     `.TRM` does not carry.
 499. **The X-ray set lit as its hull, and its tone** (`specific/hd/hd_model.h/.cpp`,
@@ -4938,13 +4926,13 @@ carries the tables.
     dropped, its gun alone, beside the rest hands' X-ray bones, and with neither on the
     card the rest hands' bones are drawn alone: never no hand, never a mod's gun. OWN,
     both rules; a later mod with a true X-ray hand is not read either. DATA (ModelProbe
-    `-lara JOBY5 -outfit 46/OUTFIT_XRAY -guns uzi` with the mods and the Tomb Raider
-    I-III root): the IMI Uzis mod ships its one gun under all three hand names,
+    `-lara JOBY5 -outfit 46/OUTFIT_XRAY -guns uzi` and the Tomb Raider I-III root): the
+    IMI Uzis mod ships its one gun under all three hand names,
     `HAND_BARE_UZI`, `HAND_GLOVES_UZI` and `HAND_XRAY_UZI`, 31,267 vertices on the same
     four pages, its hands painted with pages 8002 and 8010 of the I-III bundle, so that
     the rule for a mod's gun on another bundle's skin cut the hands away and found
-    nothing on the X-ray hand's page; it is the only X-ray name the mods measured ship;
-    the installs' `HAND_XRAY_UZI` has 8,705 vertices on page 8030.
+    nothing on the X-ray hand's page; the installs' `HAND_XRAY_UZI` has 8,705 vertices
+    on page 8030.
 508. **An opening's room in the state that draws it** (`specific/hd/hd_vis.h`,
     `HDVisRoom::flip`; `specific/hd/hd_level.cpp`, `BuildRoomVis`;
     `specific/hd/hd_vis.cpp`, `HDVisBuild`'s table `together`, `inWorldAt`;
@@ -5012,7 +5000,7 @@ carries the tables.
     between its five bulbs lies within a bulb's reach from 3.75 on, the 95th percentile
     of the light the fog adds stays under the band's top of 33 (entry 412) up to 4.25,
     and the pass stays under a millisecond at 2,560 x 1,440 up to 4.0, 0.92 ms the most
-    (`-gpu 3 -gpuall`, medians of three); 4.0 is the largest step that meets all three,
+    (`-gpu 3 -gpuall`); 4.0 is the largest step that meets all three,
     one factor for every level.
 511. **The art's mist left out where the bulbs' fog stands** (`specific/hd/hd_fog.h`,
     `HDFogBoxGap`, `HDFogArtVerdict`, `HD_FOG_ART_KEPT`, `HD_FOG_ART_BULB`,
@@ -5053,8 +5041,8 @@ carries the tables.
     size times the factor, and unshrunk on the shrunk skeleton 826.7, which the test
     refuses (ModelProbe `-hdm`). The limit, `HD_SKELETON_DRIFT_LIMIT` in `hd_model.h`,
     stands between 239, the most of a model that belongs where it stands, and 308, the
-    least of one that does not (ModelProbe `-all` over the fourteen randomized levels
-    and their vanilla twins).
+    least of one that does not (ModelProbe `-all` over the randomized levels and their
+    vanilla twins).
 513. **The classic mist sheets left out likewise** (`specific/hd/hd_fog.h`,
     `HDFogSheetRoom`; `specific/hd/hd_level.cpp`, `ReportFogSheets`,
     `HDRoomWaterFace.fogged`, `HDRoomWaterFaceFogged`; `specific/drawroom.cpp`,
@@ -5085,9 +5073,9 @@ carries the tables.
     frame takes (`HD_MAX_BULBS`); without the shaders and the table on the device there
     is no pass and the bulbs keep their haze. DATA (RoomProbe `-fogquads` and `-gpu` at
     2,560 x 1,440): the one pass lies within 2 of 255 of a quad per bulb, the difference
-    the eight bits of a blend after every bulb; of the quads' 1.77 ms at RICH2's bulb 4,
-    inside eleven fields, 0.14 were the eleven quads without their columns, 1.05 the
-    hashed breath and 0.12 the fields' sum.
+    the eight bits of a blend after every bulb; of the quads' price in the densest
+    group of bulbs the hashed breath was the larger part and the quads themselves
+    without their columns a small one.
 515. **The breath's lattice from a table** (`specific/hd/hd_fog.h`, `HD_FOG_TABLE` 64,
     `HDFogHash` with its multiply-adds fused; `specific/hd/hd_render.cpp`,
     `fog_lattice`, `fog_table`, `HDRenderFogPrepare`;
@@ -5100,8 +5088,8 @@ carries the tables.
     the same constants and no sine, no curve; its multiply-adds are fused (`fmaf`) as
     the card fuses them, so that the table holds the lattice the hashing shader drew.
     TEXTBOOK: value noise blended by a smoothstep, read from a table in a texture. DATA:
-    the hashed breath was 1.05 of the quads' 1.77 ms at RICH2's bulb 4 (entry 514), and
-    the table gives the hashing shader's lattice there (RoomProbe `-fogquads`).
+    the hashed breath was the larger part of the quads' price (entry 514), and the
+    table gives the hashing shader's lattice there (RoomProbe `-fogquads`).
 
 ## Credited, but not contained here
 
@@ -5111,12 +5099,13 @@ without them. None of their code is in this repository.
 
 ## The pictures in this repository
 
-Five of them are artwork created by the author with an AI image generator
+Four of them are artwork created by the author with an AI image generator
 (ChatGPT) for this project: `docs/banner.jpg`,
-`TR5Randomizer/package/Background.jpg`, `TOMB5 Code/setup.bmp`,
-`TOMB5 Code/icon.ico` and `TR5Randomizer/src/gui/TR5Randomizer.ico`. No
-third-party picture was a source for any of them. It is said here because the
-files themselves do not carry the content credentials such a tool writes.
+`TR5Randomizer/package/docs/Background.jpg`, `TOMB5 Code/setup.bmp` and
+`TR5Randomizer/src/gui/TR5Randomizer.ico`. No third-party picture was a source
+for any of them. It is said here because the files themselves do not carry the
+content credentials such a tool writes. The engine's icon, `TOMB5 Code/icon.ico`,
+is upstream TOMB5's, unchanged (see "The engine" above).
 
 The screenshots under `docs/` show the game running, so they necessarily show
 Core Design's level geometry and textures, and the ones taken in HD mode show

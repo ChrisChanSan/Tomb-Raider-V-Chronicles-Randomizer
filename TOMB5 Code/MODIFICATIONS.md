@@ -17543,6 +17543,28 @@ executable needs on its side.
 
 **Commits.** `e73c9471`.
 
+### The missing-file message, the X-ray tone's comment and the engine icon's origin (#301)
+2026-11-01
+
+**What.** The fatal-error dialog for a missing `SCRIPT.DAT` (#298) says that the file was
+not found in the folder the game was started from, where it said beside `PCtomb5.exe`.
+The X-ray tone's comment names its two reference pictures, one from the front and one
+from the side. `THIRD-PARTY.md` names `TOMB5 Code/icon.ico` as upstream TOMB5's icon.
+
+**Why.** `FileOpen` opens the bare name against the current folder, which the engine
+never sets: it is the folder the game was started from (`Log.bat` and `Setup.bat` change
+into the game folder first), not necessarily the executable's. The comment named one
+picture where its table measures two. The ledger counted the engine's icon among the
+pictures made for this project; the file is upstream TOMB5's, unchanged since the first
+commit.
+
+**How.** `specific/file.cpp`, `FatalFileMissing`: the message's first line and the
+comment above the function; `specific/hd/hd_lara.cpp`: the comment over the X-ray tone
+(`kXrayToneLevel`). No code changed. `THIRD-PARTY.md`'s TOMB5 paragraph names the icon
+under TOMB5's licence, and its pictures section names four pictures of this project.
+
+**Commits.** `a1461f45`, `aeb55675` (the ledger).
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -17921,3 +17943,4 @@ entries above.
 | #297 | section 3 (the randomizer) |
 | #298 | A missing SCRIPT.DAT ends with a message; the code section is read-only |
 | #299 | The engine builds with Control Flow Guard |
+| #301 | The missing-file message, the X-ray tone's comment and the engine icon's origin |

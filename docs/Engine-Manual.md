@@ -4274,11 +4274,12 @@ themselves stay two-sided. Every part of the set - the shell, the bones, the
 hands with what they hold, the holsters and the weapon on her back - is lit as
 the shell is, never over the light's full value and without a sheen, and takes
 one tone: the room's light at seven tenths, its blue cut to about half and its
-green kept, so that the figure is the dark green of the remaster's own X-ray
-Lara in the same flooded tunnel and no piece looks like ordinary gear beside
-her. The tone is a choice made from those reference pictures (the shell's added
-light over the wall behind her belly, theirs against ours), and in a bright
-room she stays brighter than in a dark one, only greener. Nothing is drawn on
+green kept, so that the figure is the dark green of the reference pictures
+supplied for this project in the same flooded tunnel and no piece looks like
+ordinary gear beside her. The tone is a choice made from those reference
+pictures (the shell's added light over the wall behind her belly, theirs
+against ours), and in a bright room she stays brighter than in a dark one, only
+greener. Nothing is drawn on
 her thighs at all: the install has no X-ray holster for the uzis or the Desert
 Eagle, and the pistols' X-ray holsters, which it has, would stand beside the
 bones in the air, so all three alike vanish when she puts a gun away. Every file

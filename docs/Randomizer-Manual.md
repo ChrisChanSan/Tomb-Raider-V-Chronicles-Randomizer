@@ -122,7 +122,7 @@ which is not code at all. The same
 seed on two different builds is two different games.
 
 That is why both numbers stand at the top of the window and in `spoiler.txt`:
-`Beta_4.1` is the release, `Build 0.21` is the placement data. Nothing stops
+`Beta_4.1` is the release, `Build 0.23` is the placement data. Nothing stops
 you mixing a randomizer and an engine of different versions — the numbers are
 there to be read, not enforced.
 
@@ -508,7 +508,9 @@ model out of a different level, which items it added, and which Tomb Raider
 III outfit you rolled. The added items matter for the objects the Remaster
 has baked into its room artwork, such as JOBY3's shelves: the artwork has
 them only where the original level has them, so a shelf a secret list adds
-is drawn the classic way instead of not at all.
+takes the art of one of the original shelves, or is drawn the classic way
+where none fits or with the visibility path off (`hd_vis` 0) — never not
+at all.
 
 An **opening** — a wall cut through, a window, a floor or ceiling opened — is
 written down as the box it lives in, and the engine leaves out just the HD

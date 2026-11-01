@@ -13,9 +13,9 @@ This page is the list. It is short on purpose; the point is that it exists.
 **Object slots beyond the file boundary**
 `SLOT_FILE_BOUNDARY` in `game/objects.h` marks where the level file's own
 slots end and this project's added ones begin (460 BLUE_GUARD2, 461
-ROMAN_GOD2, 469 CYBORG, 471 BRAWLER, and the sound slots above them). The randomizer
-places into those numbers. Add a slot on one side only and the other places
-into nothing.
+ROMAN_GOD2, 469 CYBORG, 471 BRAWLER, 472 DRONE, and the sound slots above
+them). The randomizer places into those numbers. Add a slot on one side only
+and the other places into nothing.
 *Both sides:* `game/objects.h` and `kCross` / `enemyKinds` in
 `core/Randomizer.cpp`.
 

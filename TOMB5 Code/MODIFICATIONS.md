@@ -16,10 +16,11 @@ small local fixes that predate this repository and are documented in the files t
 (`dxsound.cpp` LOCSOFTWARE, `function_stubs.cpp` DO_LOG).
 
 Measured on **2026-11-01** by comparing every file under `TOMB5/` against that first
-commit: **135 files changed, 199 entirely new - 334 in all**, none deleted,
-**284** of them carrying the modification notice at the top, which `grep -rl
-"Modified 2026 by ChrisChanSan" TOMB5/` lists. The project file `tomb5.vcxproj` carries
-the same notice as an XML comment.
+commit: **135 files changed, 199 entirely new - 334 in all**, none deleted, **284** of
+them carrying the modification notice at the top, which `grep -rl "Modified 2026 by
+ChrisChanSan" TOMB5/` lists. The project file `tomb5.vcxproj` and its filters file carry
+the same notice as an XML comment, and `resource.h` and `tomb5.rc` beside them as comment
+lines.
 
 50 of the 334 do not carry the notice, and none of them should:
 
@@ -54,17 +55,19 @@ Original credits are unchanged and remain with the upstream project: Troye (main
 programmer, project leader), ChocolateFan, thatguyfrombb, Raildex. The work recorded
 below is layered on top of theirs.
 
-How this record is laid out: section 2 holds the engine's modifications in ten areas
-(2.1 the native Windows port, 2.2 the engine's support for the randomizer, 2.3 the Tomb
-Raider III enemies, 2.4 the HD art read from the player's own Remaster files, 2.5 sixty
-frames a second, 2.6 modern controls and the options menu, 2.7 the first person view,
-the cheats and the `-log` seams, 2.8 and 2.9 the corrections and the cleanup before the
-first public push, 2.10 the rounds after it); section 3 lists the randomizer's own
+How this record is laid out: section 2 holds the engine's modifications in ten areas (2.1
+the native Windows port, 2.2 the engine's support for the randomizer, 2.3 the Tomb Raider
+III enemies, 2.4 the HD art read from the player's own Remaster files, 2.5 sixty frames a
+second, 2.6 modern controls and the options menu, 2.7 the first person view, the cheats
+and the `-log` seams, 2.8 and 2.9 the corrections and the cleanup before the first public
+push, 2.10 the rounds after it that extend no area of their own - a round after the
+cleanup that extends an area stands in that area); section 3 lists the randomizer's own
 changes since Beta 1.0 as short rows; section 4 says how to build; the appendix maps the
-task numbers that the commit subjects carry to the entries. Every entry has one form:
-What was changed, Why, How, the Decisions where a choice was made, and the Commits that
-made it - and nothing else. Where a number in the code carries a rule, the entry gives
-the number and its reason; the measurements behind it are not part of this record.
+task numbers that the commit subjects since Beta 1.0 carry to the entries. Every entry has
+one form: What was changed, Why, How, the Decisions where a choice was made, and the
+Commits that made it - and nothing else. Where a number in the code carries a rule, the
+entry gives the number and its reason; the measurements behind it are not part of this
+record.
 
 ## 2.1 Native Windows 11 port
 
@@ -125,7 +128,7 @@ never set anywhere, so alpha test and blend never saw real per-pixel texture alp
 `D3DTA_TEXTURE`, which is what removed the menu text ghosting and the black boxes around
 foliage and vines.
 
-**Commits.** `05e3b2c`, `d943e07`, `fcf8664`, `dded076`, `74e0123`, `7774945`, `09f9816`,
+**Commits.** `05e3b2c`, `d943e07`, `fcf8664`, `dded076`, `74e0123`, `14b4ea91`, `09f9816`,
 `103eb75`, `a659e96`, `3c9e395`, `2e22d92`, `92c8bc5`, `e5bb808`, `3f7cd6a`, `e7c0363`,
 `8fc6f7f`, `cb7b941`, `b6d2f70`, `2cb5434`, `6e41063`, `a819765`
 
@@ -143,7 +146,7 @@ black screen. This is also why `Ddraw.lib` has to remain on the linker line.
 
 **How.** `specific/fmv.cpp`.
 
-**Commits.** `7774945`, `0db6681`, `3c9e395`
+**Commits.** `14b4ea91`, `0db6681`, `3c9e395`
 
 ### Savegames: the screen grab, the folder, and the check on read
 2026-07-30 - 2026-08-22
@@ -184,7 +187,7 @@ duplicate-buffer-per-play model had nothing worth keeping.
 hundredths-of-a-decibel convention at the call sites and are converted to XAudio2's linear
 gain inside this file.
 
-**Commits.** `8291574`
+**Commits.** `6873c53d`
 
 ### Music and FMV sound off DirectSound
 2026-08-17 - 2026-08-21
@@ -588,7 +591,7 @@ no extra model is needed, and `CreatureDie` also does everything a death animati
 Monster this replaces a stopgap, because Core never finished that death and the lying pose
 sinks into the floor. The fade in `game/draw.cpp` is what `after_death` drives.
 
-**Commits.** `e59d89c`, `0d5a78c`, `6204552`, `f4824ba`, `7fab020`, `614805c`, `8b86e3f`,
+**Commits.** `e59d89c`, `0d5a78c`, `0473fda6`, `f4824ba`, `7fab020`, `614805c`, `8b86e3f`,
 `ee464f6`, `ca29432`, `df34902`, `c7b5f09`
 
 ### The VCI cyborg as a pool enemy on a slot of his own
@@ -1343,8 +1346,8 @@ corrections. The textures are appended by `TR5Randomizer/src/core/Tr5Transfer.cp
 same place a TR5 transfer inserts them, with texinfos and sprites drawn along after: pages
 are only appended, never moved.
 
-**Commits.** `82864fe`, `11798f6`, `5703685`, `3688ecc`, `d474d2d`, `bd351f7`, `4044991`,
-`1b30305`, `8123127`, `6528139`, `8b9e176`, `967d98b`, `fedca9e`, `8280cbe`, `79075a0`,
+**Commits.** `82864fe`, `11798f6`, `29482e1b`, `3688ecc`, `d474d2d`, `bd351f7`, `4044991`,
+`1b30305`, `02a7a4ac`, `7fea45b9`, `8b9e176`, `967d98b`, `fedca9e`, `8280cbe`, `79075a0`,
 `a82d979`, `f2f825f`, `7fb0a96`, `bae6ed6`
 
 ## 2.4 HD art from the Remaster, read at run time
@@ -1571,7 +1574,7 @@ a given camera into a picture file without starting the game, with `-groups`, `-
 `-noblend`, `-paritycheck`, and a device-state check reading 58 states before and after an
 HD block; `Preparation/Tools/Diagnose/TrgProbe.cpp` (`-mat`, `-parts`, `-flat`, `-seam`).
 
-**Commits.** `2435068`, `ae6c1e5`, `a44d6eb`, `b006b6f`, `196849a`, `05aeddc`, `34dcb15`,
+**Commits.** `eecbe2b9`, `ae6c1e5`, `a44d6eb`, `b006b6f`, `196849a`, `05aeddc`, `34dcb15`,
 `e2c8d29`, `82e1b12`
 
 ### The room shader, and a build that needs no shader compiler
@@ -1618,7 +1621,7 @@ slots, the model pair at 348 and 553.
 **Decisions.** A shader out of step is rebuilt rather than reported, because a build that
 quietly draws the wrong thing is the failure the check exists to stop.
 
-**Commits.** `2435068`, `1087750`, `893f999`, `05aeddc`
+**Commits.** `eecbe2b9`, `cd156183`, `893f999`, `05aeddc`
 
 ### The engine's own per-vertex lighting, as shader arithmetic
 2026-09-05 - 2026-09-07
@@ -1751,7 +1754,7 @@ the level's `motion=` line with the weighted parts, the smallest weight and the 
 parts. Tools: `RoomProbe` (`-paritycheck`, the `additive:` line, a bulb dropped at the new
 maximum) and `ModelProbe -name SWAT -shade N`.
 
-**Commits.** `1087750`, `a250791`, `a44d6eb`, `b006b6f`, `e12f8e8`, `e6debb7`
+**Commits.** `cd156183`, `a250791`, `a44d6eb`, `b006b6f`, `e12f8e8`, `e6debb7`
 
 ### The light shafts compose as screen, a stacked sea is drawn once, a fast swing stands still
 2026-09-26
@@ -2116,7 +2119,7 @@ ANDREA2 room 150 seen in play are that level's own opaque storm sheet 7109 drawn
 files say, and ANDREA1's night sky matches a reference picture supplied for this project;
 no rule changes for the clouds. The volumetric layer is not on the game's path.
 
-**Commits.** `1087750`, `e12f8e8`, `e2c8d29`, `2341a7f` (comparison base), `b654c174`
+**Commits.** `cd156183`, `e12f8e8`, `e2c8d29`, `2341a7f` (comparison base), `b654c174`
 (comparison base), `00cde6a0`, `db5a08b9`, `986631f9`, `0344eaea`, `37ffe727`, `3f4d68c1`,
 `578ebab9`, `baba72b2` (comparison base), `e05e64a1`, `3e34a6e7` (the layers' `hd_water` 0
 case), `838748f2` (comparison base), `6beaac58`, `ebc1525f` (the cap comments), `79ef9e4f`
@@ -2216,7 +2219,7 @@ written into the item needs the -1 scale `CalcLaraMatrices(2)` gives Lara and
 the z plane of `Draw_Mirror_Lara` does not serve. A reflected item casts no shadow of its
 own and its effects are not reflected; the lobby floor shows its static copy only.
 
-**Commits.** `e77fc52`, `a8ff098`, `12250e8`, `c0d6e3c`, `aa676dd`, `1093689`
+**Commits.** `e77fc52`, `a8ff098`, `12250e8`, `c0d6e3c`, `aa676dd`, `753af370`
 
 ### The reflection stays behind the glass
 2026-09-29
@@ -3209,7 +3212,7 @@ narrower rule - a holder counts as listed only when it is the seed or has a wind
 own - was tried in RoomProbe and not adopted.
 
 **Commits.** `9a621d2` (comparison base), `1669e6c` (its answer later taken back),
-`1d2a4ad` (takes that answer back), `3884153`, `fb386ab`, `413452f`, `fe9ecf8`
+`1d2a4ad` (takes that answer back), `16650988`, `fb386ab`, `413452f`, `fe9ecf8`
 
 ### The reach can be switched off
 2026-09-28
@@ -3615,14 +3618,14 @@ reach, #123), `23ca9ca` (covered faces drawn behind), `bc9ea38` (carrying list p
 opening beyond window), `38d70a0` (visibility list and tables), `ca3bfe4` (listed art
 drawn whole), `1c60d14` (guests' count credited), `dcd70f9a` (merge of #204), `37db7d8`
 (path keeps depth pushes), `70a5dd5` (flipmap opening names main), `8e6ef61` (broken wall
-widens portal), `50c1539` (portal at window edge), `9924788` (suite for the tables),
+widens portal), `50c1539` (portal at window edge), `f387c92c` (suite for the tables),
 `06ea59f` (both portal records widen), `9d295aa` (walk's portal comment), `1fece1b`
 (RoomProbe `-viscams`), `5bd916e8` (merge of #197 water work), `b654c174` (task table
-rows), `5fd0407` (window on standing art), `2711317` (portal at the camera), `2782323`
+rows), `5fd0407` (window on standing art), `2e7657ac` (portal at the camera), `e513dec4`
 (RoomProbe `-viswin`, `-visnear`), `baba72b2` (merge of #213), `8357acd` (wall of a
 claimed face), `b64bfd4` (plane rule, hidden room), `2768ee8` (RoomProbe `-visplane` and
-more), `890e9ab` (record, ledger, manual, tools), `838748f2` (merge of #209), `0293717` /
-`02937171` (`hd_vis` defaults to 1), `801fbc1` (static left to art), `8f4c255` (enclosed
+more), `890e9ab` (record, ledger, manual, tools), `838748f2` (merge of #209), `c144a121`
+(`hd_vis` defaults to 1), `801fbc1` (static left to art), `8f4c255` (enclosed
 classic room left out), `196b989` (art held by height), `d494585` (height rule, wall
 plane), `a45ede4` (statics' sampling step), `1e5f160` (record, ledger, manual, tools),
 `c37d83c9` (shares at step 64), `a68a9de0` (merge of #209 glass), `a917e518` (`hd_vis`
@@ -4316,7 +4319,7 @@ of it; it is built x86 and `/LARGEADDRESSAWARE` like the engine, without which t
 process reads 1995 MiB of free address space instead of 3986. `tomb5.vcxproj` sets
 `LargeAddressAware` on both Win32 configurations.
 
-**Commits.** `ec20d77` (loaders, discovery, binding), `2435068` (room renderer, page
+**Commits.** `ec20d77` (loaders, discovery, binding), `eecbe2b9` (room renderer, page
 cache), `3f4afea` (texture budget, missing pages), `7ffb871` (walk capacity, reach
 budget), `0b23074` (outfit changer asks both), `eadc929` (PoolProbe measures the pools),
 `de89861` (record and README limit), `572eccc` (record on the card side)
@@ -4844,8 +4847,8 @@ whose line her face has no file for, and in the credits, where the cutscenes rep
 without their lines, the firing face and the loop come next in the order: there she
 blinks, and after the scripted shots she bares her teeth with the classic head.
 
-**Commits.** `8321293` (base of the comparison), `6ce284e` (block place, loop, streaming),
-`11026db` (blink loop, firing face), `026be9e` (ModelProbe draws both)
+**Commits.** `385d952f` (base of the comparison), `6ce284e` (block place, loop,
+streaming), `11026db` (blink loop, firing face), `026be9e` (ModelProbe draws both)
 
 ### Statics: baked into the room, shot to pieces, or drawn classic where the art does not cover them
 2026-09-05 - 2026-09-08
@@ -5103,8 +5106,8 @@ for this project goes into the table, recorded in the ledger as OWN.
 `b654c174` (comparison base), `0da74ce7` (a pane takes its piece), `150a9ba4` (RoomProbe
 -smashpiece), `4f5fce77` (comparison base), `ead55264` (the grid goes with break),
 `dd8bda29` (record of the break), `f85dab8e` (bars' readings drawn), `838748f2`
-(comparison base), `60097611` (clear texels drawn whole), `362c8764` (the glass comment),
-`9fdd6498` (comparison base), `5d64c17d` (the split), `42611668` (RoomProbe -calltrace,
+(comparison base), `631d655e` (clear texels drawn whole), `362c8764` (the glass comment),
+`9fdd6498` (comparison base), `5d64c17d` (the split), `98cfb0f5` (RoomProbe -calltrace,
 -lumaat, -gpuall), `e89f4aa2` (ModernTest glass split), `ab6eb131` (records of the split),
 `1bb4c14d` (additive glass added whole), `9fbbc651` (RoomProbe -gpu line), `eb71cc0f`
 (ModernTest holds rule bodies), `a68a9de0` (comparison base), `d9e637bd` (classic pieces
@@ -5241,7 +5244,7 @@ hides a broken static's art only where the `.TRG` gives it a part of its own (ma
 15 with the static's ordinal in bits 8 to 14), so nothing of it is taken for these 30.
 
 **Commits.** `9fdd6498` (comparison base), `2341a7f` (comparison base), `8735c17e` (the
-rule and the draw), `091ee90d` (the tools), `caeb52e6` (the records), `32797348` (break's
+rule and the draw), `091ee90d` (the tools), `caeb52e6` (the records), `00967b62` (break's
 glue into debris.cpp), `1f1dafa6` (records follow the glue), `d9e637bd` (classic pieces
 take ambient), `3a469090` (the glass pieces' look), `f80e567e` (ModernTest), `a68a9de0`
 (comparison base), `b170d09d` (ambient only without prelight), `8235f46e` (the shade's
@@ -5600,7 +5603,7 @@ would mean a lift per item.
 **Commits.** `ed39081` (pickups bound by EXTRA prefix), `a0bfcad` (grappling gun in the
 hand), `7d87cd2` (headset, RICH2's HK by level), `084e88d` (a mod's inventory model),
 `e5e99cd` (inventory question made cheaper), `a594bc1` (ring fit reads the shape),
-`0947713` (three numbers re-measured), `cfa31ed` (comment continuations), `7964b3c` (ring
+`52d76044` (three numbers re-measured), `cfa31ed` (comment continuations), `7964b3c` (ring
 fit's picture), `2850c54` (footstep mod needs no bank), `eab9e37` (classic reader closes
 file), `b9c8798` (one floor rule), `a253f40` (floor passages rewritten), `b904973` (floor
 picture reads), `d2dcc62` (floor rule in drawn frame), `0775caa` (whole campaign
@@ -5941,9 +5944,9 @@ a copy. Files: `specific/hd/hd_laradraw.cpp`/`.h`, `hd_lara.cpp`/`.h`,
 
 **Commits.** `f31d62b` (Lara's composite loaded), `321504d` (the seam for Lara), `0f83858`
 (Desert Eagle, gloves, mirror), `77db026` (holster rig, braid, sheen), `893f999` (the
-braid's roll), `bf8b9fe` (holster table, braid halves), `6520654` (pack box, anchor,
+braid's roll), `bf8b9fe` (holster table, braid halves), `27f39c13` (pack box, anchor,
 hands), `84ce969` (neck cut, wrist), `36964e9` (collar cut, hand seam), `6a2bef2` (bare
-hands, weights folded), `635419e` (counts recounted), `0947713` (three numbers
+hands, weights folded), `635419e` (counts recounted), `52d76044` (three numbers
 re-measured), `ce0fe19` (two numbers corrected), `036fc33` (the fold counters kept)
 
 ### First person: Lara's head and neck cut away, and the lid that closes the opening
@@ -6019,9 +6022,9 @@ strap, a shoulder piece or a flap is one layer of triangles whose two sides sit 
 same depth to the bit, the inward draw won that tie, and the piece came out in one flat
 texel with its normal turned round, per pixel where float precision differed.
 
-**Commits.** `6520654` (pack box, neck cap, hands), `84ce969` (neck cut, wrist), `36964e9`
-(collar cut, inner skin), `23ce371` (cut reaches the neck), `73819d5` (first person, cut
-plane), `e6debb7` (neck plane with lid), `c021cf6` (no head, skin cap)
+**Commits.** `27f39c13` (pack box, neck cap, hands), `84ce969` (neck cut, wrist),
+`36964e9` (collar cut, inner skin), `23ce371` (cut reaches the neck), `73819d5` (first
+person, cut plane), `e6debb7` (neck plane with lid), `c021cf6` (no head, skin cap)
 
 ### Lara's HD wardrobe: a scan of the installed art, its properties, and which outfit is worn
 2026-09-05 - 2026-09-25
@@ -6353,7 +6356,7 @@ joint 1 and finds a body joint where `neck_bone_of` finds none in the two `PATRI
 **Commits.** `dc44597` (base of the face comparison), `f31d62b` (Lara's composite loaded),
 `321504d` (the seam for Lara), `0dd40a5` (engine reads HD markers), `0f83858` (Desert
 Eagle, gloves, mirror), `77db026` (holster rig, braid, sheen), `bf8b9fe` (holster rig by
-table), `6520654` (pack box, neck cap), `84ce969` (neck cut, wrist), `36964e9` (collar
+table), `27f39c13` (pack box, neck cap), `84ce969` (neck cut, wrist), `36964e9` (collar
 cut, hand seam), `9011283` (the wardrobe is a scan), `78bb4f3` (randomizer rolls from
 scan), `95a5555` (docs: outfits from mods), `ce54ab0` (randomizer knows no scanned
 outfits), `be48b67` (outfit is a registry key), `5743211` (docs: the engine's wardrobe),
@@ -7469,9 +7472,9 @@ wherever its body came from so that the two wear pages from one source. Files:
 level; sharing the slot would be safe, but the rule that a mod's model never shares a slot
 with a vanilla one is worth more than 1.5 per cent of a wardrobe.
 
-**Commits.** `8156128` (the Mods folder), `1ca834e` (docs: a Mods section), `d67ea4a`
+**Commits.** `629fd694` (the Mods folder), `1ca834e` (docs: a Mods section), `d67ea4a`
 (crafted .wav cannot crash), `20318c7` (format block where stated), `6a2bef2` (bare hands,
-weights folded), `0947713` (three numbers re-measured), `260a844` (donor game's frame 0),
+weights folded), `52d76044` (three numbers re-measured), `260a844` (donor game's frame 0),
 `247fee5` (ModelProbe prints the pose), `b80c407` (what an origin buys), `f48e890`
 (classic reader's cost)
 
@@ -8593,21 +8596,21 @@ the mirror), `31a6e892` (models' mask, clip planes), `7643450e` (census refit),
 under water), `39372345` (models' shaders at load), `baf8f943` (RoomProbe -wetstep),
 `e76bf795` (the record), `c9b2359c` (RoomProbe -wetcut), `4ba26aa6` (comments set right),
 `6020d3bd` (the record's corrections), `ba7f330` (the spring of room 194), `ab312b7`,
-`9bdecfd`, `1b47cbe`, `dcffa71`, `dc4cc90`, `8b0ea2c`, `d4ddb89`, `6508500`, `8447444`,
-`1ea4a5b`, `1867877` (the water's life), `b87cb0c` (comparison base), `98eeb0e`,
-`cf98385`, `bfcabe2`, `5712057`, `9778ec4`, `a343112`, `3ac09ac`, `086cd90`, `a407db6`,
+`9bdecfd`, `1b47cbe`, `dcffa71`, `dc4cc90`, `8b0ea2c`, `d4ddb89`, `6bf3b1b2`, `5f3749f6`,
+`1ea4a5b`, `0ec7591d` (the water's life), `b87cb0c` (comparison base), `98eeb0e`,
+`cf98385`, `bfcabe2`, `f9fc8b8f`, `9778ec4`, `a343112`, `3ac09ac`, `086cd90`, `a407db6`,
 `a2751d1` (life: ends, darts, drops), `7dbd8eb` (comparison base), `0d83b8a`, `f7e0d87`,
-`2485257`, `b0139a7`, `a329735` (life: tank, rings, depth), `e70280c`, `b3a705e`,
+`1408ed2a`, `b0139a7`, `a329735` (life: tank, rings, depth), `e70280c`, `b3a705e`,
 `196fc31`, `f0a634d`, `6c2c6e8`, `665ea11` (life: edge, tank, roam), `e764fcf` (comparison
 base), `11f3f9e`, `a374b1c`, `b74f1fd`, `cd29a12`, `0b83c25` (highlight, surface, light
 glide), `4f4b65a` (Lara's light glide), `d3393648` (comparison base), `f3559db`,
-`0434457`, `b933521`, `be77093` (bend, canal end, foam, gate), `8697749`, `38a3941`
+`61740068`, `b933521`, `be77093` (bend, canal end, foam, gate), `9a30378e`, `38a3941`
 (deeper bent place, bulbs), `5bd916e8` (comparison base), `90cd9bfb` (a reach, reverted),
 `6e879034` (its revert), `b654c174` (comparison base), `44a309dd` (the sea's vanishing),
 `f4404fe2` (the look study), `baba72b2` (comparison base), `3e34a6e7` (rim, strengths,
 walk guard), `e05e64a1` (the look in the game), `52c20e93` (the dive walked), `4f5fce77`
 (comparison base), `f9b1c1ed` (surface drawn always), `4072e772`, `ab99b2cc` (the record),
-`f4ef793d` (deep look needs a surface), `9fdd6498` (comparison base), `83020629` (the
+`f4ef793d` (deep look needs a surface), `9fdd6498` (comparison base), `91dc0f98` (the
 sea's sheet), `b594efc5` (the look stronger), `9421887d` (the record), `99bd96f6`
 (RoomProbe -sea), `049efa37` (RoomProbe -gpuadd), `859ad33d` (the knobs' comment),
 `9b83a009` (art kept, ripple 0.8), `d846bfa5` (the record), `a68a9de0` (comparison base),
@@ -9454,9 +9457,9 @@ less, so the read and the decode start at the top of the load.
 level's log), `39047e97` (merge: load measured), `7217fec` (-loadtime -reload steps),
 `062a97cb` (record on B and C1), `d9803eb1` (merge: HD data built), `3b1ac1f0` (springs
 built with HD data), `48bce13` (HD key, ModernTest table), `84049b7` (HD data kept, same
-level), `2163672` (RoomProbe -reload), `5024414` (.TRG read once), `a2440d8` (.TRG, pages
-read ahead), `be48429` (model folders listed once), `5164802` (key reads values),
-`9689393` (key once, read-ahead returned), `8c48066` (RoomProbe -reloadas), `254a0ce2`
+level), `a03773c5` (RoomProbe -reload), `b7755217` (.TRG read once), `a2440d8` (.TRG,
+pages read ahead), `be48429` (model folders listed once), `411a283c` (key reads values),
+`5f14c34a` (key once, read-ahead returned), `8c48066` (RoomProbe -reloadas), `254a0ce2`
 (merge: load kept, read ahead), `7038947` (bar full at once), `9d930b3` (classic pages
 kept), `02af3e7` (HD loading picture kept), `5a31ec2` (picture under every bar frame),
 `87f9afc` (ModernTest counts keeps, frames), `de4cbca` (one stage-0 lock), `df6e266`
@@ -9639,8 +9642,8 @@ pixels for an X8R8G8B8 buffer, about 11 ms against about 41 at 2560 x 1440.
 `476d822`, `2bb2a85`, `ac89d49`, `7a451e4` (the capture's comment), `21c9406` (thread
 share from build gate), `b168f88` (join frames, ticks, tables), `48e239b` (no reset
 between build steps), `21c41715` (comparison base), `41676a4` (off only for short loads),
-`91ce5478` (comparison base), `f167ab2` (comments on screen state), `2947690` (the level's
-name), `2fd94258` (comparison base), `1dcd9fd` (TR4 view dropped)
+`91ce5478` (comparison base), `f167ab2` (comments on screen state), `d16590ca` (the
+level's name), `2fd94258` (comparison base), `1dcd9fd` (TR4 view dropped)
 
 ## 2.5 Sixty frames a second
 
@@ -9706,7 +9709,7 @@ a `title_cadence` section that runs the title's two-ticks-a-present accumulator 
 start values of `framecount` and checks that no frame of either is a tween frame and that
 the logic tick count is unchanged.
 
-**Commits.** `290c66f`, `ab139d8`, `5301765`, `e0448e4`, `73819d5`
+**Commits.** `290c66f`, `ab139d8`, `bdd56fdb`, `e0448e4`, `73819d5`
 
 ### VSync and the rate the monitor sets
 2026-09-07
@@ -9967,7 +9970,7 @@ offset, at most about 20 units early on one axis, which is the share of the step
 refused change draws at thirty hertz, while the pose on those frames is the new
 animation's own.
 
-**Commits.** `339ab2a`, `0316088`, `860389c`, `9b63884`, `8253932`, `1655847`, `0ce621f`,
+**Commits.** `339ab2a`, `0316088`, `860389c`, `9b63884`, `50063aab`, `1655847`, `0ce621f`,
 `6f776dc`, `109566b`, `e6aaec1`, `b5efdbf`
 
 ### The pose between two ticks
@@ -10822,7 +10825,7 @@ the key-mapping screen are idempotent. One counter behind the title needed the g
 rest of the build has: `DoCredits`' roll (`StartPos--`, `specific/alexstuff.cpp`) is one
 pixel a present and asks `InterpIsTweenFrame()` now.
 
-**Commits.** `5301765`, `d0e8c74`, `6bd0ed3`
+**Commits.** `bdd56fdb`, `d0e8c74`, `6bd0ed3`
 
 ### The cut scenes at the frame rate
 2026-09-28
@@ -10979,7 +10982,7 @@ vertex declaration, and Windows paging the process in.
 what is drawn. Its numbers and the `first_frame` and low-`sec=` late lines that answer for
 the rest are documented with the profile seams.
 
-**Commits.** `ab139d8`, `5301765`
+**Commits.** `ab139d8`, `bdd56fdb`
 
 ### The frame-rate seams and the offline proofs
 2026-09-07 - 2026-09-15
@@ -11062,7 +11065,7 @@ vanilla's own `if (nframes > 10)` cap discards), the particle walk-back against 
 whose previous state really is remembered, and the ring's cadence and the title's shadow.
 The recipes are in `docs/Engine-Manual.md` under *Frame rate*.
 
-**Commits.** `ab139d8`, `5301765`, `9b4f7b8`, `078aa8e`, `e0448e4`, `8975d1d`, `6bd0ed3`
+**Commits.** `ab139d8`, `bdd56fdb`, `9b4f7b8`, `078aa8e`, `e0448e4`, `8975d1d`, `6bd0ed3`
 
 ### The zoom at the frame rate (#225)
 2026-10-19
@@ -11311,7 +11314,7 @@ checks on what the level-start reset is worth, and the groups `reversal`, `spin_
 mutations of the scheme were tried against the finished tests and all 34 were caught.
 `TOMB5 Code/tomb5.vcxproj` lists the new files and `Preparation/Tools/README.md` the test.
 
-**Commits.** `7d5bc1d`, `4557d81`, `d24be08`, `a690964`, `7407748`, `765c19c`, `1d32be2`,
+**Commits.** `7d5bc1d`, `4557d81`, `d24be08`, `a690964`, `67fdc46f`, `765c19c`, `1d32be2`,
 `77630af`, `4b668d1`, `5b6add1`, `96ecefb`, `a712a98`, `02b44fe`, `f13ef14`, `cc428ab`,
 `4458b63`, `adc1dad`, `caf306c`, `35bb41e`, `1d50d72`, `6951aea`, `e5f9d69`, `196c687`,
 `58d51d6`, `41fe965`, `e640a08`, `a2eab75`, `f70c40e`
@@ -12826,7 +12829,7 @@ chase camera, and that is left as it is, since the trigger there has already bee
 RICH2's sequence 3 jumps from camera 5 to 7 (SP_JUMPTO), so camera 7's test (music 14) is
 never armed, played or skipped - a data fact, left as it is.
 
-**Commits.** `12340cc`, `9f4a1ec`, `96267ef`, `6176647`, `c05ed61`, `59ac2096`,
+**Commits.** `12340cc`, `9f4a1ec`, `96267ef`, `917c25aa`, `c05ed61`, `59ac2096`,
 `91a58a09`, `a2874372`
 
 ### The HD/SD switch: F12 and a pad chord (#202)
@@ -13046,10 +13049,10 @@ row at 0 sees the classic loading screens until F12 or the row, by the uniform r
 
 **Commits.** `1fafd47b`, `2341a7f`, `704a10f` (earlier builds compared against),
 `f2c717b`, `cf3b9dd`, `911a7de`, `75118b1`, `153c36c`, `52b96d8` (the key, chord and
-state), `b5d39ba`, `a24dd9b`, `7b836b8`, `7779464` (the gates wired), `7887938`,
+state), `b5d39ba`, `a24dd9b`, `7b836b8`, `7779464` (the gates wired), `d1ed10e7`,
 `fff824b`, `2409d71`, `25c2320` (the row sets the switch), `254a0ce2` (the gates' census
-base), `d9803eb1` (the springs' merge base), `8eb0c2a` (build gate, draw gates), `6366176`
-(row and switch one state), `c440b8e` (the build gate's comment)
+base), `d9803eb1` (the springs' merge base), `8eb0c2a` (build gate, draw gates),
+`5685de1e` (row and switch one state), `c440b8e` (the build gate's comment)
 
 ### The installation gate: the HD build row and the TR3 sources (#230)
 2026-10-21 - 2026-10-22
@@ -13708,7 +13711,7 @@ became 19.
 seven unmarked files (`0fad390`). Origin sentences throughout the engine and in
 `THIRD-PARTY.md` were rewritten to name TRForge (MIT), TROne (GPLv3) by Todesengel1931 -
 https://github.com/todesengel1931 with file and line, or a measurement on the player's own
-files (`8219710`, `8cf9e11`). The save/load page footers (`0fef53c`) and the CP-1252
+files (`c1e7679c`, `8cf9e11`). The save/load page footers (`0fef53c`) and the CP-1252
 accent table of `game/text.cpp` (`f64271a`) were repaired byte for byte. The eleven log
 lines of `specific/hqsfx.cpp` now sit inside `if (gLogEnabled)` (`f4b43e4`). Three
 miscounting or misnaming comments and the parked comment items were swept (`5f6b4f2`,
@@ -13741,13 +13744,13 @@ Contributors row, and the GPLv3 obligation for the twenty-one source files carry
 author's copyright is met by those file headers and by the entries in `THIRD-PARTY.md` and
 `Preparation/Credits/Credits.txt`. The document commits, covering `README.md`,
 `docs/Engine-Manual.md`, `docs/Randomizer-Manual.md`, `Preparation/Verification.md` and
-`TOMB5 Code/MODIFICATIONS.md`, are `04359b1`, `f2c2573`, `1400796`, `f379ef6`, `4ec5553`,
+`TOMB5 Code/MODIFICATIONS.md`, are `04359b1`, `f2c2573`, `4e153453`, `f379ef6`, `4ec5553`,
 `d904800`, `011337c` and `3534f68`.
 
-**Commits.** `0fad390`, `8219710`, `8cf9e11`, `0fef53c`, `f64271a`, `f4b43e4`, `5f6b4f2`,
+**Commits.** `0fad390`, `c1e7679c`, `8cf9e11`, `0fef53c`, `f64271a`, `f4b43e4`, `5f6b4f2`,
 `6171d48`, `942e750`, `9bbe1b7`, `7fea6e6`, `277e7be`, `248060c`, `941bf7b`, `ed19514`,
 `098e0f6`, `28380e8`, `a886a1b`, `332dedd` (the four that moved enemies), `70b9785`,
-`b053a92`, `a82f514`, `5965873`, `4415ce7`, `e119d2a`, `04359b1`, `f2c2573`, `1400796`,
+`b053a92`, `a82f514`, `5965873`, `4415ce7`, `e119d2a`, `04359b1`, `f2c2573`, `4e153453`,
 `f379ef6`, `4ec5553`, `d904800`, `011337c`, `3534f68`
 
 ## 2.9 The cleanup before the public push
@@ -13843,7 +13846,7 @@ entries on the mouse and the movement keys; the rows of #173, #198, #205, #207, 
 #210 naming the headings of the entries that hold them; the two #194 rows one; #208 before
 #209), every title in its rows is a heading of the record, and the rope entry's date line
 is 2026-09-24, the date of its first commit, `0034725`. The Commits lines of eight entries
-cite `30bee21`, `96b10de`, `1093689`, `b3d67a7`, `46f9d9e`, `ca369f4`, `8501082`,
+cite `30bee21`, `96b10de`, `753af370`, `b3d67a7`, `46f9d9e`, `ca369f4`, `8501082`,
 `e69455b` and `885ef33`; one sentence each corrects `5ad3689`'s subject (the tightrope
 entry), `c07031b`'s check counts (the projected shadow's first entry) and the commit that
 bounds the sheen (the shine's light field entry). No tracked file names a recording, a
@@ -13875,7 +13878,7 @@ German and that of `4c8050a1` names the test machine's GPU; this record repeats 
 it.
 
 **Commits.** `0fad390` (the earlier notices), `8a599fd9` (the suite counts' base),
-`0034725` (the rope's first commit), `30bee21`, `96b10de`, `1093689`, `b3d67a7`,
+`0034725` (the rope's first commit), `30bee21`, `96b10de`, `753af370`, `b3d67a7`,
 `46f9d9e`, `ca369f4`, `8501082`, `e69455b`, `885ef33` (now cited), `5ad3689`, `c07031b`
 (texts corrected), `a10e0712`, `c8098660`, `58eff466`, `d7684639`, `73a69fde`, `1b660a38`,
 `4c8050a1` (texts that cannot change), `399d073` (the delta's base), `5734ae1`, `14908b3`,
@@ -14002,10 +14005,11 @@ EXE's own folder (`_get_pgmptr`), then from the working directory.
 
 **Commits.** `402b671`, `e98d954`, `7575bd8`, `df9302b`, `b17c1a8`, `739f60f`
 
-## 2.10 Rounds after the cleanup (2026-10-16 to 2026-10-27)
+## 2.10 Rounds after the cleanup (2026-10-16 to 2026-11-01)
 
 The rounds that followed the cleanup of section 2.9, each one change to the engine with
-its reason, recorded in the same form as the entries above.
+its reason, recorded in the same form as the entries above. Rounds after the cleanup that
+extend an area stand in that area; the others are here in task order.
 
 ### The speaking heads of the cutscenes on the HD path (#215)
 2026-10-17
@@ -14434,7 +14438,20 @@ normal is OWN, re-derived on this project's own A/B in #233 (entries 31 and 475)
 texts cannot change: the bodies of `a10e0712`, `c8098660`, `58eff466`, `d7684639`,
 `73a69fde`, `1b660a38`, `4c8050a1`, `0de47f24`, `681ea020` and `6d6ca6b1` hold wording
 that this record and the ledger do not repeat, and the record's and the ledger's wording
-is the one that stands.
+is the one that stands. Commit texts of the rounds after the cleanup cannot change either:
+suite counts stand in the bodies of `7e4b9792`, `9e6add2d`, `c407dfdc`, `b8ae7cab`,
+`d815cd73`, `04ce5f10`, `7587bbc3`, `ee99cc56`, `987200a5`, `2999d664`, `a37160b3`,
+`080e1ac2`, `51c78576`, `85c32cf8`, `1d63294d`, `90088857`, `90b4c21a`, `9b459672`,
+`e2a7e65e`, `94ef93a1` and `f8b6a5a1`; parity runs and pixel counts in those of
+`d815cd73`, `04ce5f10`, `2ad0038f`, `484d382d`, `47a40a8a`, `9b888587`, `e58151a3`,
+`57830aac`, `eea6c21f`, `a836e6cf`, `0da437b2`, `88f2f9a1`, `c8cb7cd0`, `42fa38ed` and
+`bb26f34e`; randomizer runs by seed in those of `c8cb7cd0`, `42fa38ed`, `bb26f34e` and
+`ae4a45bd`; a session's dump or log in those of `c407dfdc`, `9e6add2d`, `79c7a7fa`,
+`67e2445b`, `7b23e79e`, `57830aac`, `2ad0038f`, `a836e6cf`, `04ce5f10` and `66c57ce3`;
+what was seen in play in those of `e99184c5`, `9da367d4`, `68a0352a` and `442660d5`; the
+test screen's figures in those of `484d382d`, `eea6c21f` and `23b54aab`; and the Remaster
+named as the model of a look in those of `03fa2e66` and `8eabbf14`. This record repeats
+none of it, and its wording is the one that stands.
 
 **Commits.** `8a599fd9` (the tree first checked), `97c05067` (the last commit checked),
 `63b3d921` (origins in the engine), `61344a8e` (the HD gate comments), `5703a537` (the
@@ -15033,7 +15050,7 @@ would gain next to nothing back. The car's roof at the top (room 39) is not draw
 shaft's top room, since the walk never lists it from there: a walk question, outside this
 rule.
 
-**Commits.** `b848c417` (the base), `86812994` (scans, drop, refusals, logs, checks),
+**Commits.** `b848c417` (the base), `d0240d6c` (scans, drop, refusals, logs, checks),
 `60c92991` (the header comment), `fafa1b38` (flipmap: either state, reverted), `2d99daa5`
 (flipmap: every state, `twin_covered=`).
 
@@ -15232,17 +15249,17 @@ behind the hosts' walls.
 
 **What.** The change record, the origin ledger, the manuals and the READMEs are brought
 back to what an outside reader needs: what was changed, when, why and how. Every entry of
-this record has one form (What, Why, How, Decisions where a choice was made, Commits);
-the measurements, rounds and reviews behind the entries live outside the repository.
-Section 2.9 keeps the cleanup before the first public push and section 2.10 holds the
-rounds after it; the randomizer-only tasks #214, #223 and #244 are rows of section 3,
-#230's randomizer half has its row, and the appendix maps every task number of a commit
-subject to its entry. In the engine the second-shell scans of the level build
-(`hd_render.cpp`, `MarkSecondShells`; `hd_level.cpp`) examine every group of a level: the
-exemption of groups carrying the flag `0x40000` is gone, with its `flagged=` field of the
-`HDLOG shell level=` line and of RoomProbe's level line. The four places that carry a
-rule read in TROne name its credit in the ledger's form (`hd_render.cpp/.h`, the shells;
-`hd_level.cpp` with `hd_vis.h`, a hollow group's window; `hd_scan.h`; `game/
+this record has one form (What, Why, How, Decisions where a choice was made, Commits); the
+measurements, rounds and reviews behind the entries live outside the repository. Section
+2.9 keeps the cleanup before the first public push and section 2.10 holds the rounds after
+it that extend no area of their own; the randomizer-only tasks #214, #223 and #244 are
+rows of section 3, #230's randomizer half has its row, and the appendix maps every task
+number of a commit subject to its entry. In the engine the second-shell scans of the level
+build (`hd_render.cpp`, `MarkSecondShells`; `hd_level.cpp`) examine every group of a
+level: the exemption of groups carrying the flag `0x40000` is gone, with its `flagged=`
+field of the `HDLOG shell level=` line and of RoomProbe's level line. The four places that
+carry a rule read in TROne name its credit in the ledger's form (`hd_render.cpp/.h`, the
+shells; `hd_level.cpp` with `hd_vis.h`, a hollow group's window; `hd_scan.h`; `game/
 lift_door_rule.h`), and `tomb5.vcxproj` with its filters file lists `game/
 lift_door_rule.h` and `specific/hd/hd_install_names.h`. The picture
 `docs/hd-loading-screen.jpg` and its caption are removed from the README. The version is
@@ -15347,7 +15364,7 @@ dialog is the window's size at the next start, so it drops the remembered place.
 **Commits.** `dc646d02` (the arithmetic and its tests), `f46ebf6e` (the window, the keys
 and the remembered place), `1931a40a` (the dialog), `74d93b7c` (the manual, the tools'
 README and this entry), `cc2f6bf9` (the pages after a refused device), `ce96392b` and
-`02252971` (`DXChangeVideoMode` removed; the second commit removes a stray line the first
+`1ade40fe` (`DXChangeVideoMode` removed; the second commit removes a stray line the first
 left, which kept `dxshell.cpp` from compiling at `ce96392b`), `6e29d3f6` (this list) and
 `9c501b5d` (the manual's stale line on the dialog's defaults removed, the resize log line
 once per wait, Alt+Space opens the system menu).
@@ -15357,8 +15374,7 @@ Alt+Plus takes the largest client the work area holds, the size Maximize gives; 
 dialog's entry stays, and the `DXLOG window keys` line says `mode=-1`. Commit `23b54aab`.
 
 ### The cursor lets go while the window is moved or sized (#252)
-
-2026-10-27.
+2026-10-27
 
 **What.** While the player drags the window by its caption or sizes it by its frame, the
 cursor is free; the clip that holds it inside the client under *Modern* control returns
@@ -15377,8 +15393,7 @@ ends. `docs/Engine-Manual.md` says so.
 **Commits.** `328d7bc5`.
 
 ### A click in the picture takes the mouse back (#253)
-
-2026-10-27.
+2026-10-27
 
 **What.** From the moment the player clicks the window's caption, frame or a button, the
 cursor stays free: a second adjustment and the close button work without leaving the
@@ -15397,11 +15412,11 @@ nor moves, so the click that takes the mouse back is not a shot. The `MOUSELOG c
 line ends with `free=`. `docs/Engine-Manual.md` says so.
 
 **Commits.** `1d96c038` and `41c9e7b8` (the second makes the first build: the term was
-declared after the Alt+Enter handler that clears it, which now goes through a function).
+declared after the Alt+Enter handler that clears it, which now goes through a function),
+`ec411414` (a prototype comment within the width).
 
 ### The game ends when its window is closed from the taskbar (#255)
-
-2026-10-27.
+2026-10-27
 
 **What.** Closing the window while it is in the background - from the taskbar's thumbnail,
 or by any other way that reaches an inactive window - ends the game like the close button
@@ -15416,25 +15431,22 @@ and only the task manager could end the process.
 quit; the wait at the end of `WinMain` sleeps instead of spinning and gives up after five
 seconds with `ExitProcess`, so a thread stuck anywhere cannot hold the process either.
 
-**Commits.** `7b77e0ea`.
+**Commits.** `7b77e0ea`, `fe11f16f` (a log line within the width).
 
 ### The visibility path's room walk ends (#256)
-
-2026-10-27.
+2026-10-27
 
 **What.** A camera position from which the visibility path's room walk never ended - the
 game thread spinning in `GetRoomBounds`, the window frozen, the music playing on - ends
-like any other: the walk lists its rooms and the frame is drawn. Seen with `hd_vis 1` at
-ANDY1 rooms 121 and 113 and ANDREA2 room 69, independent of the seed.
+like any other: the walk lists its rooms and the frame is drawn. The walk ran away with
+`hd_vis 1` at ANDY1's rooms 121 and 113 and ANDREA2's room 69, whatever the seed.
 
 **Why.** `VisQueue` keeps a room's window in whole pixels but tested what the room already
 held on the float rectangle. A right or bottom edge with a fraction - 1326.3, stored as
 1326 - was never held, so the room was queued again with the same window at every visit;
 and where the path's sources - guests, openings, near portals, wide and edge portals -
-form a ring of rooms, every dequeue queued the next, for ever. The dump of a hung process
-showed 25.7 million dequeues of one frame and six rooms circling, one of them with a
-window narrower than a pixel. The classic walk is not affected: `SetRoomBounds` tests the
-parent's window, whole pixels against whole pixels.
+form a ring of rooms, every dequeue queued the next, for ever. The classic walk is not
+affected: `SetRoomBounds` tests the parent's window, whole pixels against whole pixels.
 
 **How.** `game/draw.cpp`: `VisQueue` makes its test on the whole pixels it stores and
 refuses a rectangle that is empty in whole pixels; `GetRoomBounds` cuts a walk past 32
@@ -15445,8 +15457,7 @@ the count goes out on a `ROOMWALK runaway=` line that must never appear.
 **Commits.** `67e2445b`.
 
 ### A frozen game names where its thread stands (#257)
-
-2026-10-27.
+2026-10-27
 
 **What.** When the game thread stops answering - the picture frozen, the window alive -
 the engine writes where that thread stands and a minidump, the way it does for a crash:
@@ -15458,8 +15469,8 @@ and the thread did not end in five seconds.
 
 **Why.** A freeze leaves no trace a crash leaves: no exception, so the crash seam never
 runs, and the log stops at the last seam written, which says where the game was, not where
-it stays. The hang of #256 was found only through a dump taken by hand from the task
-manager; a report from another machine has no such dump.
+it stays. A hang leaves no dump unless one is taken by hand, and a report from another
+machine has none.
 
 **How.** `specific/crashseam.h`: the crash seam's tail - the line, the dump, `crash.txt` -
 becomes `CrashSeamReport`, shared with the new `CrashSeamHang`, which suspends the named
@@ -15470,28 +15481,25 @@ stuck (`Game Thread appeared stuck`) and asks once a second whether a frame was 
 since, the thread parked after all, the window closing, or a level loading; thirty seconds
 without any of that (sixty while loading) capture, once per process. The close path
 captures after its five seconds unless a level is loading. `specific/hd/hd_level.cpp`:
-`HDFramesPresented`, the frame count the watch reads, moving with or without `-log`.
-`specific/file.cpp`: `g_level_loading`, 1 while `S_LoadLevelFile` runs. `RoomProbe -hang
-<folder>` is the seam's own test, beside `-crash`: the tool runs itself with a circling
-thread, reads the `HANG` line back and checks the dump. `docs/Engine-Manual.md` says what
-to send.
+`HDFramesPresented` (`specific/hd/hd_level.h`), the frame count the watch reads, moving
+with or without `-log`. `specific/file.cpp`: `g_level_loading` (`specific/file.h`), 1
+while `S_LoadLevelFile` runs. `RoomProbe -hang <folder>` is the seam's own test, beside
+`-crash`: the tool runs itself with a circling thread, reads the `HANG` line back and
+checks the dump. `docs/Engine-Manual.md` says what to send.
 
 **Commits.** `7b23e79e`.
 
 ### The submarine's grilles, benches and diving suits (#260)
+2026-10-28
 
-2026-10-28.
-
-**What.** Three things in the Submarine (JOBY3), seen in play: the mess hall's benches
-drawn twice, HD and classic over each other; black openings wherever the remaster shows
-pipes and cables - the ceiling coves, the space under the grating floors, the walls
-behind the truss panels; and SD diving suits in the HD glass cases of the crew cabins,
-in JOBY5 as well. Now the benches are drawn once, the openings show the cavity's pipes,
-and the suits are the remaster's own models. A sweep over every placed item of the
-fifteen levels, made with the same tool, found the other slots the HD path draws
-classic: the keyholes KEY_HOLE6 and KEY_HOLE7 of JOBY2, JOBY3 and JOBY5, the rolling
-balls of ANDREA3 and RICH1, six ANIMATING8 of RICH2 and two flat panels of JOBY3's room
-4; none of them is bound here.
+**What.** Three things in the Submarine (JOBY3): the mess hall's benches drawn twice, HD
+and classic over each other; black openings wherever the installation's art has pipes and
+cables - the ceiling coves, the space under the grating floors, the walls behind the truss
+panels; and SD diving suits in the HD glass cases of the crew cabins, in JOBY5 as well.
+Now the benches are drawn once, the openings show the cavity's pipes, and the suits are
+the remaster's own models. The other slots the HD path draws classic - the keyholes
+KEY_HOLE6 and KEY_HOLE7 of JOBY2, JOBY3 and JOBY5, the rolling balls of ANDREA3 and RICH1,
+six ANIMATING8 of RICH2 and two flat panels of JOBY3's room 4 - are not bound here.
 
 **Why.** (a) The art that models the benches is the underfloor room's, group 123, whose
 box ends at the mess hall's floor line; the classic bench stands on that line, and the
@@ -15506,15 +15514,17 @@ map names a file that does not exist, or says nothing, and the models' names
 (EXTRA5_SUBSUIT_FULL, _TOP_CHAIN, _TOP_CHAIN_JOBY5, _BOTTOM_CHAIN) follow no rule.
 
 **How.** `specific/hd/hd_render.cpp`: a vertex on a cell boundary asks the cells on both
-sides of it (GroupVertsIn); measured over all fifteen levels with `RoomProbe
--statictable`, no answer moved towards classic. `MaterialInside` reads material 17's
-layer and depth into every range (sort key and build hash); draw_pass binds the
-interior's page on stage 4, writes c38 and takes the room shader's HD_INSIDE variant
-(`hd_shader/hd_room.hlsl`: the second page through the grille's dark texels, pushed
-back along the eye's ray out of a tangent frame from the screen derivatives;
-`bshader.bat` compiles it, `be.bat` stamps it); the level line "motion=" ends with
-inside_parts and inside_dropped. `specific/hd/hd_bind.cpp`: five hand-table lines bound
-to JOBY3 and JOBY5, and a map line whose file is in no ITEM folder gives way to a
+sides of it (GroupVertsIn). `MaterialInside` reads material 17's layer and depth into
+every range (sort key and build hash); draw_pass binds the interior's page on stage 4,
+writes c38 and takes the room shader's HD_INSIDE variant (`hd_shader/hd_room.hlsl`: the
+second page through the grille's dark texels, pushed back along the eye's ray out of a
+tangent frame from the screen derivatives; `bshader.bat` compiles it into the new
+`hd_shader/hd_room_inside_ps.inc`, and the includes built from or with `hd_room.hlsl` -
+`hd_room_*.inc`, `hd_glow_ps.inc`, `hd_water_look_ps.inc` and `hd_water_look_vs.inc` -
+take its new stamp, which `be.bat` checks); the level line "motion="
+(`specific/hd/hd_level.cpp`) ends with inside_parts and inside_dropped, the build's two
+counts in `specific/hd/hd_render.h`. `specific/hd/hd_bind.cpp`: five hand-table lines
+bound to JOBY3 and JOBY5, and a map line whose file is in no ITEM folder gives way to a
 hand-table line bound to that level. `Preparation/Tools/Diagnose/TrgProbe.cpp`: `-box`,
 `-boxes` and `-layers`, the modes the three findings were measured with.
 `docs/Engine-Manual.md` says what the grilles show.
@@ -15522,8 +15532,7 @@ hand-table line bound to that level. `Preparation/Tools/Diagnose/TrgProbe.cpp`: 
 **Commits.** `95ee7611`, `eb5b50c1`, `8eabbf14`, `e21c7d6a`.
 
 ### The diving suits, their console and Lara in the suit (#261)
-
-2026-10-29.
+2026-10-29
 
 **What.** The diving suit of the submarine levels is drawn with the install's models
 wherever it stands: the halves in the crew cabins' glass cases of JOBY3 and JOBY5, the
@@ -15566,8 +15575,7 @@ the suit and the console do.
 **Commits.** `83dbc995`, `c186a665`, `8fbb2320`, `9447da31`, `b1829f23`.
 
 ### The suit's console states and Lara's legs inside the suit (#262)
-
-2026-10-29.
+2026-10-29
 
 **What.** The top of the diving suit at room 40's console in JOBY3 shows the console as
 the puzzle stands: the empty bezel with its plate until the player has put anything in,
@@ -15592,27 +15600,27 @@ nodes; worn in play she walks without legs.
 
 **How.** `specific/hd/hd_bind.cpp`: the top binds the plain file, and the table of DUMMY
 hosts names for each hole the slot it becomes and the top's model from then on
-(`HDBindGuestStates`). `specific/hd/hd_object.cpp` loads the two other files as the
-top's alternative models, as the cyborg's stages are loaded, and picks one per drawn
-frame by the object numbers of the items at the top's place; the last done hole in the
-table's order decides. The bind, dummy and swap lines name the states, and an
-`HDLOG guests` line the state drawn, at the first draw and on every change.
-`specific/hd/hd_lara.cpp`: `HDLaraNodesShown`, DrawLara__1's own test on a mesh-bits
-word; `specific/hd/hd_laradraw.cpp` masks every body with it, ends the `SWAPLOG` line
-in the hidden nodes and writes a `HIDELOG` line on every change no swap line carries.
-No level or cutscene table is needed: the classic data hides exactly these nodes, and
-Russia Extra lacks the same six. `specific/hd/hd_wardrobe.cpp`: an entry is offered
-unless a table names its file; `specific/hd/hd_outfitmenu.cpp` lists the offered ones,
-and a registry choice of another falls back to the level's facts. ModelProbe takes
-`-larabits <bits>` and draws her as such a word leaves her. `docs/Engine-Manual.md`
-says all three. The verdict census over the fifteen levels changes in the top's row
-alone. With `hd_build` 0 none of it runs.
+(`HDBindGuestStates`). `specific/hd/hd_object.cpp` loads the two other files as the top's
+alternative models, as the cyborg's stages are loaded, and picks one per drawn frame by
+the object numbers of the items at the top's place; the last done hole in the table's
+order decides. The bind, dummy and swap lines name the states, and an `HDLOG guests` line
+the state drawn, at the first draw and on every change. `specific/hd/hd_lara.cpp`:
+`HDLaraNodesShown`, DrawLara__1's own test on a mesh-bits word;
+`specific/hd/hd_laradraw.cpp` masks every body with it, ends the `SWAPLOG` line in the
+hidden nodes and writes a `HIDELOG` line on every change no swap line carries. No level or
+cutscene table is needed: the classic data hides exactly these nodes, and Russia Extra
+lacks the same six. `specific/hd/hd_wardrobe.cpp`: an entry is offered unless a table
+names its file (`HDWardrobeEntry::offered`, `specific/hd/hd_wardrobe.h`);
+`specific/hd/hd_outfitmenu.cpp` lists the offered ones, and a registry choice of another
+falls back to the level's facts. ModelProbe takes `-larabits <bits>` and draws her as such
+a word leaves her. `docs/Engine-Manual.md` says all three. `specific/drawlara.cpp` calls
+`HDLaraDrawFrame` without its mesh-bits flag (`specific/hd/hd_laradraw.h`), the seam
+masking every body. With `hd_build` 0 none of it runs.
 
 **Commits.** `a5bc13a9`, `68a0352a`, `9da367d4`, `c9e80143`.
 
 ### Lara's legs inside the suit, on the classic path (#263)
-
-2026-10-29.
+2026-10-29
 
 **What.** With the HD path off too, Lara's legs stay hidden in the two cutscenes that
 put the diving suit on her and take it off again, whatever outfit she wears: from frame
@@ -15628,27 +15636,28 @@ can dress JOBY5 in the catsuit, and the classic body then showed its own legs be
 backwards beside the suit's. The two log lines came from the HD composite alone.
 
 **How.** `specific/drawlara.cpp`: __4 and __5 put __1's own tests, literally, where __1
-has them: `mesh_bits >> 0x10 & 1 << (15 - i)` around each skin node's draw and stash,
-and `mesh_bits & 1 << (14 - i)` around each of the catsuit's seam pieces; the diving
-suit has none and stashes nothing. Dropping a hidden node's stash with it is __1's way
-and is safe for this word: the seam pieces it leaves drawn, 6 to 13, sew the hips, the
-torso, the head and the arms, all of them drawn; the six it hides sit at the hips, the
-knees and the ankles. The holsters, the weapon on the back and the suit's thrusters are
-drawn without a test, as __1 draws its own. __1 and the skeleton's __6 are unchanged: a
-SKELETON trigger picks __6 only from Lara's own control, which does not run in a
-cutscene. `specific/hd/hd_laradraw.cpp`: `HDLaraClassicLog`, called by __1, __4 and __5
-where they draw her classic, runs the writer of both lines with its state; each line
-ends in `drawn=hd` or `drawn=DrawLara__<n>`, and a level without an HD build takes its
-name from the frame clock (`specific/hd/hd_level.cpp`, `HDLevelLogName`).
-`docs/Engine-Manual.md` says it. hd_build 0: unchanged for every vanilla level; a
-catsuit or diving suit in JOBY3's last and JOBY5's first cutscene now hides the legs as
-the vanilla outfit does.
+has them: `mesh_bits >> 0x10 & 1 << (15 - i)` around each skin node's draw and stash, and
+`mesh_bits & 1 << (14 - i)` around each of the catsuit's seam pieces; the diving suit has
+none and stashes nothing. Dropping a hidden node's stash with it is __1's way and is safe
+for this word: the seam pieces it leaves drawn, 6 to 13, sew the hips, the torso, the head
+and the arms, all of them drawn; the six it hides sit at the hips, the knees and the
+ankles. The holsters, the weapon on the back and the suit's thrusters are drawn without a
+test, as __1 draws its own. __1 and the skeleton's __6 are unchanged: a SKELETON trigger
+picks __6 only from Lara's own control, which does not run in a cutscene.
+`specific/hd/hd_laradraw.cpp`: `HDLaraClassicLog`, called by __1, __4 and __5 where they
+draw her classic, runs the writer of both lines with its state; each line ends in
+`drawn=hd` or `drawn=DrawLara__<n>`, and a level without an HD build takes its name from
+the frame clock (`specific/hd/hd_level.cpp`, `HDLevelLogName`).
+`specific/hd/hd_laradraw.h` and `specific/hd/hd_level.h` declare `HDLaraClassicLog` and
+`HDLevelLogName`, and `specific/hd/hd_lara.h` names the three variants beside
+`HDLaraNodesShown`. `docs/Engine-Manual.md` says it. hd_build 0: unchanged for every
+vanilla level; a catsuit or diving suit in JOBY3's last and JOBY5's first cutscene now
+hides the legs as the vanilla outfit does.
 
 **Commits.** `64ca409f`, `7db3fc3d`.
 
 ### The title menu's sliders follow the pad (#264)
-
-2026-10-29.
+2026-10-29
 
 **What.** On the title screen the six sliders of the options pages follow the stick, the
 d-pad and the direction keys of the active layout, as they do in the pause menu; before,
@@ -15672,22 +15681,22 @@ carried the pad's bits. The title's input shadow (`TitleInputShadow`) is not the
 `S_UpdateInput` writes for every caller before any caller's mask, beside the two arrow
 keys, through `MenuSliderHeldDir` (`game/menu_nav.h`). In a level `input` and `inputBusy`
 carry the same two direction bits - the one mask between them, under `lara.Busy`, keeps
-both - so the pause menu reads what it read before. On a title present without a game
-step the shadow still zeroes `input` and `dbinput` and leaves `inputBusy` standing, as it
+both - so the pause menu reads what it read before. On a title present without a game step
+the shadow still zeroes `input` and `dbinput` and leaves `inputBusy` standing, as it
 leaves `keymap`: a held slider moves on every present by key and pad alike, and every edge
 is still read once. The value rows, the ring and `do_debounced_joystick_poo` are
 untouched. `MenuLogSlider` writes the line - `dir=`, `src=` (`key`, `pad`, `pad+key` or
 `-`, from `MenuSliderHands`) and `shadow=` - once per change and never while both stay;
 for it alone `specific/input.cpp` keeps the pad pair's own direction bits of the last call
 (`InputPadDirection`) and `game/gameflow.cpp` the shadow of the running `TitleOptions`
-call (`TitleInputShadowed`). MenuTest's `slider_held_word` holds the rule;
-`docs/Engine-Manual.md` says it.
+call (`TitleInputShadowed`). `game/gameflow.h` and `specific/input.h` declare
+`TitleInputShadowed` and `InputPadDirection`. MenuTest's `slider_held_word` holds the
+rule; `docs/Engine-Manual.md` says it.
 
 **Commits.** `f8b6a5a1`.
 
 ### An item the randomizer adds is drawn, its slot baked or not (#265)
-
-2026-10-29.
+2026-10-29
 
 **What.** An item the randomizer puts into a level is drawn in an HD room whatever its
 slot: as every item of its slot draws - HD where the slot binds a model, classic where
@@ -15717,29 +15726,25 @@ index `addItem` appends - the one way an item gets into a level, for the roll's 
 enemies and pickups and a secret list's `add` lines alike; nothing is ever inserted before
 an item or removed, so the index is the item's index in the saved file - and
 `core/ApplyPatch.cpp` writes one `item <index>` line each, ascending, at the end of the
-`.hdm`. The line needs no version: an engine that predates it counts each as a line it
-has no rule for and draws the item as before. `specific/hd/hd_markers.cpp`/`.h` read it
+`.hdm`. The line needs no version: an engine that predates it counts each as a line it has
+no rule for and draws the item as before. `specific/hd/hd_markers.cpp`/`.h` read it
 (`HDMarkersItemAdded`). `specific/hd/hd_object.cpp`: `begin_decision` no longer answers
 BEGIN_BAKED for an item the sidecar names (`item_run_added`, an index of `items[]` below
 `level_items`), so the item reaches the guard and draws as a slot without a model draws,
-classic; the objects' build writes an `HDLOG level=... added item=...` line for each
-added item of a baked slot, whether `hd_objects` is on or off. `specific/hd/hd_level.cpp`:
+classic; the objects' build writes an `HDLOG level=... added item=...` line for each added
+item of a baked slot, whether `hd_objects` is on or off. `specific/hd/hd_level.cpp`:
 `BuildBakedBoxes` leaves such an item out of the boxes of the art's objects, and the
-`markers` summary line ends in `items=`. `MapProbe -hdm` answers each `item` line with
-its slot, room and drawing, `HdmDump` lists them, and RoomProbe's copy of
-`BuildBakedBoxes` leaves them out too; `docs/Engine-Manual.md` and
-`docs/Randomizer-Manual.md` say it. The same seed 380 through the randomizer before and
-after, over the thirteen campaign levels plain and with `mix cross allsanity 8 weapons
-items20 weather` and the glitchless list: every `.trc` and log byte-identical, every
-`.hdm` the old file plus its `item` lines. The verdict census over the fifteen levels is
-unchanged. With `hd_build` 0 nothing of it runs - no HD room, no baked answer - and a
-level without a sidecar, or with one written before the line, draws as before.
+`markers` summary line ends in `items=`. `MapProbe -hdm` answers each `item` line with its
+slot, room and drawing, `HdmDump` lists them, and RoomProbe's copy of `BuildBakedBoxes`
+leaves them out too; `docs/Engine-Manual.md` and `docs/Randomizer-Manual.md` say it. The
+randomizer writes the same levels as before; only each `.hdm` gains its `item` lines. With
+`hd_build` 0 nothing of it runs - no HD room, no baked answer - and a level without a
+sidecar, or with one written before the line, draws as before.
 
 **Commits.** `c8cb7cd0`, `0ae57756`.
 
 ### What a cutscene puts into a hand, in HD (#266)
-
-2026-10-29.
+2026-10-29
 
 **What.** With the HD path on, the crane guard of JOBY2's cutscene 27 holds his pistol,
 the priest of ANDY1's cutscene 19 and ANDY2's cutscene 33 holds his torch, Pierre's
@@ -15759,41 +15764,39 @@ the four `do_*_meshswap` of Lara's hands exchange her hand with a holder slot's.
 the speech heads are the same mechanism on a face. An HD model is drawn out of its own
 file whatever the table says.
 
-**How.** `specific/hd/hd_object.cpp` keeps the mesh table as the level loaded it,
-after `InitialiseObjects` (`HDObjectMeshTableTake`, called by `HDLevelLoad` with the HD
-path on); a node whose drawn mesh is not that entry has borrowed it from the slot whose
-own mesh it was, Lara's slots first and then slot order. A mesh of one of Lara's slots
-and a mesh on the node a separate HD face rides on are speech heads and are not
-borrowed. `HDObjectCutActor`, called by `DrawCutSeqActors` before `HDObjectBegin` with
-one pointer compare per node, decides per node and per frame: the install's model of
-the actor in that state where it ships one, a new swap kind keyed on the model name and
-the set of borrowed nodes (PIERRE_SWAP for node 11, PATRICK_1_TORCH and
-PATRICK_2_TORCH for node 8, TWOGUN_LEFT for node 5 and TWOGUN_EMPTY for 5 and 8,
-measured node by node with ModelProbe `-name -nodes`); else, where the lending slot's
-model draws HD and has geometry on that node, the node of that model hung rigidly on
-the actor's node in its bind pose (`specific/hd/hd_model.cpp`, `HDModelBorrowJoints`)
-with the actor's light, and the actor's own node left out; else the actor's own node.
-The classic mesh is never drawn into an HD body: it is the whole node, a hand with the
-thing in it, and the swap rule refuses that patchwork. `specific/hd/hd_laradraw.cpp`
-does the second rule for Lara while a cutscene plays, out of the same table;
-`specific/hd/hd_bind.cpp`'s hand table binds the four holder slots to the install's
-hand files: CROW_MIP in ANDY1 to HAND_BARE_CATAPULT, MESHSWAP2 in ANDY1 to
+**How.** `specific/hd/hd_object.cpp` keeps the mesh table as the level loaded it, after
+`InitialiseObjects` (`HDObjectMeshTableTake`, called by `HDLevelLoad` in
+`specific/hd/hd_level.cpp` with the HD path on); a node whose drawn mesh is not that entry
+has borrowed it from the slot whose own mesh it was, Lara's slots first and then slot
+order. A mesh of one of Lara's slots and a mesh on the node a separate HD face rides on
+are speech heads and are not borrowed. `HDObjectCutActor`, called by `DrawCutSeqActors`
+(`game/deltapak.cpp`) before `HDObjectBegin` with one pointer compare per node, decides
+per node and per frame: the install's model of the actor in that state where it ships one,
+a new swap kind keyed on the model name and the set of borrowed nodes (PIERRE_SWAP for
+node 11, PATRICK_1_TORCH and PATRICK_2_TORCH for node 8, TWOGUN_LEFT for node 5 and
+TWOGUN_EMPTY for 5 and 8, measured node by node with ModelProbe `-name -nodes`); else,
+where the lending slot's model draws HD and has geometry on that node, the node of that
+model hung rigidly on the actor's node in its bind pose (`specific/hd/hd_model.cpp`,
+`HDModelBorrowJoints`) with the actor's light, and the actor's own node left out; else the
+actor's own node. The classic mesh is never drawn into an HD body: it is the whole node, a
+hand with the thing in it, and the swap rule refuses that patchwork.
+`specific/hd/hd_laradraw.cpp` does the second rule for Lara while a cutscene plays, out of
+the same table; `specific/hd/hd_bind.cpp`'s hand table binds the four holder slots to the
+install's hand files: CROW_MIP in ANDY1 to HAND_BARE_CATAPULT, MESHSWAP2 in ANDY1 to
 HAND_BARE_IRON_CLAPPER, MESHSWAP3 in RICH1 to HAND_BARE_HAMMER, MAFIA_MIP in ANDY3 to
-HAND_BARE_CHALK - holders with her fifteen-node tree and no item, each file's hand bone
-10 to 25 units from the holder's mesh. The suit's hips have no model and stay her
-own, as #261 left them. The state models, the lending slot's node and the prop hands
-are TROne's rules. `HDLOG cutseq actor` ends in `swap=`, every borrowed node with its
-slot, mesh and what drew it; a change later in the cutscene writes `HDLOG cutswap`;
-`SWAPLOG` ends in `shows=` and finds a mesh's slot in the load-time table, which also
-names the catapult's holder after the exchange. ModelProbe takes `-meshes` and
-`-borrow`. The verdict census over the fifteen levels changes in the four holders' rows
-alone, from classic to `hand`. With `hd_build` 0 nothing of it runs.
+HAND_BARE_CHALK - holders with her fifteen-node tree and no item, each file's hand bone 10
+to 25 units from the holder's mesh. The suit's hips have no model and stay her own, as
+#261 left them. The state models, the lending slot's node and the prop hands are TROne's
+rules. `HDLOG cutseq actor` ends in `swap=`, every borrowed node with its slot, mesh and
+what drew it; a change later in the cutscene writes `HDLOG cutswap`; `SWAPLOG` ends in
+`shows=` and finds a mesh's slot in the load-time table, which also names the catapult's
+holder after the exchange. `specific/hd/hd_object.h` and `specific/hd/hd_model.h` declare
+the calls. ModelProbe takes `-meshes` and `-borrow`. With `hd_build` 0 nothing of it runs.
 
 **Commits.** `aa2732b2`.
 
 ### The classic holsters hide with her thighs, a left-out seam keeps its place (#267)
-
-2026-10-29.
+2026-10-29
 
 **What.** On the classic path the two thigh holsters are drawn only while the thigh
 each hangs on is shown: in the two cutscenes that hide Lara's legs inside the diving
@@ -15816,23 +15819,23 @@ left-out piece among them - and the last seam's own piece was not drawn.
 **How.** `specific/drawlara.cpp`: `LaraHolstersDrawn` gives the holsters of the frame,
 each by __1's own skin test, `mesh_bits >> 0x10 & 1 << (15 - i)`, with i the place of
 `LM_LTHIGH` or `LM_RTHIGH` in `lara_mesh_sweetness_table` - 1 and 4, the places whose
-matrices, `LMX_THIGH_L` and `LMX_THIGH_R`, the holsters are drawn with - inside the
-draws' own brackets: none on young Lara, and for __4 both holster slots loaded. With the
-bits at -1 both thighs are shown and the holsters are drawn as before; the two cutscenes,
-the shipped outfit's included, are the one change of the classic picture. The joint
-loops take the step before `continue`, so a piece left out is still neither drawn nor
-fed from the stash, and every seam after it draws its own; a skin that leaves out no
-piece draws as before. `specific/hd/hd_laradraw.cpp`: `HDLaraClassicLog` takes the
-holsters and ends the classic lines in `holsters=LR`, `L`, `R` or `none`; the HD lines
-are unchanged. `specific/file.cpp`: `OBJLOG skinning done` ends in `joints_used=` and
-`left_out=`, the pieces left out by joint number, `-` for the diving suit, which is not
-skinned. `docs/Engine-Manual.md` says it.
+matrices, `LMX_THIGH_L` and `LMX_THIGH_R`, the holsters are drawn with - inside the draws'
+own brackets: none on young Lara, and for __4 both holster slots loaded. With the bits at
+-1 both thighs are shown and the holsters are drawn as before; the two cutscenes, the
+shipped outfit's included, are the one change of the classic picture. The joint loops take
+the step before `continue`, so a piece left out is still neither drawn nor fed from the
+stash, and every seam after it draws its own; a skin that leaves out no piece draws as
+before. `specific/hd/hd_laradraw.cpp`: `HDLaraClassicLog` takes the holsters and ends the
+classic lines in `holsters=LR`, `L`, `R` or `none`; the HD lines are unchanged.
+`specific/file.cpp`: `OBJLOG skinning done` ends in `joints_used=` and `left_out=`, the
+pieces left out by joint number, `-` for the diving suit, which is not skinned.
+`specific/hd/hd_laradraw.h` gives `HDLaraClassicLog` the holsters. `docs/Engine-Manual.md`
+says it.
 
 **Commits.** `94c99b8c`, `190cc510`.
 
 ### Lara in the X-ray scanner and the X-ray outfit, in HD (#268)
-
-2026-10-29 to 2026-10-30.
+2026-10-29 to 2026-10-30
 
 **What.** The scanner in Escape with the Iris X-rays Lara, and with the HD path she is now
 drawn there in the remaster's X-ray set: a translucent green body over solid bones, its
@@ -15864,9 +15867,10 @@ Page 8030's alpha is 240 or more on every texel, so the additive pass's weight b
 changes nothing, and the part's param[0] of 0.5 is the alpha reference of material 6, not
 a weight. Beside the shell the opaque parts were lit as ordinary gear, up to twice the
 light where the shell stops at its full value and the holsters with a gunmetal sheen, and
-the figure added more light than the reference: in the same flooded tunnel the shell adds
-61.6/82.2/83.9 to the wall behind her belly, the reference pictures of the remaster's
-X-ray Lara 41.2/60.7/32.3 (the mean of a front and a side view).
+the figure added more light than the reference pictures supplied for this project (an
+X-ray figure in a flooded brick tunnel): in the same tunnel the shell adds 61.6/82.2/83.9
+to the wall behind her belly, the reference pictures' mean 41.2/60.7/32.3 (a front and a
+side view).
 
 **How.** `specific/hd/hd_lara.cpp`: a table names the X-ray set part by part (`kXray`) -
 OUTFIT_XRAY, the eleven HAND_XRAY_ parts, HOLSTER_PISTOL_XRAY and the three weapons on the
@@ -15889,31 +15893,35 @@ figure is the art's own and the room's light, and no shader changed.
 (TROne-main, copy of 2026-10-23, commit a3c0c633: S_InitialisePolyList in
 `hostglue_draw5.cpp`, `lara_build_models` and `lara_head_for_outfit` in
 `game_renderer.cpp`); no code was taken. `docs/Engine-Manual.md` says it. With `hd_build`
-0 none of it runs: the X-ray set exists only inside the HD draw of Lara. The verdict
-census over the fifteen levels is unchanged. `specific/hd/hd_model.cpp`: a model whose
-plan entry asks for it (`HDModelSlot::additiveOneSided`) draws its additive run from the
-front alone - the winding turned away from the eye culled, the other one under a mirrored
-matrix, as the glass does - and its other runs from both sides; `hd_lara.cpp` asks for it
-for every part of the X-ray set, in the level's block and on an outfit that is the X-ray
-body. The bones stay two-sided, because their right half is wound the other way round.
-Every other model keeps both sides, its additive runs included: the classic draws those by
-each face's own double-sided flag, which a .TRM does not carry.
+0 none of it runs: the X-ray set exists only inside the HD draw of Lara.
 `specific/hd/hd_model.cpp`: a model whose plan entry asks for it
-(`HDModelSlot::lightAsAdditive`) draws its other runs with the pixel shader's own additive
-switches - the light held under 1.0, no sheen, weighed by the alpha, a glow under the
-water; `hd_lara.cpp` asks for it for every part of the X-ray set. `hd_lara.cpp` keeps the
-set's tone, a choice made from the reference pictures and written down there with its
-measurement: the level 0.70, the ratio of the two lumas, and the hue 0.96/1.06/0.55, the
-ratio of each channel over it. `hd_laradraw.cpp` multiplies the light it hands the set by
-it, the ambient of every node and every light, after the shadow's decision and the light
-log, and the `XRAYLOG` line ends in `tone=`. Every model outside the set is lit as before.
+(`HDModelSlot::additiveOneSided`) draws its additive run from the front alone - the
+winding turned away from the eye culled, the other one under a mirrored matrix, as the
+glass does - and its other runs from both sides; `hd_lara.cpp` asks for it for every part
+of the X-ray set, in the level's block and on an outfit that is the X-ray body. The bones
+stay two-sided, because their right half is wound the other way round. Every other model
+keeps both sides, its additive runs included: the classic draws those by each face's own
+double-sided flag, which a .TRM does not carry. `specific/hd/hd_model.cpp`: a model whose
+plan entry asks for it (`HDModelSlot::lightAsAdditive`) draws its other runs with the
+pixel shader's own additive switches - the light held under 1.0, no sheen, weighed by the
+alpha, a glow under the water; `hd_lara.cpp` asks for it for every part of the X-ray set.
+`hd_lara.cpp` keeps the set's tone, a choice made from the reference pictures and written
+down there with its measurement: the level 0.70, the ratio of the two lumas, and the hue
+0.96/1.06/0.55, the ratio of each channel over it. `hd_laradraw.cpp` multiplies the light
+it hands the set by it, the ambient of every node and every light, after the shadow's
+decision and the light log, and the `XRAYLOG` line ends in `tone=`. Every model outside
+the set is lit as before. `specific/hd/hd_laradraw.h` declares `HDLaraDrawXray`.
+
+`Preparation/Tools/Diagnose/ModelProbe.cpp`: `-xray` draws Lara in the X-ray set with its
+tone on her light, `-bg r,g,b` clears the picture to a colour, so that an additive layer
+is measured against a dark one, and `-passes solid|additive` draws the opaque or the
+additive runs alone.
 
 **Commits.** `a62561ea`, `753df221`, `0d6713d7`, `354cee0b`, `3c0c289b`, `03fa2e66`,
-`92cff2d9`.
+`92cff2d9`, `97de3331` (ModelProbe's options in two chains).
 
 ### Cut-out cards back to back are one-sided; a hanging guest is refused (#269)
-
-2026-10-29.
+2026-10-29
 
 **What.** Two rules of the HD level build on the visibility path (`hd_vis` 1). A cut-out
 card - a triangle of the opaque pass with an alpha test, or of the alpha pass but for its
@@ -15942,19 +15950,19 @@ classic flight with its railing on a dark steel floor. No flipmap pair is involv
 RICH1's room 72 and RICH2's rooms 14, 18 and 55 have no twin. The catwalk grating is group
 72's floor, facing up, and group 70's ceiling under it, facing down, its bars turned the
 other way; both are cut-outs, drawn two-sided, so both showed from either side and tied in
-depth (157,683 pixels at one eye over the catwalk at 1,280 x 720). The door frame is group
-55's art: room 55 is a corridor from room 49 to room 56 running through the stairwell's
-column over room 18, with no portal, door or floor link to it, and 63 triangles of its art
-hang 1,024 units below its floor into room 18's inside. Room 18 is under the sky - the
-stairwell's windows show the city - and the guest table took the art of an unlinked room
-for a room under the sky, as it must for ANDREA2's brick tower over room 232; listed, room
-55 drew its art and its door there and walked on into room 49 behind it. This is the kind
-of ghost the entry "Art in the air of an unlinked room draws inside its own window" (#181)
-handled for ANDREA1, come in by the guest table. The blue flight, its railing and the dark
-floor are room 18's and room 19's own classic stair and railing statics and floor faces,
-where group 14's art, which draws the whole stairwell, has no flight and no landing: no
-group's art lies on more than 14 of the flight's 39 points, and the classic floor there is
-the one Lara walks on, so the static and stand rules keep them classic, as they should.
+depth. The door frame is group 55's art: room 55 is a corridor from room 49 to room 56
+running through the stairwell's column over room 18, with no portal, door or floor link to
+it, and 63 triangles of its art hang 1,024 units below its floor into room 18's inside.
+Room 18 is under the sky - the stairwell's windows show the city - and the guest table
+took the art of an unlinked room for a room under the sky, as it must for ANDREA2's brick
+tower over room 232; listed, room 55 drew its art and its door there and walked on into
+room 49 behind it. This is the kind of ghost the entry "Art in the air of an unlinked room
+draws inside its own window" (#181) handled for ANDREA1, come in by the guest table. The
+blue flight, its railing and the dark floor are room 18's and room 19's own classic stair
+and railing statics and floor faces, where group 14's art, which draws the whole
+stairwell, has no flight and no landing: no group's art lies on more than 14 of the
+flight's 39 points, and the classic floor there is the one Lara walks on, so the static
+and stand rules keep them classic, as they should.
 
 **How.** A card is asked when its group has cards and another group drawn with it - the
 rooms of the two linked by a portal or a floor link (`g_air_links`), never a flipmap room
@@ -15962,48 +15970,44 @@ and its twin - has cards whose box meets its own, grown by 16 units; the cards t
 in 256-unit world cells. A card is culled when its centroid and its three corners, each
 pulled 1 unit inward, lie on such cards facing the other way (normals within `kShellDot`),
 within 16 units of their plane and inside them with 1 unit to spare. From either side the
-card facing the eye shows. Over the fifteen levels 1,138 triangles are drawn one-sided:
-RICH1 828 (the catwalks over rooms 69, 70 and 72, and the grating between rooms 14 and
-16), RICH3 216, TITLE 72, ANDY1 22; at the catwalk eye the tie falls from 157,683 pixels
-to 693. A group's own cards back to back stay two-sided: culled as well, the tie fell by
-26 pixels at most at four catwalk eyes and only the light of the card that shows changed.
-The scan costs 108 ms at most (TITLE, 725,744 cut-out triangles), 22 ms or less in
-thirteen levels. A flipmap room's card keeps its two sides, as a flipmap pair keeps what
-one state does not carry. The guest rule refuses one pair over the fifteen levels, RICH2's
-group 55 in room 18; every other guest stays, ANDREA2's tower among them. The second
-shells and their flipmap refusal are unchanged: RICH3 room 23's pictures, before and after
-its flip, are those of the base. `hd_build` 0 and `hd_vis` 0 are unchanged by
-construction: the card scan runs only with the shell rooms handed in and the guest table
-only on the visibility path; no classic path file changed.
+card facing the eye shows. A group's own cards back to back stay two-sided: culled as
+well, they changed only the light of the card that shows. A flipmap room's card keeps its
+two sides, as a flipmap pair keeps what one state does not carry. The guest rule refuses
+one pair over the fifteen levels, RICH2's group 55 in room 18; every other guest stays,
+ANDREA2's tower among them. The second shells and their flipmap refusal are unchanged.
+`specific/hd/hd_level.cpp` writes the `HDLOG cards` lines out of `HDCardLine`,
+`HDRenderCardLines`, `HDRenderCardLine` and `HDRenderCardCounts`
+(`specific/hd/hd_render.h`). `hd_build` 0 and `hd_vis` 0 are unchanged by construction:
+the card scan runs only with the shell rooms handed in and the guest table only on the
+visibility path; no classic path file changed.
 
 **Commits.** `e58151a3`.
 
 ### The game comes back after Ctrl+Alt+Del (#270)
-
-2026-10-29.
+2026-10-29
 
 **What.** After Ctrl+Alt+Del, the lock screen or a UAC prompt the game comes back when the
 player returns to its window, in the look it had, HD included. Before, the picture stood
 still with the sound playing on, and the process never recovered. A game parked behind
 another window also wakes when its window is in front again without an activation message.
 
-**Why.** A full dump of the frozen process showed the game thread parked at the start of
-its scene (`HWBeginScene`, `game_parked` 1), the window thread idle in `GetMessage`, the
-music stream and XAudio2 running. The secure desktop had lost the windowed D3D9 device. In
-two frames running the device-lost road in `DXShowFrame` released the HD level and called
-`Reset` on the game thread; the log's last lines, still in the dump's memory, give the
-answer: `D3DERR_INVALIDCALL`. D3D9 refuses a `Reset` on any thread but the one that made
-the device, the window's, and while any `D3DPOOL_DEFAULT` object lives; the second release
-also forgot that the level was to be built HD again. Within the same millisecond of the
-log `WM_ACTIVATE` (`WA_INACTIVE`) parked the game thread, and in the ten seconds to the
-dump neither `WM_ACTIVATE` nor `WM_SETFOCUS` came, only a mouse move. Woken, the thread
-would have met the refused `Reset` in every frame.
+**Why.** The secure desktop of Ctrl+Alt+Del, the lock screen or a UAC prompt takes the
+windowed D3D9 device away. The device-lost road in `DXShowFrame` released the HD level and
+called `Reset` on the game thread, and D3D9 refuses a `Reset` (`D3DERR_INVALIDCALL`) on
+any thread but the one that made the device, the window's, and while any `D3DPOOL_DEFAULT`
+object lives; a second release also forgot that the level was to be built HD again.
+Meanwhile `WM_ACTIVATE` (`WA_INACTIVE`) parked the game thread at the start of its scene
+(`HWBeginScene`, `game_parked` 1), and no message is bound to come when the player
+returns - neither `WM_ACTIVATE` nor `WM_SETFOCUS` need arrive, only a mouse move - so the
+thread stayed parked with the music playing on, and woken it would have met the refused
+`Reset` in every frame.
 
 **How.** `specific/dxshell.cpp`: `DXShowFrame` resets nothing; it marks the loss
 (`DXDeviceLost`) and posts `WM_APP_DEVICE` to the window once per loss. `DXRestoreDevice`
 makes a new device as a new size makes it (`DXResizeToClient`: the HD level released with
 the old device and built again on the new one); `DXDeviceCoop` and `DXCoopName` give
-`TestCooperativeLevel`'s answer. `specific/winmain.cpp`: `WIN_DEVICE_TIMER` asks four
+`TestCooperativeLevel`'s answer; `specific/dxshell.h` declares them with `WM_APP_DEVICE`,
+`DXDeviceLost` and `DXRestoreDevice`. `specific/winmain.cpp`: `WIN_DEVICE_TIMER` asks four
 times a second whether the player is back in the window - the game thread not parked, the
 window in front and not minimised, no film, no level loading - and whether the device can
 be given back; then the game thread is held at the start of its scene, the device made
@@ -16038,8 +16042,7 @@ and the `WINLOG front` line says when nobody has it.
 term).
 
 ### The Game Over menu takes the d-pad and the arrow keys (#271)
-
-2026-10-29.
+2026-10-29
 
 **What.** Under the Modern scheme the Game Over menu after Lara's death, and the load list
 it opens, take the d-pad and the arrow keys beside the left stick, and Return whatever the
@@ -16072,11 +16075,11 @@ read before. `DeathLogStep` writes the line: `open` with `load=`, `scheme=` and
 bits of the last call (`InputPadDirection`). MenuTest's `death_menu_pad` holds the rule;
 `docs/Engine-Manual.md` says it.
 
-**Commits.** `94ef93a1`.
+**Commits.** `94ef93a1`, `9b459672` (MenuTest reads the title's predicate with the death
+menu's flag).
 
 ### The diving suit's thrusters on the HD body (#272)
-
-2026-10-29.
+2026-10-29
 
 **What.** In Deepsea Dive with the HD path, the diving suit's two propulsion units now
 keep the place they have on the classic suit against the back of whatever body the
@@ -16110,15 +16113,14 @@ and the classic suit leaves them 15 units of air at rest - the difference keeps 
 relation in every pose. An `HDLOG lara thrusters` line per level build names the body,
 both backs, the shift and what was measured; ModelProbe `-thrusters` prints the same for
 every body of the wardrobe and draws the units, `-thrustersclassic` at the classic
-numbers. `docs/Engine-Manual.md` says it. With the HD path off, or `hd_build` 0, the shift
-is 0 and the units and their mist are the classic ones. The verdict census over the
-fifteen levels is unchanged.
+numbers. `specific/hd/hd_laradraw.h` declares `HDLaraThrusterShift`.
+`docs/Engine-Manual.md` says it. With the HD path off, or `hd_build` 0, the shift is 0 and
+the units and their mist are the classic ones.
 
 **Commits.** `e8a42c14`, `039f1121`, `d7317d1a`.
 
 ### A static the art leaves out at one place takes the art it has at another (#274)
-
-2026-10-30.
+2026-10-30
 
 **What.** One rule of the HD level build on the visibility path (`hd_vis` 1), run as the
 `.TRG` is read and before anything is built from it (`specific/hd/hd_artcopy.h`, new:
@@ -16170,40 +16172,26 @@ image at the donor is a face carrying the group's art - the landing at a flight'
 takes that art too and then falls to the art as any covered face. The vertices go in after
 the group's last vertex and the triangles at the end of their run; every later index and
 run start moves up, as the sky's caps do. A copy keeps the donor's baked light and not its
-new place's: the flights come in at about 41 on the first colour, as at their donors,
-while the art round their new places reads 61 to 76, and warmer in rooms 18 and 19; the
-railings and posts land within about 20 of it either way.
+new place's. `specific/hd/hd_cover.h` holds a static's row (`HDArtCopyStatic`) and
+`HD_ARTCOPY_AROUND`, and `specific/hd/hd_render.h` declares `HDRenderSetArtCopyStatics`,
+`HDRenderArtCopySet`, `HDRenderArtCopyParamsSet`, `HDRenderArtCopyPlanNow` and
+`HDRenderArtCopies`. `hd_build` 0 and `hd_vis` 0 are unchanged by construction: the
+statics are handed to the build on the visibility path only, and without them nothing is
+copied; no classic path file changed.
 
-On RICH2: nine copies, 5,881 triangles and 8,192 vertices; the nine statics are answered
-by the art afterwards (seven `art`, two `groups`), every point of each on it. Room 18
-keeps no classic face (16 of 16 covered, its landing taking 58 triangles), room 19 one (14
-of 15, its landing taking 54). Where flights were copied the fight of group 14's art (the
-pixels that change when it is pushed by 1/2,000 of its distance either way) rises at two
-eyes from 3,672 to 3,962 and from 1,738 to 2,558 pixels; it stays with the art drawn
-alone, and leaving out the copied triangles that touch the art already there takes fewer
-than 90 of those pixels away: they lie on the copied gratings themselves, near-coincident
-surfaces of the art's own flight. The card census stays 1,138 one-sided triangles; RICH2's
-cut-out triangles grow from 60,123 to 64,991, none one-sided. Over the other fourteen
-levels nothing is copied and the build's fingerprint and every static's answer are the
-base's: their few targets have no donor, all but RICH3's room 79 mesh 2 (slot 46), which
-is refused: its three donors hold 260 to 15,290 triangles round them, the art models other
-objects there, and a copy would have put another object, in another light, into its niche.
-The rule costs 132 ms on RICH2, about 4 % of its build, and 5 to 56 ms elsewhere. Room
-16's sixteen kept ceiling faces at the top of the shaft stay classic and black by
-decision: the open top is meant to suggest that the shaft goes on into RICH3. Room 19's
-wall square (face 8) stays classic: the stair repeats every 4,096 units and the rooms
-every 1,536, so no face at the donor has its corners. Room 14's flat wall square (mesh 2,
-slot 7) is no copy's case: all nine of its points lie on the art, whose wall stands 1 to 8
-units from its plane, and the statics' rule draws it classic by its box's cells (1 of 25),
-a flat static on a cell boundary. `hd_build` 0 and `hd_vis` 0 are unchanged by
-construction: the statics are handed to the build on the visibility path only, and without
-them nothing is copied; no classic path file changed.
+**Decisions.** Room 16's sixteen kept ceiling faces at the top of RICH2's shaft stay
+classic and black: the open top is meant to suggest that the shaft goes on into RICH3.
+Room 19's wall square (face 8) stays classic: the stair repeats every 4,096 units and the
+rooms every 1,536, so no face at the donor has its corners. Room 14's flat wall square
+(mesh 2, slot 7) is no copy's case: all nine of its points lie on the art, and the
+statics' rule draws it classic by its box's cells, a flat static on a cell boundary.
+RICH3's room 79 mesh 2 (slot 46) is refused: its donors' art models other objects round
+them, and a copy would have put another object, in another light, into its niche.
 
 **Commits.** `14b9afa5`.
 
 ### An item the run added to a baked slot takes the art of another placement (#275)
-
-2026-10-30.
+2026-10-30
 
 **What.** The art copies of #274 gain an item path (`specific/hd/hd_artcopy.h`,
 `hdartcopy::MakeItems`, the last step of `HDArtCopyMake`; the item copies go into the
@@ -16231,11 +16219,10 @@ copy holds the item. RoomProbe lists the item rows in `-artcopytable` and ends i
 such an item; ModernTest checks the item path on a level of two rooms built by hand.
 
 **Why.** JOBY3's shelf (slot 168, SEARCH_OBJECT3) that the glitchless secret list adds to
-the bunk room - item 299 in room 52 at 64000, 6912, 55808, turned half round, the level's
-secret inside - was drawn classic among HD art since #265: flat cans and classic textures,
-while the slot's Core shelves are drawn by the art with its cans and boxes. The slot has
-no model file to draw it with (#265); the art is the only HD look there is, and it stands
-at the slot's other placements.
+the bunk room, room 52, with the level's secret inside, was drawn classic among HD art
+since #265: flat cans and classic textures, while the slot's Core shelves are drawn by the
+art with its cans and boxes. The slot has no model file to draw it with (#265); the art is
+the only HD look there is, and it stands at the slot's other placements.
 
 **How.** The donors stand in other rooms, so in other room groups than the added item: a
 copy leaves its group. It may, because a triangle's picture is named level-wide: its first
@@ -16244,68 +16231,38 @@ corner's layer byte, one-based into the `.TRG`'s one texture list (`Trg.h`,
 a part's material and four numbers mean the same in every group. The copy is read in the
 donor group's frame (its room's origin and y shift) and written in the target group's, and
 each triangle goes into the run of its pass of the target group's first part with the same
-material and numbers (`hdartcopy::Level::RunIn`); a target group with no such part gives
-no copy (`no_part`). A donor is an item of the slot Core placed in a room a group draws,
-its yaw whole quarter turns, the art in its box grown by 32 units lit: at least a
-twentieth of its corners with a colour byte above zero (`HD_ARTCOPY_LIT`; else `unlit`).
-A target is an added item in a room drawn by its own art - where `begin_decision` bakes
-the slot's items; elsewhere a copy would stand beside the classic mesh (`no_group`) - and
-of a yaw of whole quarter turns (else `skewed`). Its donor is one of its slot anywhere in
-the level: no turn first, then the nearest, then the level's order; the slot's art must be
-alike at its donors the level over (the most at three halves of the fewest, as #274). What
-is taken is the statics' rule: the donor group's triangles wholly inside the donor's grown
-box, less what lies on a classic face at either place (the wall behind a shelf, the floor)
-and what would stand on the target group's art already; the targets one motion moves from
-one donor group into one target group take together. The vertices go in after the target
-group's last vertex and the triangles at the end of their run; where two receiving runs
-end at one index - an empty run of the target group's part - they go in in the file's
-order.
+material and numbers (`hdartcopy::Level::RunIn` in `specific/hd/hd_artcopy.h`); a target
+group with no such part gives no copy (`no_part`). A donor is an item of the slot Core
+placed in a room a group draws, its yaw whole quarter turns, the art in its box grown by
+32 units lit: at least a twentieth of its corners with a colour byte above zero
+(`HD_ARTCOPY_LIT`; else `unlit`). A target is an added item in a room drawn by its own
+art - where `begin_decision` bakes the slot's items; elsewhere a copy would stand beside
+the classic mesh (`no_group`) - and of a yaw of whole quarter turns (else `skewed`). Its
+donor is one of its slot anywhere in the level: no turn first, then the nearest, then the
+level's order; the slot's art must be alike at its donors the level over (the most at
+three halves of the fewest, as #274). What is taken is the statics' rule: the donor
+group's triangles wholly inside the donor's grown box, less what lies on a classic face at
+either place (the wall behind a shelf, the floor) and what would stand on the target
+group's art already; the targets one motion moves from one donor group into one target
+group take together. The vertices go in after the target group's last vertex and the
+triangles at the end of their run; where two receiving runs end at one index - an empty
+run of the target group's part - they go in in the file's order. `specific/hd/hd_cover.h`
+holds an item's row and its answers (`HDArtCopyItem`, `HD_ARTCOPY_ITEM_NONE` to
+`HD_ARTCOPY_ITEM_UNLIT`) beside the statics', and `specific/hd/hd_render.h` declares
+`HDRenderSetArtCopyItems`, `HDRenderArtCopyItemHeld`, `HDRenderArtCopyItemCopies` and
+`HDRenderArtCopyItemAnswer`. With `hd_build` 0 nothing is built, and with `hd_vis` 0 no
+item is handed in: the shelf stays classic, as #265 left it.
 
-On JOBY3 (the game folder's level, re-rolled: 307 items, its sidecar 59 item lines) one
-added item is asked, item 299. Of the eight Core shelves, 53 and 54 in room 26 carry no
-light: 228 of 16,992 and 210 of 16,974 corners lit, the wall behind them; the shelves are
-black in their own room as well. The six others are 70 to 82 per cent lit and hold 5,634
-to 5,718 triangles, alike. Without the light test room 26's shelf 53 would give the copy
-(no turn, nearest: 5,120 units against 9,216) and it would be black. Taken is item 227 in
-room 164, no turn, shift 0, 3072, -6144: 5,718 triangles inside its grown box, 152 across
-its border (the neighbouring shelf 226), 70 on the wall or the floor, 36 on group 52's art
-already; the copy is 5,612 triangles and 6,254 vertices, no face beside it. It keeps its
-donor's light, 9,10,10 and 7,7,7 on the two colours against 12,14,15 and 18,20,20 round
-its new place: darker than the bunk room, as the Core shelves are darker than theirs.
-
-In RoomProbe's pictures (the engine's renderer) at the trview camera of the picture that
-showed the shelf and at the game's eye down the bunk room's aisle the shelf stands with
-the art's cans and boxes where the base drew the bare wall (RoomProbe draws no item, so
-the classic shelf is not in the base either): 259,357 and 116,772 pixels changed. On the
-vanilla JOBY3, which has no such item, 0 and 0 pixels change, in rooms 164 (the donor's)
-and 26 0 each. The depth fight - the pixels that change when group 52 is pushed by 1/2,000
-of its distance either way - is the base's to the pixel outside the shelf's pixels, the
-wall seen through and round it and the room (4,503 against 4,504 and 1,447 against 1,447;
-at 1/500, 6,890 against 6,891 and 6,275 against 6,276): the copy fights neither the wall
-behind it nor the room. Inside them it is about what the wall there had (739 against 680
-and 372 against 267; at 1/500, 745 against 1,100 and 1,269 against 1,271), speckles on the
-shelf's own boards, boxes and can bottoms, near-coincident surfaces of the art's shelf,
-which its donor shows as well (865 and 77 pixels in the same screen region at the eye
-moved back to the donor).
-
-Over the fifteen levels only JOBY3 copies an item: no other randomized level of the game
-folder has an added item of a DUMMY slot (`items=0`), the vanilla levels none. The build's
-fingerprint is the base's in all fifteen levels with `hd_vis` 0 and with `hd_fog` 0,
-vanilla and randomized, and with `hd_vis` 1 on the vanilla levels; with `hd_vis` 1 on the
-randomized ones only JOBY3's changes. Every static's answer is the base's in each of these
-runs, JOBY3's with the copy too; against #274's base the nine RICH2 answers of #274 and
-nothing else, and RICH2's nine `HDLOG artcopy` lines are #274's to the letter. The card
-census stays 1,138 one-sided triangles. The rule costs 124 ms on the randomized JOBY3 -
-60 ms of it the wall and standing tests over the donor's 5,718 triangles, 11 ms putting
-the copy in -, 21 ms on the vanilla JOBY3, and 6 to 134 ms elsewhere as before. With
-`hd_build` 0 nothing is built, and with `hd_vis` 0 no item is handed in: the shelf stays
-classic, as #265 left it.
+**Decisions.** A donor's art must be lit: of JOBY3's eight Core shelves the two in room 26
+carry next to no light, only the wall behind them lit, and are black in their own room as
+well, and without the test the nearer of them would give the copy. A copy keeps its
+donor's light and not its new place's, as the statics' copies of #274 do: the shelf stands
+darker than the bunk room, as the Core shelves stand darker than theirs.
 
 **Commits.** `41f24b2b`.
 
 ### The diving suit's thrusters hang from her shoulders on the HD body (#276)
-
-2026-10-30.
+2026-10-30
 
 **What.** In Deepsea Dive with the HD path, the diving suit's two propulsion units now
 hang from the shoulders of the body she wears: their top stands at the top of its torso,
@@ -16327,40 +16284,37 @@ bone), and the level build settles both moves in one place (`HDLaraThrusterSettl
 `specific/hd/hd_lara.h`): the move down is that top minus the units' top at rest, rounded
 half away from zero as the shift is, and never up - a torso whose top stands above the
 units' keeps them where they are, which is the HD diving suit's (-330).
-`HDLaraThrusterShift` (`specific/hd/hd_laradraw.cpp`) hands back both moves at once, so
-that no caller can take the one and lose the other: `specific/drawlara.cpp` adds the move
-down to both units' y, `game/subsuit.cpp` to the mist's origin and its two targets. JOBY4
-measures OUTFIT_TR3_ANTARC's top at -196.6 (down 79), the nineteen other bodies with a
-backpack at -188.5 to -199.6 (76 to 87), the thirty-one without one at -185.2 to -196.6
-(79 to 91) and OUTFIT_SUBSUIT at -329.6 (0). The back the shift was measured against at
-the classic height holds at the new one: every body keeps 14.5 to 15.5 units of air
-before the units, the classic suit's 15, and no point of any torso lies inside them but
-the HD diving suit's block corners, as before. Turned by up to 45 degrees, a corner rises
-4 units over the top at rest. The `HDLOG lara thrusters` line carries the move as
-`shift=0,<down>,<back>` and ends on `hd_top=`, `classic_top=` and `down=`; ModelProbe
-`-thrusters` prints both tops and the move down for every body of the wardrobe, the air
-at the new height and the worn body against its pack, and `-thrustersdown <units>` draws
-the units at another height. ModernTest `thruster_move` (12 checks) holds the arithmetic;
-`docs/Engine-Manual.md` says it. With the HD path off, or `hd_build` 0, both moves are 0
-and the units and their mist are the classic ones. A second height, the units' centre a
-third of the torso's height under its top (50 down on the Antarctica outfit), was drawn
-to compare and not built. The verdict census over the fifteen levels is unchanged.
+`HDLaraThrusterShift` (`specific/hd/hd_laradraw.cpp`, declared in
+`specific/hd/hd_laradraw.h`) hands back both moves at once, so that no caller can take the
+one and lose the other: `specific/drawlara.cpp` adds the move down to both units' y,
+`game/subsuit.cpp` to the mist's origin and its two targets. The back the shift was
+measured against at the classic height holds at the new one, and no point of any torso
+lies inside the units but the HD diving suit's block corners, as before. The `HDLOG lara
+thrusters` line carries the move as `shift=0,<down>,<back>` and ends on `hd_top=`,
+`classic_top=` and `down=`; ModelProbe `-thrusters` prints both tops and the move down for
+every body of the wardrobe, the air at the new height and the worn body against its pack,
+and `-thrustersdown <units>` draws the units at another height. ModernTest `thruster_move`
+(12 checks) holds the arithmetic; `docs/Engine-Manual.md` says it. With the HD path off,
+or `hd_build` 0, both moves are 0 and the units and their mist are the classic ones.
 
-**Addendum.** The air bubbles the suit loses once JOBY4's cutscene 40 has played
-(`TriggerAirBubbles` in `game/subsuit.cpp`; `game/laramisc.cpp` drains her air from then
-on) leave it between the two units, at their height and depth - (0, -192, -160) on the
-torso, the midpoint of the units' own two points - and so are a third reader of the
-moves: their start and their aim move with the units as the mist does, and they keep
-their path but rise from between the units rather than from the water beside her head
-(on the Antarctica outfit 79 lower and 24 nearer her). ModernTest `thruster_wiring` (7
-checks) counts in the engine's text that all three readers ask for both moves and that
-none of the suit's numbers for the units' height and depth stands without its move.
+The air bubbles the suit loses once JOBY4's cutscene 40 has played (`TriggerAirBubbles` in
+`game/subsuit.cpp`; `game/laramisc.cpp` drains her air from then on) leave it between the
+two units, at their height and depth - (0, -192, -160) on the torso, the midpoint of the
+units' own two points - and so are a third reader of the moves: their start and their aim
+move with the units as the mist does, and they keep their path but rise from between the
+units rather than from the water beside her head (on the Antarctica outfit 79 lower and 24
+nearer her). ModernTest `thruster_wiring` (7 checks) counts in the engine's text that all
+three readers ask for both moves and that none of the suit's numbers for the units' height
+and depth stands without its move.
+
+**Decisions.** The units' top goes to the top of her torso, not their centre to a third of
+the torso's height under its top (50 down on the Antarctica outfit), which was drawn to
+compare and not built.
 
 **Commits.** `3c4f255d`, `046d1e95`.
 
 ### The X-ray look holsters nothing at the thighs, its Uzis like its other guns (#277)
-
-2026-10-30.
+2026-10-30
 
 **What.** In the X-ray look - the X-ray outfit of the outfit menu, and the scanner's set
 in Escape with the Iris - nothing is drawn on Lara's thighs any more. The pistols' X-ray
@@ -16373,21 +16327,16 @@ This supersedes what the #268 entry says about the Uzi and Desert Eagle holsters
 drawn because the install has no file): the thighs now draw nothing for all three by one
 rule.
 
-**Why.** Measured with ModelProbe (`-lara JOBY5 -outfit 46/OUTFIT_XRAY -guns uzi`, the
-game's `Mods` folder and the Tomb Raider I-III game 3 folder - the engine's own two
-roots). The model resolver asks the active mods before the installs, and the IMI Uzis mod
+**Why.** The model resolver asks the active mods before the installs, and the IMI Uzis mod
 ships `HAND_XRAY_UZI.TRM`: its one gun under all three hand names, `HAND_BARE_UZI`,
-`HAND_GLOVES_UZI` and `HAND_XRAY_UZI` alike - 31,267 vertices and 106,164 indices, the
-hands on pages 8002 and 8010 of the I-III bundle (its `origin=tr1`), the gun on its own
-6111 and 6112. The rule for a mod gun painted with another bundle's skin
-(`HDModelSlot::twinSlot`) then dropped those hands and cut the install's own
-`HAND_XRAY_UZI` to the pages it shares with the rest hands `HAND_BARE_REST` - page 8001 -
-and the X-ray hand has page 8030 alone: no triangle survived, no twin was built, and
-nothing was left at the grips but the mod's gun on nodes 10 and 13, in its own texture
-under the tone. Of the set's sixteen names and the two thigh holsters the install lacks,
-`HAND_XRAY_UZI` is the only one any of the thirteen mods of that folder ships; the HK USP,
-MP5 and Spas-12 mods ship bare hands and holsters only, which is why every other gun
-already fell back to the install's X-ray file.
+`HAND_GLOVES_UZI` and `HAND_XRAY_UZI` alike, the hands on pages of the Tomb Raider I-III
+bundle (its `origin=tr1`), the gun on pages of its own. The rule for a mod gun painted
+with another bundle's skin (`HDModelSlot::twinSlot`) then dropped those hands and cut the
+install's own `HAND_XRAY_UZI` to the pages it shares with the rest hands
+`HAND_BARE_REST` - page 8001 - and the X-ray hand has page 8030 alone: no triangle
+survived, no twin was built, and nothing was left at the grips but the mod's gun on nodes
+10 and 13, in its own texture under the tone. A mod that ships bare hands and holsters
+only leaves every other gun to the install's X-ray file.
 
 **How.** `specific/hd/hd_lara.h`: `HDLaraXrayPick`, the set's lookup in a table of part
 and file with one rule in front of it - a thigh holster (`HD_LARA_PART_HOLSTER_PISTOL` to
@@ -16401,33 +16350,25 @@ no install folder, the installs' own stand-in is built in its place with every p
 worn and in the block: a hand's stand-in is its `HAND_BARE_<x>` without the pages of
 `HAND_BARE_REST` - its gun alone - and `HDLaraXrayHand` has `HDLaraFrameParts` put the
 rest hands' X-ray bones beside it, or the rest hands' bones alone where neither is on the
-card: never no hand, never a mod's gun. The installation measured has `HAND_XRAY_UZI`
-(4\ITEM, 8,705 vertices, page 8030), so its Uzis take that file. The other case was drawn
-once with a throwaway build whose table asked for a name no folder has: `HAND_BARE_UZI`
-stood in, one page of `HAND_BARE_REST` dropped, the install's Uzi on nodes 10 and 13
-beside `HAND_XRAY_REST`.
+card: never no hand, never a mod's gun. An installation that has `HAND_XRAY_UZI` (4\ITEM,
+page 8030) gives its Uzis that file; one without it gets the stand-in, `HAND_BARE_UZI`
+with the pages of `HAND_BARE_REST` dropped, beside `HAND_XRAY_REST`.
 
-With `-log` the `XRAYLOG` line ends in `thighs=none` (`thighs=-` when off), a hand of the
-set reads `<stem>:install`, or `HAND_XRAY_REST:install+<stem>:gun` for a stand-in, and the
-X-ray outfit writes the line from the level's first frame, scanner or not; it had none
-outside the scanner. The level build notes `the X-ray look: N hand parts out of the
-installs and never a mod's, M of them a stand-in; nothing at the thighs` and one line per
-stand-in, hd_model the stand-in and its dropped pages. The composite's `SWAPLOG` lines
-carry no holster field and are unchanged. `DrawLara__6` is untouched and `hd_build` 0
-unchanged by construction.
+With `-log` the `XRAYLOG` line (`specific/hd/hd_laradraw.cpp`) ends in `thighs=none`
+(`thighs=-` when off), a hand of the set reads `<stem>:install`, or
+`HAND_XRAY_REST:install+<stem>:gun` for a stand-in, and the X-ray outfit writes the line
+from the level's first frame, scanner or not; it had none outside the scanner. The level
+build notes `the X-ray look: N hand parts out of the installs and never a mod's, M of them
+a stand-in; nothing at the thighs` and one line per stand-in, hd_model the stand-in and
+its dropped pages. The composite's `SWAPLOG` lines carry no holster field and are
+unchanged. `DrawLara__6` is untouched and `hd_build` 0 unchanged by construction.
 
-Pictures, ModelProbe before (90b4c21a) and after, JOBY5, the X-ray outfit, with the mods
-and the I-III root, 768 by 768: pistols holstered from behind, 1,806 pixels changed (the
-two holsters gone); Desert Eagle holstered, Uzis holstered and the shotgun on the back, 0;
-the Uzis in hand from behind with the arms raised, 39,219; the pistols and the Desert
-Eagle in hand, 0. The census of the fifteen levels is the head's (1,791 rows). ModernTest
-`xray_weapons` (9 checks).
+ModernTest gains `xray_weapons` (9 checks).
 
 **Commits.** `0f28d980`.
 
 ### A search object keeps the pickup in its reach from any enemy (#278)
-
-2026-10-31.
+2026-10-31
 
 **What.** At level start a pickup that lies in reach of a search object goes to the search
 object, whatever enemy stands in reach as well and wherever either stands in the item
@@ -16463,24 +16404,9 @@ of the kinds (`game/savegame.cpp`, which chains it writes) still reads `intellig
 `SEARCH_OBJECT1..3`, the same set. The `setup.cpp` lines the wall-grab entry (2.2) names
 have moved, and the line it gives now ends on ` pass=<pass>` after `<verdict>`.
 
-A census over the level files reads the items as the load leaves them before
-`GetCarriedItems` - every initialise call that moves a pickup or a carrier replayed - and
-walks both orders. The vanilla files, the thirteen levels with the title, `del` and
-`richcut2`: 59 pickups in a carrier's reach, none in reach of both kinds, no carrier
-changed. The sixteen of the randomized game folder: five, one in reach of both - the JOBY3
-secret, which goes from the husky to the cupboard. Its line, derived from the code (the
-game not started), before
-
-    CARRYLOG baddy=296/HUSKIE item=29/PICKUP_ITEM4 ocb=0 d=0,0 carried
-
-and after
-
-    CARRYLOG baddy=299/SEARCH_OBJECT3 item=29/PICKUP_ITEM4 ocb=0 d=0,0 carried pass=search
-
-and the husky writes no line any more; the level's two other lines, the pistols in a
-`SEARCH_OBJECT2` and the chef's key, keep their carriers. The change is game logic in
-every build path, so there is no `hd_build` 0 byte identity to claim. ModernTest
-`carrier_pass` (23 checks).
+Game logic in every build path; there is no `hd_build` parity to claim. In the vanilla
+levels no pickup lies in reach of both kinds, so no carrier changes there. ModernTest
+`carrier_pass` (23 checks) holds the rule.
 
 **Decisions.** The kind decides, not the distance: a pickup in reach of a search object is
 its whatever enemy stands closer, because the search object stands where the item was put
@@ -16488,9 +16414,9 @@ and the enemy where the roll put him. Two passes over the whole table, not a sor
 of carriers, keep the index order within each pass and with it every chain as it was.
 
 **Commits.** `85c32cf8`.
-### The button that skipped a scene does nothing more until it is released (#279)
 
-2026-10-31.
+### The button that skipped a scene does nothing more until it is released (#279)
+2026-10-31
 
 **What.** With the *Cutscene skipper* on, the controller's confirm button - Cross, A -
 skips a cutscene and a camera flyby, and every default pad page binds the Action role to
@@ -16504,44 +16430,27 @@ letting go of Escape does. The button skips only a flyby that holds Lara still; 
 leaves her playing leaves her the button as Action. Escape is unchanged in both skippers:
 it skips while it is held.
 
-**Why.** ANDREA2, Trajan's Markets. The pull rope in room 51 (item 36, OCB 1) is pulled
-three times to raise the cog (item 18, RAISING_COG) to the gear above it; the rope in
-room 33 (item 27) then turns the gears and opens trapdoor 11. With the skipper on, the
-room 51 rope wanted more than three pulls, and the first pull of the room 33 rope moved
-only the big wheel (item 117); the trapdoor opened on the pull after. Read from the level
-(the vanilla and the randomized `ANDREA2.TRC` hold the same triggers, items and cameras;
-only the music differs) and from the code:
-
-- Both ropes' floor triggers are SWITCH triggers with all five code bits, and a SWITCH
-  trigger toggles each target's bits (`_TestTriggers`, `item->flags ^= flags &
-  IFL_CODEBITS`). Room 51, sector 2,2: `8204 3E00 0024 8012`, the rope and the cog. Room
-  33, sector 2,2, behind the trigger triggerer (item 28, enabled when the cog's third rise
-  ends): `8204 3E00 001B 000B 0010 000F 0011 3001 0100 8012` - the rope, trapdoor 11, the
-  gears 16, 15 and 17, flyby 1 played once (`0100`), the cog.
-- Room 33's trigger starts flyby 1 in the pull's own tick. Room 51's has no scene of its
-  own, but the cog's control (`ControlRaisingCog`, `game/andrea.cpp`) starts flyby 9 the
-  tick after a pull sets it rising. Both flybys hold Lara still (SP_NOLARACONTROL on their
-  first cameras, flags 0651 and 0441) and so mask her input while they play.
-- A pulley with OCB 1 is armed again after every pull, and `lara_as_pulley` keeps the
-  goal on the pull while the interact bit is in her input. The level's animation 340, the
-  pull (59 frames), counts the pull at frame 44 and loops into itself unless the goal is
-  the stand on its last two frames (its one state change, frames 58 and 59, to 341).
-- The flyby skip fired on the button held, with no edge. The button is held through the
-  pull, so the flyby the pull set off was skipped from its first frame and over in 9 ticks
-  (flyby 1) or 2 (flyby 9) - before frame 58, 13 ticks after frame 44 - and the still-held
-  button was Action again there: Lara pulled once more. That second pull in room 33 shut
-  the trapdoor again and stopped the gears and the cog; the big wheel stayed, set by flyby
-  1's own heavy test (camera 7, room 52), which is no toggle. The second pull in room 51
-  turned the rising cog off half-way (it rises 2 units a tick for 128 ticks), and the next
-  pull set it going again. Played through, both flybys outlast frame 58 with Lara's input
-  masked, and she stops after one pull.
-
-ModernTest's `skip_latch_rope` runs both ropes tick by tick in the engine's order. Before:
-the pull is counted at tick 59, the held skip ends flyby 1 at tick 67, the pull loops on
-frames 58 and 59 at ticks 72 and 73 and counts again at 118; for flyby 9, started at 60,
-the skip ends it at 61 and the second pull counts at 118 as well. After: one pull, the
-flyby played through; or, with the button let go and pressed again to skip, the flyby
-over in 9 ticks (2 for flyby 9) and the press out of the input until it is let go.
+**Why.** ANDREA2, Trajan's Markets: the pull rope in room 51 (item 36, OCB 1) is pulled
+three times to raise the cog (item 18, RAISING_COG) to the gear above it; the rope in room
+33 (item 27) then turns the gears and opens trapdoor 11. With the skipper on, the room 51
+rope wanted more than three pulls, and the first pull of the room 33 rope moved only the
+big wheel (item 117); the trapdoor opened on the pull after. In the level (`ANDREA2.TRC`,
+vanilla and randomized alike) both ropes' floor triggers are SWITCH triggers, and a SWITCH
+trigger toggles each target's code bits (`_TestTriggers`); room 33's starts flyby 1 in the
+pull's own tick, and the cog's control (`ControlRaisingCog`, `game/andrea.cpp`) starts
+flyby 9 the tick after a pull sets it rising. Both flybys hold Lara still
+(SP_NOLARACONTROL on their first cameras) and so mask her input while they play. A pulley
+with OCB 1 is armed again after every pull, and `lara_as_pulley` keeps the goal on the
+pull while the interact bit is in her input; the level's pull animation counts the pull at
+frame 44 and loops into itself unless the goal is the stand on its last two frames, 58
+and 59. The flyby skip fired on the button held, with no edge, and the button is held
+through the pull: the flyby the pull set off was skipped from its first frame and over
+before frame 58, and the still-held button was Action again there - Lara pulled once more.
+That second pull in room 33 shut the trapdoor again and stopped the gears and the cog; the
+big wheel stayed, set by flyby 1's own heavy test, which is no toggle. The second pull in
+room 51 turned the rising cog off half-way, and the next pull set it going again. Played
+through, both flybys outlast frame 58 with Lara's input masked, and she stops after one
+pull.
 
 **How.** `game/skip_latch.h` (new, pure): `SKIP_LATCH` (the bit, the skipper, the tick),
 `SkipLatchEngage` (bits 0 to 23 only), `SkipLatchApply` (one reading of the pad: the
@@ -16554,45 +16463,40 @@ the latch's state; `InputSkipLatch`, which engages it on `JoyBitConfirm()`;
 `InputSkipLatchHolds`; `JoyConfirmDown`, the skippers' one read of the button, as the
 latch leaves it; the latch applied in `S_UpdateInput` right after the pad is read and
 before any role is read - every pad role comes out of that one word (`JoyRole`,
-`PadRoleFires`), so the mask follows the binding page and leaves every other button
-alone; and dropped in `InputModeLatchReset`, at every level start and savegame restore.
+`PadRoleFires`), so the mask follows the binding page and leaves every other button alone;
+and dropped in `InputModeLatchReset`, at every level start and savegame restore.
 `game/control.cpp`: the cutscene skipper asks `SkipConfirmEdge` and engages the latch when
 the press skipped, not on the title. `game/spotcam.cpp`: `InitialiseSpotCam` primes the
 flyby's edge from the button as it is when the flyby begins; `CalculateSpotCams` asks the
-two rules and engages the latch when a press starts the skip.
+two rules and engages the latch when a press starts the skip. `specific/input.h` declares
+`JoyConfirmDown`, `InputSkipLatch` and `InputSkipLatchHolds` and takes in
+`game/skip_latch.h`.
 
 With `-log`: `SKIPLATCH set=cutseq|flyby bit=<n> tick=<t>` when a skip engages the latch,
 `SKIPLATCH released held=<ticks> tick=<t>` when the button is let go, `SKIPLATCH dropped
 held=<ticks> tick=<t>` when a level start lets go first; `FLYLOG` ends in `latch=on|off`.
 
-Measured with TrgProbe `-flyby`, SectorCheck, ItemCheck and a probe of Lara's three pulley
-animations (339, 340, 341: 14, 59 and 14 frames). The census of the fifteen levels is
-unchanged, 64 sequences and 359 cameras. Of the 59 outside the title, 45 take the pad's
-skip; 8 leave Lara her control (ANDREA3 0 and 3, RICH1 11, RICH2 0, 1 and 12, RICH3 10
-and 15) and 6 track her (ANDY1 5, ANDY2 2, ANDY3 9, RICH2 7 and 13, RICH3 7), and those
-14 are skipped by Escape alone. ModernTest: `skip_latch` (15 checks), `spot_pad_skip`
-(10), `skip_latch_rope` (12), `skip_latch_wiring` (6). Game logic in every draw path;
-there is no `hd_build` parity to claim.
+ModernTest: `skip_latch`, `spot_pad_skip`, `skip_latch_rope` (both ropes tick by tick in
+the engine's order) and `skip_latch_wiring`. Game logic in every draw path; there is no
+`hd_build` parity to claim.
 
 **Decisions.** The button skips only a flyby that holds Lara's control. Before, it skipped
 any: in one that leaves her playing - an expanding platform in RICH1 and RICH2 - Cross is
 her Action, a skip there was a camera jump on every Action press, and with the latch the
-press that grabbed a ledge would have been taken from her a tick later. Escape skips
-those as before. Escape needs no latch: it is the inventory key of both default rows and
-the binding page cannot put it on any other role (the capture gives up on it,
-`game/menu_frame.cpp`), and its bits, IN_OPTION and IN_DESELECT, open the inventory or
-go back in a menu on a fresh press only. A skipped flyby no longer masks Lara's input for
-as long as it would have played, so in room 51 a new press within 70 ticks (2.3 seconds)
-of a pull's count still lands its pull while the cog is rising and stops it; one more
-pull sets it going. That is the SWITCH toggle as the level has it, and it is left so.
-Task #278 (`game/setup.cpp`, `GetCarriedItems`) is on a branch of its own; this entry
-stands after #277's.
+press that grabbed a ledge would have been taken from her a tick later. Escape skips those
+as before. Escape needs no latch: it is the inventory key of both default rows and the
+binding page cannot put it on any other role (the capture gives up on it,
+`game/menu_frame.cpp`), and its bits, IN_OPTION and IN_DESELECT, open the inventory or go
+back in a menu on a fresh press only. A skipped flyby no longer masks Lara's input for as
+long as it would have played, so in room 51 a new press within 70 ticks (2.3 seconds) of a
+pull's count still lands its pull while the cog is rising and stops it; one more pull sets
+it going. That is the SWITCH toggle as the level has it, and it is left so.
 
-**Commits.** `51c78576`.
+**Commits.** `51c78576`, `e35fa1f7` (ModernTest's carrier checks closed before the
+latch's).
 
 ### A scene that holds Lara leaves her life and air as they were (#280)
-
-2026-10-31.
+2026-10-31
 
 **What.** While a cutscene plays, or a flyby runs whose camera carries the "disable Lara
 control" flag, Lara's life and air stay what they were when the scene began. The world
@@ -16655,41 +16559,47 @@ the next tick's first look.
 The census covers the 47 subtractions through `lara_item`, the four through other names,
 her fall, the places that set her life to 0 or below and those that force her animation.
 Class b, where Balance.txt decides - the hit branch asks with the value it would take, and
-it is refused from 1000 on, today only the bite: `autogun.cpp:149`, `bat.cpp:245`,
-`chef.cpp:191`, `compy.cpp:273`, `crow.cpp:143`, `dog.cpp:175`, `:194`, `:214`,
-`gladiatr.cpp:258`, `huskie.cpp:188`, `:265`, `hydra.cpp:162`, `imp.cpp:243`,
-`joby.cpp:216` (the live water, 10), `lion.cpp:134`, `:149`, `minisub.cpp:275` (a torpedo
-runs on), `people.cpp:158` (every gun of the human enemies; a refused shot is a miss),
-`raptor.cpp:227`, `:268`, `romangod.cpp:374`, `:589`, `skeleton.cpp:120`,
-`spider.cpp:146`, `swampy.cpp:128`, `tower.cpp:264` (the gunship), `:385` (the iris, 12),
-`:577` (the Area 51 laser), `trex.cpp:114` (the kick, 1 and 10), `:242` (the bite, 10000),
-`twogun.cpp:599`, `willwisp.cpp:252`, `:262` - 33 places. Class b, refused whenever a
-scene holds her: `andrea.cpp:461` (the crush), `box.cpp:1519` (`CreatureKill`),
-`guardian.cpp:525`, `hitman.cpp:284` (the water he lives in), `joby.cpp:143` (a cable),
-`:223` (the live water at 32 or less), `:257` (the wrecking ball's crush), `lara.cpp:519`
-(a fall, 1000 times the speed squared over 196, or -1), `lasers.cpp:63`, `:110`, `:210`,
-`tower.cpp:376` (the iris at 72 or less), `traps.cpp:84` (`LaraBurn`, every fire at once),
-`:106` (lava), `:786` (the rolling ball, which pushes her instead), `:1360` (teeth
-spikes), `:1409` (the spiked death) and `twogun.cpp:603` - 18 places. Class a, a fixed
-value under her whole life, left as it was and put back by the looks: `camera.cpp:2301`
-(the sniper, 100), `control.cpp:762` (the poison, 32 at most), `collide.cpp:521` (the Rome
-hammer, 250), `effect2.cpp:582`, `:591`, `:596`, `:1962` (300, 200, 50, 2), `joby.cpp:262`
-(the wrecking ball, 96), `lara1gun.cpp:610` (her own grenade, 50), `laramisc.cpp:964`,
-`:1005` (gas and drowning, 5), `tomb4fx.cpp:1175` (a shockwave, 33 at most),
-`traps.cpp:173` (an explosion, 127 at most), `:419` (a dart, 25), `:694` (a flame, 5),
-`:770` (the fire on her, 7), `:1370` (teeth spikes, 8), `:1652` (300). Untouched as well:
-her death branch, `lara_col_death` and `lara_col_uwdeath`, which only read a life a hold
-no longer leaves them, the death goals of her states, the heals (the medipacks, the
-cheats, the search object that sets 640), the poison gate, the enemies' AI and their
-focus.
+it is refused from 1000 on, today only the bite - 33 places: `autogun.cpp`
+`AutogunControl`, `bat.cpp` `UpdateBats`, `chef.cpp` `ChefControl`, `compy.cpp`
+`CompyControl`, `crow.cpp` `CrowControl`, `dog.cpp` `DogControl` (three), `gladiatr.cpp`
+`GladiatorControl`, `huskie.cpp` `HuskieControl` (two), `hydra.cpp` `HydraControl`,
+`imp.cpp` `ImpControl`, `joby.cpp` `ControlElectricalCables` (the live water, 10),
+`lion.cpp` `LionControl` (two), `minisub.cpp` `TorpedoControl` (a torpedo runs on),
+`people.cpp` `ShotLara` (every gun of the human enemies; a refused shot is a miss),
+`raptor.cpp` `RaptorControl` (two), `romangod.cpp` `RomangodControl` (two), `skeleton.cpp`
+`SkeletonControl`, `spider.cpp` `UpdateSpiders`, `swampy.cpp` `SwampyControl`, `tower.cpp`
+`ControlGunship` (the gunship), `ControlIris` (the iris, 12) and `ControlArea51Laser`,
+`trex.cpp` `DinoControl` (the kick, 1 and 10, and the bite, 10000), `twogun.cpp`
+`FireTwogunWeapon` and `willwisp.cpp` `MazeMonsterControl` (two). Class b, refused
+whenever a scene holds her - 18 places: `andrea.cpp` `ControlGenSlot1` (the crush),
+`box.cpp` `CreatureKill`, `guardian.cpp` `GuardianControl`, `hitman.cpp` `HitmanControl`
+(the water he lives in), `joby.cpp` `ControlElectricalCables` (a cable, and the live water
+at 32 or less) and `WreckingBallCollision` (the wrecking ball's crush), `lara.cpp`
+`LaraLandedBad` (a fall, 1000 times the speed squared over 196, or -1), `lasers.cpp`
+`ControlLasers`, `ControlSteamLasers` and `ControlFloorLasers`, `tower.cpp` `ControlIris`
+(the iris at 72 or less), `traps.cpp` `LaraBurn` (every fire at once), `LavaBurn` (lava),
+`RollingBallCollision` (the rolling ball, which pushes her instead) and
+`ControlScaledSpike` (teeth spikes and the spiked death), and `twogun.cpp`
+`FireTwogunWeapon`. Class a, a fixed value under her whole life, left as it was and put
+back by the looks - 18 places: `camera.cpp` `FixedCamera` (the sniper, 100), `control.cpp`
+`ControlPhase` (the poison, 32 at most), `collide.cpp` `GenericSphereBoxCollision` (the
+Rome hammer, 250), `effect2.cpp` `ControlEnemyMissile` (300, 200, 50) and `UpdateSparks`
+(2), `joby.cpp` `WreckingBallCollision` (the wrecking ball, 96), `lara1gun.cpp`
+`DoGrenadeDamageOnBaddie` (her own grenade, 50), `laramisc.cpp` `LaraControl` (gas and
+drowning, 5), `tomb4fx.cpp` `UpdateShockwaves` (a shockwave, 33 at most), `traps.cpp`
+`ControlExplosion` (an explosion, 127 at most), `DartsControl` (a dart, 25),
+`FlameEmitter3Control` (a flame, 5), `FlameControl` (the fire on her, 7),
+`ControlScaledSpike` (teeth spikes, 8) and `FallingCeiling` (300). Untouched as well: her
+death branch, `lara_col_death` and `lara_col_uwdeath`, which only read a life a hold no
+longer leaves them, the death goals of her states, the heals (the medipacks, the cheats,
+the search object that sets 640), the poison gate, the enemies' AI and their focus.
 
-The change is game logic in every build path, so there is no `hd_build` 0 byte identity to
-claim. ModernTest `scene_hold` (39 checks): the kind of every flag set, the arithmetic of
-a hold through its start, its blows and its end, the air, a Lara dead at the start and one
-whose death began, a cutscene over a flyby, the class rule against two made-up balance
-tables, and the engine's text - the two looks of the tick in their places, the flyby's own
-memory gone, the cutscene's look and release, the T-Rex's bite asked, and the census file
-by file.
+Game logic in every build path; there is no `hd_build` parity to claim. ModernTest
+`scene_hold` (39 checks): the kind of every flag set, the arithmetic of a hold through its
+start, its blows and its end, the air, a Lara dead at the start and one whose death began,
+a cutscene over a flyby, the class rule against two made-up balance tables, and the
+engine's text - the two looks of the tick in their places, the flyby's own memory gone,
+the cutscene's look and release, the T-Rex's bite asked, and the census file by file.
 
 **Decisions.** The hold remembers where it begins: at a flyby's start or at the camera
 that takes her control - for a flag set by a later camera Core put back the flyby's start,
@@ -16702,11 +16612,11 @@ she is held, for every caller at once. Two things stay outside the hold: the win
 before a cutscene plays (the fade, `cutseq_trig` 1), and poison - a dart's 25 are put
 back, the poison it adds is a state of its own and goes on after the scene.
 
-**Commits.** `d8c2625f`.
+**Commits.** `d8c2625f`, `82d1e4b9` (the notice in `andrea.cpp`, `guardian.cpp` and
+`lasers.cpp`).
 
 ### The raising cog's lift runs to its end, a pull meanwhile is kept (#281)
-
-2026-10-31.
+2026-10-31
 
 **What.** A lift of the raising cog that has begun runs to its end, whatever its rope does
 meanwhile. A pull while the cog still rises is kept for a lift to come, and when the
@@ -16728,19 +16638,6 @@ holds Lara still for about 200 ticks, longer than a lift's 128. Since the *Cutsc
 skipper* can end that flyby, a new press within about 70 ticks of a counted pull lands
 its pull while the cog still rises (#279, Decisions), and a fast player needed more than
 three pulls.
-
-Tick by tick, with the first pull counted at tick 59 (the press at 0) and the cog's first
-2 units and its flyby at 60, derived from the code and the level, the game not started:
-
-- Before: a second pull counted at 118 (the held button before #279) stopped the cog at
-  118 of 256 units; one at 129, 70 ticks on, at 140; one at 187, on the lift's last unit,
-  left the lift at 256 uncounted, so that the next pull only ended it. Three pulls 59
-  ticks apart gave one lift, ended at 247.
-- After: the same pulls are kept (`COGLOG item=18 lift=1 at=118 pulls_pending=1 kept`),
-  lift 1 ends at 188 (`... at=256 pulls_pending=1 done`) and lift 2 begins in that tick
-  (`... lift=2 at=0 pulls_pending=0 started from pending`). Three pulls 59 ticks apart
-  give three lifts, the third ending at 444 with the cog engaged, 768 units in all; a
-  fourth is dropped. Pulls that wait for each lift's end give Core's ticks.
 
 **How.** `game/raising_cog_rule.h`, new and with no engine header: `COG_STATE`, the lift
 count, the units of the running lift and the pulls kept, as `item_flags[0]`, `[2]` and
@@ -16773,30 +16670,26 @@ what Core's did and the slot stays 0, and the savegame is the same as before.
 With `-log`: `COGLOG item=<i> lift=<n> at=<units> pulls_pending=<p> <word>`, the word
 `begin`, `kept`, `dropped`, `done` or `started from pending`.
 
-ItemCheck over the sixteen vanilla level files finds the raising cog in ANDREA2 alone
-(item 18, room 24, flags 0, OCB 0). ModernTest: `raising_cog` (20 checks),
-`raising_cog_rope` (16 - the rope and the cog tick by tick, Core's control beside the
-rule, and 2860 timings of three pulls, three lifts every time with the rule and before
-only the 396 with no pull in a lift) and `raising_cog_wiring` (13). The change is game
-logic in every draw path; there is no `hd_build` parity to claim.
+The raising cog stands in ANDREA2 alone. ModernTest: `raising_cog`, `raising_cog_rope`
+(the rope and the cog tick by tick, Core's control beside the rule, three pulls at every
+timing) and `raising_cog_wiring`. Game logic in every draw path; there is no `hd_build`
+parity to claim.
 
-**Decisions.** A count, not a flag: two pulls during one lift are two lifts to come, up
-to the lifts that are left; a pull beyond them is dropped, as a pull after the third lift
+**Decisions.** A count, not a flag: two pulls during one lift are two lifts to come, up to
+the lifts that are left; a pull beyond them is dropped, as a pull after the third lift
 does nothing. The cog turns its bits on again rather than reading both edges, so every
 pull is a change to off; the cap holds even a trigger timer - which this trigger does not
 carry, and which once run out would read as a pull on every tick - to the lifts that are
 left. The next lift begins in the tick the last one ends, so that no tick stands between
 with a pull kept and no lift running. Every lift starts flyby 9, a kept pull's too: where
-the flyby of the lift before still plays - a pull under way when it began still counts
-at its frame - it begins again from its first camera. This takes back the last decision
-of #279, which left the toggle as the level has it. Tasks #280, #282 and #283 run on
-branches of their own; this entry stands after #280's.
+the flyby of the lift before still plays - a pull under way when it began still counts at
+its frame - it begins again from its first camera. This takes back the last decision of
+#279, which left the toggle as the level has it.
 
 **Commits.** `35a91179`.
 
 ### Skipping a Zip call ends it, and the pad skips every flyby with an end (#282)
-
-2026-10-31.
+2026-10-31
 
 **What.** With the *Cutscene skipper* on, skipping the flyby that comes with a call from
 Zip - Zip on Lara's headset in the VCI levels - ends the call with it: her hand comes down
@@ -16810,95 +16703,68 @@ that leave Lara playing too; the fresh press and the latch of #279 stay. A flyby
 follows her or loops is left to Escape.
 
 **Why.** In RICH1 and RICH2, after a skipped flyby, Lara stood with her hand at her ear
-and could not move; a save and a load gave her control back. Read from the levels (the
-vanilla and the randomized `.TRC` hold the same calls) and from the code:
-
-- A call is an item of the slot the data name EXPANDING_PLATFORM, whose control is
-  `ControlZipController` (`game/twogun.cpp`); its OCB is the call's track. The campaign
-  has four: RICH1 item 4 (room 3, track 95) with flyby 11 and item 134 (room 72, track
-  94) with no scene; RICH2 item 56 (room 34, track 60, from six sectors) with flyby 12
-  and item 225 (room 161, track 77) with flyby 10. Each is a one-shot TRIGGER that
-  activates the call and then starts the flyby. RICH3 has none: its line from Zip (track
-  59, room 136) is a plain music trigger without the pose, as are RICH1's tracks 48, 52,
-  54 and 67 and RICH2's 79 and 90.
-- Stage 0 takes her control; stage 1 waits until she stands in ANIM_BREATH, poses her
-  (ANIM_ZIP_IN, AS_INTO_ZIP) and starts the track; stage 2 waits until the track is the
-  music and then until it is not, and only then sets her goal AS_OUT_ZIP, gives her
-  control back and kills the item. Her three zip states run `lara_as_null` with no
-  collision, and the pose (animation 468, 73 frames, in all three levels) loops until
-  goal AS_OUT_ZIP: the line that held her is stage 2's `else if (XATrack !=
-  item->trigger_flags)`, false for as long as the track plays.
-- No skip path touches the music: the flyby's skip, its two ends and the cutscene skipper
-  call neither `S_CDStop` nor `S_CDPlay`. Escape held from the first frame ends flyby 11
-  (16 segments of 100 ticks: 15 cameras and the spline back to her) in its 16th tick and
-  flyby 10 in its 3rd. Lara, who reaches the trigger walking or running, needs about 20
-  to 40 ticks to stand (her stop and ANIM_STOP before ANIM_BREATH), so the skipped flyby
-  handed her control back first, and the call posed her the first tick she stood still,
-  started the track then and held her for the whole of it. Played through, flyby 11 runs
-  1600 ticks, over 53 seconds, and the call plays under it.
-- A load lets her go because a savegame keeps the call's stage and not the music: the
-  load starts the level's atmosphere, and the call, which has heard its track, takes that
-  for its end. With no music device `S_CDPlay` does nothing and the call never hears its
-  track; with the track's file missing `ACMEmulateCDPlay` names the track and opens
-  nothing, so the call hears it and never sees it end. Both held her for good, the second
-  until a load.
-- The pad: #279 asked for Lara's control taken at the moment of the press. The two flybys
-  with a call that leave her the control by their flags (RICH1 11, RICH2 12) had it taken
-  by the call from their second tick, so Cross skipped them there before as well; it was
-  refused once the call had ended, and throughout the six flybys without a call that
-  leave her playing.
-
-ModernTest's `zip_call_skip` runs both flybys tick by tick. Before: Escape ends flyby 11
-at tick 15, Lara stands at 24, the call poses her at 25 and ends the track's length later.
-After: the skip ends the call at tick 15, before it poses her; standing on the trigger
-she is posed at 2 and back on her feet at 15, the track off.
+and could not move; a save and a load gave her control back. A call is an item of the slot
+the data name EXPANDING_PLATFORM, whose control is `ControlZipController`
+(`game/twogun.cpp`); its OCB is the call's track. The campaign has four: RICH1 item 4
+(room 3, track 95) with flyby 11 and item 134 (room 72, track 94) with no scene, RICH2
+item 56 (room 34, track 60) with flyby 12 and item 225 (room 161, track 77) with flyby 10,
+each started by a one-shot TRIGGER that activates the call and then starts the flyby;
+RICH3 has none, and Zip's other lines are plain music triggers without the pose. Stage 0
+takes her control; stage 1 waits until she stands in ANIM_BREATH, poses her (ANIM_ZIP_IN,
+AS_INTO_ZIP) and starts the track; stage 2 waits until the track is the music and then
+until it is not, and only then sets her goal AS_OUT_ZIP, gives her control back and kills
+the item; the pose (animation 468) loops until that goal. No skip path touches the music:
+the flyby's skip, its two ends and the cutscene skipper call neither `S_CDStop` nor
+`S_CDPlay`. A skipped flyby ended before Lara, who reaches the trigger walking or running,
+came to a stand, so it handed her control back first; the call posed her the first tick
+she stood still, started the track then and held her for the whole of it. A load let her
+go because a savegame keeps the call's stage and not the music: the load starts the
+level's atmosphere, the track `SCRIPT.DAT` names for the level, and the call, which has
+heard its track, takes that for its end. With no music device `S_CDPlay` does nothing and
+the call never hears its track; with the track's file missing `ACMEmulateCDPlay` names the
+track and opens nothing, so the call hears it and never sees it end - both held her for
+good, the second until a load. And the pad's skip of #279 asked for Lara's control taken
+at the moment of the press, which the two flybys with a call that leave her the control by
+their flags (RICH1 11, RICH2 12) had only once the call had taken it, and the six flybys
+without a call that leave her playing never had.
 
 **How.** `game/zip_call_rule.h` (new, pure): `ZipCallTick` (one tick of a stage: started,
-posing, heard, waiting, ended, ended without track - decided on the first tick of stage
-2, because `S_CDPlay` has named the track and opened its stream before it returns),
+posing, heard, waiting, ended, ended without track - decided on the first tick of stage 2,
+because `S_CDPlay` has named the track and opened its stream before it returns),
 `ZipPoseEnd` (the end by track keeps goal AS_OUT_ZIP; a cut end takes her from AS_ZIP
 through AS_OUT_ZIP, from AS_INTO_ZIP straight to standing, and leaves any other state),
-`ZipEndMusic` (the level's atmosphere, looped, while the music is still the call's
-track; silence in a level without one; otherwise nothing) and `ZipCallWord`.
-`game/twogun.cpp`: `ControlZipController` steps through the rule; `ZipCallFinish` is the
-one end of a call, whatever ends it; `ZipCallsEndBySkip` ends every active item whose
-control is the call's. `specific/audio.cpp`: `S_CDTrackPlaying`, whether a track is the
-music and its stream runs. `game/spotcam.cpp`: a flyby notes that a skip jumped one of
-its frames, forgets it where it begins, and ends the calls at its end, before the last
-camera's test, and when Look breaks it off; `SpotPadSkipStarts` (`game/spotcam_math.h`)
-no longer asks whether her control is taken. `game/control.cpp`: the cutscene skipper
-ends the calls as well.
+`ZipEndMusic` (the level's atmosphere, looped, while the music is still the call's track;
+silence in a level without one; otherwise nothing) and `ZipCallWord`. `game/twogun.cpp`:
+`ControlZipController` steps through the rule; `ZipCallFinish` is the one end of a call,
+whatever ends it; `ZipCallsEndBySkip` ends every active item whose control is the call's.
+`specific/audio.cpp`: `S_CDTrackPlaying`, whether a track is the music and its stream
+runs. `game/spotcam.cpp`: a flyby notes that a skip jumped one of its frames, forgets it
+where it begins, and ends the calls at its end, before the last camera's test, and when
+Look breaks it off; `SpotPadSkipStarts` (`game/spotcam_math.h`) no longer asks whether her
+control is taken. `game/control.cpp`: the cutscene skipper ends the calls as well.
+`specific/audio.h` declares `S_CDTrackPlaying`, `game/twogun.h` `ZipCallsEndBySkip`.
 
 With `-log`: `ZIPLOG item=<i> stage=<s> track=<t> tick=<n>` and `started`, `posing`,
 `heard`, `ended`, `ended by skip` or `ended without track`. SKIPLATCH and FLYLOG are
 unchanged.
 
-Measured with TrgProbe `-flyby`, a census of the calls and their triggers over the
-fifteen levels, a probe of Lara's zip animations (467, 468, 469: 19, 73 and 25 frames)
-and of her stops, and the levels' music bytes in `SCRIPT.DAT` (129 for the three Rich
-levels). The flyby census is unchanged, 64 sequences and 359 cameras. Of the 59 outside
-the title the pad now skips 53 (ANDREA1 6, ANDREA2 8, ANDREA3 5, ANDY1 1, ANDY2 6, ANDY3
-3, JOBY2 1, JOBY5 1, RICH1 9, RICH2 9, RICH3 4) against #279's 45; the 6 that track Lara
-(ANDY1 5, ANDY2 2, ANDY3 9, RICH2 7 and 13, RICH3 7) are left to Escape. ModernTest:
-`zip_call_rule` (16 checks), `zip_call_skip` (18), `zip_call_wiring` (9); `spot_pad_skip`
-and `skip_latch_rope` hold the new table. Game logic in every draw path; there is no
-`hd_build` parity to claim.
+ModernTest: `zip_call_rule`, `zip_call_skip` (both flybys tick by tick) and
+`zip_call_wiring`; `spot_pad_skip` and `skip_latch_rope` hold the new table. Game logic in
+every draw path; there is no `hd_build` parity to claim.
 
-**Decisions.** The skip ends the call when the flyby ends, not on its first skipped
-frame: a short press jumps a few cameras and the flyby plays on, and the call ends with it
-then. Every call running when a skipped scene ends ends with it, whatever its stage; one
-not yet posed would otherwise pose her wherever she next stood still. Her hand on its way
-up goes straight back to standing rather than up and down again, 44 frames more of a pose
-the skip was meant to end; the call's own end keeps its goal. RICH1's call 134 comes with
-no scene, so no skip reaches it, and it plays as before. The track's length is not read -
-the audio lies outside the level data - and the test stands a length in for it.
-Tasks #280, #281 and #283 are on branches of their own; this entry stands after #281's.
+**Decisions.** The skip ends the call when the flyby ends, not on its first skipped frame:
+a short press jumps a few cameras and the flyby plays on, and the call ends with it then.
+Every call running when a skipped scene ends ends with it, whatever its stage; one not yet
+posed would otherwise pose her wherever she next stood still. Her hand on its way up goes
+straight back to standing rather than up and down again, 44 frames more of a pose the skip
+was meant to end; the call's own end keeps its goal. RICH1's call 134 comes with no scene,
+so no skip reaches it, and it plays as before. The track's length is not read - the audio
+lies outside the level data - and the test stands a length in for it.
 
-**Commits.** `a37160b3`.
+**Commits.** `a37160b3`, `2c4020eb` (the notice in `game/twogun.h`).
 
 ### The openings take no room linked only through a flipmap twin (#283)
-
-2026-10-31.
+2026-10-31
 
 **What.** On the visibility path (`hd_vis` 1) a room listed behind a bare classic wall
 face of a listed room - an opening - must now be linked with that room in a state of the
@@ -16916,30 +16782,23 @@ refusal and takes `-visroom all`; RoomProbe's `-vis: tables` line ends in
 `openings_state=` with a `-vis: visopening` line each; ModernTest checks the rule on three
 flipmap pairs built by hand.
 
-**Why.** In play, looking from the landing into the vent shaft, the shaft's walls and
-floor showed a second, beige texture through the grey one, flickering as the eye moved,
-and a beige wall closed the shaft at the end of its grating; from inside the shaft it
-looked right. Room 85 is the main room of a pair on flipmap 0, as are rooms 21, 89 and 18
-with their twins 96, 94 and 97: a box of three squares at the shaft's place (x 30,720 to
-31,744, z 45,056 to 48,128, y -4,352 to -3,328) with no portal and no floor link of its
-own, closed on all six sides by fourteen classic quads of one texture; its twin 86 is the
-chute that 96's portal leads into while map 0 is on. No portal ever reaches room 85
-itself: with the map off only 96 names its number, and 96 is not in the world then; with
-the map on, 86 stands at that number. Its art (group 85, 252 triangles) models the box
-where group 89's shaft (288 triangles) stands. Room 21's art leaves the two wall faces
-beside the shaft's portal half bare (faces 4 and 15, 0.50 and 0.51 of their samples), the
-point 512 units behind them lies in the boxes of rooms 89, 94, 85 and 86, and the
-openings' link test, closed over the twins so that a room counts as linked with what its
-twin's records name, took 85 for linked with 21 through 96's portal and through 86's
-portal to 21's number. The opening listed 85 beside 89, and group 85's art was drawn whole
-inside the shaft: art against art. At 1,280 x 720 the pixels that change when group 89 is
-pushed by 1/2,000 of its distance either way were 66,953 at an eye over the landing (GA,
-in room 53) and 346,357 at head height behind Lara (GB, in room 21). Inside the shaft (GC)
-the walk starts in room 89, which has no opening, and 85 was never listed. From the
-shaft's other end, room 18, nothing lists 85: the openings keep a room only when it is
-linked with the room that lists it ("Art in the air of an unlinked room draws inside its
-own window", #181), and no portal of 18, 97, 85 or 86 joins them. The closure over the
-twins got round that test from 21's side.
+**Why.** Room 85 is the main room of a pair on flipmap 0, as are rooms 21, 89 and 18 with
+their twins 96, 94 and 97: a box of three squares at the shaft's place with no portal and
+no floor link of its own, closed on all six sides by fourteen classic quads of one
+texture; its twin 86 is the chute that 96's portal leads into while map 0 is on. No portal
+ever reaches room 85 itself: with the map off only 96 names its number, and 96 is not in
+the world then; with the map on, 86 stands at that number. Its art (group 85, 252
+triangles) models the box where group 89's shaft (288 triangles) stands. Room 21's art
+leaves the two wall faces beside the shaft's portal half bare (faces 4 and 15), the point
+512 units behind them lies in the boxes of rooms 89, 94, 85 and 86, and the openings' link
+test, closed over the twins so that a room counts as linked with what its twin's records
+name, took 85 for linked with 21 through 96's portal and through 86's portal to 21's
+number. The opening listed 85 beside 89, and group 85's art was drawn whole inside the
+shaft: art against art. Inside the shaft the walk starts in room 89, which has no opening,
+and 85 was never listed. From the shaft's other end, room 18, nothing lists 85: the
+openings keep a room only when it is linked with the room that lists it ("Art in the air
+of an unlinked room draws inside its own window", #181), and no portal of 18, 97, 85 or 86
+joins them. The closure over the twins got round that test from 21's side.
 
 **How.** `HDVisRoom::flip` (`specific/hd/hd_vis.h`) is the flipmap a room naming a twin
 flips by: `ROOM_INFO` `FlipNumber` in `BuildRoomVis` (`hd_level.cpp`), header byte 53 in
@@ -16954,39 +16813,21 @@ while the opening's room is drawn - the one that room's own state gives when bot
 one map, either one otherwise - is linked with it in `together` (`inWorldAt`). Each
 refusal is noted once per holder, face and number (`HDVisTables::stateRefused`,
 `openingsState`). The guests, the enclosure, the wides and the walk are unchanged.
-
-**Proof.** The tables of the fifteen levels room by room (TrgProbe `-vistable -visroom
-all`, 1,181 lines of guests, openings, wides and enclosures on the vanilla levels): two
-lines go, RICH1 room 21's openings behind room 85 (faces 4 and 15), RICH1's level line
-counts 56 openings instead of 58, and `void=` and every other line stay; the randomized
-RICH1 gives the same tables and the same two refusals. At GA the union of the pixels that
-change when each listed group is pushed by 1/500 of its distance either way falls from
-67,809 to 975, at GB from 346,990 to 1,273, and group 89's own from 66,953 to 76 and from
-346,357 to 733; GC and the three eyes with map 0 on draw the same picture before and
-after. The static census of #274 and the card census of #269 on the fifteen levels
-(RoomProbe `-statictable`, `hd_vis` 1 and 0): 2,845 statics answered alike, 1,138
-one-sided card triangles as before, RICH2's nine art copies alike. #269's views: 88 of 88
-card-sample pictures and 7 of 7 before-and-after places byte-identical; the parity set of
-#236, 72 of 72 (six classic, six HD, thirty census and thirty camera pictures). Of the
-HDLOG room lines of the 2,709 rooms of the fifteen levels one changes, RICH1 room 85's,
-which ends in `refused=flipstate`; each level's `HDLOG level= vis=1` line ends in
-`openings_state=0`, RICH1's in `openings_state=2` with two `HDLOG visopening` lines.
 `hd_vis` 0 builds no tables and is unchanged.
 
 **Decisions.** The rule is the openings' alone. On the guests the same test would refuse
 14 pairs, six in ANDY2, four in RICH2 and four in RICH3, each a main room and the twin of
 another pair on the same map - never in the world together, so `HDVisRoomOfGroup` lists
 none of them while the holder is drawn and no frame would change; on the enclosure it
-would move or drop the room 17 rooms stand enclosed in (JOBY5's room 42 from 69 to 41,
-RICH3's room 24 from 9 to none among them), a question of its own. Room 85 is no data
-error of the level, so `game/levelfix.h` has no entry for it: it is the place its pair
-keeps while map 0 is off, as every main room is, and the original game never draws it.
+would move or drop the room 17 rooms stand enclosed in, a question of its own. Room 85 is
+no data error of the level, so `game/levelfix.h` has no entry for it: it is the place its
+pair keeps while map 0 is off, as every main room is, and the original game never draws
+it.
 
 **Commits.** `9b888587`.
 
 ### A Zip call with no scene ends on a skip as one under a scene does (#284)
-
-2026-10-31.
+2026-10-31
 
 **What.** With the *Cutscene skipper* on, a call from Zip that holds Lara while no flyby
 and no cutscene runs ends on Escape held or on a fresh press of the controller's confirm
@@ -16997,37 +16838,17 @@ button stays out of play until it is let go. A call under a flyby or a cutscene 
 scene's skip, which ends it at the scene's end. A call that is not skipped plays as
 before.
 
-**Why.** On the thirteenth floor (RICH1) a trigger starts a call from Zip, and Lara stood
-with her hand at her ear for the whole line: no skip reached it. Read from the levels (the
-vanilla and the randomized `.TRC` hold the same calls and triggers) and from the code:
-
-- The calls of all fifteen levels: RICH1 item 4 (room 3, track 95) with flyby 11 and item
-  134 (room 72, track 94) with no scene; RICH2 item 56 (room 34, track 60) with flyby 12
-  and item 225 (room 161, track 77) with flyby 10. The title, ANDREA1 to 3, JOBY2 to 5,
-  ANDY1 to 3, RICHCUT2 and RICH3 have none.
-- Call 134 is started by the one-shot TRIGGER on sector (2,5) of room 72 (x 20992, z
-  43520), whose commands are the call and a Target on item 126, a CAMERA_TARGET in room 69
-  (x 23040, y -1536, z 44544); the sectors (2,2), (2,3), (2,4) and (2,6) of that walkway
-  carry the Target alone, not one-shot. No flyby, camera or cutscene. `RefreshCamera`
-  gives the camera the target on every tick she stands on one of them, and
-  `CalculateCamera` turns her head toward it and looks through a look camera while it lies
-  within her head's reach; posed, her zip states' collision fills no trigger, and the look
-  ends.
-- Tick by tick: on tick 0 the trigger activates the call (`LaraControl`); on tick 1 stage
-  0 takes her control, after tick 1's input was read; from tick 2 her input is masked to
-  the look key and `dbinput` is cleared. She comes to a stand, 20 to 40 ticks from a run;
-  that tick stage 1 poses her and plays track 94, the next hears it, and the pose loops
-  until the track is over, then goal AS_OUT_ZIP and 25 frames to ANIM_BREATH. Escape and
-  the confirm button reached nothing all that time: the mask takes the inventory's and the
-  pause menu's edges, and no skipper ran.
-- `S_CDTrackPlaying(94)` is true while the stream of track 94 runs (the language's HQ OGG,
-  HQ EN's, else `xa12_z_05.wav`); at its end the stream's tail plays the level's
-  atmosphere, 129, and the call ends. With no music device or the file missing the call
-  ends on the first tick of stage 2, as #282 made it; nothing holds her for good there
-  now.
-- A call that outlives its flyby - its track the longer, or the flyby broken off by Look -
-  holds her in the pose after the flyby's end has cleared `bDisableLaraControl`: there her
-  input is not masked, and a fresh Escape opened the inventory over the pose.
+**Why.** On the thirteenth floor (RICH1) call 134 is started by a one-shot TRIGGER on room
+72's walkway whose commands are the call and a Target on a CAMERA_TARGET in room 69 - no
+flyby, camera or cutscene - so no skip reached it, and Lara stood with her hand at her ear
+for the whole line. From the tick after the trigger the call masks her input to the look
+key and clears `dbinput`, so Escape and the confirm button reached nothing: the mask takes
+the inventory's and the pause menu's edges, and no skipper ran. `S_CDTrackPlaying(94)` is
+true while the stream of track 94 runs; at its end the stream's tail plays the level's
+atmosphere, and the call ends. A call that outlives its flyby - its track the longer, or
+the flyby broken off by Look - holds her in the pose after the flyby's end has cleared
+`bDisableLaraControl`: there her input is not masked, and a fresh Escape opened the
+inventory over the pose.
 
 **How.** `game/zip_call_rule.h`: `ZipSkipStarts` - the call holds her (posed, or her
 control taken while she comes to a stand; stage 0 holds nothing yet), no flyby, track
@@ -17040,32 +16861,16 @@ and latches the pad's press; its edge is primed on the call's first tick.
 `game/control.cpp`: `ControlPhase` asks it once a tick after the input mask and the
 cutscene skipper and before the inventory, and masks the tick it fires on as a held tick.
 `specific/input.cpp`: the SKIPLATCH line takes its word from `SkipLatchWord`.
+`game/twogun.h` declares `ZipCallSkipWithoutScene`, and `specific/input.h` gives the
+latch's calls their kind.
 
 With `-log`: `ZIPSKIP item=<i> stage=<s> tick=<n> how=escape|pad scene=0`, a new line,
 then the call's `ZIPLOG ... ended by skip`; `SKIPLATCH set=zip` for the pad. The ZIPLOG
 words and SKIPLATCH's `cutseq` and `flyby` lines are unchanged.
 
-Measured with a census of the calls and of the other holds over the fifteen vanilla and
-the fifteen randomized levels (items, their OCB, every trigger that names them), a walk of
-all of Lara's animations in the fifteen levels (64 of her 140 states have no routine that
-reads the input; the real animations that loop in one of them until a goal set from
-outside are the Zip pose, 468, the push and pull of a block, 122 and 123, and the cog
-switch, 321, besides the death poses), and the code. ModernTest: `zip_skip_rule` (15
-checks), `zip_skip_noscene` (22: call 134 and the call under flyby 11 tick by tick, before
-and after - played through the same; Escape at tick 300 ends it there, she stands at 325;
-a fresh Cross the same, latched until let go, where without the latch it reached her as
-Action for 34 ticks; under the flyby one end only; the call outliving its flyby, where
-Escape opened the ring before), `zip_skip_wiring` (8); 17,150 checks. Game logic in every
-draw path; there is no `hd_build` parity to claim.
-
-The other holds a skip cannot reach, none of them changed here: the lift buttons (a switch
-of OCB 1000 or more, which `InitialiseSwitch` makes 6; RICH1 2, RICH3 3), released by
-their LIFT_TELEPORTER 30 ticks after it runs, for good only if a button's trigger named no
-lift, which none does; RICH2's puzzle hole 2, Core's level-bound hold, released by
-teleporter 217 (OCB 512) after its 128-tick charge; RICH2's teleporter 76 (OCB 666), which
-keeps her in ANIM_ELEVATOR_RECOVER for 150 ticks; the walk to an object's place
-(`lara.IsMoving`), at most 90 ticks. Each ends by itself; none stays past its end in the
-data.
+ModernTest: `zip_skip_rule`, `zip_skip_noscene` (call 134 and the call under flyby 11 tick
+by tick, before and after) and `zip_skip_wiring`. Game logic in every draw path; there is
+no `hd_build` parity to claim.
 
 **Decisions.** The skip follows the *Cutscene skipper* option, as both scene skips do.
 Escape skips while held, the confirm button on a fresh press only, as at a scene; a press
@@ -17073,58 +16878,48 @@ already down when the call begins does not skip it. A skip on the tick the call 
 its own track is no skip. Every call running ends with the skip, as at a scene's end. The
 pop from AS_INTO_ZIP to ANIM_BREATH and the plain music triggers with Zip's voice, which a
 skip leaves playing, stay as #282 left them. A call with no scene is no scene for #280's
-hold: her life is not held while she is posed there. Task #285, built on a branch of its
-own at the same time, stands after this one; this entry stands after #283's.
+hold: her life is not held while she is posed there. The other holds a skip cannot reach -
+the lift buttons, RICH2's puzzle hole 2 and its teleporter 76, the walk to an object's
+place - each end by themselves and stay as they were.
 
 **Commits.** `7343d52b`.
 
 ### The frame a flyby ends on is drawn with the camera it leaves (#285)
-
-2026-10-31.
+2026-10-31
 
 **What.** A camera flyby whose first camera carries SNAPBACK - 49 of the 64 sequences, all
 8 of ANDREA2 - now draws the tick it ends in with the chase camera, skipped or played
 through: eye, target, room and field of view of the one camera the end hands the view back
-to. That picture used to take the flyby's view with the chase camera's room. Skipping the
-cog's flyby in Trajan's Markets with Cross showed it: one picture with the lower half
-black, the horizon as a ball in the middle and above it the cog room's walls seen from far
-outside, Lara on the rope inside them; the chase camera came a tick later. A flyby played
-to its end drew the same split from one or two speed steps before its last camera; for a
-player who lets it run, the cut to the chase camera now comes one tick, a thirtieth of a
-second, earlier, and that picture is gone. The flybys that end on the spline back to the
-chase camera (ANDY3 1, RICH1 1, RICH2 2 and the title's 5), the end by Look and the end of
-a sequence that follows Lara drew one camera before and are drawn as before. With `-log` a
-`FLYEND` line names every end.
+to. That picture used to take the flyby's view with the chase camera's room: skipping the
+cog's flyby in Trajan's Markets drew one picture with the lower half black, the horizon as
+a ball in the middle and above it the cog room's walls seen from far outside, Lara on the
+rope inside them; the chase camera came a tick later. A flyby played to its end drew the
+same split from one or two speed steps before its last camera; for a player who lets it
+run, the cut to the chase camera now comes one tick, a thirtieth of a second, earlier, and
+that picture is gone. The flybys that end on the spline back to the chase camera (ANDY3 1,
+RICH1 1, RICH2 2 and the title's 5), the end by Look and the end of a sequence that
+follows Lara drew one camera before and are drawn as before. With `-log` a `FLYEND` line
+names every end.
 
-**Why.** The run that showed it skipped the cog's flyby three times, at ticks 216/217,
-367/368 and 486/487, with the same lines each time. The flyby is sequence 9 (TrgProbe
-`-flyby`): cameras 34, 35 and 36 in room 24, the first with flags 0441 (snap, snapback, no
-Lara control). At tick 216 the press jumps the spline to the end of 34's segment and the
-knots are filled for 35 to 36. At tick 217 `CalculateSpotCams` takes the spline at 0,
-camera 35 (73216,2176,35328) in room 24, with camera 35's field of view (18200), and
-`phd_LookAt` builds the view from them; the held press jumps the segment, the count passes
-the last camera and the end branch runs: the hold ends (`HOLDLOG end=flyby`), the type
-turns CHASE, SNAPBACK puts `camera.pos`, `camera.target` and `camera.pos.room_number` back
-to what they were when the flyby began - the chase camera of tick 205, room 51 - and
-`AlterFOV(LastFov)` sets 14560. Nothing builds the view again: the camera step of
-`game/control.cpp` runs `CalculateSpotCams` instead of `CalculateCamera` on a tick that
-begins in a flyby. The interpolation takes the end for a cut and draws the tick's state
-live, with the view of camera 35. `DrawRooms` walks from `camera.pos.room_number`, room 51
-(`VISLOG eye_room=51`, `ROOMLIST cam_room=51 walk_room=51 eye=(73216,2176,35328) rooms=2
-removed=24,23,224,16,159,168,162`): the eye stands in room 24, 10,000 units off and 5,000
-below, the walk follows none of room 51's portals, 51 and its guest 222 are all it lists,
-and the rest stays black. The list holds room 222, which lies under the sky (flags 0x48),
-and the sky is drawn at `camera.pos` (`SkyDrawPhase`): the horizon around the chase
-camera's place by Lara, seen from 10,000 units away - the ball. Every picture until tick
-218, five or six at 165 Hz, is this one; at tick 218 `CalculateCamera` puts the chase
-camera at its ideal (`CAMLOG tick f=218 eye=(72329,-2937,26551)/51`). A run played to its
-end reaches the same branch with the spline one or two speed steps before the last camera,
-and splits the same way. The end on the spline to the chase camera keeps the eye and the
-room of its own tick, from which the view was built; the Look end calls
-`AlterFOV(LastFov)` and `CalculateCamera`; a sequence that tracks Lara ends when its
-trigger stops arming it, on a tick whose camera step runs `CalculateCamera`. The log's end
-at tick 81 (`HOLDLOG how=level`) is the title's flyby dropped by the level load, with no
-picture after it; no flyby ran at ANDREA2's start in that run.
+**Why.** A flyby whose first camera carries SNAPBACK ends in `CalculateSpotCams` after
+that tick's view was built from the spline: when the count passes the last camera the end
+branch runs - the hold ends, the type turns CHASE, SNAPBACK puts `camera.pos`,
+`camera.target` and `camera.pos.room_number` back to what they were when the flyby began,
+and `AlterFOV(LastFov)` sets the chase camera's field of view. Nothing builds the view
+again: the camera step of `game/control.cpp` runs `CalculateSpotCams` instead of
+`CalculateCamera` on a tick that begins in a flyby. The interpolation takes the end for a
+cut and draws the tick's state live, with the flyby camera's view, while `DrawRooms` walks
+from the chase camera's room. In the cog's flyby, sequence 9 (TrgProbe `-flyby`: cameras
+34, 35 and 36 in room 24, the first with flags 0441, snap, snapback and no Lara control),
+the eye stands in room 24, some 10,000 units off and 5,000 below room 51, the chase
+camera's room: the walk follows none of room 51's portals, lists room 51 and its guest 222
+and leaves the rest black, and the sky, drawn at `camera.pos` (`SkyDrawPhase`), hangs the
+horizon around the chase camera's place by Lara - the ball. A run played to its end
+reaches the same branch with the spline one or two speed steps before the last camera, and
+splits the same way. The end on the spline to the chase camera keeps the eye and the room
+of its own tick, from which the view was built; the Look end calls `AlterFOV(LastFov)` and
+`CalculateCamera`; a sequence that tracks Lara ends when its trigger stops arming it, on a
+tick whose camera step runs `CalculateCamera`.
 
 **How.** `game/spotcam.cpp`: the SNAPBACK end calls `CalculateCamera` after
 `AlterFOV(LastFov)`, as the Look end does. With `camera.speed` 1 and `old_type`
@@ -17133,22 +16928,9 @@ builds its own view, so eye, target, room, view and field of view are one state.
 `FlyEndLog` writes `FLYEND tick= how= eye=(x,y,z)/room target=(x,y,z)/room fov=` after the
 end's own camera step, with `how=end`, `skip` (a skip jumped that tick to the end) or
 `look`; `game/control.cpp`'s camera step writes `how=track` when it finds that a sequence
-which tracked Lara was let go. `game/spotcam.h` declares `FlyEndLog`.
-
-**Proof.** Tick 217 read again after the change: the same up to `AlterFOV(LastFov)`, then
-`CalculateCamera` - the chase camera at its ideal behind Lara in room 51, the place
-`CAMLOG` showed at tick 218, its `phd_LookAt` the view - and `FLYEND tick=217 how=skip`
-with that eye and room 51. The end is still a cut for the interpolation (the flyby flag
-drops, the eye jumps 10,000 units) and its pictures are drawn live with that view: the
-walk from room 51 with the eye inside it, the sky around the eye. Type and old type no
-longer change from tick 217 to 218 (CHASE and FIXED_CAMERA to CHASE and CHASE was a cut of
-its own), so the pictures after 218 are blended where they were drawn live. The census of
-TrgProbe `-flyby` over the fifteen levels: 64 sequences, 49 end by SNAPBACK (ANDREA1 6,
-ANDREA2 8, ANDREA3 5, ANDY1 1, ANDY2 6, ANDY3 2, JOBY2 1, JOBY5 1, RICH1 8, RICH2 7, RICH3
-4), 9 on the spline to the chase camera, 6 loop or track. ModernTest 17,105, MenuTest
-45,043, InterpTest 754 and LipsTest 272 checks, none failed. The rule is one call in one
-branch and has no part a test could hold without the engine; ModernTest gains no group.
-Game logic shared by every draw path: there is no `hd_build` parity to claim.
+which tracked Lara was let go. `game/spotcam.h` declares `FlyEndLog`. The rule is one call
+in one branch and has no part a test could hold without the engine; ModernTest gains no
+group. Game logic shared by every draw path: there is no `hd_build` parity to claim.
 
 **Decisions.** The end runs the chase camera rather than building a view at the snap-back
 place: the next tick's `CalculateCamera` moves to the ideal at once (speed 1), so that
@@ -17158,14 +16940,12 @@ that ends on the spline back: its last tick shows the last flyby camera's own vi
 chase camera's field of view, one camera, before the chase camera takes over. The cutscene
 skipper ends no flyby - it never touches `bUseSpotCam`, and a cut scene that starts during
 a flyby holds it until the scene is over - so FLYEND has no `cutseq`. An anti-trigger
-(`TestTriggers`) ends a flyby in no level's data and writes no FLYEND line. This entry
-stands after #284's, built on a branch of its own at the same time.
+(`TestTriggers`) ends a flyby in no level's data and writes no FLYEND line.
 
 **Commits.** `66c57ce3`.
 
 ### A room under the sky lists the art that stands in the sky beside it (#286)
-
-2026-10-31.
+2026-10-31
 
 **What.** On the visibility path (`hd_vis` 1) a room under the sky now lists, as guests,
 the rooms under the sky whose art stands in the sky beside it: in the open air - farther
@@ -17175,48 +16955,33 @@ a sector of it. The walk lists such a room by the box of that art inside the win
 room under the sky is seen in, as it lists a guest, and the room walks on through its own
 portals. A room whose art there is, all but fewer than eight triangles, a copy of another
 such room's (centroids within two units) is left out, and so is the art of a room not
-under the sky and art on a closed room's roof. In ANDREA2's rooftop courtyard by the
-griffins (room 223) the brick tower, the facade with the two barred windows, the block
-with the cornice on the roofline, the coffered ceiling of the loggia and the city beyond
-the lattice parapet with the red building now stay where they are as the eye turns and
-moves. With `-log` the `HDLOG level= vis=1` line ends in `sky_groups= sky_tris= sky_pairs=
-sky_copies= hull_sky= sky_closed=`, one `HDLOG vissky level= room= group= tris= over_sky=
-over_closed= beyond= box=` line names each pair, one ending in `refused=copy` or
-`refused=closed` each room left out, and every `HDLOG room=` line ends in `sky_art=`;
-`VISLOG` names such a room `g`, the walk being handed it as a guest. TrgProbe `-vistable`
-ends its level line in the same counts with a `skyart`, `skycopy` or `skyclosed` line per
-group, `-visroom` adds a room's `sky=` lines and `-visskyreach` sets the reach;
-RoomProbe's `-vis: tables` line ends in the counts with a `-vis: vissky` line per pair,
-`-walkfinal` names a room the sky table listed first `vis=sky`, `-vissky 0` builds no sky
-table, `-visskyreach` sets the reach and `-visyshift 1` builds the tables with the groups'
-y shifts as the engine does; ModernTest checks the rule on rooftops built by hand.
+under the sky and art on a closed room's roof. In ANDREA2's rooftop courtyard (room 223)
+the brick tower, the facades, the block on the roofline, the loggia's coffered ceiling and
+the city beyond the parapet now stay where they are as the eye turns and moves. With
+`-log` the `HDLOG level= vis=1` line ends in `sky_groups= sky_tris= sky_pairs= sky_copies=
+hull_sky= sky_closed=`, one `HDLOG vissky level= room= group= tris= over_sky= over_closed=
+beyond= box=` line names each pair, one ending in `refused=copy` or `refused=closed` each
+room left out, and every `HDLOG room=` line ends in `sky_art=`; `VISLOG` names such a room
+`g`, the walk being handed it as a guest. TrgProbe `-vistable` ends its level line in the
+same counts with a `skyart`, `skycopy` or `skyclosed` line per group, `-visroom` adds a
+room's `sky=` lines and `-visskyreach` sets the reach; RoomProbe's `-vis: tables` line
+ends in the counts with a `-vis: vissky` line per pair, `-walkfinal` names a room the sky
+table listed first `vis=sky`, `-vissky 0` builds no sky table, `-visskyreach` sets the
+reach and `-visyshift 1` builds the tables with the groups' y shifts as the engine does;
+ModernTest checks the rule on rooftops built by hand.
 
-**Why.** On ANDREA2's rooftops round room 223 the Remaster's art on the facades and roofs
-went out and came back, often many times over: diving over the parapet, the upper part of
-the brick tower turned into a dark block and the facade with the barred windows to the
-right was gone, sky where it stood - the tower that had popped from the other side before
-#269; standing on the sloped roof, the block on the roofline became a thin dark slab and
-two panels of the loggia's coffered ceiling showed the sky; diving along the lattice
-parapet, the red building of the skyline shrank and then was gone. The log of that run
-holds 913 changes of the room list in ANDREA2, the eye in room 223 in 298 of them. The
-walk replayed at the eye of each change (RoomProbe, the change's eye, the camera's target
-of that tick) gives the game's list in 605 of the 884 that follow a whole list, the rest
-one room or more apart; drawn there at 1,280 x 720 with the list before and after the
-change, 136 changes move 200 pixels or more, 3,213,043 in all, and three rooms make 97 per
-cent of them: room 55 (51 changes, 1,813,871 pixels, the eye in room 223), room 222 (21,
-1,189,869, the eye in rooms 221, 223 and 33) and room 7 (22, 107,190). Drawn at frames
-4,258 (eye in room 221) and 8,452 (in room 223) without room 222, the pictures are those
-of the dive and of the roof. None of the three is a guest of the rooms the eye stands in:
-their art there stands outside every room's box. Group 222, the tower's, holds 300
-triangles of the facade over the courtyard's east side above its top, 72 over room 221,
-467 of a parapet past the level's rooms, and 709 of the roofs and the coffers over the
-loggia (room 225, a closed room) above its top; group 55 holds 13,321 triangles of the
-city past the level's east edge, group 7 2,064 more of it. The guest table counts art only
-in a room's inside, between its floor and its ceiling - so the tower's 240 triangles in
-room 232 made it that room's guest - and no room's inside holds this art; each of the
-three was listed only while its own room was, through a chain of portals: room 222 from
-room 221 through the portal at the eye's back when the eye looks over the courtyard, room
-55 from room 223 through rooms 225, 3, 7 and 56.
+**Why.** On ANDREA2's rooftops round room 223 the art of three rooms stands outside every
+room's box: group 222, the tower's, holds 300 triangles of the facade over the courtyard's
+east side above its room's top, 72 over room 221, 467 of a parapet past the level's rooms
+and 709 of the roofs and the coffers over the loggia (room 225, a closed room) above its
+top; group 55 holds 13,321 triangles of the city past the level's east edge, group 7 2,064
+more of it. The guest table counts art only in a room's inside, between its floor and its
+ceiling - so the tower's 240 triangles in room 232 made it that room's guest - and no
+room's inside holds this art; each of the three was listed only while its own room was,
+through a chain of portals: room 222 from room 221 through the portal at the eye's back
+when the eye looks over the courtyard, room 55 from room 223 through rooms 225, 3, 7
+and 56. So the tower, the facades and the skyline went out and came back as the eye turned
+and moved.
 
 **How.** `HDVisBuild` (`specific/hd/hd_vis.cpp`) asks each triangle of a group's art that
 stands farther than `overhang` out of its own room's box, of the rooms whose floor plan
@@ -17234,68 +16999,28 @@ than eight of them are copies of a taken group's (`skyCopyOf`). A room not under
 is none (`skyRoomClosed`): listed, it draws its inside and walks on through its doors -
 RICH2's office room 135, beside the stairwell with no link to it, has 24 triangles of its
 ceiling slab 7 units over the stairwell's top, and taken it filled the stairwell's opening
-with its lockers and a glass block wall (105,029 pixels at the niche eye of #269) - and
-its sky art is mostly a copy: ANDREA2's room 50, the street under the roofs, holds 11,234
-triangles of the skyline, each a copy of one of room 55's. Then each room under the sky
-takes each taken group, but its own and its twin's, whose sky art stands over its floor
-plan or within `skyReach` of it - 1,024 units, a sector, the width of a wall ring: the
-skyline stands 889 units past the courtyard's east wall (`HDVisParams::skyArt` 1,
-`skyReach`; the table `HDVisTables::sky`, `skyFirst`, `skyCount`). `hd_level.cpp` hands
-the walk a room's sky groups after its guests (`VisKeepGuests`, `HDVisRoomGuests`), a
-second shell's left out as for the guests, so `game/draw.cpp`'s walk lists them through
-`VisGuestBounds` and is not changed. The guests, the openings, the wides, the enclosure
-and the classic rooms' verdicts are those of before. The reading - art above a room's
-classic box counts for that room, the Remaster building higher than the classic level - is
-after TROne's guests' column (GPLv3, Todesengel1931); the open air, the sky, the reach and
-the copies are this engine's own.
-
-**Proof.** Along the log's run, at the eye of each of the 884 changes of the list that
-follow a whole list: with the game's lists, 136 changes move 200 pixels or more, 3,213,043
-in all; with the walk replayed under the rule at the same eyes, 37 changes, 240,353 pixels
-(92.5 per cent fewer). Rooms 55, 222 and 7 move 200 pixels or more at 51, 21 and 22
-changes before and at 0, 1 and 0 after - room 222's one with the eye in room 154, a closed
-room; between one change's eye and the next they come and go 64, 24 and 40 times before
-and 14, 2 and 19 after. At the 136 changes the pictures showed, drawn from both replays,
-2,914,074 pixels move before and 75,176 after, 108 changes and 26; what still moves is art
-not in the sky: the loggia's own (room 225), the rooms below the courtyard (21, 18, 17 and
-46, the last two 14,324 pixels at frame 3,739) and the building west of the tower (162);
-room 52's facade in room 232's box, gone with room 222 before, stays. The tables of the
-fifteen levels room by room (TrgProbe `-vistable -visroom all`): every guest, opening,
-wide and enclosure line as before; 501 sky pairs, 84 sky groups a room takes - ANDREA1 33
-pairs, ANDREA2 47, ANDREA3 11, ANDY1 136, ANDY2 0, ANDY3 111, JOBY2 34, JOBY3 0, JOBY4 82,
-JOBY5 1, RICH1 0, RICH2 26, RICH3 3, RICHCUT2 0, TITLE 17; the largest RICH2's group 26
-(59,896 triangles in the sky), ANDREA3's 67 (30,601), TITLE's 54 (28,697), ANDY3's 23
-(21,532), ANDY1's 202 (15,758) and ANDREA2's 55 (13,321); six groups left out as copies
-(ANDREA3's 66, 69 and 91 of 67, ANDY3's 201, JOBY5's 82, RICH2's 120 of 26) and 45 because
-their room is not under the sky. RICH2's table is the same with the y shift the engine
-reads (RoomProbe `-visyshift 1`). The parity set of #236, 72 of 72 pictures byte-identical
-(six classic, six HD, thirty census and thirty camera pictures); #269's seven
-before-and-after places 7 of 7; of its 88 card samples 76, the twelve others named:
-TITLE's room 43 four views (540 to 2,998 pixels at 960 x 540), the sky groups 35 and 54 -
-the landscape past the rooms - listed there with room 33, a guest of theirs; ANDY1's rooms
-96, 97 and 135 eight views (1 to 18 pixels), the same rooms in another order and wider
-windows, rooms 143, 159, 162 and 163 queued first by the sky table, at room 96 also 121,
-160, 161 and 150. RICH1 has no sky pair: its tables and walk, and #283's three pictures,
-are those of before. The price at ten eyes of the log, at 2,560 x 1,440, every pass timed
-30 times on the GPU (median): the rooms 45, 12, 13, 12, 12, 14, 13, 18, 14 and 8 before,
-49, 14, 28, 23, 24, 16, 15, 19, 17 and 12 after; the triangles 25,134 to 440,028 before,
-71,114 to 473,073 after; the draw calls 99 to 401 before, 173 to 451 after; the GPU time
-0.189 ms on average before and 0.235 after, at most 0.157 to 0.459 ms at frame 3,739 (13
-to 28 rooms, 54,279 to 418,708 triangles, room 10's 309,808 among them, a guest of the
-rooms the sky groups walk into). The log's frames ran at the 165 Hz cap (6.06 ms median,
-5.31 of it waiting at the flip, the walk 0.11 ms, the HD draws 0.32 ms of the CPU). The
-table build costs 1,435 ms before and 1,258 after on ANDREA2, 480 and 588 on ANDY1.
-ModernTest 17,123 checks, 0 failed (`vis_sky_art`, 18), MenuTest 45,043, InterpTest 754,
-LipsTest 272, 0 failed. `hd_vis` 0 is unchanged by construction: the sky table is built on
-the visibility path alone; `hd_build` 0 is untouched.
+with its lockers and a glass block wall - and its sky art is mostly a copy: ANDREA2's room
+50, the street under the roofs, holds 11,234 triangles of the skyline, each a copy of one
+of room 55's. Then each room under the sky takes each taken group, but its own and its
+twin's, whose sky art stands over its floor plan or within `skyReach` of it - 1,024 units,
+a sector, the width of a wall ring: the skyline stands 889 units past the courtyard's east
+wall (`HDVisParams::skyArt` 1, `skyReach`; the table `HDVisTables::sky`, `skyFirst`,
+`skyCount`). `hd_level.cpp` hands the walk a room's sky groups after its guests
+(`VisKeepGuests`, `HDVisRoomGuests`), a second shell's left out as for the guests, so
+`game/draw.cpp`'s walk lists them through `VisGuestBounds` and is not changed. The guests,
+the openings, the wides, the enclosure and the classic rooms' verdicts are those of
+before. The reading - art above a room's classic box counts for that room, the Remaster
+building higher than the classic level - is after TROne's guests' column (GPLv3,
+Todesengel1931); the open air, the sky, the reach and the copies are this engine's own.
+`specific/hd/hd_level.h`'s comment on a group room's tables names the sky groups after its
+guests. `hd_vis` 0 is unchanged by construction: the sky table is built on the visibility
+path alone; `hd_build` 0 is untouched.
 
 **Decisions.** The art of a room not under the sky is left out, all of it: the 45 groups
-so left out include ANDREA3's arena skylines (groups 16, 17, 28 and 55, 29,127 to 29,458
-triangles each), ANDY3's group 86 (39,870), RICH2's 34 and 153 (40,191) and TITLE's 0, 7,
-8 and 36. Should one of them be reported to come and go, the next step is to let a room
-under the sky take it when the two rooms are linked. The reach is a sector of the floor
-plan and not every room under the sky: so 501 pairs, every room 4,489 (ANDY1 1,660 of
-them), each one a room more listed whenever its sky art is in the window. Art over a
+so left out include ANDREA3's arena skylines (groups 16, 17, 28 and 55), ANDY3's group 86,
+RICH2's 34 and 153 and TITLE's 0, 7, 8 and 36. The reach is a sector of the floor plan and
+not every room under the sky: so 501 pairs over the fifteen levels, against 4,489 with
+every room, each one a room more listed whenever its sky art is in the window. Art over a
 closed room's roof makes no room listed, but it comes along with its group: the roofs and
 the coffers over ANDREA2's loggia are group 222's. The walk is handed the sky groups as
 guests, so `game/draw.cpp` is not touched and `VISLOG` names them `g`. No table per level:
@@ -17304,8 +17029,7 @@ ANDREA2 has no entry, and the rule derives each pair from the level's own rooms 
 **Commits.** `a836e6cf`.
 
 ### The bulbs' fog reaches as a field, and the mist it stands in goes (#287)
-
-2026-10-31.
+2026-10-31
 
 **What.** With `hd_fog` 1 every fog bulb's body reaches past its radius as a field: its
 density falls over four radii - the reach - with the body's own smooth fall, its strength
@@ -17327,35 +17051,13 @@ dropped=bulb|field meets= gap=` line per mist range left out. RoomProbe: `-fogfi
 `-fogfactor <k>`, `-fogdrop 0`; each `-fogart` line ends in the bulb its box meets and the
 verdict. ModernTest's group `fog_field`, 13 checks.
 
-**Why.** In play at ANDY3's sluice, with the bulbs' body of #218, two mottled grey-green
-lumps still hung in the view, on the dark hillside left of the mill and over the brown
-rocks beside the crane, and closer by rectangular, blocky edges showed inside the fog on
-the ground. The fog was wanted over the whole area around the mill, not in each bulb's
-ball alone. A third ball seen there before #218, the haze disc of the bulb at the pool's
-south-west corner (bulb 9) on the hillside beside the left lump, had become that bulb's
-body with #218.
-
-**Measured.** ANDY3's mist is three ranges of the flow material, one each in groups 10, 15
-and 17 (RoomProbe `-fogart`): group 10 spans x 33,018 to 36,790, y 7,547 to 10,263, z
-50,636 to 54,724; group 15 x 38,281 to 43,321, y 6,913 to 9,613, z 48,570 to 52,610; group
-17 x 33,018 to 43,322, y 6,913 to 10,263, z 48,568 to 54,724, the union of the two others'
-boxes. Drawn one group at a time at the eye of the sluice (37,900, 7,450, 44,000 in room
-105, towards 38,450, 9,300, 48,200; 1,280 x 720, hd_fog 1 with the level's bulbs), group
-10's mist covers 27,319 pixels of the left lump, group 15's 47,575 of the right one and
-group 17's 75,145 of both, its light on each within one per cent of the other group's:
-every lump is drawn twice, by its own room's group and by room 17's. Together the mist
-adds light to 79,698 pixels over the picture without it, p95 29.9 and most 53.6 of 255,
-and at 12,395 pixels its light changes by more than 3 from one pixel to the next - the
-edges of the two copies' layers, where each group's mist alone has 609 (group 10), 1,849
-(15) and 2,315 (17). At #218's eye by the mill (35,586, 8,448, 45,730 in room 17) the
-same: 90,955 pixels, p95 29.8, most 59.1, 12,121 steps. The bulbs there are bulbs 7 to 11
-of room 105 (radius 1,312): 7 and 9 at x 35,328 by the pool's west side, 8, 10 and 11 at x
-42,496 to 46,592 east of the mill. Group 17's box holds bulb 7's centre and meets bulb 8's
-sphere at 952 units; group 15's box meets bulb 8's at 954; group 10's box lies 1,996 from
-bulb 7's centre (1.52 radii), its centre 4,124 (3.14 radii). Of the 34 mist ranges of the
-fifteen levels the other 31 are the title's sand: 21 of their boxes meet or hold the
-sphere of bulb 14 or 15 (rooms 61 and 71), the other 10 have their centres in those bulbs'
-fields - in a level where the pass does not draw.
+**Why.** At ANDY3's sluice the art's mist is three ranges of the flow material, one each
+in groups 10, 15 and 17 (RoomProbe `-fogart`), and group 17's box is the union of the two
+others': every lump was drawn twice, by its own room's group and by room 17's - two
+mottled grey-green lumps on the dark hillside left of the mill and over the brown rocks
+beside the crane, with the blocky edges of the two copies' layers inside them. The bulbs'
+bodies of #218 each filled a ball of their own, and the fog was wanted over the whole
+ground between them.
 
 **How.** `specific/hd/hd_fog.h` holds the rule as pure functions: `HD_FOG_FIELD` (4.0),
 `HDFogFieldReach`, `HDFogFieldDensity` (the peak times 1 - (distance / reach)^2),
@@ -17379,103 +17081,36 @@ lists in `aRoomInit`'s order and writes the load lines; RoomProbe hands in the b
 reads with `-fogbulbs`. `ROOM_MIST` is no fog flag in this engine: it marks the vertices
 of a room's floor over a downward portal that no vertex below repeats (`drawroom.cpp`,
 `IsMistVert`), the water surface's shimmer beside `ROOM_REFLECT`; nothing here reads it.
+`specific/hd/hd_render.h`: `HDFogLast`, the pass's record that RoomProbe reads, counts the
+fields that meet another's and the mist left out; `bshader.bat` compiles the shader into
+`hd_shader/hd_fog_ps.inc` and `hd_fog_vs.inc`.
 
-**The factor.** Measured in steps of a quarter from 1 to 5 (RoomProbe `-fogfactor`) on
-three conditions. The ground between the mill's bulbs: the x/z hull of bulbs 7 to 11,
-sampled every 64 units at the heights of room 17's ground layer, lies within a bulb's
-reach everywhere from 3.0 at the layer's top (y 8,448), 3.25 at its middle (9,600) and
-3.75 at its floor bound (10,752); at 1 a quarter of the top is covered and nothing below
-it. The band: at #218's seven eyes (H by the mill in room 17, M1 over the river, C3 at the
-sluice from room 105, E1, E2 and E3 over the pond rooms, I8 inside bulb 8; 1,280 x 720)
-the 95th percentile of the light the fog adds over the picture without it stays under the
-top of 33 up to 4.25 (M1 32.9 the most) and M1 passes it at 4.5 (33.1); at 1 the eyes lie
-at 13.6 (C3) to 21.5 (M1), at 4.0 at 23.1 (E2) to 32.0 (M1), and the eye of the sluice at
-20.1 and 27.3. The price, as #218 measured it (`-gpu 3 -gpuall` at 2,560 x 1,440, three
-runs, the median): at 4.25 the pass takes 1.02 ms at I8, past the budget of 1 ms, and 0.97
-at M1; at 4.0 the most is M1's 0.92 (I8 0.88, C3 0.84, the sluice 0.82, H 0.78). 4.0 is
-the largest step that meets all three, and the same factor rules every level. Before each
-quad's cap was cut to the fields that meet it, 4.25 cost 1.14 ms at I8.
-
-**What the field reaches** (RoomProbe `-fogfield`, factor 4). ANDY3: the mill's five bulbs
-reach 5,248 and make one field (7 and 9 lie 3,072 apart, 8 and 10 3,494, 10 and 11 2,563,
-8 and 11 5,376, 7 and 8 7,241, 8 and 9 7,455, 7 and 10 10,425); the pond's two in room 34
-one more (5,120 apart), the bulbs of rooms 20, 69 and 87 a third and room 145's pair a
-fourth, reaching 7,424 to 9,344. ANDY1: 15 bulbs of radius 1,920 reach 7,680 in two
-fields, bulbs 0 to 4 with 9 to 14 (joined through 0 and 10) and 5 to 8. ANDY2: 9 bulbs,
-6,144 to 7,168, bulbs 1 to 8 one field. ANDREA1: 9 bulbs, seven of them in water rooms
-under the sheets, which the frame never hands the pass (the water's own look stands
-there), and bulbs 0 and 7 (rooms 2 and 59) reach 3,328 and 4,224 alone. ANDREA2: 16 of 17
-bulbs in water rooms under the sheets, bulb 16 (room 234) reaches 7,040 alone. RICH2: 15
-bulbs, 6,016 to 10,240, two fields (0 to 12, 13 and 14). RICH3: 4 bulbs, 7,040 to 12,288,
-one field. RICH1 (10 bulbs), ANDREA3 (15) and the title (17, its bulbs 14 and 15 in rooms
-61 and 71 reaching 10,624 each) have no water square, so the pass draws no field there and
-the bulbs keep their haze; JOBY2 to JOBY5 and RICHCUT2 hold no bulb.
-
-**Room 12.** The pale patch on the hillside between the pond rooms and the tower, seen in
-trview with its lighting off, is the classic level's own texture: of room 12's 72 classic
-faces 65 are opaque, 2 alpha tested and 5 additive (the water surface beside the channel,
-at y 10,752), and the slope west and north of the tower is opaque quads and triangles with
-no face word (texture infos 1,932, 1,941, 1,944, 2,004, 2,009 and 2,010 on pages 2 to 5).
-trview draws them unlit, so the paler, hazy grass is painted into the tiles; in the
-classic game their vertex colours, 16 to 40 of 255, darken them to the night. The HD path
-draws the room with its art: group 12 has no additive range, so no mist of the art lies
-there, and no bulb's sphere reaches the room (bulb 7's lies 4,615 from its box, 3.52
-radii); the fields of bulbs 7 and 11 reach into its box only up to z 53,900, short of its
-first faces at z 54,272. No fog rule of #218 or this entry draws the patch.
-
-**Decisions.** The cap acts on the density at a point - each bulb keeps its share of the
-fields' sum - and not on a pixel's veil: a veil capped per pixel needs every bulb in one
-quad or a second render target, the share keeps a quad per bulb, and where the fields of
-two equal bulbs overlap their sum stays at one field's peak; along a long ray through
+**Decisions.** `HD_FOG_FIELD` is 4.0, the largest quarter step that meets three
+conditions: the ground between the mill's bulbs lies within a bulb's reach (from 3.0 at
+the top of room 17's ground layer, from 3.75 at its floor bound), the 95th percentile of
+the light the fog adds stays under the band's top of 33 at the measured eyes (up to 4.25),
+and the pass stays under 1 ms (0.92 ms at the most at 4.0, 1.02 at 4.25); the same factor
+rules every level. The cap acts on the density at a point - each bulb keeps its share of
+the fields' sum - and not on a pixel's veil: a veil capped per pixel needs every bulb in
+one quad or a second render target, the share keeps a quad per bulb, and where the fields
+of two equal bulbs overlap their sum stays at one field's peak; along a long ray through
 several fields the veil may still pass the top, which is what the band at the eyes
 measures. The strength is the band's top on the field's densest line, so a field is a
 quarter as dense at its middle as the body was and four times as wide, and where fields
-overlap the sum is held at that peak. A box lies in the field when its centre does,
-as #218 asked whether a part's centre lay in a sphere: a box only touching a field's rim
-would be left out where the field adds next to nothing (group 10's box touches bulb 7's
-field from 1.52 radii on, its centre lies in it from 3.14 on). The mist is left out only
-where the pass draws: in a level or a setting without the pass no fog stands in its place.
-The verdict takes every bulb of the level, not the frame's: a mist range keeps one verdict
+overlap the sum is held at that peak. A box lies in the field when its centre does, as
+#218 asked whether a part's centre lay in a sphere: a box only touching a field's rim
+would be left out where the field adds next to nothing. The mist is left out only where
+the pass draws: in a level or a setting without the pass no fog stands in its place. The
+verdict takes every bulb of the level, not the frame's: a mist range keeps one verdict
 wherever the eye is, so a range never flickers in and out as bulbs come within 20,480 of
 the eye. The breath keeps its cells at half a bulb's radius, the shape of the fog as
 before. The factor, the cap and the rule are the level's data alone; no room, group, bulb
 or level number is in the engine's code.
 
-**Proof.** At the eye of the sluice the mist adds light to 79,698 pixels before (p95 29.9,
-most 53.6, 12,395 steps) and to none after: the picture's line says three mist draws left
-out, and the fog alone - the picture against the same one without the pass (`-fogpass
-0`) - adds light to every pixel, p50 19.4, p95 27.3, most 35.1, with no rectangle in it;
-at #218's eye by the mill 90,955 pixels and 12,121 steps before, none after, the fog alone
-p50 16.6, p95 28.7, most 46.4. The parity sets of #218 (79 jobs at 960 x 540, RoomProbe of
-af575431 against this entry's): without bulbs at `hd_fog` 1 and at 0, 79 of 79
-byte-identical; with the level's bulbs at `hd_fog` 0, 79 of 79; with them at 1 under
-`hd_water` 0, 36 of 36, and the classic faces 7 of 7; the rules off (`-fogfactor 1
--fogdrop 0`) against the base at `hd_fog` 1, 79 of 79 (at 1,280 x 720 the sluice's eye
-and #218's differ by 1 of 255 at 2 and 1 pixels, the shader's compiled order; I8 not at
-all). With the bulbs at `hd_fog` 1 seven pictures change, each by the field: the census of
-rooms at `hd_water` 1 in ANDREA1 by 7,580 pixels (bulbs 0 and 7), ANDY1 91,928 (six
-bulbs), ANDY3 67,882 (two), RICH2 135,071 (nine) and RICH3 518,400 (four, the whole
-picture), the HD views of ANDY3's rooms 17 by 517,586 (five, and one mist draw left out)
-and 34 by 516,779 (five); ANDY2's census draws two bulbs whose fields lie behind its walls
-and stays the same, and the fifteen cameras draw no bulb's fog. The title's eyes of #218
-with its bulbs are byte-identical at `hd_fog` 1 and 0, its 30 and 19 ranges of sand drawn
-as before. `hd_build` 0 never runs the pass and is untouched. The price at the mill's eyes
-(medians of three runs at 2,560 x 1,440): E1 0.38 ms, E2 0.44, E3 0.24, A3mill 0.34, M1
-0.92, I8 0.88, H 0.78, C3 0.84, the sluice's eye 0.82. Beyond the mill the parity pictures
-cost at most 0.83 ms (RICH3's census).
-
-**Left.** Inside the densest fields the data holds the pass passes 1 ms: at RICH2's bulb 4
-(room 76), inside eleven fields, 2.04 ms (0.33 at the factor 1), at ANDY1's bulb 12
-(room 201) 1.14 ms (0.29); at 3.75, the least factor that covers the mill's ground, 1.57
-and 1.12. A pass that walks the summed field once per pixel instead of once per bulb would
-make that cheaper; it is not built here. The game was not run: the look and the log's
-lines wait for play.
-
 **Commits.** `eea6c21f`.
 
 ### JOBY2's cutscene soldier as a pool enemy: the brawler on a slot of his own (#288)
-
-2026-10-31.
+2026-10-31
 
 **What.** The soldier of JOBY2's last cutscene, the man in the tank top and the camouflage
 trousers on the submarine's deck, is an enemy of the randomizer's pool: `BRAWLER`, engine
@@ -17520,11 +17155,13 @@ Remaster carries (`MapProbe -hdm` on a randomized ANDREA1: HD if the skeleton fi
 `donor_map`; `ModelProbe` draws the model on its slot 471 with all 15 nodes covered), so
 he takes no hand-table line; without the installation he draws classic. The strike's
 sounds stay the chef's: 89 and 187 from his anim commands, which every campaign level
-carries, 190, the chef's cry, which the import brings from joby3, and the hard-wired thud
-70. His items save like the chef's - position, hit points, flags, animation - and an older
-savegame holds no item of the slot. `ModernTest` gains the group `brawler_rule`, 22
+carries, 190, the chef's cry, which the import brings from joby3, and the hard-wired
+thud 70. His items save like the chef's - position, hit points, flags, animation - and an
+older savegame holds no item of the slot. `ModernTest` gains the group `brawler_rule`, 22
 checks, the two rules and the engine's own text. No draw path changed: the classic and the
 HD drawing of the slot are the generic ones, so there is no `hd_build` parity to claim.
+`Preparation/Tools/Diagnose/bbone.bat` builds BoneCheck, which holds two slots' bone trees
+against each other.
 
 **Decisions.** The randomizer writes OCB 0 for him and no spawn row, since his hunt does
 not read it. The strike range stays the chef's: the control starts a strike when Lara is
@@ -17539,8 +17176,7 @@ other pool enemy.
 (ModernTest), `987200a5` (BoneCheck's script).
 
 ### RICH3's gunship flies after Lara as a drone at the vulture's size (#289)
-
-2026-11-01.
+2026-11-01
 
 **What.** A new enemy slot, `DRONE` (472), holds RICH3's gunship as the randomizer copies
 it: shrunk to the size of the pool's flyer, the vulture, by 2290/7161, its origin moved
@@ -17551,18 +17187,18 @@ line while it sees her, backs off nearer than two, hangs a sector over her head 
 box clear of floor and ceiling, turns its nose to her four degrees a tick and banks into a
 strafe. It fires the gunship's gun - the flash, the HK's report, a hit test every other
 tick along a ray past the aim point - in bursts of 12 ticks in every 48, its nose within
-30 degrees of her and she within eight sectors; a hit takes `DMG_Drone` (5, half the
-gunship's 10, through `EnemyDamage`) behind `SceneHoldRefuses`, and it smashes glass
-statics and smashable objects as the gunship does. It has 60 hit points (`HP_Drone`, the
-chef's), sparks where Lara's bullets strike it and carries no pickup. At zero it explodes
-on the motion sensors' pattern - the bang and two bursts of explosion sparks - and goes
-through `CreatureDie` with its explode flag: the body flies apart, the item ends, the AI
-slot is freed; the shot that took its last hit point counted the kill, as for every enemy.
-The HD model build reads a new sidecar line, `scale <slot> <num> <den>`, and shrinks the
-donor's `.TRM` by it, so GUNSHIP.TRM stands on the shrunk skeleton. With `-log`, a
-`DRONELOG item= tick= state= dist= los= fire=` line at every change of state and one per
-shot, which ends in `shot= dmg=`; the `HDLOG donor` line of a shrunk slot ends in
-`scale=`. Play on 2026-11-01 raised both defaults to 100 hit points and 50 a hit.
+30 degrees of her and she within eight sectors; a hit takes `DMG_Drone` (50, five times
+the gunship's 10, through `EnemyDamage`) behind `SceneHoldRefuses`, and it smashes glass
+statics and smashable objects as the gunship does. It has 100 hit points (`HP_Drone`),
+sparks where Lara's bullets strike it and carries no pickup. At zero it explodes on the
+motion sensors' pattern - the bang and two bursts of explosion sparks - and goes through
+`CreatureDie` with its explode flag: the body flies apart, the item ends, the AI slot is
+freed; the shot that took its last hit point counted the kill, as for every enemy. The HD
+model build reads a new sidecar line, `scale <slot> <num> <den>`, and shrinks the donor's
+`.TRM` by it, so GUNSHIP.TRM stands on the shrunk skeleton. With `-log`, a `DRONELOG item=
+tick= state= dist= los= fire=` line at every change of state and one per shot, which ends
+in `shot= dmg=`; the `HDLOG donor` line of a shrunk slot ends in `scale=`. The defaults
+are 100 hit points and 50 a hit.
 
 **Why.** At home the gunship is a set piece: seven sectors long, it runs along one wall on
 a path of its own and nothing can hurt it. As an enemy in a random level none of that
@@ -17590,12 +17226,22 @@ line), `specific/hd/hd_object.cpp`, `specific/hd/hd_model.cpp` and `.h`
 (`HDModelSlot::scale`), `tomb5.vcxproj`. ModernTest's `drone_rule` (39 checks) holds the
 table and the control's text; `ModelProbe -hdm` draws a slot through the sidecar's donor
 and factor and prints the skeleton test's numbers.
+`Preparation/Tools/Diagnose/HdmDump.cpp` lists the sidecar's `scale` lines, and
+`MapProbe.cpp` ends a shrunk slot's donor line in its factor.
 
-**Commits.** `f6bbae70`, `ee99cc56`.
+**Decisions.** The flight's numbers in `game/drone_rule.h` - the band of 2,048 to 4,096
+units with a slack of 512, the range of 8,192, the cone of 30 degrees, the height of 1,024
+over her head with 64 units of clearance, the burst of 12 ticks with a pause of 36, the
+strafe leg of 75, the speeds 48, 32 and 24, the turn of 4 degrees a tick, the bank of 10
+degrees at 1 a tick and the spread of 160 - are this project's free choices for a flyer of
+the vulture's size, left to play; the factor, the frame box's centre and the rotor's turn
+are measured on the data, and the gun follows the classic `tower.cpp`.
+
+**Commits.** `f6bbae70`, `ee99cc56`, `7bde37e2` (the defaults), `442660d5` (their
+comment).
 
 ### The bulbs' fog in one pass a frame, and the mill's old sheets of mist go (#290)
-
-2026-11-01.
+2026-11-01
 
 **What.** With `hd_fog` 1 the fog bulbs' pass is one draw a frame: one quad over the union
 of the rectangles of the taken bulbs' fields - the whole screen where one of them reaches
@@ -17618,26 +17264,14 @@ frame line ends in ` fog_pass=N fog_sheets=N`, an `HDLOG fogsheet level= room= f
 dropped= meets= gap=` line names each sheet left out at the load, and PROFLOG's lines end
 in the pass's own times, ` fog=` the processor's and ` fog_gpu=` the card's.
 
-**Why.** In play at ANDY3's mill with the field (#287), flat grey-green panes with
-straight edges hung in the air over the sluice and its bank and lay over the slope by the
-mill house, a bright cross where two of them met; and in the densest groups of bulbs the
-pass cost more than a millisecond (RICH2's bulb 4 2.04 ms, ANDY1's bulb 12 1.14).
-
-**Measured.** The panes are classic faces at y 8,448 of rooms 107 (its faces 35, 36, 37
-and 49 in the classic order) and 104 (faces 0 and 3), 1,024 square, texinfos 2312, 2313
-and 2295, additive, double-sided and in no animated range - the classic shimmer of the
-mist's marked corners moves them; the level's log restores them ("restored=4 of 4 face(s)
-at y=8448", "restored=2 of 2"), the .TRG covering none. Room 104's two are diagonal
-neighbours: the cross is their shared corner. The census of the fifteen levels (RoomProbe
-`-fogsheets`): rooms with `ROOM_MIST` stand in ANDY3 alone (28, 69, 87, 104, 105, 107 and
-210), and only 104 and 107 carry sheets, all six restored over the HD room, none in a room
-without art; the faces of the animated ranges lie in water rooms or in rooms of neither
-branch - flat water in thirteen levels, the falls tilted or upright in ANDREA3 (8), ANDY1
-(2), JOBY3 (1), JOBY5 (1) and RICHCUT2 (30) - none of them mist: the data tells mist by
-the room's branch, not by its texture. The price of #287's pass at RICH2's bulb 4 (1.77 ms
-at 2,560 x 1,440): 0.14 ms of it the eleven quads without their columns, 1.05 the hashed
-breath, 0.12 the fields' sum - one quad instead of eleven saves about a tenth of a
-millisecond, the table the most of the rest.
+**Why.** At ANDY3's mill, with the field of #287, the classic mist sheets stood in the
+fog: six additive, double-sided classic faces at y 8,448 of rooms 107 (four) and 104
+(two), 1,024 square and in no animated range, which the HD path restores over the HD room
+as it restores water, the `.TRG` covering none of them. They hung as flat grey-green panes
+with straight edges over the sluice and its bank and lay over the slope by the mill house,
+a bright cross where room 104's two diagonal neighbours met. And in the densest groups of
+bulbs #287's pass cost more than a millisecond: eleven quads at RICH2's bulb 4, each
+walking its own fields, the breath hashed per pixel the most of it.
 
 **How.** `specific/hd/hd_fog.h`: `HDFogHash` fused (`fmaf`), `HD_FOG_PASS_SLOTS` (16),
 `HD_FOG_TABLE` (64), `HDFogPassCount` (the shader's loop bound), `HDFogUnion` (the one
@@ -17657,42 +17291,26 @@ branch held against the bulbs as the art's mist is, its verdict into
 the clock round `HDRenderFrameEnd`; `specific/drawroom.cpp`: `InsertRoomWater` leaves a
 fogged face out while the pass stands in; `specific/profile.cpp`: `ProfileNoteFog`.
 RoomProbe: the one pass's line after the picture, `-fogquads` and `-fogsheets` (namespace
-`probesheets`). ModernTest: `fog_pass`, 9 checks.
+`probesheets`). ModernTest: `fog_pass`, 9 checks. `specific/hd/hd_level.h` declares
+`HDRoomWaterFace.fogged` and `HDRoomWaterFaceFogged`, `specific/hd/hd_render.h` gives
+`HDFogLast` the pass's draws and its rectangle, `specific/profile.h` declares
+`ProfileNoteFog`; `bshader.bat` compiles the shader into `hd_shader/hd_fog_ps.inc` and
+`hd_fog_vs.inc`. `hd_fog` 0 and a frame without bulbs are unchanged by construction;
+`hd_build` 0 never runs the pass.
 
-**Proof.** The parity sets of #287 (79 jobs at 960 x 540, RoomProbe of cd24dda6 against
-this entry's): without bulbs at `hd_fog` 1 and at 0, 79 of 79 byte-identical; with the
-level's bulbs at `hd_fog` 0, 79 of 79; at 1 the 72 that #287 left as they were
-byte-identical, and the 7 its field changed within 4 of 255 per channel - ANDREA1's census
-47 pixels by 1; ANDY1's 66,889 by 1 and 2,298 by 2; ANDY3's 19,535 and 1,528; RICH2's
-26,022, 899 and 6 by 1 to 3; RICH3's 358,810, 30,591 and 29; the HD view of ANDY3's room
-17 371,587, 43,244, 1,611 and 80 by 1 to 4, of its room 34 371,207, 18,082 and 2. The same
-shader one bulb a draw, the frame blended after each bulb as the quads blended it
-(`-fogquads`), lies within 1 of 255 of #287 but for 1, 9, 45 and 10 pixels by 2 (ANDY3's
-census, RICH3's, the two views; by 1 47, 664, 813, 902, 6,633, 16,338 and 9,966 pixels):
-the rest is the blend - eight bits after every bulb before, once at the end now. The price
-(medians of three runs at 2,560 x 1,440, #287 then this): E1 0.38 / 0.16 ms, E2 0.44 /
-0.18, E3 0.24 / 0.12, A3mill 0.34 / 0.19, M1 0.93 / 0.43, I8 0.88 / 0.39, H 0.78 / 0.35,
-C3 0.85 / 0.39, the sluice's eye 0.82 / 0.36, RICH2's bulb 4 1.78 / 0.94, ANDY1's bulb 12
-1.14 / 0.53, and a lone bulb (ANDREA1's bulb 0, the eye in its field) 0.27 / 0.10.
-
-**The stutters.** The play test's log at the mill: the seconds with a frame of 13 to 14 ms
-(20, 43 and 49 s into the level) spent it in the present (`flip` at most 11.7, 13.1 and
-11.8 ms), every phase of the frame's own work as in the seconds around them - a frame that
-waited out a second refresh of the 165 Hz screen; the pass is no phase there and costs the
-card under half a millisecond at the mill. The two long frames (46 s, 904 ms; 98 s, 760
-ms) lie outside the work (2.86 and 2.15 ms in their late lines): the two pictures taken.
-None of it is the fog's; what holds the present is not in the log, which now carries the
-pass's times to rule it in or out.
-
-**Left.** The game was not run: the look, the `fogsheet` lines and the profile's fog times
-wait for play. The pass's bytecode is 54 KB, its `.inc` 413 KB of text (#287's 49 KB): the
-bulbs and the fields unrolled. RICH2's bulb 4 is the tightest eye at 0.94 ms.
+**Decisions.** One draw a frame instead of a quad per bulb, and the breath's lattice read
+from a table instead of hashed per pixel: of #287's 1.77 ms at RICH2's bulb 4 the hashed
+breath took 1.05 and the eleven quads without their columns 0.14, so the table saves the
+most and the one quad about a tenth of a millisecond. The frame is blended once, eight
+bits after the last bulb, where #287 blended after every bulb. A sheet is told by its
+room's branch and not by its texture: the rooms with `ROOM_MIST` stand in ANDY3 alone,
+only two of them carry sheets, and the faces of the animated ranges elsewhere are flat
+water and falls, none of them mist.
 
 **Commits.** `668a5140`.
 
 ### The brawler's strike starts and lands where his fist reaches (#291)
-
-2026-11-01.
+2026-11-01
 
 **What.** The brawler has a reach of his own. His swing begins, and his walk ends, when
 the AI's distance to Lara is below 375 units where the chef's is 682; his hit lands once a
@@ -17756,8 +17374,7 @@ construction and ModernTest reads it out of `chef.cpp`.
 **Commits.** `84681cb0` (BoneCheck -reach), `68c44d94` (the reach, the seam, ModernTest).
 
 ### A savegame's pointers survive a moved pool, and null stays null (#292)
-
-2026-11-01.
+2026-11-01
 
 **What.** A savegame keeps its two pointers into the `game_malloc` pool - a creature's
 enemy and Lara's `GeneralPtr` - so that a load in another run, another build or another
@@ -17783,28 +17400,27 @@ enemy=` line per creature and one `SAVELOG general stored= side= how= general=` 
 `how=` being `null`, `tag_item`, `tag_ai`, `tag_num`, `legacy_ok` or `legacy_null`; at a
 save `SAVELOG save item= stored= kind=` and `SAVELOG save general stored= side=`.
 
-**Why.** The crash dump of 2026-10-31 23:41: in the first tick after a savegame was loaded
-into ANDY3, `GetAITarget` read through the swamp witch's (item 20) `enemy`, 0xFFFF6000.
-The save wrote `enemy - malloc_buffer` and the load added its own `malloc_buffer`, so a
-null enemy came back as the difference of two pool starts, -40,960 there. The entry
-"Address space, the page cache and what the machine can pay for" (September) said a null
-enemy "already comes back as 0"; that holds inside one process only. The pool is a
-`malloc` of a `DYNAMIC_BASE` program: eight starts of a probe linked as the engine is
-(`/DYNAMICBASE /LARGEADDRESSAWARE`, the static runtime) gave eight bases between
-0x00AF9020 and 0x015DE020 in page steps, so every load after a restart and every load in
-another build meets a moved pool. What the two pointers hold was counted from every
-assignment in `game/`: an enemy is null (7), Lara (30) or the creature's own `ai_target`
-(1, `FindAITargetObject`), nothing else; `GeneralPtr` holds an item number cast to a
-pointer in 34 places and an item of `items[]` in 4 - the pulley, the parallel bars, the
-cog switch's door and the crow-dove switch - which `lara_as_pulley`, `lara_as_pbleapoff`
-and `CogSwitchControl` read through. A distance survives a moved pool but not a moved
-layout: `items[]` lies behind the level's rooms, meshes, boxes and texture infos,
-`baddie_slots` also behind the samples, which are loaded only with sound on, so another
-build or level file moves them; a number survives both. A tag in the field itself would
-have cost every older build its enemies, since such a build adds its base to whatever the
-field holds: hence the number beside the field, and a new save loads on an older build as
-an old save does there - Lara, items and slots found by distance, a null or a number
-garbage as with any moved pool.
+**Why.** In the first tick after a savegame was loaded into ANDY3, `GetAITarget` read
+through the swamp witch's (item 20) `enemy`, 0xFFFF6000. The save wrote `enemy -
+malloc_buffer` and the load added its own `malloc_buffer`, so a null enemy came back as
+the difference of two pool starts, -40,960 there. The entry "Address space, the page cache
+and what the machine can pay for" (September) said a null enemy "already comes back as 0";
+that holds inside one process only. The pool is a `malloc` of a `DYNAMIC_BASE` program:
+eight starts of a probe linked as the engine is (`/DYNAMICBASE /LARGEADDRESSAWARE`, the
+static runtime) gave eight bases between 0x00AF9020 and 0x015DE020 in page steps, so every
+load after a restart and every load in another build meets a moved pool. What the two
+pointers hold was counted from every assignment in `game/`: an enemy is null (7), Lara
+(30) or the creature's own `ai_target` (1, `FindAITargetObject`), nothing else;
+`GeneralPtr` holds an item number cast to a pointer in 34 places and an item of `items[]`
+in 4 - the pulley, the parallel bars, the cog switch's door and the crow-dove switch -
+which `lara_as_pulley`, `lara_as_pbleapoff` and `CogSwitchControl` read through. A
+distance survives a moved pool but not a moved layout: `items[]` lies behind the level's
+rooms, meshes, boxes and texture infos, `baddie_slots` also behind the samples, which are
+loaded only with sound on, so another build or level file moves them; a number survives
+both. A tag in the field itself would have cost every older build its enemies, since such
+a build adds its base to whatever the field holds: hence the number beside the field, and
+a new save loads on an older build as an old save does there - Lara, items and slots found
+by distance, a null or a number garbage as with any moved pool.
 
 **How.** `game/save_pointer_rule.h` (new), `game/savegame.cpp` (`SaveLaraData`,
 `RestoreLaraData`, `SaveLevelData`, `RestoreLevelData`: the six calls, and a
@@ -17812,14 +17428,67 @@ garbage as with any moved pool.
 (`init_game_malloc`, the `POOL` line), `tomb5.vcxproj` and `.filters`. ModernTest's
 `save_pointer` (62 checks).
 
-**Left.** The game was not run: the `SAVELOG` and `POOL` lines wait for play. A save made
-before this build in the middle of the pulley, the parallel bars or the cog switch, loaded
-in a build whose pool is laid out otherwise before `items[]`, gets `GeneralPtr` 0, and the
-three readers do not check for it. The rope's `PENDULUM.Rope` is saved as a distance from
-`RopeList`, a static array; it is 0 only between a grab and the rope's next control, which
-sets it.
+**Decisions.** The three readers of an item in `GeneralPtr` - `lara_as_pulley`,
+`lara_as_pbleapoff` and `CogSwitchControl` - are left as they are: a save made before this
+build in the middle of the pulley, the parallel bars or the cog switch, loaded in a build
+whose pool is laid out otherwise before `items[]`, comes back with `GeneralPtr` 0, and
+they do not check for it. The rope's `PENDULUM.Rope` is left as it is saved, a distance
+from `RopeList`, a static array; it is 0 only between a grab and the rope's next control,
+which sets it.
 
 **Commits.** `c407dfdc`.
+
+### The record in its one form again, and comments without task numbers (#294)
+2026-11-01
+
+**What.** The entries of the rounds after the cleanup, #252 to #292, and the rows of
+section 3 are back in the record's one form: What, Why, How, Decisions and Commits, the
+date under the heading, no measurement, proof, parity, price or to-do paragraph, no
+narration of a run, a log, a dump or a picture, no branch sentence. Every file their How
+paragraphs named is still named, and the headers, includes and commits that no entry named
+are named. Forty-five commit hashes written with digits only, which named commits as they
+were before the last rewrite of the history, name the commits they became. The appendix
+covers the task numbers of the commit subjects since Beta 1.0, #259 and #265 have rows in
+section 3, and the sentence on commit texts that cannot change names, by class, the bodies
+of these rounds whose wording the record does not repeat. In the engine and the tools a
+comment carries no task number, date or history: ModernTest's regression cases are named
+by what they lack, the wardrobe's, the Zip call's and the walk's comments state the rule
+as it stands, the X-ray tone's comment names its model as reference pictures supplied for
+this project, the grille's comment says that the cavity shows where the installation's art
+has pipes and cables, and the drone's rule header says that its flight numbers are this
+project's free choices. `tomb5.vcxproj.filters`, `resource.h` and `tomb5.rc` carry the
+modification notice. The READMEs, the release script, the contract and the Randomizer
+manual count the drone's slot and describe the added shelf as it is drawn.
+
+**Why.** The rounds after the cleanup had brought back what this record is not -
+measurements per eye and per level, parity tallies, the narration of runs, branch
+sentences and open to-dos - against the form section 1 states. The record's all-digit
+hashes had escaped the update that followed the last rewrite of the history. A comment
+that names a task or a date tells a reader of the code nothing. The three project files
+beside `TOMB5/` had been modified without the notice GPLv3 section 5(a) asks of a modified
+file.
+
+**How.** `TOMB5 Code/MODIFICATIONS.md`, entry by entry against its earlier text; the dead
+hashes through the map the last rewrite left, each checked against its citation's label or
+its entry's title. Comments only in `game/draw.cpp`, `game/drone.cpp`,
+`game/drone_rule.h`, `game/zip_call_rule.h`, `specific/hd/hd_lara.cpp`,
+`specific/hd/hd_laradraw.cpp`, `specific/hd/hd_render.cpp` and `specific/hd/hd_vis.cpp`:
+no code changed, so every picture is the previous one by construction. The notice: an XML
+comment in `tomb5.vcxproj.filters` as in `tomb5.vcxproj`, two comment lines in
+`resource.h` and in `tomb5.rc`, the latter edited as UTF-16LE bytes with its BOM and its
+line ends kept. `Preparation/Tools/README.md`, `Preparation/Tools/BuildRelease.ps1`,
+`Preparation/Tools/Diagnose/ModernTest.cpp` and `BoneCheck.cpp`,
+`Preparation/Contract.md`, `TR5Randomizer/README.txt`, `docs/Engine-Manual.md` and
+`docs/Randomizer-Manual.md`.
+
+**Decisions.** A How keeps its files and its functions where the entry got shorter: a file
+a How no longer names would hide a modification. The numbers measured on the reference
+pictures stay, the pictures named as such. The TROne credits stand as they were.
+
+**Commits.** `2d109ad1` (the hashes), `f936737c`, `27335d39` and `9a42dc16` (the entries),
+`a21d8c91` (the index, section 3 and the commit lists), `f1f69374` (the comments),
+`e8bc3702` (the READMEs, the manuals and the notices), `68018f8f` (two test messages,
+#289's defaults).
 
 ## 3. Randomizer changes since Beta 1.0
 
@@ -17938,24 +17607,33 @@ new.
   `24ea0290` and the new one, over the thirteen campaign levels, once with no switches and
   once with `mix cross allsanity 8 weapons items20 weather`: all 78 `.trc`, `.hdm` and log
   files byte-identical.
-
-- **#258 - no pickup under a carrier.** `core/Randomizer.cpp`: the roll bars the
-  sector of every enemy and every searchable crate that stands there at level
-  start, since the engine hands a pickup within half a sector to that carrier at
-  the first frame and a dormant enemy never gives it back - a key under one was
-  a lost playthrough. The burning roots of Gallows Tree go invisible when the
-  heart has left them, because the engine finds the heart by its kind and would
-  lift it to the roots' height wherever it lies. `core/Randomizer.h`: the list
-  of carriers is the engine's own now - it lacked SWAT_PLUS, Mafia, Sailor,
-  Crane Guy, Scientist and the two slots past the file boundary. Trajan's
-  Markets' puzzle 4 keeps its OCB 5 when it travels and the guardian's trigger
-  stays as Core wrote it: the guardian sets the puzzle's height by item number
-  when it explodes, and a puzzle moved with OCB 0 sank into its new floor;
-  hidden until the guardian falls, it now lands where the roll put it. The
-  earlier void of that trigger is gone (`core/LevelFix.h`,
-  `Preparation/Tools/ZoneAnalysis.ps1`). `docs/Randomizer-Manual.md` says all
-  three.
-
+- **#258 - no pickup under a carrier.** `core/Randomizer.cpp`: the roll bars the sector of
+  every enemy and every searchable crate that stands there at level start, since the
+  engine hands a pickup within half a sector to that carrier at the first frame and a
+  dormant enemy never gives it back - a key under one was a lost playthrough. The burning
+  roots of Gallows Tree go invisible when the heart has left them, because the engine
+  finds the heart by its kind and would lift it to the roots' height wherever it lies.
+  `core/Randomizer.h`: the list of carriers is the engine's own now - it lacked SWAT_PLUS,
+  Mafia, Sailor, Crane Guy, Scientist and the two slots past the file boundary. Trajan's
+  Markets' puzzle 4 keeps its OCB 5 when it travels and the guardian's trigger stays as
+  Core wrote it: the guardian sets the puzzle's height by item number when it explodes,
+  and a puzzle moved with OCB 0 sank into its new floor; hidden until the guardian falls,
+  it now lands where the roll put it. The earlier void of that trigger is gone
+  (`core/LevelFix.h`, `core/LevelFix.cpp`, `Preparation/Tools/ZoneAnalysis.ps1`), and
+  `core/EmbeddedData.cpp` carries the fifteen zone exports baked again, all with one
+  curation stamp. `docs/Randomizer-Manual.md` says all three (`ae4a45bd`, `165298aa`,
+  `6ff94f09`).
+- **#259 - the secret lists.** `Preparation/Curation/Secrets/ChrisChanSan_Glitchless.txt`
+  opens Old Mill's third passage, `Make_Portal@Room183(x0,z5)->Room208(x4,z5)`: ANDY3's
+  room 34 flips to 183 and its secret room 36 to 208, so the passage opened at
+  Room34(x0,z5) was gone after the flip. The headers of both lists name the pitfall: a
+  room with a flipmap twin needs its portal on the twin too, since `Make_Portal` goes by
+  room number. `docs/Engine-Manual.md` counts three doorways (`665e13c6`, `e99184c5`).
+- **#265 - the added items in the sidecar.** `core/Tr5Level.cpp` / `.h` record every index
+  `addItem` appends, and `core/ApplyPatch.cpp` / `.h` write one `item <index>` line for
+  each at the end of the `.hdm`, so that the engine can tell the items a run added from
+  those Core placed (2.10, "An item the randomizer adds is drawn, its slot baked or not";
+  `c8cb7cd0`).
 - **#288 - the brawler, a two-donor composite.** `core/Tr5Level.h`,
   `core/Tr5Transfer.cpp`: `copyMoveableFrom` takes a mesh source beside its source - the
   meshes, their texinfos and texture pages out of one slot, the bones, animations, state
@@ -17969,38 +17647,26 @@ new.
   joby2:439, animations joby3:87, `animCount` 12, `baseSlot` 460 for the borrowed death -
   measured by the anim donor's rest pose, no clone rule for a composite, so joby2 may take
   him, "Brawler" in the enemy list ("Raufbold" in German), 471 a carrier. A new pool
-  member changes every cross draw after it; a build with only his row removed gives the
-  base's bytes, all 39 `.trc`, `.hdm` and log files of the thirteen campaign levels at
-  seed 380 plain and with `mix cross allsanity 8 weapons items20 weather`, at seed 1 with
-  `mix cross 8 weapons` and at seed 77 with `mix cross allsanity 8 items20`, and with the
-  row a plain run stays byte-identical too. Over ten seeds he stands 5 to 14 times per
-  campaign with `mix cross allsanity 8` (89 in all) and 2 to 14 with `mix cross 8` (68),
-  and joby3's item 186 keeps type 87 and OCB 0 in every run (`bb26f34e`).
-
+  member changes every cross draw after it; a run without the cross mix is unchanged, and
+  joby3's item 186 keeps type 87 and OCB 0 (`bb26f34e`). `core/BuildId.h`:
+  `RANDO_BUILD_ID` 21 to 22, `0.22`, because the pool changes what a seed writes
+  (`707564af`); `TR5Randomizer/README.txt` counts the slots `types.json` names.
 - **#289 - the drone.** `core/Tr5Level.cpp` / `.h`, `core/Tr5Transfer.cpp`,
-  `core/ApplyPatch.cpp`, `core/Randomizer.cpp`, `gui/Language.cpp`: a copy can
-  come out shrunk. `copyMoveableFrom` scales it by the factor the table
-  `kScales` (`Tr5Level::importScale`) names for a pair of slots - mesh centres,
-  radii and vertices, bone offsets, keyframe boxes and root offsets, animation
-  speeds and command lengths, in integers rounded half away from zero - and the
-  one pair is RICH3's gunship (91) into the drone's slot 472 at 2290/7161, after
-  `kOffsets` has moved its origin into the middle of its frame box (x -30, z
-  -3528); measured against the donor, 267 numbers of the copy are the donor's
-  times the factor and none is off. The run's log names the factor (`cross-enemy
-  slot 91 from rich3 -> slot 472: scaled 2290/7161 (0.3198)`) and the `.hdm`
-  sidecar carries it as `scale 472 2290 7161`. The drone joins the cross pool
-  after the chef: donor rich3, sourceSlot 91, the sounds 65 (the rotor) and 68
-  (the gun), "Drone" in the enemy list, German "Drohne", measured by the height
-  rule at its shrunk 784 rather than the gunship's 2451; RICH3 never takes it,
-  so its own helicopter, item 147, and its script stay as they were. A new pool
-  member changes every draw after it: the same seed 380 with `mix cross
-  allsanity 8 weapons items20 weather` and the glitchless list gives 22 of 26
-  `.trc` and `.hdm` different from the build of `f6bbae70`, where a throwaway
-  build with the pool row taken out gives all 26 byte-identical, and the run
-  with no switches is byte-identical either way. Seeds 1 to 10 with `mix cross 8
-  weapons items20` place 34 drones, 3.4 a run, in eight of the thirteen levels;
-  seeds 1 to 5 with `allsanity` place 30. `LevelBuild -hdm` writes the sidecar
-  of a test level.
+  `core/ApplyPatch.cpp`, `core/Randomizer.cpp`, `gui/Language.cpp`: a copy can come out
+  shrunk. `copyMoveableFrom` scales it by the factor the table `kScales`
+  (`Tr5Level::importScale`) names for a pair of slots - mesh centres, radii and vertices,
+  bone offsets, keyframe boxes and root offsets, animation speeds and command lengths, in
+  integers rounded half away from zero - and the one pair is RICH3's gunship (91) into the
+  drone's slot 472 at 2290/7161, after `kOffsets` has moved its origin into the middle of
+  its frame box (x -30, z -3528). The randomizer's log names the factor (`cross-enemy slot
+  91 from rich3 -> slot 472: scaled 2290/7161 (0.3198)`) and the `.hdm` sidecar carries it
+  as `scale 472 2290 7161`. The drone joins the cross pool after the chef: donor rich3,
+  sourceSlot 91, the sounds 65 (the rotor) and 68 (the gun), "Drone" in the enemy list,
+  German "Drohne", measured by the height rule at its shrunk 784 rather than the gunship's
+  2451; RICH3 never takes it, so its own helicopter, item 147, and its script stay as they
+  were. A new pool member changes every cross draw after it; a run with no switches is
+  unchanged. `LevelBuild -hdm` writes the sidecar of a test level. `core/BuildId.h`:
+  `RANDO_BUILD_ID` 22 to 23, `0.23` (`df83b76f`).
 
 - **#296 - the background picture beside the program.** `gui/Main.cpp`,
   `gui/TR5Randomizer.rc`, `gui/TR5Randomizer.ico`, `package/Background.jpg`, `README.txt`:
@@ -18050,23 +17716,24 @@ the game is needed to play.
 
 ## Appendix: task numbers in commit subjects
 
-Commit subjects carry task numbers (`#NNN`). This table maps them to the entries above.
+Commit subjects since Beta 1.0 carry task numbers (`#NNN`). This table maps them to the
+entries above.
 
 | task | entries whose commits carry it |
 |---|---|
 | #117 | Optional high quality sound bank from the player's remaster |
-| #123 | Finding an installed Remaster, reading what it holds for a level, and the settings that steer it; The second renderer, the seam where the engine draws HD rooms, and what a .TRG material means; The room shader, and a build that needs no shader compiler; The engine's own per-vertex lighting, as shader arithmetic; The sky; The portal walk, the window on intruding art, and the doorway a randomized run opens; Art in the air of an unlinked room draws inside its own window; Water in the HD rooms; Address space, the page cache and what the machine can pay for; HD models for items, enemies and machinery; Statics: baked into the room, shot to pieces, or drawn classic where the art does not cover them; HD models for the pickups: the EXTRA prefix, a mod's own inventory model, and lying on the floor; The grappling gun in the hand, and the Desert Eagle in the revolver's slot; The inventory ring and the pickup display in HD; The seam for Lara: the HD composite drawn by the engine; First person: Lara's head and neck cut away, and the lid that closes the opening; Lara's HD wardrobe: a scan of the installed art, its properties, and which outfit is worn; The font in HD; The frame rate option and the clock; The pose between two ticks; The arms between two ticks; The camera on the in-between frame; The first person view; The -log switch and the diagnostic seams |
+| #123 | Finding an installed Remaster, reading what it holds for a level, and the settings that steer it; The second renderer, the seam where the engine draws HD rooms, and what a .TRG material means; The room shader, and a build that needs no shader compiler; The engine's own per-vertex lighting, as shader arithmetic; The sky; The portal walk, the window on intruding art, and the doorway a randomized run opens; Art in the air of an unlinked room draws inside its own window; Water in the HD rooms; Address space, the page cache and what the machine can pay for; HD models for items, enemies and machinery; Statics: baked into the room, shot to pieces, or drawn classic where the art does not cover them; HD models for the pickups: the EXTRA prefix, a mod's own inventory model, and lying on the floor; The grappling gun in the hand, and the Desert Eagle in the revolver's slot; The inventory ring and the pickup display in HD; The seam for Lara: the HD composite drawn by the engine; First person: Lara's head and neck cut away, and the lid that closes the opening; Lara's HD wardrobe: a scan of the installed art, its properties, and which outfit is worn; The font in HD; The frame rate option and the clock; The pose between two ticks; The arms between two ticks; The camera on the in-between frame; The first person view; The -log switch and the diagnostic seams; section 3 (the randomizer) |
 | #137 | section 3 (the randomizer) |
 | #141 | Licence notices, origin sentences and the corrections made before the public push |
 | #142 | section 3 (the randomizer) |
 | #144 | section 3 (the randomizer) |
-| #146 | Engine-only object slots beyond the original 460; An enemy's animations come from its own slot; The VCI cyborg as a pool enemy on a slot of his own; Balance.txt: every weapon, enemy, attack and hazard settable; Licence notices, origin sentences and the corrections made before the public push |
+| #146 | Engine-only object slots beyond the original 460; An enemy's animations come from its own slot; The VCI cyborg as a pool enemy on a slot of his own; Balance.txt: every weapon, enemy, attack and hazard settable; Licence notices, origin sentences and the corrections made before the public push; section 3 (the randomizer) |
 | #147 | section 3 (the randomizer) |
 | #148 | The second renderer, the seam where the engine draws HD rooms, and what a .TRG material means; The engine's own per-vertex lighting, as shader arithmetic; The portal walk, the window on intruding art, and the doorway a randomized run opens; HD models for items, enemies and machinery; First person: Lara's head and neck cut away, and the lid that closes the opening; The frame rate option and the clock; VSync and the rate the monitor sets; The in-between frame: the root snapshot; The pose between two ticks; The arms between two ticks; The camera on the in-between frame; Particles on the same time axis; Every per-frame counter on the logic tick; The title menu at the frame rate, one tap one row; The level warm-up; The frame-rate seams and the offline proofs; The first person view; The -log switch and the diagnostic seams |
 | #149 | HD loading screens from the Remaster, when they are there; The logo screen and the title menu wordmark |
 | #150 | Keys are counted, not flagged |
 | #151 | The logo screen and the title menu wordmark |
-| #153 | Level Select, a keyhole that survives a save, and the underwater pickup animation; HD models for the pickups: the EXTRA prefix, a mod's own inventory model, and lying on the floor; The seam for Lara: the HD composite drawn by the engine; Lara's HD wardrobe: a scan of the installed art, its properties, and which outfit is worn; F4 changes Lara's outfit inside the level; The outfit chooses the footsteps, and a bare foot silences the floor layer; The Mods folder: models, texture pages and sounds from a mod; Imported enemy sounds are named in the sidecar, not guessed at by length |
+| #153 | Level Select, a keyhole that survives a save, and the underwater pickup animation; HD models for the pickups: the EXTRA prefix, a mod's own inventory model, and lying on the floor; The seam for Lara: the HD composite drawn by the engine; Lara's HD wardrobe: a scan of the installed art, its properties, and which outfit is worn; F4 changes Lara's outfit inside the level; The outfit chooses the footsteps, and a bare foot silences the floor layer; The Mods folder: models, texture pages and sounds from a mod; Imported enemy sounds are named in the sidecar, not guessed at by length; section 3 (the randomizer) |
 | #154 | The inventory ring at the frame rate; The title menu at the frame rate, one tap one row; The frame-rate seams and the offline proofs |
 | #155 | HD models for the pickups: the EXTRA prefix, a mod's own inventory model, and lying on the floor; The Mods folder: models, texture pages and sounds from a mod |
 | #156 | Lara's HD wardrobe: a scan of the installed art, its properties, and which outfit is worn |
@@ -18080,7 +17747,7 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #164 | Address space, the page cache and what the machine can pay for |
 | #169 | The in-between frame: the root snapshot |
 | #171 | The modern camera: a free orbit on the right stick; Combat, Sprint, Duck and Grab: hold or toggle; Ledge hang: an automatic turn and lowering at an edge; The record completed before the push |
-| #172 | Optional high quality sound bank from the player's remaster; The -log switch and the diagnostic seams; Licence notices, origin sentences and the corrections made before the public push; The record completed before the push |
+| #172 | Optional high quality sound bank from the player's remaster; The -log switch and the diagnostic seams; Licence notices, origin sentences and the corrections made before the public push; The record completed before the push; section 3 (the randomizer) |
 | #173 | Comments in the engine, the randomizer and the tools say what, why and what for; String literals, a build script's working directory, and two questions measured; The record completed before the push |
 | #174 | Lara blanked out in the half turn on a rope: the ROPELOG seam; Lara facing the wrong way for one tick in the jump twists: the early half turn; Lara squeezed to a sliver in the tightrope turn: the far key-frame pair; HD models for items, enemies and machinery; Lara's HD wardrobe: a scan of the installed art, its properties, and which outfit is worn; The in-between frame: the root snapshot; The animation's root offset on a refused frame; The pose between two ticks; The record completed before the push |
 | #175 | A camera cut keeps the held course until the stick is let go |
@@ -18128,8 +17795,8 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #224 | The search objects' binding and the double doors |
 | #225 | The zoom at the frame rate |
 | #226 | The translucent parts of HD models and JOBY2's window |
-| #230 | The installation gate: the HD build row and the TR3 sources |
-| #231 | Audit round B1 |
+| #230 | The installation gate: the HD build row and the TR3 sources; section 3 (the randomizer) |
+| #231 | Audit round B1; section 3 (the randomizer) |
 | #232 | Lara's footstep follows the draw and her outfit, and nobody else's does |
 | #233 | The glow's normal, re-derived |
 | #234 | The captions in German, and Lara's weapon item steps as she does |
@@ -18154,14 +17821,14 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #255 | The game ends when its window is closed from the taskbar |
 | #256 | The visibility path's room walk ends |
 | #257 | A frozen game names where its thread stands |
-| #258 | No pickup under a carrier; the roots let the heart go |
-| #259 | Old Mill's secret list opens a third passage |
+| #258 | section 3 (the randomizer) |
+| #259 | section 3 (the randomizer) |
 | #260 | The submarine's grilles, benches and diving suits |
 | #261 | The diving suits, their console and Lara in the suit |
 | #262 | The suit's console states and Lara's legs inside the suit |
 | #263 | Lara's legs inside the suit, on the classic path |
 | #264 | The title menu's sliders follow the pad |
-| #265 | An item the randomizer adds is drawn, its slot baked or not |
+| #265 | An item the randomizer adds is drawn, its slot baked or not; section 3 (the randomizer) |
 | #266 | What a cutscene puts into a hand, in HD |
 | #267 | The classic holsters hide with her thighs, a left-out seam keeps its place |
 | #268 | Lara in the X-ray scanner and the X-ray outfit, in HD |
@@ -18184,8 +17851,9 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #286 | A room under the sky lists the art that stands in the sky beside it |
 | #287 | The bulbs' fog reaches as a field, and the mist it stands in goes |
 | #288 | JOBY2's cutscene soldier as a pool enemy: the brawler on a slot of his own; section 3 (the randomizer) |
-| #289 | RICH3's gunship flies after Lara as a drone at the vulture's size |
+| #289 | RICH3's gunship flies after Lara as a drone at the vulture's size; section 3 (the randomizer) |
 | #290 | The bulbs' fog in one pass a frame, and the mill's old sheets of mist go |
 | #291 | The brawler's strike starts and lands where his fist reaches |
 | #292 | A savegame's pointers survive a moved pool, and null stays null |
+| #294 | The record in its one form again, and comments without task numbers |
 | #296 | section 3 (the randomizer) |

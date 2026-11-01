@@ -1,6 +1,8 @@
 //{{NO_DEPENDENCIES}}
 // Microsoft Visual C++ generated include file.
 // Used by tomb5.rc
+// Modified 2026 by ChrisChanSan for the TR5 Randomizer project (GPLv3).
+// Changes are recorded in MODIFICATIONS.md and the git history.
 //
 #define IDI_ICON1                       101
 #define IDR_ACCELERATOR                 102

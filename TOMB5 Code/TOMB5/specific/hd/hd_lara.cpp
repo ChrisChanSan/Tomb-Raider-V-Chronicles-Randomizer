@@ -678,7 +678,7 @@ namespace
 	 * LARA_HEAD over it is an opaque face fighting the skull for the depth.
 	 * So the set has none of those parts and no holster rig either.
 	 *
-	 * Nothing at the thighs (#277). The uzis and the Desert Eagle have no
+	 * Nothing at the thighs. The uzis and the Desert Eagle have no
 	 * X-ray holster, so they vanish when put away; the pistols' holsters
 	 * stood in the air beside the bones, and the look is cleaner with all
 	 * three alike. One rule, HDLaraXrayPick: whatever this table holds for
@@ -686,17 +686,16 @@ namespace
 	 * the table as the file the remaster ships for the part; the weapon on
 	 * the back keeps its own.
 	 *
-	 * The set's own files (#277). Every file here is read from the
-	 * installs alone (xray_sources, HDModelSlot::installOnly): Guns\IMI
-	 * Uzis ships HAND_XRAY_UZI, and it is that mod's own gun - the same
-	 * 31,267 vertices on the same four pages as its HAND_BARE_UZI, the hands
+	 * The set's own files. Every file here is read from the installs
+	 * alone (xray_sources, HDModelSlot::installOnly): Guns\IMI Uzis ships
+	 * HAND_XRAY_UZI, and it is that mod's own gun - the same 31,267
+	 * vertices on the same four pages as its HAND_BARE_UZI, the hands
 	 * painted with pages 8002 and 8010 of the Tomb Raider I-III bundle.
 	 * Taken, the twin rule cut those hands away and looked for them in the
 	 * install's HAND_XRAY_UZI on the rest hands' page 8001, where the X-ray
 	 * hand has nothing (page 8030 alone): the gun kept its texture and the
-	 * hands were gone. It is the one X-ray name the thirteen mods of the
-	 * measured Mods folder ship. A hand the installs have no X-ray file for
-	 * takes its bare file's gun beside the rest hands' bones instead.
+	 * hands were gone. A hand the installs have no X-ray file for takes
+	 * its bare file's gun beside the rest hands' bones instead.
 	 *
 	 * The hull is drawn from the front alone (HDModelSlot::additiveOneSided).
 	 * The classic adds every face of the X-ray body single sided
@@ -742,16 +741,17 @@ namespace
 	 * them lit as the hull is (HDModelSlot::lightAsAdditive), so that no
 	 * piece reads as ordinary gear beside the body.
 	 *
-	 * A CHOICE, made from the reference pictures and nothing else: the
-	 * remaster's X-ray Lara in a flooded brick tunnel (front and side) and
-	 * this composite in the same tunnel, its hull drawn one sided. What the
-	 * hull adds to the wall behind the belly, measured as the patch's mean
-	 * less the wall's beside it, in 0..255:
+	 * A CHOICE, made from the reference pictures and nothing else: a
+	 * reference picture supplied for this project (an X-ray figure in a
+	 * flooded brick tunnel, front and side) and this composite in the same
+	 * tunnel, its hull drawn one sided. What the hull adds to the wall
+	 * behind the belly, measured as the patch's mean less the wall's
+	 * beside it, in 0..255:
 	 *
-	 *   the remaster, front    47.5 / 63.4 / 33.6
-	 *   the remaster, side     34.9 / 57.9 / 31.0
-	 *   their mean             41.2 / 60.7 / 32.3   luma 54.5
-	 *   this composite         61.6 / 82.2 / 83.9   luma 77.9
+	 *   the reference, front          47.5 / 63.4 / 33.6
+	 *   the reference, side           34.9 / 57.9 / 31.0
+	 *   the reference pictures' mean  41.2 / 60.7 / 32.3   luma 54.5
+	 *   this composite                61.6 / 82.2 / 83.9   luma 77.9
 	 *
 	 * The level is the luma ratio, 0.70; the hue the channel ratios over it,
 	 * 0.96 / 1.06 / 0.55 - the green kept, the blue cut. One tone for every
@@ -767,7 +767,7 @@ namespace
 			part);
 	}
 
-	/* Where the set's files come from (#277): the installs alone, and for
+	/* Where the set's files come from: the installs alone, and for
 	 * a hand the installs have no X-ray file for, the install's bare file
 	 * without the rest hands' pages - its gun - as the stand-in. */
 	void xray_sources(HDModelSlot& one, int part)
@@ -791,7 +791,7 @@ namespace
 	 * of its own wardrobe entry. Cleared with the level, like g_has. */
 	bool g_xray_planned[HD_LARA_PART_COUNT] = { false };
 	bool g_xray_has[HD_LARA_PART_COUNT] = { false };
-	// The hands of the set in use whose slot holds a stand-in (#277).
+	// The hands of the set in use whose slot holds a stand-in.
 	bool g_xray_standin[HD_LARA_PART_COUNT] = { false };
 	float g_xray_sheen[2] = { 0.0f, 1.0f };
 
@@ -2761,7 +2761,7 @@ bool HDLaraLevelBuild(const HDLaraLevel* level, HDLaraStats* stats)
 				"is the X-ray body and wears it already");
 	}
 
-	/* The hands of the X-ray set in use (#277): read from the installs, and
+	/* The hands of the X-ray set in use: read from the installs, and
 	 * where a slot holds its stand-in and not the X-ray file, that hand
 	 * draws the rest hands' bones beside it (HDLaraXrayHand). */
 	{
@@ -3190,7 +3190,7 @@ int HDLaraFrameParts(const HDLaraFrame* now, HDLaraDraw* out, int max,
 	if (left < 0)
 		left = HD_LARA_PART_HAND_REST;
 
-	/* In the X-ray look no hand is left out (HDLaraXrayHand, #277): the
+	/* In the X-ray look no hand is left out (HDLaraXrayHand): the
 	 * rest hands' bones go on first for a part that holds its stand-in gun
 	 * or is not on the card at all. Every other look adds the part alone,
 	 * as before. */

@@ -906,7 +906,7 @@ bool HDVisBuild(const trf::remaster::Trg& trg, const HDVisRoom* rooms,
 	 * doors - RICH2's office room 135, standing beside the stairwell with no
 	 * link to it, 24 triangles of its ceiling slab 7 units over the
 	 * stairwell's top, filled the stairwell's opening with its lockers and
-	 * a glass block wall (105,029 pixels at #269's niche eye) - and its
+	 * a glass block wall - and its
 	 * sky art is mostly a copy: ANDREA2's group 50, a street under the
 	 * roofs, holds 11,234 triangles of the skyline, each a copy of one of
 	 * group 55's 13,321. Then each room under the sky takes each of them,

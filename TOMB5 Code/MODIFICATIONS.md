@@ -17487,7 +17487,8 @@ pictures stay, the pictures named as such. The TROne credits stand as they were.
 
 **Commits.** `2d109ad1` (the hashes), `f936737c`, `27335d39` and `9a42dc16` (the entries),
 `a21d8c91` (the index, section 3 and the commit lists), `f1f69374` (the comments),
-`e8bc3702` (the READMEs, the manuals and the notices).
+`e8bc3702` (the READMEs, the manuals and the notices), `68018f8f` (two test messages,
+#289's defaults).
 
 ## 3. Randomizer changes since Beta 1.0
 

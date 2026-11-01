@@ -16202,8 +16202,7 @@ them nothing is copied; no classic path file changed.
 **Commits.** `14b9afa5`.
 
 ### An item the run added to a baked slot takes the art of another placement (#275)
-
-2026-10-30.
+2026-10-30
 
 **What.** The art copies of #274 gain an item path (`specific/hd/hd_artcopy.h`,
 `hdartcopy::MakeItems`, the last step of `HDArtCopyMake`; the item copies go into the
@@ -16231,11 +16230,10 @@ copy holds the item. RoomProbe lists the item rows in `-artcopytable` and ends i
 such an item; ModernTest checks the item path on a level of two rooms built by hand.
 
 **Why.** JOBY3's shelf (slot 168, SEARCH_OBJECT3) that the glitchless secret list adds to
-the bunk room - item 299 in room 52 at 64000, 6912, 55808, turned half round, the level's
-secret inside - was drawn classic among HD art since #265: flat cans and classic textures,
-while the slot's Core shelves are drawn by the art with its cans and boxes. The slot has
-no model file to draw it with (#265); the art is the only HD look there is, and it stands
-at the slot's other placements.
+the bunk room, room 52, with the level's secret inside, was drawn classic among HD art
+since #265: flat cans and classic textures, while the slot's Core shelves are drawn by the
+art with its cans and boxes. The slot has no model file to draw it with (#265); the art is
+the only HD look there is, and it stands at the slot's other placements.
 
 **How.** The donors stand in other rooms, so in other room groups than the added item: a
 copy leaves its group. It may, because a triangle's picture is named level-wide: its first
@@ -16244,62 +16242,33 @@ corner's layer byte, one-based into the `.TRG`'s one texture list (`Trg.h`,
 a part's material and four numbers mean the same in every group. The copy is read in the
 donor group's frame (its room's origin and y shift) and written in the target group's, and
 each triangle goes into the run of its pass of the target group's first part with the same
-material and numbers (`hdartcopy::Level::RunIn`); a target group with no such part gives
-no copy (`no_part`). A donor is an item of the slot Core placed in a room a group draws,
-its yaw whole quarter turns, the art in its box grown by 32 units lit: at least a
-twentieth of its corners with a colour byte above zero (`HD_ARTCOPY_LIT`; else `unlit`).
-A target is an added item in a room drawn by its own art - where `begin_decision` bakes
-the slot's items; elsewhere a copy would stand beside the classic mesh (`no_group`) - and
-of a yaw of whole quarter turns (else `skewed`). Its donor is one of its slot anywhere in
-the level: no turn first, then the nearest, then the level's order; the slot's art must be
-alike at its donors the level over (the most at three halves of the fewest, as #274). What
-is taken is the statics' rule: the donor group's triangles wholly inside the donor's grown
-box, less what lies on a classic face at either place (the wall behind a shelf, the floor)
-and what would stand on the target group's art already; the targets one motion moves from
-one donor group into one target group take together. The vertices go in after the target
-group's last vertex and the triangles at the end of their run; where two receiving runs
-end at one index - an empty run of the target group's part - they go in in the file's
-order.
+material and numbers (`hdartcopy::Level::RunIn` in `specific/hd/hd_artcopy.h`); a target
+group with no such part gives no copy (`no_part`). A donor is an item of the slot Core
+placed in a room a group draws, its yaw whole quarter turns, the art in its box grown by
+32 units lit: at least a twentieth of its corners with a colour byte above zero
+(`HD_ARTCOPY_LIT`; else `unlit`). A target is an added item in a room drawn by its own
+art - where `begin_decision` bakes the slot's items; elsewhere a copy would stand beside
+the classic mesh (`no_group`) - and of a yaw of whole quarter turns (else `skewed`). Its
+donor is one of its slot anywhere in the level: no turn first, then the nearest, then the
+level's order; the slot's art must be alike at its donors the level over (the most at
+three halves of the fewest, as #274). What is taken is the statics' rule: the donor
+group's triangles wholly inside the donor's grown box, less what lies on a classic face at
+either place (the wall behind a shelf, the floor) and what would stand on the target
+group's art already; the targets one motion moves from one donor group into one target
+group take together. The vertices go in after the target group's last vertex and the
+triangles at the end of their run; where two receiving runs end at one index - an empty
+run of the target group's part - they go in in the file's order. `specific/hd/hd_cover.h`
+holds an item's row and its answers (`HDArtCopyItem`, `HD_ARTCOPY_ITEM_NONE` to
+`HD_ARTCOPY_ITEM_UNLIT`) beside the statics', and `specific/hd/hd_render.h` declares
+`HDRenderSetArtCopyItems`, `HDRenderArtCopyItemHeld`, `HDRenderArtCopyItemCopies` and
+`HDRenderArtCopyItemAnswer`. With `hd_build` 0 nothing is built, and with `hd_vis` 0 no
+item is handed in: the shelf stays classic, as #265 left it.
 
-On JOBY3 (the game folder's level, re-rolled: 307 items, its sidecar 59 item lines) one
-added item is asked, item 299. Of the eight Core shelves, 53 and 54 in room 26 carry no
-light: 228 of 16,992 and 210 of 16,974 corners lit, the wall behind them; the shelves are
-black in their own room as well. The six others are 70 to 82 per cent lit and hold 5,634
-to 5,718 triangles, alike. Without the light test room 26's shelf 53 would give the copy
-(no turn, nearest: 5,120 units against 9,216) and it would be black. Taken is item 227 in
-room 164, no turn, shift 0, 3072, -6144: 5,718 triangles inside its grown box, 152 across
-its border (the neighbouring shelf 226), 70 on the wall or the floor, 36 on group 52's art
-already; the copy is 5,612 triangles and 6,254 vertices, no face beside it. It keeps its
-donor's light, 9,10,10 and 7,7,7 on the two colours against 12,14,15 and 18,20,20 round
-its new place: darker than the bunk room, as the Core shelves are darker than theirs.
-
-In RoomProbe's pictures (the engine's renderer) at the trview camera of the picture that
-showed the shelf and at the game's eye down the bunk room's aisle the shelf stands with
-the art's cans and boxes where the base drew the bare wall (RoomProbe draws no item, so
-the classic shelf is not in the base either): 259,357 and 116,772 pixels changed. On the
-vanilla JOBY3, which has no such item, 0 and 0 pixels change, in rooms 164 (the donor's)
-and 26 0 each. The depth fight - the pixels that change when group 52 is pushed by 1/2,000
-of its distance either way - is the base's to the pixel outside the shelf's pixels, the
-wall seen through and round it and the room (4,503 against 4,504 and 1,447 against 1,447;
-at 1/500, 6,890 against 6,891 and 6,275 against 6,276): the copy fights neither the wall
-behind it nor the room. Inside them it is about what the wall there had (739 against 680
-and 372 against 267; at 1/500, 745 against 1,100 and 1,269 against 1,271), speckles on the
-shelf's own boards, boxes and can bottoms, near-coincident surfaces of the art's shelf,
-which its donor shows as well (865 and 77 pixels in the same screen region at the eye
-moved back to the donor).
-
-Over the fifteen levels only JOBY3 copies an item: no other randomized level of the game
-folder has an added item of a DUMMY slot (`items=0`), the vanilla levels none. The build's
-fingerprint is the base's in all fifteen levels with `hd_vis` 0 and with `hd_fog` 0,
-vanilla and randomized, and with `hd_vis` 1 on the vanilla levels; with `hd_vis` 1 on the
-randomized ones only JOBY3's changes. Every static's answer is the base's in each of these
-runs, JOBY3's with the copy too; against #274's base the nine RICH2 answers of #274 and
-nothing else, and RICH2's nine `HDLOG artcopy` lines are #274's to the letter. The card
-census stays 1,138 one-sided triangles. The rule costs 124 ms on the randomized JOBY3 -
-60 ms of it the wall and standing tests over the donor's 5,718 triangles, 11 ms putting
-the copy in -, 21 ms on the vanilla JOBY3, and 6 to 134 ms elsewhere as before. With
-`hd_build` 0 nothing is built, and with `hd_vis` 0 no item is handed in: the shelf stays
-classic, as #265 left it.
+**Decisions.** A donor's art must be lit: of JOBY3's eight Core shelves the two in room 26
+carry next to no light, only the wall behind them lit, and are black in their own room as
+well, and without the test the nearer of them would give the copy. A copy keeps its
+donor's light and not its new place's, as the statics' copies of #274 do: the shelf stands
+darker than the bunk room, as the Core shelves stand darker than theirs.
 
 **Commits.** `41f24b2b`.
 
@@ -16591,8 +16560,7 @@ stands after #277's.
 **Commits.** `51c78576`.
 
 ### A scene that holds Lara leaves her life and air as they were (#280)
-
-2026-10-31.
+2026-10-31
 
 **What.** While a cutscene plays, or a flyby runs whose camera carries the "disable Lara
 control" flag, Lara's life and air stay what they were when the scene began. The world
@@ -16655,41 +16623,47 @@ the next tick's first look.
 The census covers the 47 subtractions through `lara_item`, the four through other names,
 her fall, the places that set her life to 0 or below and those that force her animation.
 Class b, where Balance.txt decides - the hit branch asks with the value it would take, and
-it is refused from 1000 on, today only the bite: `autogun.cpp:149`, `bat.cpp:245`,
-`chef.cpp:191`, `compy.cpp:273`, `crow.cpp:143`, `dog.cpp:175`, `:194`, `:214`,
-`gladiatr.cpp:258`, `huskie.cpp:188`, `:265`, `hydra.cpp:162`, `imp.cpp:243`,
-`joby.cpp:216` (the live water, 10), `lion.cpp:134`, `:149`, `minisub.cpp:275` (a torpedo
-runs on), `people.cpp:158` (every gun of the human enemies; a refused shot is a miss),
-`raptor.cpp:227`, `:268`, `romangod.cpp:374`, `:589`, `skeleton.cpp:120`,
-`spider.cpp:146`, `swampy.cpp:128`, `tower.cpp:264` (the gunship), `:385` (the iris, 12),
-`:577` (the Area 51 laser), `trex.cpp:114` (the kick, 1 and 10), `:242` (the bite, 10000),
-`twogun.cpp:599`, `willwisp.cpp:252`, `:262` - 33 places. Class b, refused whenever a
-scene holds her: `andrea.cpp:461` (the crush), `box.cpp:1519` (`CreatureKill`),
-`guardian.cpp:525`, `hitman.cpp:284` (the water he lives in), `joby.cpp:143` (a cable),
-`:223` (the live water at 32 or less), `:257` (the wrecking ball's crush), `lara.cpp:519`
-(a fall, 1000 times the speed squared over 196, or -1), `lasers.cpp:63`, `:110`, `:210`,
-`tower.cpp:376` (the iris at 72 or less), `traps.cpp:84` (`LaraBurn`, every fire at once),
-`:106` (lava), `:786` (the rolling ball, which pushes her instead), `:1360` (teeth
-spikes), `:1409` (the spiked death) and `twogun.cpp:603` - 18 places. Class a, a fixed
-value under her whole life, left as it was and put back by the looks: `camera.cpp:2301`
-(the sniper, 100), `control.cpp:762` (the poison, 32 at most), `collide.cpp:521` (the Rome
-hammer, 250), `effect2.cpp:582`, `:591`, `:596`, `:1962` (300, 200, 50, 2), `joby.cpp:262`
-(the wrecking ball, 96), `lara1gun.cpp:610` (her own grenade, 50), `laramisc.cpp:964`,
-`:1005` (gas and drowning, 5), `tomb4fx.cpp:1175` (a shockwave, 33 at most),
-`traps.cpp:173` (an explosion, 127 at most), `:419` (a dart, 25), `:694` (a flame, 5),
-`:770` (the fire on her, 7), `:1370` (teeth spikes, 8), `:1652` (300). Untouched as well:
-her death branch, `lara_col_death` and `lara_col_uwdeath`, which only read a life a hold
-no longer leaves them, the death goals of her states, the heals (the medipacks, the
-cheats, the search object that sets 640), the poison gate, the enemies' AI and their
-focus.
+it is refused from 1000 on, today only the bite - 33 places: `autogun.cpp`
+`AutogunControl`, `bat.cpp` `UpdateBats`, `chef.cpp` `ChefControl`, `compy.cpp`
+`CompyControl`, `crow.cpp` `CrowControl`, `dog.cpp` `DogControl` (three), `gladiatr.cpp`
+`GladiatorControl`, `huskie.cpp` `HuskieControl` (two), `hydra.cpp` `HydraControl`,
+`imp.cpp` `ImpControl`, `joby.cpp` `ControlElectricalCables` (the live water, 10),
+`lion.cpp` `LionControl` (two), `minisub.cpp` `TorpedoControl` (a torpedo runs on),
+`people.cpp` `ShotLara` (every gun of the human enemies; a refused shot is a miss),
+`raptor.cpp` `RaptorControl` (two), `romangod.cpp` `RomangodControl` (two), `skeleton.cpp`
+`SkeletonControl`, `spider.cpp` `UpdateSpiders`, `swampy.cpp` `SwampyControl`, `tower.cpp`
+`ControlGunship` (the gunship), `ControlIris` (the iris, 12) and `ControlArea51Laser`,
+`trex.cpp` `DinoControl` (the kick, 1 and 10, and the bite, 10000), `twogun.cpp`
+`FireTwogunWeapon` and `willwisp.cpp` `MazeMonsterControl` (two). Class b, refused
+whenever a scene holds her - 18 places: `andrea.cpp` `ControlGenSlot1` (the crush),
+`box.cpp` `CreatureKill`, `guardian.cpp` `GuardianControl`, `hitman.cpp` `HitmanControl`
+(the water he lives in), `joby.cpp` `ControlElectricalCables` (a cable, and the live water
+at 32 or less) and `WreckingBallCollision` (the wrecking ball's crush), `lara.cpp`
+`LaraLandedBad` (a fall, 1000 times the speed squared over 196, or -1), `lasers.cpp`
+`ControlLasers`, `ControlSteamLasers` and `ControlFloorLasers`, `tower.cpp` `ControlIris`
+(the iris at 72 or less), `traps.cpp` `LaraBurn` (every fire at once), `LavaBurn` (lava),
+`RollingBallCollision` (the rolling ball, which pushes her instead) and
+`ControlScaledSpike` (teeth spikes and the spiked death), and `twogun.cpp`
+`FireTwogunWeapon`. Class a, a fixed value under her whole life, left as it was and put
+back by the looks - 18 places: `camera.cpp` `FixedCamera` (the sniper, 100), `control.cpp`
+`ControlPhase` (the poison, 32 at most), `collide.cpp` `GenericSphereBoxCollision` (the
+Rome hammer, 250), `effect2.cpp` `ControlEnemyMissile` (300, 200, 50) and `UpdateSparks`
+(2), `joby.cpp` `WreckingBallCollision` (the wrecking ball, 96), `lara1gun.cpp`
+`DoGrenadeDamageOnBaddie` (her own grenade, 50), `laramisc.cpp` `LaraControl` (gas and
+drowning, 5), `tomb4fx.cpp` `UpdateShockwaves` (a shockwave, 33 at most), `traps.cpp`
+`ControlExplosion` (an explosion, 127 at most), `DartsControl` (a dart, 25),
+`FlameEmitter3Control` (a flame, 5), `FlameControl` (the fire on her, 7),
+`ControlScaledSpike` (teeth spikes, 8) and `FallingCeiling` (300). Untouched as well: her
+death branch, `lara_col_death` and `lara_col_uwdeath`, which only read a life a hold no
+longer leaves them, the death goals of her states, the heals (the medipacks, the cheats,
+the search object that sets 640), the poison gate, the enemies' AI and their focus.
 
-The change is game logic in every build path, so there is no `hd_build` 0 byte identity to
-claim. ModernTest `scene_hold` (39 checks): the kind of every flag set, the arithmetic of
-a hold through its start, its blows and its end, the air, a Lara dead at the start and one
-whose death began, a cutscene over a flyby, the class rule against two made-up balance
-tables, and the engine's text - the two looks of the tick in their places, the flyby's own
-memory gone, the cutscene's look and release, the T-Rex's bite asked, and the census file
-by file.
+Game logic in every build path; there is no `hd_build` parity to claim. ModernTest
+`scene_hold` (39 checks): the kind of every flag set, the arithmetic of a hold through its
+start, its blows and its end, the air, a Lara dead at the start and one whose death began,
+a cutscene over a flyby, the class rule against two made-up balance tables, and the
+engine's text - the two looks of the tick in their places, the flyby's own memory gone,
+the cutscene's look and release, the T-Rex's bite asked, and the census file by file.
 
 **Decisions.** The hold remembers where it begins: at a flyby's start or at the camera
 that takes her control - for a flag set by a later camera Core put back the flyby's start,
@@ -16702,7 +16676,8 @@ she is held, for every caller at once. Two things stay outside the hold: the win
 before a cutscene plays (the fade, `cutseq_trig` 1), and poison - a dart's 25 are put
 back, the poison it adds is a state of its own and goes on after the scene.
 
-**Commits.** `d8c2625f`.
+**Commits.** `d8c2625f`, `82d1e4b9` (the notice in `andrea.cpp`, `guardian.cpp` and
+`lasers.cpp`).
 
 ### The raising cog's lift runs to its end, a pull meanwhile is kept (#281)
 
@@ -17164,8 +17139,7 @@ stands after #284's, built on a branch of its own at the same time.
 **Commits.** `66c57ce3`.
 
 ### A room under the sky lists the art that stands in the sky beside it (#286)
-
-2026-10-31.
+2026-10-31
 
 **What.** On the visibility path (`hd_vis` 1) a room under the sky now lists, as guests,
 the rooms under the sky whose art stands in the sky beside it: in the open air - farther
@@ -17175,48 +17149,33 @@ a sector of it. The walk lists such a room by the box of that art inside the win
 room under the sky is seen in, as it lists a guest, and the room walks on through its own
 portals. A room whose art there is, all but fewer than eight triangles, a copy of another
 such room's (centroids within two units) is left out, and so is the art of a room not
-under the sky and art on a closed room's roof. In ANDREA2's rooftop courtyard by the
-griffins (room 223) the brick tower, the facade with the two barred windows, the block
-with the cornice on the roofline, the coffered ceiling of the loggia and the city beyond
-the lattice parapet with the red building now stay where they are as the eye turns and
-moves. With `-log` the `HDLOG level= vis=1` line ends in `sky_groups= sky_tris= sky_pairs=
-sky_copies= hull_sky= sky_closed=`, one `HDLOG vissky level= room= group= tris= over_sky=
-over_closed= beyond= box=` line names each pair, one ending in `refused=copy` or
-`refused=closed` each room left out, and every `HDLOG room=` line ends in `sky_art=`;
-`VISLOG` names such a room `g`, the walk being handed it as a guest. TrgProbe `-vistable`
-ends its level line in the same counts with a `skyart`, `skycopy` or `skyclosed` line per
-group, `-visroom` adds a room's `sky=` lines and `-visskyreach` sets the reach;
-RoomProbe's `-vis: tables` line ends in the counts with a `-vis: vissky` line per pair,
-`-walkfinal` names a room the sky table listed first `vis=sky`, `-vissky 0` builds no sky
-table, `-visskyreach` sets the reach and `-visyshift 1` builds the tables with the groups'
-y shifts as the engine does; ModernTest checks the rule on rooftops built by hand.
+under the sky and art on a closed room's roof. In ANDREA2's rooftop courtyard (room 223)
+the brick tower, the facades, the block on the roofline, the loggia's coffered ceiling and
+the city beyond the parapet now stay where they are as the eye turns and moves. With
+`-log` the `HDLOG level= vis=1` line ends in `sky_groups= sky_tris= sky_pairs= sky_copies=
+hull_sky= sky_closed=`, one `HDLOG vissky level= room= group= tris= over_sky= over_closed=
+beyond= box=` line names each pair, one ending in `refused=copy` or `refused=closed` each
+room left out, and every `HDLOG room=` line ends in `sky_art=`; `VISLOG` names such a room
+`g`, the walk being handed it as a guest. TrgProbe `-vistable` ends its level line in the
+same counts with a `skyart`, `skycopy` or `skyclosed` line per group, `-visroom` adds a
+room's `sky=` lines and `-visskyreach` sets the reach; RoomProbe's `-vis: tables` line
+ends in the counts with a `-vis: vissky` line per pair, `-walkfinal` names a room the sky
+table listed first `vis=sky`, `-vissky 0` builds no sky table, `-visskyreach` sets the
+reach and `-visyshift 1` builds the tables with the groups' y shifts as the engine does;
+ModernTest checks the rule on rooftops built by hand.
 
-**Why.** On ANDREA2's rooftops round room 223 the Remaster's art on the facades and roofs
-went out and came back, often many times over: diving over the parapet, the upper part of
-the brick tower turned into a dark block and the facade with the barred windows to the
-right was gone, sky where it stood - the tower that had popped from the other side before
-#269; standing on the sloped roof, the block on the roofline became a thin dark slab and
-two panels of the loggia's coffered ceiling showed the sky; diving along the lattice
-parapet, the red building of the skyline shrank and then was gone. The log of that run
-holds 913 changes of the room list in ANDREA2, the eye in room 223 in 298 of them. The
-walk replayed at the eye of each change (RoomProbe, the change's eye, the camera's target
-of that tick) gives the game's list in 605 of the 884 that follow a whole list, the rest
-one room or more apart; drawn there at 1,280 x 720 with the list before and after the
-change, 136 changes move 200 pixels or more, 3,213,043 in all, and three rooms make 97 per
-cent of them: room 55 (51 changes, 1,813,871 pixels, the eye in room 223), room 222 (21,
-1,189,869, the eye in rooms 221, 223 and 33) and room 7 (22, 107,190). Drawn at frames
-4,258 (eye in room 221) and 8,452 (in room 223) without room 222, the pictures are those
-of the dive and of the roof. None of the three is a guest of the rooms the eye stands in:
-their art there stands outside every room's box. Group 222, the tower's, holds 300
-triangles of the facade over the courtyard's east side above its top, 72 over room 221,
-467 of a parapet past the level's rooms, and 709 of the roofs and the coffers over the
-loggia (room 225, a closed room) above its top; group 55 holds 13,321 triangles of the
-city past the level's east edge, group 7 2,064 more of it. The guest table counts art only
-in a room's inside, between its floor and its ceiling - so the tower's 240 triangles in
-room 232 made it that room's guest - and no room's inside holds this art; each of the
-three was listed only while its own room was, through a chain of portals: room 222 from
-room 221 through the portal at the eye's back when the eye looks over the courtyard, room
-55 from room 223 through rooms 225, 3, 7 and 56.
+**Why.** On ANDREA2's rooftops round room 223 the art of three rooms stands outside every
+room's box: group 222, the tower's, holds 300 triangles of the facade over the courtyard's
+east side above its room's top, 72 over room 221, 467 of a parapet past the level's rooms
+and 709 of the roofs and the coffers over the loggia (room 225, a closed room) above its
+top; group 55 holds 13,321 triangles of the city past the level's east edge, group 7 2,064
+more of it. The guest table counts art only in a room's inside, between its floor and its
+ceiling - so the tower's 240 triangles in room 232 made it that room's guest - and no
+room's inside holds this art; each of the three was listed only while its own room was,
+through a chain of portals: room 222 from room 221 through the portal at the eye's back
+when the eye looks over the courtyard, room 55 from room 223 through rooms 225, 3, 7
+and 56. So the tower, the facades and the skyline went out and came back as the eye turned
+and moved.
 
 **How.** `HDVisBuild` (`specific/hd/hd_vis.cpp`) asks each triangle of a group's art that
 stands farther than `overhang` out of its own room's box, of the rooms whose floor plan
@@ -17234,68 +17193,28 @@ than eight of them are copies of a taken group's (`skyCopyOf`). A room not under
 is none (`skyRoomClosed`): listed, it draws its inside and walks on through its doors -
 RICH2's office room 135, beside the stairwell with no link to it, has 24 triangles of its
 ceiling slab 7 units over the stairwell's top, and taken it filled the stairwell's opening
-with its lockers and a glass block wall (105,029 pixels at the niche eye of #269) - and
-its sky art is mostly a copy: ANDREA2's room 50, the street under the roofs, holds 11,234
-triangles of the skyline, each a copy of one of room 55's. Then each room under the sky
-takes each taken group, but its own and its twin's, whose sky art stands over its floor
-plan or within `skyReach` of it - 1,024 units, a sector, the width of a wall ring: the
-skyline stands 889 units past the courtyard's east wall (`HDVisParams::skyArt` 1,
-`skyReach`; the table `HDVisTables::sky`, `skyFirst`, `skyCount`). `hd_level.cpp` hands
-the walk a room's sky groups after its guests (`VisKeepGuests`, `HDVisRoomGuests`), a
-second shell's left out as for the guests, so `game/draw.cpp`'s walk lists them through
-`VisGuestBounds` and is not changed. The guests, the openings, the wides, the enclosure
-and the classic rooms' verdicts are those of before. The reading - art above a room's
-classic box counts for that room, the Remaster building higher than the classic level - is
-after TROne's guests' column (GPLv3, Todesengel1931); the open air, the sky, the reach and
-the copies are this engine's own.
-
-**Proof.** Along the log's run, at the eye of each of the 884 changes of the list that
-follow a whole list: with the game's lists, 136 changes move 200 pixels or more, 3,213,043
-in all; with the walk replayed under the rule at the same eyes, 37 changes, 240,353 pixels
-(92.5 per cent fewer). Rooms 55, 222 and 7 move 200 pixels or more at 51, 21 and 22
-changes before and at 0, 1 and 0 after - room 222's one with the eye in room 154, a closed
-room; between one change's eye and the next they come and go 64, 24 and 40 times before
-and 14, 2 and 19 after. At the 136 changes the pictures showed, drawn from both replays,
-2,914,074 pixels move before and 75,176 after, 108 changes and 26; what still moves is art
-not in the sky: the loggia's own (room 225), the rooms below the courtyard (21, 18, 17 and
-46, the last two 14,324 pixels at frame 3,739) and the building west of the tower (162);
-room 52's facade in room 232's box, gone with room 222 before, stays. The tables of the
-fifteen levels room by room (TrgProbe `-vistable -visroom all`): every guest, opening,
-wide and enclosure line as before; 501 sky pairs, 84 sky groups a room takes - ANDREA1 33
-pairs, ANDREA2 47, ANDREA3 11, ANDY1 136, ANDY2 0, ANDY3 111, JOBY2 34, JOBY3 0, JOBY4 82,
-JOBY5 1, RICH1 0, RICH2 26, RICH3 3, RICHCUT2 0, TITLE 17; the largest RICH2's group 26
-(59,896 triangles in the sky), ANDREA3's 67 (30,601), TITLE's 54 (28,697), ANDY3's 23
-(21,532), ANDY1's 202 (15,758) and ANDREA2's 55 (13,321); six groups left out as copies
-(ANDREA3's 66, 69 and 91 of 67, ANDY3's 201, JOBY5's 82, RICH2's 120 of 26) and 45 because
-their room is not under the sky. RICH2's table is the same with the y shift the engine
-reads (RoomProbe `-visyshift 1`). The parity set of #236, 72 of 72 pictures byte-identical
-(six classic, six HD, thirty census and thirty camera pictures); #269's seven
-before-and-after places 7 of 7; of its 88 card samples 76, the twelve others named:
-TITLE's room 43 four views (540 to 2,998 pixels at 960 x 540), the sky groups 35 and 54 -
-the landscape past the rooms - listed there with room 33, a guest of theirs; ANDY1's rooms
-96, 97 and 135 eight views (1 to 18 pixels), the same rooms in another order and wider
-windows, rooms 143, 159, 162 and 163 queued first by the sky table, at room 96 also 121,
-160, 161 and 150. RICH1 has no sky pair: its tables and walk, and #283's three pictures,
-are those of before. The price at ten eyes of the log, at 2,560 x 1,440, every pass timed
-30 times on the GPU (median): the rooms 45, 12, 13, 12, 12, 14, 13, 18, 14 and 8 before,
-49, 14, 28, 23, 24, 16, 15, 19, 17 and 12 after; the triangles 25,134 to 440,028 before,
-71,114 to 473,073 after; the draw calls 99 to 401 before, 173 to 451 after; the GPU time
-0.189 ms on average before and 0.235 after, at most 0.157 to 0.459 ms at frame 3,739 (13
-to 28 rooms, 54,279 to 418,708 triangles, room 10's 309,808 among them, a guest of the
-rooms the sky groups walk into). The log's frames ran at the 165 Hz cap (6.06 ms median,
-5.31 of it waiting at the flip, the walk 0.11 ms, the HD draws 0.32 ms of the CPU). The
-table build costs 1,435 ms before and 1,258 after on ANDREA2, 480 and 588 on ANDY1.
-ModernTest 17,123 checks, 0 failed (`vis_sky_art`, 18), MenuTest 45,043, InterpTest 754,
-LipsTest 272, 0 failed. `hd_vis` 0 is unchanged by construction: the sky table is built on
-the visibility path alone; `hd_build` 0 is untouched.
+with its lockers and a glass block wall - and its sky art is mostly a copy: ANDREA2's room
+50, the street under the roofs, holds 11,234 triangles of the skyline, each a copy of one
+of room 55's. Then each room under the sky takes each taken group, but its own and its
+twin's, whose sky art stands over its floor plan or within `skyReach` of it - 1,024 units,
+a sector, the width of a wall ring: the skyline stands 889 units past the courtyard's east
+wall (`HDVisParams::skyArt` 1, `skyReach`; the table `HDVisTables::sky`, `skyFirst`,
+`skyCount`). `hd_level.cpp` hands the walk a room's sky groups after its guests
+(`VisKeepGuests`, `HDVisRoomGuests`), a second shell's left out as for the guests, so
+`game/draw.cpp`'s walk lists them through `VisGuestBounds` and is not changed. The guests,
+the openings, the wides, the enclosure and the classic rooms' verdicts are those of
+before. The reading - art above a room's classic box counts for that room, the Remaster
+building higher than the classic level - is after TROne's guests' column (GPLv3,
+Todesengel1931); the open air, the sky, the reach and the copies are this engine's own.
+`specific/hd/hd_level.h`'s comment on a group room's tables names the sky groups after its
+guests. `hd_vis` 0 is unchanged by construction: the sky table is built on the visibility
+path alone; `hd_build` 0 is untouched.
 
 **Decisions.** The art of a room not under the sky is left out, all of it: the 45 groups
-so left out include ANDREA3's arena skylines (groups 16, 17, 28 and 55, 29,127 to 29,458
-triangles each), ANDY3's group 86 (39,870), RICH2's 34 and 153 (40,191) and TITLE's 0, 7,
-8 and 36. Should one of them be reported to come and go, the next step is to let a room
-under the sky take it when the two rooms are linked. The reach is a sector of the floor
-plan and not every room under the sky: so 501 pairs, every room 4,489 (ANDY1 1,660 of
-them), each one a room more listed whenever its sky art is in the window. Art over a
+so left out include ANDREA3's arena skylines (groups 16, 17, 28 and 55), ANDY3's group 86,
+RICH2's 34 and 153 and TITLE's 0, 7, 8 and 36. The reach is a sector of the floor plan and
+not every room under the sky: so 501 pairs over the fifteen levels, against 4,489 with
+every room, each one a room more listed whenever its sky art is in the window. Art over a
 closed room's roof makes no room listed, but it comes along with its group: the roofs and
 the coffers over ANDREA2's loggia are group 222's. The walk is handed the sky groups as
 guests, so `game/draw.cpp` is not touched and `VISLOG` names them `g`. No table per level:
@@ -17304,8 +17223,7 @@ ANDREA2 has no entry, and the rule derives each pair from the level's own rooms 
 **Commits.** `a836e6cf`.
 
 ### The bulbs' fog reaches as a field, and the mist it stands in goes (#287)
-
-2026-10-31.
+2026-10-31
 
 **What.** With `hd_fog` 1 every fog bulb's body reaches past its radius as a field: its
 density falls over four radii - the reach - with the body's own smooth fall, its strength
@@ -17327,35 +17245,13 @@ dropped=bulb|field meets= gap=` line per mist range left out. RoomProbe: `-fogfi
 `-fogfactor <k>`, `-fogdrop 0`; each `-fogart` line ends in the bulb its box meets and the
 verdict. ModernTest's group `fog_field`, 13 checks.
 
-**Why.** In play at ANDY3's sluice, with the bulbs' body of #218, two mottled grey-green
-lumps still hung in the view, on the dark hillside left of the mill and over the brown
-rocks beside the crane, and closer by rectangular, blocky edges showed inside the fog on
-the ground. The fog was wanted over the whole area around the mill, not in each bulb's
-ball alone. A third ball seen there before #218, the haze disc of the bulb at the pool's
-south-west corner (bulb 9) on the hillside beside the left lump, had become that bulb's
-body with #218.
-
-**Measured.** ANDY3's mist is three ranges of the flow material, one each in groups 10, 15
-and 17 (RoomProbe `-fogart`): group 10 spans x 33,018 to 36,790, y 7,547 to 10,263, z
-50,636 to 54,724; group 15 x 38,281 to 43,321, y 6,913 to 9,613, z 48,570 to 52,610; group
-17 x 33,018 to 43,322, y 6,913 to 10,263, z 48,568 to 54,724, the union of the two others'
-boxes. Drawn one group at a time at the eye of the sluice (37,900, 7,450, 44,000 in room
-105, towards 38,450, 9,300, 48,200; 1,280 x 720, hd_fog 1 with the level's bulbs), group
-10's mist covers 27,319 pixels of the left lump, group 15's 47,575 of the right one and
-group 17's 75,145 of both, its light on each within one per cent of the other group's:
-every lump is drawn twice, by its own room's group and by room 17's. Together the mist
-adds light to 79,698 pixels over the picture without it, p95 29.9 and most 53.6 of 255,
-and at 12,395 pixels its light changes by more than 3 from one pixel to the next - the
-edges of the two copies' layers, where each group's mist alone has 609 (group 10), 1,849
-(15) and 2,315 (17). At #218's eye by the mill (35,586, 8,448, 45,730 in room 17) the
-same: 90,955 pixels, p95 29.8, most 59.1, 12,121 steps. The bulbs there are bulbs 7 to 11
-of room 105 (radius 1,312): 7 and 9 at x 35,328 by the pool's west side, 8, 10 and 11 at x
-42,496 to 46,592 east of the mill. Group 17's box holds bulb 7's centre and meets bulb 8's
-sphere at 952 units; group 15's box meets bulb 8's at 954; group 10's box lies 1,996 from
-bulb 7's centre (1.52 radii), its centre 4,124 (3.14 radii). Of the 34 mist ranges of the
-fifteen levels the other 31 are the title's sand: 21 of their boxes meet or hold the
-sphere of bulb 14 or 15 (rooms 61 and 71), the other 10 have their centres in those bulbs'
-fields - in a level where the pass does not draw.
+**Why.** At ANDY3's sluice the art's mist is three ranges of the flow material, one each
+in groups 10, 15 and 17 (RoomProbe `-fogart`), and group 17's box is the union of the two
+others': every lump was drawn twice, by its own room's group and by room 17's - two
+mottled grey-green lumps on the dark hillside left of the mill and over the brown rocks
+beside the crane, with the blocky edges of the two copies' layers inside them. The bulbs'
+bodies of #218 each filled a ball of their own, and the fog was wanted over the whole
+ground between them.
 
 **How.** `specific/hd/hd_fog.h` holds the rule as pure functions: `HD_FOG_FIELD` (4.0),
 `HDFogFieldReach`, `HDFogFieldDensity` (the peak times 1 - (distance / reach)^2),
@@ -17379,97 +17275,31 @@ lists in `aRoomInit`'s order and writes the load lines; RoomProbe hands in the b
 reads with `-fogbulbs`. `ROOM_MIST` is no fog flag in this engine: it marks the vertices
 of a room's floor over a downward portal that no vertex below repeats (`drawroom.cpp`,
 `IsMistVert`), the water surface's shimmer beside `ROOM_REFLECT`; nothing here reads it.
+`specific/hd/hd_render.h`: `HDFogLast`, the pass's record that RoomProbe reads, counts the
+fields that meet another's and the mist left out; `bshader.bat` compiles the shader into
+`hd_shader/hd_fog_ps.inc` and `hd_fog_vs.inc`.
 
-**The factor.** Measured in steps of a quarter from 1 to 5 (RoomProbe `-fogfactor`) on
-three conditions. The ground between the mill's bulbs: the x/z hull of bulbs 7 to 11,
-sampled every 64 units at the heights of room 17's ground layer, lies within a bulb's
-reach everywhere from 3.0 at the layer's top (y 8,448), 3.25 at its middle (9,600) and
-3.75 at its floor bound (10,752); at 1 a quarter of the top is covered and nothing below
-it. The band: at #218's seven eyes (H by the mill in room 17, M1 over the river, C3 at the
-sluice from room 105, E1, E2 and E3 over the pond rooms, I8 inside bulb 8; 1,280 x 720)
-the 95th percentile of the light the fog adds over the picture without it stays under the
-top of 33 up to 4.25 (M1 32.9 the most) and M1 passes it at 4.5 (33.1); at 1 the eyes lie
-at 13.6 (C3) to 21.5 (M1), at 4.0 at 23.1 (E2) to 32.0 (M1), and the eye of the sluice at
-20.1 and 27.3. The price, as #218 measured it (`-gpu 3 -gpuall` at 2,560 x 1,440, three
-runs, the median): at 4.25 the pass takes 1.02 ms at I8, past the budget of 1 ms, and 0.97
-at M1; at 4.0 the most is M1's 0.92 (I8 0.88, C3 0.84, the sluice 0.82, H 0.78). 4.0 is
-the largest step that meets all three, and the same factor rules every level. Before each
-quad's cap was cut to the fields that meet it, 4.25 cost 1.14 ms at I8.
-
-**What the field reaches** (RoomProbe `-fogfield`, factor 4). ANDY3: the mill's five bulbs
-reach 5,248 and make one field (7 and 9 lie 3,072 apart, 8 and 10 3,494, 10 and 11 2,563,
-8 and 11 5,376, 7 and 8 7,241, 8 and 9 7,455, 7 and 10 10,425); the pond's two in room 34
-one more (5,120 apart), the bulbs of rooms 20, 69 and 87 a third and room 145's pair a
-fourth, reaching 7,424 to 9,344. ANDY1: 15 bulbs of radius 1,920 reach 7,680 in two
-fields, bulbs 0 to 4 with 9 to 14 (joined through 0 and 10) and 5 to 8. ANDY2: 9 bulbs,
-6,144 to 7,168, bulbs 1 to 8 one field. ANDREA1: 9 bulbs, seven of them in water rooms
-under the sheets, which the frame never hands the pass (the water's own look stands
-there), and bulbs 0 and 7 (rooms 2 and 59) reach 3,328 and 4,224 alone. ANDREA2: 16 of 17
-bulbs in water rooms under the sheets, bulb 16 (room 234) reaches 7,040 alone. RICH2: 15
-bulbs, 6,016 to 10,240, two fields (0 to 12, 13 and 14). RICH3: 4 bulbs, 7,040 to 12,288,
-one field. RICH1 (10 bulbs), ANDREA3 (15) and the title (17, its bulbs 14 and 15 in rooms
-61 and 71 reaching 10,624 each) have no water square, so the pass draws no field there and
-the bulbs keep their haze; JOBY2 to JOBY5 and RICHCUT2 hold no bulb.
-
-**Room 12.** The pale patch on the hillside between the pond rooms and the tower, seen in
-trview with its lighting off, is the classic level's own texture: of room 12's 72 classic
-faces 65 are opaque, 2 alpha tested and 5 additive (the water surface beside the channel,
-at y 10,752), and the slope west and north of the tower is opaque quads and triangles with
-no face word (texture infos 1,932, 1,941, 1,944, 2,004, 2,009 and 2,010 on pages 2 to 5).
-trview draws them unlit, so the paler, hazy grass is painted into the tiles; in the
-classic game their vertex colours, 16 to 40 of 255, darken them to the night. The HD path
-draws the room with its art: group 12 has no additive range, so no mist of the art lies
-there, and no bulb's sphere reaches the room (bulb 7's lies 4,615 from its box, 3.52
-radii); the fields of bulbs 7 and 11 reach into its box only up to z 53,900, short of its
-first faces at z 54,272. No fog rule of #218 or this entry draws the patch.
-
-**Decisions.** The cap acts on the density at a point - each bulb keeps its share of the
-fields' sum - and not on a pixel's veil: a veil capped per pixel needs every bulb in one
-quad or a second render target, the share keeps a quad per bulb, and where the fields of
-two equal bulbs overlap their sum stays at one field's peak; along a long ray through
+**Decisions.** `HD_FOG_FIELD` is 4.0, the largest quarter step that meets three
+conditions: the ground between the mill's bulbs lies within a bulb's reach (from 3.0 at
+the top of room 17's ground layer, from 3.75 at its floor bound), the 95th percentile of
+the light the fog adds stays under the band's top of 33 at the measured eyes (up to 4.25),
+and the pass stays under 1 ms (0.92 ms at the most at 4.0, 1.02 at 4.25); the same factor
+rules every level. The cap acts on the density at a point - each bulb keeps its share of
+the fields' sum - and not on a pixel's veil: a veil capped per pixel needs every bulb in
+one quad or a second render target, the share keeps a quad per bulb, and where the fields
+of two equal bulbs overlap their sum stays at one field's peak; along a long ray through
 several fields the veil may still pass the top, which is what the band at the eyes
 measures. The strength is the band's top on the field's densest line, so a field is a
 quarter as dense at its middle as the body was and four times as wide, and where fields
-overlap the sum is held at that peak. A box lies in the field when its centre does,
-as #218 asked whether a part's centre lay in a sphere: a box only touching a field's rim
-would be left out where the field adds next to nothing (group 10's box touches bulb 7's
-field from 1.52 radii on, its centre lies in it from 3.14 on). The mist is left out only
-where the pass draws: in a level or a setting without the pass no fog stands in its place.
-The verdict takes every bulb of the level, not the frame's: a mist range keeps one verdict
+overlap the sum is held at that peak. A box lies in the field when its centre does, as
+#218 asked whether a part's centre lay in a sphere: a box only touching a field's rim
+would be left out where the field adds next to nothing. The mist is left out only where
+the pass draws: in a level or a setting without the pass no fog stands in its place. The
+verdict takes every bulb of the level, not the frame's: a mist range keeps one verdict
 wherever the eye is, so a range never flickers in and out as bulbs come within 20,480 of
 the eye. The breath keeps its cells at half a bulb's radius, the shape of the fog as
 before. The factor, the cap and the rule are the level's data alone; no room, group, bulb
 or level number is in the engine's code.
-
-**Proof.** At the eye of the sluice the mist adds light to 79,698 pixels before (p95 29.9,
-most 53.6, 12,395 steps) and to none after: the picture's line says three mist draws left
-out, and the fog alone - the picture against the same one without the pass (`-fogpass
-0`) - adds light to every pixel, p50 19.4, p95 27.3, most 35.1, with no rectangle in it;
-at #218's eye by the mill 90,955 pixels and 12,121 steps before, none after, the fog alone
-p50 16.6, p95 28.7, most 46.4. The parity sets of #218 (79 jobs at 960 x 540, RoomProbe of
-af575431 against this entry's): without bulbs at `hd_fog` 1 and at 0, 79 of 79
-byte-identical; with the level's bulbs at `hd_fog` 0, 79 of 79; with them at 1 under
-`hd_water` 0, 36 of 36, and the classic faces 7 of 7; the rules off (`-fogfactor 1
--fogdrop 0`) against the base at `hd_fog` 1, 79 of 79 (at 1,280 x 720 the sluice's eye
-and #218's differ by 1 of 255 at 2 and 1 pixels, the shader's compiled order; I8 not at
-all). With the bulbs at `hd_fog` 1 seven pictures change, each by the field: the census of
-rooms at `hd_water` 1 in ANDREA1 by 7,580 pixels (bulbs 0 and 7), ANDY1 91,928 (six
-bulbs), ANDY3 67,882 (two), RICH2 135,071 (nine) and RICH3 518,400 (four, the whole
-picture), the HD views of ANDY3's rooms 17 by 517,586 (five, and one mist draw left out)
-and 34 by 516,779 (five); ANDY2's census draws two bulbs whose fields lie behind its walls
-and stays the same, and the fifteen cameras draw no bulb's fog. The title's eyes of #218
-with its bulbs are byte-identical at `hd_fog` 1 and 0, its 30 and 19 ranges of sand drawn
-as before. `hd_build` 0 never runs the pass and is untouched. The price at the mill's eyes
-(medians of three runs at 2,560 x 1,440): E1 0.38 ms, E2 0.44, E3 0.24, A3mill 0.34, M1
-0.92, I8 0.88, H 0.78, C3 0.84, the sluice's eye 0.82. Beyond the mill the parity pictures
-cost at most 0.83 ms (RICH3's census).
-
-**Left.** Inside the densest fields the data holds the pass passes 1 ms: at RICH2's bulb 4
-(room 76), inside eleven fields, 2.04 ms (0.33 at the factor 1), at ANDY1's bulb 12
-(room 201) 1.14 ms (0.29); at 3.75, the least factor that covers the mill's ground, 1.57
-and 1.12. A pass that walks the summed field once per pixel instead of once per bulb would
-make that cheaper; it is not built here. The game was not run: the look and the log's
-lines wait for play.
 
 **Commits.** `eea6c21f`.
 

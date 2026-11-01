@@ -17535,6 +17535,42 @@ on its side.
 
 **Commits.** `e73c9471`.
 
+### A loading screen shows no texture page of the level, not for a frame (#300)
+
+2026-11-01
+
+**What.** While a level loads with the *Gamma* bar off its middle, no frame of the loading
+screen shows one of the level's texture pages over the whole window any more. Every frame
+of the screen starts from the fixed function, and `-log` writes a `LOADFRAME` line per
+frame of the screen and a `LOADBIND` line per set of texture stage 0 by the loading
+thread.
+
+**Why.** Off the middle, the gamma pass at the present binds its copy of the frame to
+stage 0 and draws it over the window. Direct3D 9 keeps one stage 0 per device, and the
+loading thread bound each object page to stage 0 as it made it; the stage lock kept those
+binds away from the picture's and the bar's draws, not from the pass, so a page bound
+between the pass's bind and its draw filled the window for one frame, without the level's
+name and the bar.
+
+**How.** `specific/file.cpp`: `LoadTexturePages` and `LoadTexturePagesKept` bind no page;
+Direct3D 9 uploads a managed texture at its first draw, which `WarmUpLevel`'s `PreLoad`
+brings forward while the bar is up. `specific/dxshell.cpp`: `GammaPass` holds the stage
+lock from its read of stage 0 to its restore, so the two unbinds the loading thread keeps
+(`FreeTextures`, `FreeTexturesFrom` in `specific/texture.cpp`) cannot fall inside it.
+`specific/drawbars.cpp`: `S_LoadFrameBegin`, called by `S_DrawLoadBar` under the lock and
+by `S_LoadLevelFile` (`specific/file.cpp`) for the first frame, sets no vertex or pixel
+shader, the classic vertex format and nothing on stages 1 and 2, and with `-log` notes the
+device as the frame found it; `S_LoadFrameSeam` writes the `LOADFRAME` line after the
+present. `DXGammaSeen` (`specific/dxshell.cpp`) names what stage 0 held as the pass drew,
+`LoadingPictureKind` (`specific/LoadSave.cpp`) the picture drawn, and `LoadBindNote`
+(`specific/texture.cpp`) writes the `LOADBIND` line; `drawbars.h`, `dxshell.h` and
+`LoadSave.h` declare them. ModernTest's group `load_frame` checks the order of these calls
+in the engine's text, and the two `load_keep` checks of the old binds check that
+`LoadTextures` and the walk over kept pages bind no page.
+
+**Commits.** `3db3e8e3` (the lines of `-log`), `cd250150` (the fix), `100f9e02` (the
+checks).
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -17913,3 +17949,4 @@ entries above.
 | #297 | section 3 (the randomizer) |
 | #298 | A missing SCRIPT.DAT ends the game with a message, and the code section is read-only |
 | #299 | The engine builds with Control Flow Guard |
+| #300 | A loading screen shows no texture page of the level, not for a frame |

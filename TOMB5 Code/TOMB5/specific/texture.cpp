@@ -19,6 +19,7 @@
 #include "LoadSave.h"
 #include "devicemove.h"
 #include "hd/hd_level.h"	// HDLevelDeviceRecreated
+#include "file.h"			// g_level_loading - the LOADBIND line
 
 // Raised from the original 64 - a Randomizer combining texture pages from
 // several source levels can plausibly need more than any single vanilla
@@ -32,12 +33,15 @@ long nTextures;
  * Direct3D keeps one stage 0 per device, not per thread, and the device's own
  * lock (D3DCREATE_MULTITHREADED) covers one call, not a bind and the draws
  * after it. While a level loads, the main thread draws the loading picture
- * and the bar (S_DrawLoadBar) and the loading thread binds pages (FreeLevel,
- * LoadTextures). A bind landing between the picture's bind and its draws
- * shows the picture as a level page or untextured for a frame. So the main
- * thread holds this lock from the frame's first bind to its last draw, and
- * the loading thread holds it around each of its binds. Nobody else waits on
- * it: outside a load one thread draws. */
+ * and the bar (S_DrawLoadBar) and presents them through the gamma pass
+ * (dxshell.cpp), which binds its copy of the frame and draws it over the
+ * whole window; the loading thread sets stage 0 to nothing as the level's
+ * pages go (FreeTextures, FreeTexturesFrom) and binds no page. A set landing
+ * between one of those binds and its draws shows the frame untextured, and
+ * a page bound there would show that page. So the main thread holds this
+ * lock from the frame's first bind to its last draw and through the gamma
+ * pass, and the loading thread holds it around its set. Nobody else waits
+ * on it: outside a load one thread draws. */
 static struct TextureStageLockCS
 {
 	CRITICAL_SECTION cs;
@@ -53,6 +57,17 @@ void TextureStageLock()
 void TextureStageUnlock()
 {
 	LeaveCriticalSection(&g_stage_lock.cs);
+}
+
+/* LOADBIND, with -log: a set of stage 0 by the loading thread - the entry
+ * of Textures[] it binds, or none - and the entries in use at that moment:
+ *   LOADBIND page=<entry|none> of <nTextures>
+ * The unbinds before the pages go are its only sets (LoadTextures binds
+ * no page); nothing outside a level load. */
+static void LoadBindNote()
+{
+	if (gLogEnabled && g_level_loading)
+		Log("LOADBIND page=none of %ld", nTextures);
 }
 
 // Destination is always a plain 32-bit D3DFMT_A8R8G8B8 texture now (the old per-adapter
@@ -167,6 +182,7 @@ void FreeTextures()
 	TextureStageLock();	// on the loading thread under the bar's frames
 	DXAttempt(App.dx.lpD3DDevice->SetTexture(0, 0));
 	TextureStageUnlock();
+	LoadBindNote();
 
 	for (int i = 0; i < nTextures; i++)
 	{
@@ -195,6 +211,7 @@ void FreeTexturesFrom(long first)
 	TextureStageLock();	// on the loading thread under the bar's frames
 	DXAttempt(App.dx.lpD3DDevice->SetTexture(0, 0));
 	TextureStageUnlock();
+	LoadBindNote();
 
 	for (long i = first; i < nTextures; i++)
 	{

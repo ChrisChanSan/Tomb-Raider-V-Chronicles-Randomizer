@@ -54,6 +54,9 @@ long S_LoadScreenKeepName();
 void S_InitLoadBar(long max);
 void S_UpdateLoadBar();
 void S_FinishLoadBar();
+// A frame of the loading screen: its start, and its LOADFRAME line of -log.
+void S_LoadFrameBegin();
+void S_LoadFrameSeam();
 long S_DrawLoadBar();
 void S_LoadBar();
 void DoSlider(long x, long y, long width, long height, long pos, long c1, long c2, long c3);

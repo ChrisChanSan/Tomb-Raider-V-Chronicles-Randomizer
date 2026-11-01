@@ -517,10 +517,9 @@ void FreeLevel()
  * packed size, so a seek over the bytes a read would take ends where the read
  * ends - the bar gets the calls a read makes (pages + 3, the count LoadLevel
  * starts the bar with), Textures[1..end) stay as they are and nTextures goes
- * to their end. The read binds each object page to stage 0 as it makes it;
- * stage 0 ends on the last one here too. A header that does not match the
- * record (a file rewritten with the same size and write time) gives the pages
- * back and reads them. Returns 0 when the load reads the pages. */
+ * to their end. A header that does not match the record (a file rewritten
+ * with the same size and write time) gives the pages back and reads them.
+ * Returns 0 when the load reads the pages. */
 static long LoadTexturePagesKept(long RTPages, long OTPages, long BTPages)
 {
 	long size, compressedSize;
@@ -547,13 +546,6 @@ static long LoadTexturePagesKept(long RTPages, long OTPages, long BTPages)
 
 	for (long i = 0; i < g_pages_kept + 2; i++)
 		S_LoadBar();
-
-	if (OTPages)
-	{
-		TextureStageLock();	// under the bar's frames (texture.cpp)
-		App.dx.lpD3DDevice->SetTexture(0, Textures[RTPages + OTPages].tex);
-		TextureStageUnlock();
-	}
 
 	nTextures = g_pages_kept;
 	Log("LoadTextures: %d pages kept (RTPages %d OTPages %d BTPages %d)",
@@ -626,7 +618,11 @@ bool LoadTextures(long RTPages, long OTPages, long BTPages)
 /* The room, object and bump pages: the two page blocks read (the one in the
  * device's pixel format inflated, the other stepped over), one page made per
  * entry of Textures[] from 1 on, and the bar moved once per page and three
- * times besides - pages + 3 calls. */
+ * times besides - pages + 3 calls. No page is set on the device: Direct3D 9
+ * uploads a managed texture at its first draw, which WarmUpLevel's PreLoad
+ * brings forward while the bar is up, and a bind of stage 0 from this
+ * thread would fall between a bind and a draw of the frames on the screen
+ * (texture.cpp). */
 static void LoadTexturePages(long RTPages, long OTPages, long BTPages,
 	long format, long skip)
 {
@@ -721,9 +717,6 @@ static void LoadTexturePages(long RTPages, long OTPages, long BTPages,
 		Textures[nTex].width = App.TextureSize;
 		Textures[nTex].height = App.TextureSize;
 		Textures[nTex].bump = 0;
-		TextureStageLock();	// under the bar's frames (texture.cpp)
-		App.dx.lpD3DDevice->SetTexture(0, tSurf);
-		TextureStageUnlock();
 		S_LoadBar();
 	}
 
@@ -2411,6 +2404,7 @@ long S_LoadLevelFile(long num)
 	if (shown)
 	{
 		_BeginScene();
+		S_LoadFrameBegin();
 		InitBuckets();
 		InitialiseSortList();
 		DrawLoadingScreen();
@@ -2425,6 +2419,7 @@ long S_LoadLevelFile(long num)
 			S_LoadScreenKeepName();
 
 		S_DumpScreenFrame();
+		S_LoadFrameSeam();
 	}
 
 	/* The screen's clock starts with its first frame: the brake keeps it up

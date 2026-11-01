@@ -13812,27 +13812,23 @@ static void load_keep()
 	ok(a >= 0 && a < b, "load keep: the picture goes after the last frame",
 		a < b, 1);
 
-	// Stage 0 between the two threads: each loading-thread bind and each
-	// bar frame's binds and draws under the one lock (texture.cpp).
+	// Stage 0 between the two threads: the loading thread's unbinds and
+	// each bar frame's binds and draws under the one lock (texture.cpp);
+	// the page loops and the kept walk bind no page.
 	n = hd_switch_count(tex, "TextureStageLock();") +
 		hd_switch_count(tex, "TextureStageUnlock();");
 	ok(n == 4, "load keep: FreeTextures' two binds are locked", n, 4);
 	n = hd_switch_count(file, "TextureStageLock();") +
-		hd_switch_count(file, "TextureStageUnlock();");
-	ok(n == 4, "load keep: LoadTextures' two binds are locked", n, 4);
+		hd_switch_count(file, "SetTexture(");
+	ok(n == 0, "load keep: LoadTextures binds no page", n, 0);
 	{
-		const char* ot = "Textures[nTex].bump = 0;\r\n\t\tTextureStageLock";
 		const char* fr = "long S_DrawLoadBar()";
 		long s[5];
 
-		if (load_keep_at(file, ot, "TextureStageLock();") < 0)
-			ot = "Textures[nTex].bump = 0;\n\t\tTextureStageLock";
-
-		s[0] = load_keep_at(file, ot, "TextureStageLock();");
-		s[1] = load_keep_at(file, ot, "SetTexture(0, tSurf);");
-		s[2] = load_keep_at(file, ot, "TextureStageUnlock();");
-		n = s[0] >= 0 && s[0] < s[1] && s[1] < s[2];
-		ok(n == 1, "load keep: the page loop binds under the lock", n, 1);
+		n = hd_switch_count(file, "\t\tS_LoadBar();\r\n\r\n\tnTextures = "
+			"g_pages_kept;") + hd_switch_count(file, "\t\tS_LoadBar();\n\n"
+			"\tnTextures = g_pages_kept;");
+		ok(n == 1, "load keep: the kept walk binds no page either", n, 1);
 
 		s[0] = load_keep_at(bars, fr, "TextureStageLock();");
 		s[1] = load_keep_at(bars, fr, "DrawLoadingScreen();");
@@ -13853,6 +13849,188 @@ static void load_keep()
 	free(screen);
 	free(bars);
 	free(level);
+}
+
+/* `lf`, a text with LF line ends, counted in `text` as it stands with LF
+ * and with CRLF line ends. */
+static int load_frame_count(const char* text, const char* lf)
+{
+	char crlf[512];
+	size_t k = 0;
+	bool lines = false;
+
+	for (const char* p = lf; *p && k + 2 < sizeof(crlf); p++)
+	{
+		if (*p == '\n')
+		{
+			crlf[k++] = '\r';
+			lines = true;
+		}
+
+		crlf[k++] = *p;
+	}
+
+	crlf[k] = 0;
+	return hd_switch_count(text, lf) + (lines ? hd_switch_count(text, crlf)
+		: 0);
+}
+
+/* The function whose head is `head` in `text`, up to the closing brace at
+ * the start of a line, as a copy to be freed; 0 when it is not there. */
+static char* load_frame_body(const char* text, const char* head)
+{
+	const char* s = text ? strstr(text, head) : 0;
+	const char* e = s ? strstr(s, "\n}") : 0;
+	char* out = e ? (char*)malloc((size_t)(e - s) + 1) : 0;
+
+	if (out)
+	{
+		memcpy(out, s, (size_t)(e - s));
+		out[e - s] = 0;
+	}
+
+	return out;
+}
+
+/* A frame of a level load's screen against the loading thread, in the
+ * engine's own text (the frames and the threads need the game and a
+ * device): every frame starts from the fixed function with stages 1 and 2
+ * empty, under the stage lock where the thread runs; no draw of the frame
+ * takes an entry of Textures[] counted from nTextures; the gamma pass binds,
+ * draws and restores under the lock; the loading thread's only sets of
+ * stage 0 are the two unbinds, locked; and the LOADFRAME and LOADBIND
+ * lines of -log. */
+static void load_frame()
+{
+	static const char* const bars_draws[6] = { "long S_DrawLoadBar()",
+		"static void S_DrawGouraudBar(", "static void S_DoTR4Bar(",
+		"static void DoBar(", "static void LoadFadeQuad(",
+		"static void DrawColoredRect(" };
+	static const char* const save_draws[3] = { "void DrawLoadingScreen()",
+		"void S_DisplayMonoScreen()", "void S_DrawTile(long x" };
+	char* bars = hd_switch_text("../drawbars.cpp");
+	char* dx = hd_switch_text("../dxshell.cpp");
+	char* tex = hd_switch_text("../texture.cpp");
+	char* file = hd_switch_text("../file.cpp");
+	char* save = hd_switch_text("../LoadSave.cpp");
+	char* body;
+	long n, s[8];
+
+	ok(bars && dx && tex && file && save, "load frame: the five files are "
+		"read", !!bars + !!dx + !!tex + !!file + !!save, 5);
+
+	// The frame's start: the look of -log first, then the reset, always.
+	body = load_frame_body(bars, "void S_LoadFrameBegin()");
+	s[0] = load_keep_at(body, "void", "dev->SetVertexShader(0);");
+	s[1] = load_keep_at(body, "void", "dev->SetPixelShader(0);");
+	s[2] = load_keep_at(body, "void", "dev->SetFVF(FVF);");
+	s[3] = load_keep_at(body, "void", "dev->SetTexture(1, 0);");
+	s[4] = load_keep_at(body, "void", "dev->SetTexture(2, 0);");
+	n = s[0] >= 0 && s[0] < s[1] && s[1] < s[2] && s[2] < s[3] &&
+		s[3] < s[4];
+	ok(n == 1, "load frame: no shader, the classic format, stages 1, 2 "
+		"empty", n, 1);
+	n = load_frame_count(body, "if (gLogEnabled)\n\t\tLoadFrameLook();\n\n"
+		"\tdev->SetVertexShader(0);");
+	ok(n == 1, "load frame: the reset is not behind -log", n, 1);
+	free(body);
+
+	// The bar's frames: reset under the lock, the line after the present.
+	s[0] = load_keep_at(bars, "long S_DrawLoadBar()", "TextureStageLock();");
+	s[1] = load_keep_at(bars, "long S_DrawLoadBar()", "S_LoadFrameBegin();");
+	s[2] = load_keep_at(bars, "long S_DrawLoadBar()", "DrawLoadingScreen();");
+	s[3] = load_keep_at(bars, "long S_DrawLoadBar()", "DrawSortList();");
+	s[4] = load_keep_at(bars, "long S_DrawLoadBar()", "TextureStageUnlock();");
+	s[5] = load_keep_at(bars, "long S_DrawLoadBar()", "S_DumpScreenFrame();");
+	s[6] = load_keep_at(bars, "long S_DrawLoadBar()", "S_LoadFrameSeam();");
+	s[7] = load_keep_at(bars, "long S_DrawLoadBar()", "loadbar_frames++;");
+	n = s[0] >= 0 && s[0] < s[1] && s[1] < s[2] && s[2] < s[3] &&
+		s[3] < s[4] && s[4] < s[5] && s[5] < s[6] && s[6] < s[7];
+	ok(n == 1, "load frame: a bar frame starts reset under the lock", n, 1);
+
+	// The first frame: reset too, and before the loading thread starts.
+	s[0] = load_keep_at(file, "long S_LoadLevelFile(long num)",
+		"_BeginScene();");
+	s[1] = load_keep_at(file, "long S_LoadLevelFile(long num)",
+		"S_LoadFrameBegin();");
+	s[2] = load_keep_at(file, "long S_LoadLevelFile(long num)",
+		"DrawLoadingScreen();");
+	s[3] = load_keep_at(file, "long S_LoadLevelFile(long num)",
+		"S_DumpScreenFrame();");
+	s[4] = load_keep_at(file, "long S_LoadLevelFile(long num)",
+		"S_LoadFrameSeam();");
+	s[5] = load_keep_at(file, "long S_LoadLevelFile(long num)",
+		"_beginthreadex(0, 0, LoadLevel,");
+	n = s[0] >= 0 && s[0] < s[1] && s[1] < s[2] && s[2] < s[3] &&
+		s[3] < s[4] && s[4] < s[5];
+	ok(n == 1, "load frame: the first frame starts reset, before the "
+		"thread", n, 1);
+
+	// No draw of the frame takes a page counted from nTextures; the bars and
+	// the fade take entry 0, which is never a page.
+	n = 0;
+	s[0] = 0;
+
+	for (int i = 0; i < 6 + 3; i++)
+	{
+		body = load_frame_body(i < 6 ? bars : save, i < 6 ? bars_draws[i] :
+			save_draws[i - 6]);
+		n += body ? 1 : 0;
+		s[0] += hd_switch_count(body, "nTextures");
+		free(body);
+	}
+
+	ok(n == 9 && s[0] == 0, "load frame: no draw of it counts from "
+		"nTextures", s[0], 0);
+	n = 0;
+
+	for (int i = 1; i < 5; i++)
+	{
+		body = load_frame_body(bars, bars_draws[i]);
+		n += hd_switch_count(body, "tex.tpage = 0;") == 1 &&
+			hd_switch_count(body, "tex.tpage =") == 1;
+		free(body);
+	}
+
+	n += hd_switch_count(file, "Textures[0].tex = 0;") == 1;
+	ok(n == 5, "load frame: the bars and the fade take entry 0, no page", n,
+		5);
+
+	// The gamma pass at the present: its bind, draw and restore locked.
+	body = load_frame_body(dx, "static bool GammaPass(");
+	s[0] = load_keep_at(body, "static", "TextureStageLock();");
+	s[1] = load_keep_at(body, "static", "dev->GetTexture(0, &tex_old);");
+	s[2] = load_keep_at(body, "static", "dev->SetTexture(0, g_gammaCopy);");
+	s[3] = load_keep_at(body, "static", "dev->DrawPrimitiveUP(");
+	s[4] = load_keep_at(body, "static", "dev->SetTexture(0, tex_old);");
+	s[5] = load_keep_at(body, "static", "TextureStageUnlock();");
+	n = s[0] >= 0 && s[0] < s[1] && s[1] < s[2] && s[2] < s[3] &&
+		s[3] < s[4] && s[4] < s[5] &&
+		hd_switch_count(body, "TextureStageLock();") == 1 &&
+		hd_switch_count(body, "TextureStageUnlock();") == 1;
+	ok(n == 1, "load frame: the gamma pass draws under the lock", n, 1);
+	free(body);
+
+	// The loading thread: two unbinds of stage 0, locked, and no page.
+	n = load_frame_count(tex, "TextureStageLock();\t// on the loading thread "
+		"under the bar's frames\n\tDXAttempt(App.dx.lpD3DDevice->SetTexture(0,"
+		" 0));\n\tTextureStageUnlock();");
+	ok(n == 2 && hd_switch_count(tex, "SetTexture(") == 2 &&
+		hd_switch_count(file, "SetTexture(") == 0, "load frame: the loading "
+		"thread only unbinds, locked", n, 2);
+
+	// The lines of -log.
+	n = hd_switch_count(bars, "\"LOADFRAME n=%ld phase=%s pic=%s tex0=%s "
+		"ps=%s vs=%s stage1=%s \"") + hd_switch_count(tex,
+		"Log(\"LOADBIND page=none of %ld\", nTextures);") +
+		hd_switch_count(dx, "g_gammaDrew = seen == g_gammaCopy ? 1 : 2;");
+	ok(n == 3, "load frame: the LOADFRAME and LOADBIND lines", n, 3);
+
+	free(bars);
+	free(dx);
+	free(tex);
+	free(file);
+	free(save);
 }
 
 /* The font's glyph rows and accent rows as the engine has them (game\
@@ -35116,6 +35294,7 @@ int main()
 	extra_strings();
 	japanese_audio();
 	load_keep();
+	load_frame();
 	load_mode();
 	load_brake();
 	ledge_hang();

@@ -32,6 +32,7 @@
 #include "../game/interpolate.h"	// InterpNoteClassicPresent
 #include "hd/hd_level.h"	// HDFramePresented - the frame clock of -log
 #include "dxshell.h"		// DXGammaStart - the held present's gamma pass
+#include "function_stubs.h"	// Log, gLogEnabled - the LOADFRAME line
 
 static GouraudBarColourSet healthBarColourSet =
 {
@@ -134,6 +135,21 @@ static long loadbar_build_done;
  * present reports it to the window as every other frame's does. */
 static long loadbar_held;
 static long loadbar_lost;
+
+/* The part of the load the frame being drawn belongs to, for its LOADFRAME
+ * line (S_LoadFrameSeam): the first frame - the picture, drawn before the
+ * loading thread starts - the thread's frames, the frame at its join, the
+ * main thread's work after it, and the brake's tail. */
+enum
+{
+	LOADPHASE_FIRST,
+	LOADPHASE_THREAD,
+	LOADPHASE_JOIN,
+	LOADPHASE_BUILD,
+	LOADPHASE_TAIL
+};
+
+static long loadbar_phase;
 
 /* The clock of the loading screen, in ms: QueryPerformanceCounter, the
  * counter Sync() paces the frames by and the LOADLOG lines read. */
@@ -608,6 +624,7 @@ void S_LoadScreenBegin(long mode, long fade, double fadeMs, double minMs,
 	loadbar_fade_ms = fadeMs;
 	loadbar_frames = mode != LOADBAR_OFF;
 	loadbar_loading = 1;
+	loadbar_phase = LOADPHASE_THREAD;
 	loadbar_start = LoadScreenTickMs();
 	loadbar_min_ms = minMs;
 	loadbar_share = hd ? kLoadBarThreadShare : 1.0F;
@@ -693,15 +710,18 @@ void S_LoadScreenStep(long step)
 void S_LoadScreenJoin()
 {
 	loadbar_held = loadbar_loading;
+	loadbar_phase = LOADPHASE_JOIN;
 
 	if (!loadbar_fading || !(App.dx.Flags & DXF_HWR))
 	{
 		S_LoadScreenStep(LOADSTEP_JOIN);
+		loadbar_phase = LOADPHASE_BUILD;
 		return;
 	}
 
 	loadbar_fade_ms = 0;
 	S_DrawLoadBar();
+	loadbar_phase = LOADPHASE_BUILD;
 }
 
 /* The work is done: the brake's tail and the last frame. The bar runs on
@@ -715,6 +735,7 @@ void S_LoadScreenEnd()
 	const double from = LoadScreenClockMs();
 
 	loadbar_held = 0;
+	loadbar_phase = LOADPHASE_TAIL;
 	S_FinishLoadBar();
 
 	if (App.dx.Flags & DXF_HWR && loadbar_mode != LOADBAR_OFF)
@@ -722,6 +743,7 @@ void S_LoadScreenEnd()
 
 	loadbar_wait_ms = LoadScreenClockMs() - from;
 	loadbar_loading = 0;
+	loadbar_phase = LOADPHASE_FIRST;	// the next load's first frame
 }
 
 // What this load's screen drew, for the LOADLOG lines.
@@ -794,6 +816,131 @@ void S_UpdateLoadBar()
 	loadbar_steps = 100.0F / loadbar_maxpos + loadbar_steps;
 }
 
+/* LOADFRAME, with -log: one line per frame of a level load's screen, after
+ * its present - the device as the frame found it, before the picture's
+ * bind, and what the present's gamma pass drew with:
+ *   LOADFRAME n=<frame> phase=<first|thread|join|build|tail>
+ *     pic=<hd|classic|view|none> tex0=<entry|none|other> ps=<set|none>
+ *     vs=<set|none> stage1=<set|none> stage2=<set|none> nTextures=<n>
+ *     name_page=<n-2> bar_page=<n-1> gamma=<off|copy|entry|none|other>
+ * n counts the load's frames from its first, 0. pic: the HD picture, a
+ * classic one, the first frame read back with the level's name (view), or
+ * none. tex0: the entry of Textures[] bound at stage 0, none, or another
+ * texture. ps and vs: a shader set; stage1 and stage2: a texture there.
+ * name_page and bar_page: the entries a classic name (DrawChar) and a
+ * slider (DoSlider) would take at that moment. gamma: what stage 0 held as
+ * the gamma pass drew - its own copy of the frame, an entry, none, another
+ * texture - or off without the pass. Without -log nothing is read. */
+static struct
+{
+	char tex0[16];
+	long ps, vs, stage1, stage2;
+	long textures;
+	long pic;
+} loadframe_look;
+
+/* A texture of stage 0 by name: its entry of Textures[], none or other.
+ * Every entry is asked, not only those below nTextures, which the loading
+ * thread moves while the frames draw. */
+static void LoadFrameTexName(const void* t, char* out, size_t size)
+{
+	snprintf(out, size, "%s", t ? "other" : "none");
+
+	for (long i = 0; t && i < long(sizeof(Textures) / sizeof(Textures[0]));
+		i++)
+	{
+		if ((const void*)Textures[i].tex == t)
+		{
+			snprintf(out, size, "%ld", i);
+			break;
+		}
+	}
+}
+
+// The device as the frame finds it, for the LOADFRAME line.
+static void LoadFrameLook()
+{
+	LPDIRECT3DBASETEXTURE9 t[3] = { 0, 0, 0 };
+	LPDIRECT3DPIXELSHADER9 ps = 0;
+	LPDIRECT3DVERTEXSHADER9 vs = 0;
+
+	for (int i = 0; i < 3; i++)
+		App.dx.lpD3DDevice->GetTexture(i, &t[i]);
+
+	App.dx.lpD3DDevice->GetPixelShader(&ps);
+	App.dx.lpD3DDevice->GetVertexShader(&vs);
+	LoadFrameTexName(t[0], loadframe_look.tex0, sizeof(loadframe_look.tex0));
+	loadframe_look.ps = ps != 0;
+	loadframe_look.vs = vs != 0;
+	loadframe_look.stage1 = t[1] != 0;
+	loadframe_look.stage2 = t[2] != 0;
+	loadframe_look.textures = nTextures;
+	loadframe_look.pic = LoadingPictureKind();
+
+	for (int i = 0; i < 3; i++)
+	{
+		if (t[i])
+			t[i]->Release();
+	}
+
+	if (ps)
+		ps->Release();
+
+	if (vs)
+		vs->Release();
+}
+
+/* The start of a frame of the loading screen, before the picture's bind:
+ * S_DrawLoadBar's under the stage lock, the first frame's in
+ * S_LoadLevelFile. The frame draws with the fixed function whatever the
+ * frame or the build step before it left: no shader, the classic vertex
+ * format, and no texture on stages 1 and 2, where the HD room bracket
+ * binds its light field. Stage 0 is set by each draw of the frame. */
+void S_LoadFrameBegin()
+{
+	const LPDIRECT3DDEVICE9 dev = App.dx.lpD3DDevice;
+
+	if (gLogEnabled)
+		LoadFrameLook();
+
+	dev->SetVertexShader(0);
+	dev->SetPixelShader(0);
+	dev->SetFVF(FVF);
+	dev->SetTexture(1, 0);
+	dev->SetTexture(2, 0);
+}
+
+// The LOADFRAME line of the frame just presented (above).
+void S_LoadFrameSeam()
+{
+	static const char* const phase[] = { "first", "thread", "join", "build",
+		"tail" };
+	static const char* const pic[] = { "none", "classic", "hd", "view" };
+	const void* seen = 0;
+	char gamma[16];
+
+	if (!gLogEnabled)
+		return;
+
+	const long drew = DXGammaSeen(&seen);
+	const long kind = loadframe_look.pic >= 0 && loadframe_look.pic < 4 ?
+		loadframe_look.pic : 0;
+
+	if (drew == 2)
+		LoadFrameTexName(seen, gamma, sizeof(gamma));
+	else
+		snprintf(gamma, sizeof(gamma), "%s", drew ? "copy" : "off");
+
+	Log("LOADFRAME n=%ld phase=%s pic=%s tex0=%s ps=%s vs=%s stage1=%s "
+		"stage2=%s nTextures=%ld name_page=%ld bar_page=%ld gamma=%s",
+		loadbar_phase == LOADPHASE_FIRST ? 0 : loadbar_frames,
+		phase[loadbar_phase], pic[kind], loadframe_look.tex0,
+		loadframe_look.ps ? "set" : "none", loadframe_look.vs ? "set" : "none",
+		loadframe_look.stage1 ? "set" : "none",
+		loadframe_look.stage2 ? "set" : "none", loadframe_look.textures,
+		loadframe_look.textures - 2, loadframe_look.textures - 1, gamma);
+}
+
 /* One frame of the loading screen, at the next 1/60 s tick: the picture -
  * with the level's name in it, read back with the first frame - and over
  * it the bar or, without a screen, the fade. The tick is waited
@@ -828,9 +975,11 @@ long S_DrawLoadBar()
 	 * D3DSWAPEFFECT_DISCARD promises nothing of its contents after a
 	 * Present, so the picture is drawn again rather than expected to be
 	 * there. Nothing when no picture is up (MonoScreenOn 0).
-	 * The loading thread binds stage 0 meanwhile: the picture's and the bar's
-	 * binds and draws are held together up to DrawSortList (texture.cpp). */
+	 * The loading thread sets stage 0 meanwhile as the level's pages go:
+	 * the picture's and the bar's binds and draws are held together up to
+	 * DrawSortList (texture.cpp), from the device S_LoadFrameBegin set. */
 	TextureStageLock();
+	S_LoadFrameBegin();
 	DrawLoadingScreen();
 
 	/* Without a screen there is no bar: the frame is the last frame of the
@@ -885,6 +1034,7 @@ long S_DrawLoadBar()
 	else
 		S_DumpScreenFrame();
 
+	S_LoadFrameSeam();
 	loadbar_frames++;
 	return LoadBarDone(work, elapsed, loadbar_min_ms);
 }

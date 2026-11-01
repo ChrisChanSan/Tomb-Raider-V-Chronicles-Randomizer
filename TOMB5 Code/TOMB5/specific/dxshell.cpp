@@ -252,6 +252,13 @@ static UINT g_gammaW = 0, g_gammaH = 0;
 static bool g_gammaRefused = 0;	// one -log line per device, not per frame
 static long g_gammaNamed = -1;	// the value the -log line last named
 
+/* With -log, what stage 0 held as the last present's pass drew (DXGammaSeen,
+ * the loading screen's LOADFRAME line): 0 no pass drew, 1 its copy, 2
+ * another texture or none, which g_gammaSeen names. A name only: it is
+ * compared, never drawn with. */
+static long g_gammaDrew = 0;
+static const void* g_gammaSeen = 0;
+
 // Everything the pass made; the device's own release and reset come here.
 static void GammaRelease()
 {
@@ -396,6 +403,12 @@ static bool GammaPass(LPDIRECT3DDEVICE9 dev, ulong row)
 		return GammaRefuse(row, "copy", hr);
 	}
 
+	/* From the read of stage 0 to its restore under the stage lock: while
+	 * a level loads, the loading thread sets stage 0 too as the level's
+	 * pages go (texture.cpp), and a set between the copy's bind and the
+	 * draw would fill the whole window with something else. */
+	TextureStageLock();
+
 	for (i = 0; i < nrs; i++)
 		dev->GetRenderState(rs[i], &rs_old[i]);
 
@@ -445,6 +458,19 @@ static bool GammaPass(LPDIRECT3DDEVICE9 dev, ulong row)
 	}
 
 	dev->BeginScene();
+
+	if (gLogEnabled)
+	{
+		LPDIRECT3DBASETEXTURE9 seen = 0;
+
+		dev->GetTexture(0, &seen);
+		g_gammaSeen = seen;
+		g_gammaDrew = seen == g_gammaCopy ? 1 : 2;
+
+		if (seen)
+			seen->Release();
+	}
+
 	hr = dev->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, 2, quad, sizeof(quad[0]));
 	dev->EndScene();
 
@@ -476,6 +502,8 @@ static bool GammaPass(LPDIRECT3DDEVICE9 dev, ulong row)
 
 	for (i = 0; i < nrs; i++)
 		dev->SetRenderState(rs[i], rs_old[i]);
+
+	TextureStageUnlock();
 
 	if (vb_old) vb_old->Release();
 	if (decl_old) decl_old->Release();
@@ -515,6 +543,8 @@ bool DXGammaStart()
 {
 	const ulong row = tomb5.gamma;
 
+	g_gammaDrew = 0;
+
 	if ((long)row != g_gammaNamed)
 	{
 		g_gammaNamed = (long)row;
@@ -532,6 +562,14 @@ void DXGammaFinish(bool curved, HRESULT hr)
 {
 	if (curved && hr != D3DERR_DEVICELOST)
 		GammaRestore(G_dxptr->lpD3DDevice);
+}
+
+/* With -log, the last present's pass: 0 no pass drew, 1 it drew with its
+ * copy, 2 with what `tex` names instead (see g_gammaDrew). */
+long DXGammaSeen(const void** tex)
+{
+	*tex = g_gammaSeen;
+	return g_gammaDrew;
 }
 
 HRESULT DXShowFrame()

@@ -17333,6 +17333,103 @@ lines wait for play.
 
 **Commits.** `eea6c21f`.
 
+### The bulbs' fog in one pass a frame, and the mill's old sheets of mist go (#290)
+
+2026-11-01.
+
+**What.** With `hd_fog` 1 the fog bulbs' pass is one draw a frame: one quad over the union
+of the rectangles of the taken bulbs' fields - the whole screen where one of them reaches
+the near plane - in which every pixel walks every bulb of the frame, farthest first, takes
+each bulb's column as before (its share of the summed fields and its breath at the middle
+of each of its four pieces) and lays the bulb's veil over the veils of the bulbs behind
+it; the frame is blended once. The breath's lattice is read from a table: the hash at the
+64 x 64 x 64 points of its fold in a 16-bit volume texture, blended by the card's filter
+at the smoothstep of the place in the cell; the processor's hash fuses its multiply-adds
+as the card does, so the table holds the lattice the hashing shader drew. The old sheets
+of mist go where the bulbs' fog stands: a room on the classic path's mist branch
+(`ROOM_MIST`, and not `ROOM_REFLECT` with `ROOM_REFLECT_CEILING`) lays additive faces over
+its opening to the room below - the faces whose every corner lies at its lowest floor and
+carries the shimmer mark - and the HD path restored them over the HD room as it restores
+water; with `hd_fog` 1, where the pass draws, a sheet whose box meets a bulb's sphere or
+whose centre lies in its field is left out, as the art's mist is. ANDY3 alone carries such
+sheets: four in room 107 over the sluice by the mill house's door, two in room 104 over
+the channel east of it, all six in the fields of bulbs 7 and 8 and left out. The first
+frame line ends in ` fog_pass=N fog_sheets=N`, an `HDLOG fogsheet level= room= face=
+dropped= meets= gap=` line names each sheet left out at the load, and PROFLOG's lines end
+in the pass's own times, ` fog=` the processor's and ` fog_gpu=` the card's.
+
+**Why.** In play at ANDY3's mill with the field (#287), flat grey-green panes with
+straight edges hung in the air over the sluice and its bank and lay over the slope by the
+mill house, a bright cross where two of them met; and in the densest groups of bulbs the
+pass cost more than a millisecond (RICH2's bulb 4 2.04 ms, ANDY1's bulb 12 1.14).
+
+**Measured.** The panes are classic faces at y 8,448 of rooms 107 (its faces 35, 36, 37
+and 49 in the classic order) and 104 (faces 0 and 3), 1,024 square, texinfos 2312, 2313
+and 2295, additive, double-sided and in no animated range - the classic shimmer of the
+mist's marked corners moves them; the level's log restores them ("restored=4 of 4 face(s)
+at y=8448", "restored=2 of 2"), the .TRG covering none. Room 104's two are diagonal
+neighbours: the cross is their shared corner. The census of the fifteen levels (RoomProbe
+`-fogsheets`): rooms with `ROOM_MIST` stand in ANDY3 alone (28, 69, 87, 104, 105, 107 and
+210), and only 104 and 107 carry sheets, all six restored over the HD room, none in a room
+without art; the faces of the animated ranges lie in water rooms or in rooms of neither
+branch - flat water in thirteen levels, the falls tilted or upright in ANDREA3 (8), ANDY1
+(2), JOBY3 (1), JOBY5 (1) and RICHCUT2 (30) - none of them mist: the data tells mist by
+the room's branch, not by its texture. The price of #287's pass at RICH2's bulb 4 (1.77 ms
+at 2,560 x 1,440): 0.14 ms of it the eleven quads without their columns, 1.05 the hashed
+breath, 0.12 the fields' sum - one quad instead of eleven saves about a tenth of a
+millisecond, the table the most of the rest.
+
+**How.** `specific/hd/hd_fog.h`: `HDFogHash` fused (`fmaf`), `HD_FOG_PASS_SLOTS` (16),
+`HD_FOG_TABLE` (64), `HDFogPassCount` (the shader's loop bound), `HDFogUnion` (the one
+rectangle) and `HDFogSheetRoom` (the mist branch), the declarations of
+`HDRenderFogStands`, `HDRenderFogPrepare`, `HDRenderFogClock` and `HDRenderFogClockRead`
+and `HDRenderFogQuadsProbe`. `specific/hd/hd_shader/hd_fog.hlsl`: `FogPS` walks the slots
+unrolled (ps_3_0 indexes no constant at run time), the bulbs in c10 to c53 (the fields and
+their peaks, the colours with the density, the reaches, the own radii), c3 the count and
+the slots a draw walks, the table in s1. `specific/hd/hd_render.cpp`: `fog_lattice` and
+`fog_table` (L16, or eight bits in every channel where the card filters no L16 volume),
+`fog_ready` (the shaders and the table once a device; without them no pass, and the bulbs
+keep their haze), `fog_stands` (asked by `fog_add_left` and for the sheets), `fog_draw`
+one quad, `fog_clock_*` (the log's timestamps, a ring of four read back without a wait).
+`specific/hd/hd_level.cpp`: `ReportFogSheets` (each restored face of a room on the mist
+branch held against the bulbs as the art's mist is, its verdict into
+`HDRoomWaterFace.fogged`, the `fogsheet` lines), `HDRoomWaterFaceFogged`, the frame line,
+the clock round `HDRenderFrameEnd`; `specific/drawroom.cpp`: `InsertRoomWater` leaves a
+fogged face out while the pass stands in; `specific/profile.cpp`: `ProfileNoteFog`.
+RoomProbe: the one pass's line after the picture, `-fogquads` and `-fogsheets` (namespace
+`probesheets`). ModernTest: `fog_pass`, 9 checks.
+
+**Proof.** The parity sets of #287 (79 jobs at 960 x 540, RoomProbe of cd24dda6 against
+this entry's): without bulbs at `hd_fog` 1 and at 0, 79 of 79 byte-identical; with the
+level's bulbs at `hd_fog` 0, 79 of 79; at 1 the 72 that #287 left as they were
+byte-identical, and the 7 its field changed within 4 of 255 per channel - ANDREA1's census
+47 pixels by 1; ANDY1's 66,889 by 1 and 2,298 by 2; ANDY3's 19,535 and 1,528; RICH2's
+26,022, 899 and 6 by 1 to 3; RICH3's 358,810, 30,591 and 29; the HD view of ANDY3's room
+17 371,587, 43,244, 1,611 and 80 by 1 to 4, of its room 34 371,207, 18,082 and 2. The same
+shader one bulb a draw, the frame blended after each bulb as the quads blended it
+(`-fogquads`), lies within 1 of 255 of #287 but for 1, 9, 45 and 10 pixels by 2 (ANDY3's
+census, RICH3's, the two views; by 1 47, 664, 813, 902, 6,633, 16,338 and 9,966 pixels):
+the rest is the blend - eight bits after every bulb before, once at the end now. The price
+(medians of three runs at 2,560 x 1,440, #287 then this): E1 0.38 / 0.16 ms, E2 0.44 /
+0.18, E3 0.24 / 0.12, A3mill 0.34 / 0.19, M1 0.93 / 0.43, I8 0.88 / 0.39, H 0.78 / 0.35,
+C3 0.85 / 0.39, the sluice's eye 0.82 / 0.36, RICH2's bulb 4 1.78 / 0.94, ANDY1's bulb 12
+1.14 / 0.53, and a lone bulb (ANDREA1's bulb 0, the eye in its field) 0.27 / 0.10.
+
+**The stutters.** The play test's log at the mill: the seconds with a frame of 13 to 14 ms
+(20, 43 and 49 s into the level) spent it in the present (`flip` at most 11.7, 13.1 and
+11.8 ms), every phase of the frame's own work as in the seconds around them - a frame that
+waited out a second refresh of the 165 Hz screen; the pass is no phase there and costs the
+card under half a millisecond at the mill. The two long frames (46 s, 904 ms; 98 s, 760
+ms) lie outside the work (2.86 and 2.15 ms in their late lines): the two pictures taken.
+None of it is the fog's; what holds the present is not in the log, which now carries the
+pass's times to rule it in or out.
+
+**Left.** The game was not run: the look, the `fogsheet` lines and the profile's fog times
+wait for play. The pass's bytecode is 54 KB, its `.inc` 413 KB of text (#287's 49 KB): the
+bulbs and the fields unrolled. RICH2's bulb 4 is the tightest eye at 0.94 ms.
+
+**Commits.** `668a5140`.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -17636,3 +17733,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #284 | A Zip call with no scene ends on a skip as one under a scene does |
 | #285 | The frame a flyby ends on is drawn with the camera it leaves |
 | #287 | The bulbs' fog reaches as a field, and the mist it stands in goes |
+| #290 | The bulbs' fog in one pass a frame, and the mill's old sheets of mist go |

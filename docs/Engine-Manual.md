@@ -5051,7 +5051,11 @@ chef holds his knife. He goes for Lara as soon as he wakes, takes twice the
 chef's hits and his punch hurts twice as much as the knife; both stand in
 `Balance.txt` as lines of his own (`HP_Brawler` 120, `DMG_Brawler_Fist`
 400). He dies the way the chef does, with the soldiers' gunshot death. With
-the Remaster installed he wears its model of that soldier.
+the Remaster installed he wears its model of that soldier. His reach is his
+own, measured on that fist: he swings only once Lara is within about 425
+units of him, where the chef with his knife swings from 730, and the punch
+lands as it crosses in front of him — on a Lara who stands or backs away,
+not on one who runs, and it passes over her head when she crouches.
 
 **The drone is the gunship from Red Alert, shrunk to the size of the
 vulture.** The helicopter in Red Alert stays what it was: it flies along its

@@ -17593,6 +17593,71 @@ and factor and prints the skeleton test's numbers.
 
 **Commits.** `f6bbae70`, `ee99cc56`.
 
+### The brawler's strike starts and lands where his fist reaches (#291)
+
+2026-11-01.
+
+**What.** The brawler has a reach of his own. His swing begins, and his walk ends, when
+the AI's distance to Lara is below 375 units where the chef's is 682; his hit lands once a
+swing either on the touch bits, as the chef's does, or when on frame 15 or 16 of the
+strike Lara's pivot lies within 445 units of his, within 22.1 degrees of his arm, with her
+body at the height of his fist and a line of sight from his torso to hers. Damage, blood,
+sound, the scene hold and the once-a-swing flag are as they were. The chef keeps every
+vanilla number: the distance 682 squared, now `CHEF_SWING` in `game/chef.cpp`, the
+touch-bit hit, the knife. With `-log`, a `BRAWLLOG item= tick= state= dist= ahead= frame=
+touch= reach= hit=` line when his swing starts (`state=start`) and when it lands (`hit`)
+or ends without landing (`miss`).
+
+**Why.** He swung from up to 732 units pivot to pivot - CreatureAIInfo measures from 50
+units ahead of him (`pivot_length`) to where Lara will be 14 frames on at her speed - and
+his fist reaches 345: between the two he struck the air, stood, since state 4 only walks
+beyond the swing distance, and struck again, and never closed the gap. `BoneCheck -reach`
+(a new mode, Preparation/Tools) poses the fist's sphere, radius 51, on every frame of the
+chef's strike (animation +2, 46 frames at one a tick) on his meshes, and the same rows
+come out of slot 471 of a randomized level: 310 ahead of his pivot at the first frame, 188
+at frame 12, then the slash across his front - 344 on frame 15 at 1.6 degrees right of his
+facing, 345 on frame 16 at 22.1, 381 to 515 above his floor - then out to the right and
+slowly back to guard, 302 to 353 ahead from frame 29 on. The chef's knife, radius 138,
+reaches 473 on frame 16. The reach is the slash's 345 plus Lara's radius, 100. A swing
+begun is checked on frame 15 sixteen ticks later. Standing still Lara is where she was: it
+lands up to 445, where the AI saw 395. Walking back, 10 units a frame (her animation 40),
+she has gone 160 and the AI saw her 140 further: it lands up to 285, where the AI saw 375,
+the row that binds and so the number. Running, 47 a frame, the AI sees her 658 further and
+he does not swing; she outruns his walk of 19. Crouched, her frame box 347 high, she ducks
+under the slash, and his fist's sphere touches her on no frame of the strike. The touch
+bits alone reach a standing Lara up to 420 on the slash: her spheres have to meet the
+small fist's.
+
+**How.** `game/chef_rule.h`: the measured numbers - `BRAWLER_HIT_FIRST` and `_LAST` (15,
+16), `BRAWLER_FIST_FRONT` 345, `BRAWLER_REACH` 445, `BRAWLER_CONE` 4029,
+`BRAWLER_FIST_TOP` and `_BOTTOM` (515, 381), `BRAWLER_SWING` 375 - with the measurement in
+the comment, the table's inputs (`pivot_length` 50, the look-ahead 14, the walk back 10,
+the torso mesh 7), `BrawlerSwingSquared` and `BrawlerFistReaches`. `game/chef.cpp`:
+`CHEF_SWING`, the slot's own distance in states 4 and 5, `BrawlerReaches` (her pivot
+against his, her direction off his facing turned by the torso's twist, her frame box
+against the fist's band, on a living Lara, and `LOS` from his torso joint to her
+`LMX_TORSO`, as `game/drone.cpp` does), the hit on `touch || reach` with the reach the
+brawler's alone, and `BrawlLog`. ModernTest gains `brawler_reach`, 29 checks: the numbers
+against the measurement, the swing distance against the table, the rule's edges, and
+`chef.cpp`'s own text - the chef's constant, the touch-bit hit as it was, the seam, the
+line of sight - with the inputs read out of `setup.cpp`, `box.cpp` and `lara.cpp`.
+
+**Decisions.** The hit window is the slash and not the way back: from frame 29 the arm
+returns to guard at about 10 units a frame, and the touch bits catch it there as before.
+The cone is taken against his arm, his facing turned by the torso's twist, joint 0, which
+the control aims at half Lara's angle. The line of sight can matter: his pivot keeps 102
+units off a wall and hers 100, so a convex wall corner can stand between two pivots from
+286 units on, inside the reach; a closed door cannot, its sector is 1024 deep. Lara's
+nearest stand in front of him is his frame box's front, 309 to 363 while he stands: once
+her spheres meet his, `ItemPushLara` puts her pivot there, and his object radius (102)
+never meets her - it is `CreatureCreature`'s, which passes over Lara, and the wall
+shift's. His walk ends only at the end of a walk cycle, 36 frames of 19 units, as the
+chef's does, so he still walks on up to a cycle past the swing distance and pushes a Lara
+who stands before him. No parity is claimed for him; the chef's path is vanilla's by
+construction and ModernTest reads it out of `chef.cpp`.
+
+**Commits.** `84681cb0` (BoneCheck -reach), `68c44d94` (the reach, the seam, ModernTest).
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -17945,3 +18010,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #287 | The bulbs' fog reaches as a field, and the mist it stands in goes |
 | #288 | JOBY2's cutscene soldier as a pool enemy: the brawler on a slot of his own; section 3 (the randomizer) |
 | #289 | RICH3's gunship flies after Lara as a drone at the vulture's size |
+| #291 | The brawler's strike starts and lands where his fist reaches |

@@ -432,7 +432,7 @@ from", carries the tables. The numbers 146 to 159 are not used.
     the face's where more than half of a part's corners disagree (`BuildGlowParts`,
     `HDGlowFaceNormal`; `hd_glow.hlsl` 205 to 215), is OWN, re-derived on this project's
     own A/B of 2026-10-22 (entry 475): the per-part choice against the file's normal and
-    the face's normal on every part, over the glow's 46 views.
+    the face's normal on every part.
 32. **Where a page is looked for: its own game, the sibling games, then
     `WHITE.DDS`; a missing page is white, never black.** TROne,
     `host/render/hd_pages.cpp` (`upload_shared`, `upload2`). THIRD and PLACE.
@@ -886,8 +886,8 @@ carries the tables.
     ANDY3's 29 split squares of the pond's island and room 12); OWN: taking
     the ceiling's highest corner as the surface, the height
     `GetWaterHeight` breaks Lara's head out at, and keeping a split square
-    whole under the level's raised triangle, the ask of the play
-    test of 2026-10-09.
+    whole under the level's raised triangle, a request reported for this
+    project, 2026-10-09.
 99. **No water square over an island or a rim** - a square whose dry floor
     stands more than a click (256) over that top at every corner is none.
     OWN, free choice of the click; count on our data: ANDY2's 16 squares of
@@ -971,9 +971,9 @@ carries the tables.
     that frame); the gloss variant, with no slots left, is not drawn under
     the water (entry 119). DATA
     for the reason: ANDREA2's sixteen fog bulbs in its water rooms, colour
-    0.81 1.00 0.87, radius 1,472 to 5,152 - the flat pale haze of the play
-    test of 2026-10-09 (the rooms' headers, `nFogBulbs` and `fogbulb`, read
-    with the randomizer's `Tr5Level`); OWN: the replacement.
+    0.81 1.00 0.87, radius 1,472 to 5,152 - the flat pale haze reported for
+    this project, 2026-10-09 (the rooms' headers, `nFogBulbs` and `fogbulb`,
+    read with the randomizer's `Tr5Level`); OWN: the replacement.
 111. **The flood under a sheet** - in a room whose body draws its sheet and
     hides the remaster's art, RoomVS's flood lays no swell, UV wobble or
     surface caustic on any vertex (`gSwell.z`, set by `set_room_rows`); the
@@ -2048,9 +2048,8 @@ carries the tables.
     stands on the crack's bottom: OWN. The frame's copy is taken for a column too
     (`HDSpringFrameCopy`, `HDSpringColumnInFrame`): both ends more than a unit in front
     of the eye (`HDSpringColumnFront`, the draw's own test), a weight over 0, the box of
-    its ends widened by their half-widths on the screen. OWN, chosen on the camera lines
-    of a `-log` run in play at the fountain (no sheet's room in the frame) and a fan of
-    29 views round the column (RoomProbe, a measuring build).
+    its ends widened by their half-widths on the screen. OWN, chosen at the fountain, no
+    sheet's room in the frame, and round the column (RoomProbe, a measuring build).
 201. **The file's spring row** - `spring <x> <z> <strength> [<seconds>]`
     in `hd_water.txt`: changes the table's spring of its level and room,
     takes it away at strength 0, else adds one; a row whose one key it is
@@ -2147,13 +2146,13 @@ carries the tables.
     test (`hd_spring.h`, `HDSpringCrackSeen`, `HDSpringCrackFloorFit`): the eye 8 units
     over the bottom, and over the outline's highest point or else over the plane of
     least squares through the outline's heights at the eye's own column. OWN, chosen on
-    RoomProbe pictures of a fan of 42 views round ANDREA2's rule crack with the test
-    removed. The eye's test asks no more for the bottom; for an eye under the bottom's
-    plane (`HDSpringCrackBottom`) the hole writes the far plane's depth in black and the
-    walls fill the slit, and the eye must stand over the level's own floor at its column
+    RoomProbe pictures round ANDREA2's rule crack with the test removed. The eye's test
+    asks no more for the bottom; for an eye under the bottom's plane
+    (`HDSpringCrackBottom`) the hole writes the far plane's depth in black and the walls
+    fill the slit, and the eye must stand over the level's own floor at its column
     (`HDSpringCrackGround`: of the `.TRG`'s floor read 4,096 round the outline, the
-    height nearest the eye lies under it by the lift). OWN, chosen on that fan's rows
-    under the bottom and three cameras of `-log` runs in play.
+    height nearest the eye lies under it by the lift). OWN, chosen on those pictures
+    under the bottom.
 208. **The crack's walls** (`hd_spring.hlsl`, `CrackPS`) - the floor's page
     folded over the lip (a place d down the wall takes the floor's page d
     further in along the edge's inward normal, wrapped), the floor's light
@@ -2425,7 +2424,7 @@ carries the tables.
     `HDMarblePlanesPick`; `hd_marble_planes`) - a frame's floor heights
     ordered by the share of the screen their faces cover, the higher first
     between equals, at most the cap (default 2). OWN, free choice; DATA: the
-    cap's cost at 1, 2 and 3 planes at 27 views.
+    cap's cost measured at 1, 2 and 3 planes.
 234. **The mirror's edges** (`hd_render.cpp`, `marble_make`,
     `g_marble_rows`, the flip's half pixel; bilinear reading) - the target
     read at 2 X + W - x plus a half, Direct3D 9's pixel centre, and drawn at
@@ -2706,11 +2705,10 @@ carries the tables.
     classic room's box and make a copy's square leave the level. OWN, the
     rule a project decision of 2026-10-16 (the copies dropped for the
     planar mirror); the square rule RoomProbe `-tankcensus`'s (8 mirrored,
-    a third); 2 from the faces' spread (entry 259), 64 a free choice
-    measured: without it two triangles beside RICH2's corridor showed as
-    holes from room 121 (562 and 445 pixels at two views), with it none. DATA: RICH2
-    119,319 triangles; at the measurement's 28 views the pictures with and without the
-    copies differ by at most 31 pixels (a crack between floor pieces the copy filled).
+    a third); 2 from the faces' spread (entry 259), 64 a free choice measured: without
+    it two triangles beside RICH2's corridor showed as holes from room 121, with it
+    none. DATA: RICH2 119,319 triangles; the pictures with and without the copies
+    differ only at a crack between floor pieces the copy filled.
 261. **A mirror face wholly under its own room's floor is none**
     (`hd_render.cpp`, `marble_build`, `kMarbleBuriedIn`) - a face whose
     centroid, corners and edges' middles (these drawn an eighth of the way
@@ -2739,10 +2737,9 @@ carries the tables.
     `HDRenderMarbleWarmUp`; `hd_level.cpp`, `BuildWaterSheets`) - once a
     level the mirror's target made and the plain, gloss and glow room
     shaders drawn once with the clip plane on, and the layer's pair once,
-    as the water's warm-up does. OWN, after this project's water warm-up;
-    DATA: the first marble draw at 2560 x 1440 at two views seen in play 42 ms (median
-    of five) before, 0.08 to 0.67 after; the load 27.7 to 48.6
-    ms more over the sessions measured.
+    as the water's warm-up does. OWN, after this project's water warm-up; DATA: the
+    first marble draw cost 42 ms before, under 1 ms after; the load 27.7 to 48.6 ms
+    more.
 266. **RoomProbe's marble measurement** (`Preparation/Tools/Diagnose/
     RoomProbe.cpp`, `-marbleclip`, `-marblecopies`, the `marbleplane:`
     lines and the `marble:` line's spread, rising, copies, buried and
@@ -2766,10 +2763,9 @@ carries the tables.
     the first listed room's matrix moved by the two origins' difference
     (as `DecideStand`), its own lighting and the frame's extinction. OWN,
     the rule of 2026-10-17 to draw always, and the place, chosen
-    over the reach walk (`draw.cpp`, beside `CarryArt`), which the dive's
-    visibility path does not run; DATA: RoomProbe `-undertick` over 306 views of the
-    dive with and without it (the 164 log lines without room 19 on the list, the six
-    edges, 40 views of the first measurement, every 40th log line).
+    over the reach walk (`draw.cpp`, beside `CarryArt`), which the dive's visibility
+    path does not run; DATA: RoomProbe `-undertick` along the dive with and without
+    it, at the frames whose list leaves room 19 out.
 269. **The surface room in the log and the probe** (`hd_level.cpp`, the
     `WATERLOG ... undergate` line's `surface=`; RoomProbe `-surfaceroom`,
     `-surfacealways`, `-undertick`'s `carried=`) - OWN, this project's
@@ -3145,10 +3141,8 @@ carries the tables.
 309. **The marble mirror's plane in its clip** (`hd_render.cpp`,
     `kMarbleClipOver` 4, now a number of its own, and `HDRenderMarbleDraw`) -
     the reflection in the plane 4 units over the floor where the clip
-    lies, not in the floor. OWN, the rule; DATA: RoomProbe `-marblevoid`
-    at 51 views (15 seen in play, 28 and 8 of earlier measurements), the floor that
-    shows none of the mirrored rooms 296,133 pixels before and 274,108 after, the strip
-    at the walls' foot gone (three views: 350 to 2, 901 to 4, 1,260 to 0); what is left
+    lies, not in the floor. OWN, the rule; DATA: RoomProbe `-marblevoid`: less floor
+    shows none of the mirrored rooms, the strip at the walls' foot gone; what is left
     is floor whose mirrored room is not drawn (entry 314) or lies out of the target.
 310. **RoomProbe's edge measurement** (`Preparation/Tools/Diagnose/
     RoomProbe.cpp`, `-marblevoid`, `-marbleplanefloor`) - OWN, this
@@ -3182,16 +3176,13 @@ carries the tables.
     `HDRenderMarbleOver`, `HDRenderMarbleBeside`, `HDRenderMarbleRooms`,
     `marble_replay_over`, `g_marble_over_depth` 3; `hd_marble_math.h`,
     `HDMarbleOverRooms`; `hd_level.cpp`, the level's portals and flip
-    table) - OWN, the rule and the depth; DATA: ANDREA1's church, rooms 157
-    and 186 over room 165 out of the frame's list in a `-log` run in play, their
-    reflection (the church's upper part, 2,560 to 4,352 units over the floor) 17,544
-    pixels at one view; the same rooms over room 165 beside the stairs' room 174 (three
-    views: 7,737, 3,792 and 3,839 pixels of floor showing nothing, 309, 0 and 1 after);
-    RICH2's shaft, room 68 over room 66 (14,629 to 0); over 50 views 207,814 pixels
-    without the rooms over, 176,722 at depth 1, 160,294 at
-    2, 146,969 at 3, the rest the sky; a portal's normal pointing into its
-    room (TR5's room data), so down out of a ceiling; the box cut against
-    the mirrored view, the flip table as `hd_level.cpp`'s `g_room_group`.
+    table) - OWN, the rule and the depth; DATA: ANDREA1's church, rooms 157 and 186
+    over room 165 out of the frame's list, their reflection the church's upper part,
+    2,560 to 4,352 units over the floor; the same rooms over room 165 beside the
+    stairs' room 174; RICH2's shaft, room 68 over room 66; less floor showing nothing
+    at each depth from 1 to 3, the rest the sky; a portal's normal pointing into its
+    room (TR5's room data), so down out of a ceiling; the box cut against the mirrored
+    view, the flip table as `hd_level.cpp`'s `g_room_group`.
 315. **The models' warm-up for the marble mirror** (`hd_model.cpp`,
     `HDModelMirrorWarmUp`, once for the model shaders' life; `hd_level.cpp`,
     after `HDObjectLevelBuild`) - OWN, after this project's room warm-up
@@ -3776,9 +3767,8 @@ carries the tables.
     the target is, two pixels of the frame wider, and a room, stand range
     or room over whose box lies past the mirrored view, under its clip or
     beside the scissor not drawn. TEXTBOOK: scissoring and box culling;
-    OWN: the two pixels; the target's turn and rows are the
-    record's (entry 234); DATA: byte-identical pictures at the cap of 2 at three views
-    seen in play, RICH2's draw calls at one view 1,340 for 8
+    OWN: the two pixels; the target's turn and rows are the record's (entry 234);
+    DATA: the pictures unchanged at the cap of 2, RICH2's draw calls 1,340 for 8
     planes before and 792 for 9 after.
 388. **The least a plane shows** (`hd_marble_math.h`, `HDMarbleShown`,
     `HD_MARBLE_LEAST` 0.004; `hd_render.cpp`, `g_marble_least`) - a plane
@@ -3811,9 +3801,9 @@ carries the tables.
 391. **The store of the planes' own faces** (`hd_render.cpp`,
     `g_marble_store`, `marble_build`'s own height) - the leaning and rising
     faces kept by group and joined to the level faces at every run, the
-    rise tested against a face's own height. OWN; DATA: RoomProbe
-    `-reload` at a RICH2 view, 30 sloped planes before the reload and 0 after it before
-    this rule, 55 and 55 and the picture byte-identical with it.
+    rise tested against a face's own height. OWN; DATA: RoomProbe `-reload` in RICH2,
+    the sloped planes lost at a reload before this rule (30 to 0) and kept with it (55
+    and 55).
 392. **ANDREA1's church mosaic in the mirror column** (`hd_gloss_pages.h`,
     169, 170 and 183, class `A`) - OWN, a request of 2026-10-18; DATA: RoomProbe
     `-marblesteep -marblepages 169,170,183`, faces of them facing up only in rooms 165
@@ -3887,9 +3877,9 @@ carries the tables.
     to the sheet past the eye's own height under its plane added to the sheet's way
     through the water at 1/32 of itself, so the sheet fades into the water's colour
     toward the horizon and adds under 1 of luma within 4,096 units of its edge
-    (RoomProbe, the four views that see it). OWN: the 45 degrees, and the share, the
-    largest halving step from 1 that keeps every view under the sheet in its band (24
-    views, 0.62 to 0.96 of before; 1/16 left one under it, 1/4 four, down to 0.14).
+    (RoomProbe). OWN: the 45 degrees, and the share, the largest halving step from 1
+    that keeps the view under the sheet in its band (0.62 to 0.96 of before; 1/16 and
+    1/4 fall out of the band, down to 0.14).
 400. **RoomProbe's sea knobs and ModernTest's checks** (`Preparation/Tools/Diagnose/
     RoomProbe.cpp`, `-underlookknobs` with twenty-five numbers, the `-underlook` line's
     `power`, `break`, `edge` and `reach`, `HDRenderWaterSeaKnobs` before the one
@@ -4236,13 +4226,11 @@ carries the tables.
     target up and down), its passes without the depth write (the opaque pass keeps it
     where the sky has two opaque parts), the held depth laid from its own triangles
     through the layer's mask shader; `HDRenderSky`'s third call left out. OWN; DATA:
-    RoomProbe `-skycensus` over the fifteen levels (only opaque and alpha sky parts; RICH3
-    two opaque parts, TITLE two opaque groups); GPU timestamps round the sky, 2,560 x
-    1,440: at four views 0.46 to 0.27 ms, 1.37 to 0.89, 0.32 to 0.19 and 0.63 to 0.66;
-    the pictures byte-identical to the sky drawn first at 73 places seen in play (146)
-    and at 57 views with the sky's groups; one
-    row each way the least that keeps them so (without it 4 of 146 differ by a
-    pixel).
+    RoomProbe `-skycensus` over the fifteen levels (only opaque and alpha sky parts;
+    RICH3 two opaque parts, TITLE two opaque groups); GPU timestamps round the sky at
+    2,560 x 1,440, 0.46 to 0.27 ms, 1.37 to 0.89, 0.32 to 0.19 and 0.63 to 0.66; the
+    pictures the same as with the sky drawn first, with the sky's groups as well, and
+    one row each way the least that keeps them so.
 443. **RoomProbe `-marblepop` and the `marblerooms` line; ModernTest's six checks of
     `HDMarbleSolidRun`** (`Preparation/Tools/Diagnose/`) - the walk's pops in the tool:
     each change of the frame's room list drawn at its frame's camera with the rooms
@@ -4431,19 +4419,18 @@ carries the tables.
     OWN; DATA: the census over the fifteen levels, 253 parts, 208,476 corners,
     53,046 disagreeing; 31 parts from 0.514 of their corners disagreeing up, the
     other 222 at most 0.486, 190 of them none. The A/B of 2026-10-22, RoomProbe at
-    2560 x 1440 over the glow's 46 views under the per-part choice, the file's
-    normal everywhere and the face's everywhere. The aims are the measurement of
-    #179's (fewer clipped, white and hue-pinned pixels, then fewer steps over 40 of
-    255 at equal means); #179 set only pass marks, so the pairwise thresholds are
-    this project's own, set for this A/B before the verdict: a difference in the
-    three shares counts over 0.05 percentage points (a twentieth of #179's pass
-    mark of 1 per cent), then the fewer steps win over 5 per cent and by 2 or more,
-    at a mean no lower than 95 per cent of the other's; a tie or a marginal result
-    keeps the per-part choice. 46 ties in each pair, no setting winning a view; the
-    means over the views 0.067 per cent clipped under
+    2560 x 1440 under the per-part choice, the file's normal everywhere and the
+    face's everywhere. The aims are the measurement of #179's (fewer clipped, white
+    and hue-pinned pixels, then fewer steps over 40 of 255 at equal means); #179
+    set only pass marks, so the pairwise thresholds are this project's own, set for
+    this A/B before the verdict: a difference in the three shares counts over 0.05
+    percentage points (a twentieth of #179's pass mark of 1 per cent), then the
+    fewer steps win over 5 per cent and by 2 or more, at a mean no lower than 95
+    per cent of the other's; a tie or a marginal result keeps the per-part choice.
+    Every pair a tie, no setting winning; the means 0.067 per cent clipped under
     all three, 494.15, 494.15 and 494.17 steps, 13.05, 13.02 and 13.12 of 255. On
     the parts whose corners disagree the file's normal fades the card as if seen
-    edge-on (ANDREA3 room 36's view keeps 1,622 of 64,335 glow pixels).
+    edge-on, in ANDREA3's room 36 nearly to nothing.
 476. **RoomProbe `-glowface shipped|file|face`; ModernTest's `glow_normal`**
     (`Preparation/Tools/Diagnose/`) - the normal forced on every glow part before
     the level is built, for the A/B, and 8 checks of `HDGlowFaceNormal`. OWN.

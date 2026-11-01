@@ -17562,7 +17562,7 @@ The HD model build reads a new sidecar line, `scale <slot> <num> <den>`, and shr
 donor's `.TRM` by it, so GUNSHIP.TRM stands on the shrunk skeleton. With `-log`, a
 `DRONELOG item= tick= state= dist= los= fire=` line at every change of state and one per
 shot, which ends in `shot= dmg=`; the `HDLOG donor` line of a shrunk slot ends in
-`scale=`.
+`scale=`. Play on 2026-11-01 raised both defaults to 100 hit points and 50 a hit.
 
 **Why.** At home the gunship is a set piece: seven sectors long, it runs along one wall on
 a path of its own and nothing can hurt it. As an enemy in a random level none of that

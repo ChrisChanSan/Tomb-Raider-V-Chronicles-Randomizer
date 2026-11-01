@@ -136,7 +136,12 @@ static const BALANCE_LINE balanceLines[] =
 	HEALTH("HP_Huskie",			hpHuskie,		25,	24,		HUSKIE),
 	HEALTH("HP_Lion",			hpLion,			50,	40,		LION),
 	HEALTH("HP_Crow",			hpCrow,			30,	10,		CROW),
-	HEALTH("HP_Drone",			hpDrone,		60,	60,		DRONE),
+	/*
+	 * The drone's two lines were tuned in play on 2026-11-01: 100 hit
+	 * points and 50 a hit. Core never made it an enemy, so the vanilla
+	 * column repeats the standard, as the brawler's does.
+	 */
+	HEALTH("HP_Drone",			hpDrone,		100,	100,		DRONE),
 	HEALTH("HP_TRex",			hpTRex,			350,	800,	SAS),
 	HEALTH("HP_Raptor",			hpRaptor,		80,	90,		REAPER),
 	HEALTH("HP_Compy",			hpCompy,		25,	10,		SAILOR),
@@ -206,7 +211,7 @@ static const BALANCE_LINE balanceLines[] =
 
 	DAMAGE("DMG_Chef_Knife",	dmgChefKnife,		200,	150,	"  melee fighter in the enemy pool - was 80"),
 	DAMAGE("DMG_Brawler_Fist",	dmgBrawlerFist,		400,	400,	"  the chef's strike with an empty fist"),
-	DAMAGE("DMG_Drone",			dmgDrone,			5,	5,		"  per hit of the drone, half the attack helicopter's"),
+	DAMAGE("DMG_Drone",			dmgDrone,			50,	50,		"  per hit of the drone, five times the attack helicopter's"),
 	DAMAGE("DMG_Skeleton_Strike", dmgSkeletonStrike, 400,	400,	0),
 	DAMAGE("DMG_Gladiator_Strike", dmgGladiatorStrike, 200,	120,	0),
 	DAMAGE("DMG_God_Strike",	dmgGodStrike,		60,	40,		"  Roman god in melee"),

@@ -9,16 +9,18 @@
 #define IDI_APPICON 101
 IDI_APPICON ICON "TR5Randomizer.ico"
 
-// The interface's background image - the same project banner, from
-// Logos\Tomb5 Rando Logo 1920x1080.png. Embedded as JPEG and not as PNG:
-// this image is photo-like, PNG needs 3.1 MB for it, JPEG at quality 88
-// only 0.5 MB. The difference is not visible because the image lies
-// heavily darkened behind the interface.
+// The interface's background picture - the same project banner, from
+// Logos\Tomb5 Rando Logo 1920x1080.png - is NOT embedded here. It ships as
+// Background.jpg beside the EXE (TR5Randomizer\package\, which the release
+// copies next to it), and Main.cpp reads it from the EXE's folder at start.
+// A block of a megabyte at an entropy near 8 bits a byte inside an
+// executable is what virus scanners' heuristics take for a packed program;
+// beside it as a file, the executable's sections read as plain code and
+// data. Without the file the program runs with a plain dark background.
 //
-// Embedded instead of sitting next to it as a file, so the EXE stays
-// runnable on its own and nobody deletes the image by accident.
-#define IDR_BACKGROUND 201
-IDR_BACKGROUND RCDATA "Background.jpg"
+// A JPEG and not a PNG: the picture is photo-like, a PNG of it takes
+// several times the bytes, and the loss does not show because the picture
+// lies heavily darkened behind the interface.
 
 // VS_VERSION_INFO is the constant 1 and comes from winres.h. Without the
 // include, rc stores the block under the NAME "VS_VERSION_INFO" instead

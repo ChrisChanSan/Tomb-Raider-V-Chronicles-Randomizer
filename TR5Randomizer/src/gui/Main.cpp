@@ -50,13 +50,13 @@
 #include "backends/imgui_impl_dx11.h"
 #include "backends/imgui_impl_win32.h"
 
-// stb_image (Public Domain, Sean Barrett) - only for the embedded background
-// image. Shipped under libs/stb so the source package compiles without any
+// stb_image (Public Domain, Sean Barrett) - only for the background picture
+// beside the EXE, read through a FILE (stbi_load_from_file), so stdio stays
+// in. Shipped under libs/stb so the source package compiles without any
 // further procurement.
 #define STB_IMAGE_IMPLEMENTATION
 #define STBI_ONLY_JPEG
 #define STBI_ONLY_PNG
-#define STBI_NO_STDIO
 #include "libs/stb/stb_image.h"
 
 #define WIN32_LEAN_AND_MEAN
@@ -89,28 +89,31 @@ namespace
     bool                    g_windowDragged = false;   // WM_EXITSIZEMOVE seen
     ID3D11RenderTargetView* g_rtv = nullptr;
 
-    // Background image: the banner, as JPEG inside the EXE
-    // (TR5Randomizer.rc, IDR_BACKGROUND). Unpacked once at startup, then
-    // drawn at window size every frame.
+    // Background picture: the banner, as Background.jpg beside the EXE
+    // (TR5Randomizer.rc says why it is not embedded). Read and unpacked once
+    // at startup, then drawn at window size every frame. Without the file
+    // g_background stays null and the window is plain.
     ID3D11ShaderResourceView* g_background = nullptr;
     int                       g_bgWidth = 0, g_bgHeight = 0;
 
     void loadBackground()
     {
-        HRSRC res = FindResourceW(nullptr, MAKEINTRESOURCEW(201), reinterpret_cast<LPCWSTR>(RT_RCDATA));
-        if (!res) return;
+        // From the EXE's folder, never from the current directory, which a
+        // shortcut or a command line may set anywhere. The path stays wide
+        // up to _wfopen_s, so a folder name outside the code page opens too.
+        // A missing or unreadable file is no error: nothing is said, and the
+        // window keeps its plain background.
+        const std::wstring dir = PathUtil::exeDir();
+        if (dir.empty()) return;
 
-        const DWORD size = SizeofResource(nullptr, res);
-        HGLOBAL loaded = LoadResource(nullptr, res);
-        if (!loaded || !size) return;
-
-        const void* bytes = LockResource(loaded);
-        if (!bytes) return;
+        FILE* f = nullptr;
+        const std::wstring path = PathUtil::join(dir, L"Background.jpg");
+        if (_wfopen_s(&f, path.c_str(), L"rb") != 0 || !f) return;
 
         int channels = 0;
-        stbi_uc* pixel = stbi_load_from_memory(static_cast<const stbi_uc*>(bytes),
-                                               static_cast<int>(size),
-                                               &g_bgWidth, &g_bgHeight, &channels, 4);
+        stbi_uc* pixel = stbi_load_from_file(f, &g_bgWidth, &g_bgHeight,
+                                             &channels, 4);
+        std::fclose(f);
         if (!pixel) return;
 
         D3D11_TEXTURE2D_DESC td{};

@@ -741,12 +741,12 @@ namespace
 	 * them lit as the hull is (HDModelSlot::lightAsAdditive), so that no
 	 * piece reads as ordinary gear beside the body.
 	 *
-	 * A CHOICE, made from the reference pictures and nothing else: a
-	 * reference picture supplied for this project (an X-ray figure in a
-	 * flooded brick tunnel, front and side) and this composite in the same
-	 * tunnel, its hull drawn one sided. What the hull adds to the wall
-	 * behind the belly, measured as the patch's mean less the wall's
-	 * beside it, in 0..255:
+	 * A CHOICE, made from the reference pictures and nothing else: the two
+	 * reference pictures supplied for this project (an X-ray figure in a
+	 * flooded brick tunnel, one from the front and one from the side) and
+	 * this composite in the same tunnel, its hull drawn one sided. What the
+	 * hull adds to the wall behind the belly, measured as the patch's mean
+	 * less the wall's beside it, in 0..255:
 	 *
 	 *   the reference, front          47.5 / 63.4 / 33.6
 	 *   the reference, side           34.9 / 57.9 / 31.0

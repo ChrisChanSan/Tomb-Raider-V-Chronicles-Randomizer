@@ -28,9 +28,9 @@ the full assignment is written down in
 *Both sides:* `game/objects.h` and the swap columns in `core/Randomizer.cpp`.
 
 **The version string**
-`RANDO_VERSION_STRING` in `core/BuildId.h` and the two Windows version
-resources - `TR5Randomizer.rc` and `tomb5.rc`. Three places, kept in step by
-hand. A mismatch is harmless to run and confusing to a bug report.
+`RANDO_VERSION_STRING` in `core/BuildId.h` and the three Windows version
+resources - `TR5Randomizer.rc`, `Tools.rc` and `tomb5.rc`. Four places, kept
+in step by hand. A mismatch is harmless to run and confusing to a bug report.
 
 **The build id - the one that is NOT enforced, though it says it is**
 `core/BuildId.h` states that the engine carries the same constant and that

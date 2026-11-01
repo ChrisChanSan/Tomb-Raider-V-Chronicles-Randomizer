@@ -819,6 +819,7 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <ClCompile>
+      <ControlFlowGuard>Guard</ControlFlowGuard>
       <WarningLevel>Level3</WarningLevel>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
@@ -839,7 +840,7 @@
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableUAC>false</EnableUAC>
-      <AdditionalOptions>%(AdditionalOptions) /pdbaltpath:%_PDB%</AdditionalOptions>
+      <AdditionalOptions>/guard:cf %(AdditionalOptions) /pdbaltpath:%_PDB%</AdditionalOptions>
       <AdditionalDependencies>dxguid.lib;Msacm32.lib;d3d9.lib;Ddraw.lib;dinput8.lib;xaudio2.lib;xinput.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(ProjectDir)TOMB5\tomb5\libs\discordRPC;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>

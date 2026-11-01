@@ -4565,7 +4565,7 @@ without them. None of their code is in this repository.
 
 Five of them are artwork created by the author with an AI image generator
 (ChatGPT) for this project: `docs/banner.jpg`,
-`TR5Randomizer/src/gui/Background.jpg`, `TOMB5 Code/setup.bmp`,
+`TR5Randomizer/package/Background.jpg`, `TOMB5 Code/setup.bmp`,
 `TOMB5 Code/icon.ico` and `TR5Randomizer/src/gui/TR5Randomizer.ico`. No
 third-party picture was a source for any of them. It is said here because the
 files themselves do not carry the content credentials such a tool writes.

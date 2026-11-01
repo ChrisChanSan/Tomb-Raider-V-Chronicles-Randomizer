@@ -18002,6 +18002,18 @@ new.
   seeds 1 to 5 with `allsanity` place 30. `LevelBuild -hdm` writes the sidecar
   of a test level.
 
+- **#296 - the background picture beside the program.** `gui/Main.cpp`,
+  `gui/TR5Randomizer.rc`, `gui/TR5Randomizer.ico`, `package/Background.jpg`, `README.txt`:
+  the interface's background picture is no longer embedded in `TR5Randomizer.exe`. It
+  moves from `src/gui` into `package/`, which the release copies next to the EXE, and
+  `loadBackground` reads it at start from the EXE's folder, never from the current
+  directory; a missing or unreadable file is no error, and the window keeps its plain dark
+  background. The program icon keeps its six sizes and its pixels, now stored as
+  uncompressed 32-bit bitmaps instead of PNG entries. The reason for both: a megabyte of
+  compressed data at an entropy near 8 bits a byte inside an executable is what virus
+  scanners' heuristics take for a packed program. `THIRD-PARTY.md` names the picture's new
+  path (`cad68af7`, `0f80eb00`).
+
 ## 4. Building this yourself
 
 The published binary need not be trusted. Either:
@@ -18176,3 +18188,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #290 | The bulbs' fog in one pass a frame, and the mill's old sheets of mist go |
 | #291 | The brawler's strike starts and lands where his fist reaches |
 | #292 | A savegame's pointers survive a moved pool, and null stays null |
+| #296 | section 3 (the randomizer) |

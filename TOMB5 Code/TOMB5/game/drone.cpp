@@ -341,7 +341,7 @@ void DroneControl(short item_number)
 	tick = (unsigned short)item->item_flags[1];
 	item->item_flags[1] = (short)(tick + 1);
 
-	// #124's lesson: a control that never reads its hit points never dies.
+	// A control that never reads its hit points never dies.
 	if (item->hit_points <= 0)
 	{
 		DroneDie(item_number, item, tick);

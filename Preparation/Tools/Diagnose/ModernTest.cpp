@@ -30863,7 +30863,7 @@ static void fog_field()
 		(long)(HD_FOG_FIELD * 100.0f), 400);
 }
 
-/* The one pass and the classic sheets of mist (hd_fog.h, #290): the
+/* The one pass and the classic sheets of mist (hd_fog.h): the
  * bulbs the pass walks, the one rectangle it draws over the bulbs'
  * rectangles, the rooms whose sheets are mist, and ANDY3's sheets against
  * its mill bulbs (rooms 107 and 104, the -fogsheets census). */
@@ -32345,7 +32345,7 @@ static void spot_pad_skip()
 enum
 {
 	ROPE_SKIPPER_OFF,	// the Cutscene skipper off
-	ROPE_SKIP_HELD,		// the skip before #279: Cross held skips, no latch
+	ROPE_SKIP_HELD,		// the skip without a latch: Cross held skips
 	ROPE_SKIP_LATCH		// the fresh press, the latch
 };
 
@@ -32566,9 +32566,9 @@ static void skip_latch_rope()
 		"rope 33: without a skip the latch's rule is the skipper off",
 		r.pulls, off.pulls);
 
-	/* A flyby that leaves Lara her control takes the pad's skip as well
-	 * (#282): the fresh press at 63 skips three segments while it is held,
-	 * the latch keeps it out of her input from the next reading on, and the
+	/* A flyby that leaves Lara her control takes the pad's skip as well:
+	 * the fresh press at 63 skips three segments while it is held, the
+	 * latch keeps it out of her input from the next reading on, and the
 	 * pull is not repeated. */
 	h.flags = 0x0201;
 	h.press[0][1] = 61;
@@ -33270,7 +33270,7 @@ static void raising_cog_rope()
 	/* The first pull is counted at tick 59 (pressed at 0: 339's 14 frames,
 	 * then frame 44 of 340); the cog's flyby and first 2 units come at 60,
 	 * its 256th unit at 187, the end of the lift at 188. */
-	const int held[] = { 59, 118 };	// the held button before #279
+	const int held[] = { 59, 118 };	// the held button without a latch
 	CogRun b = cog_run(false, held, 2, 600);
 	CogRun a = cog_run(true, held, 2, 600);
 
@@ -33884,8 +33884,8 @@ static void zip_call_skip()
 		"zip rich1: a track longer than the flyby, the same either way",
 		lb.heldAfter, 2049 - 1599);
 
-	/* The pad: a fresh press on the call's first tick. #279's start asked
-	 * for her control taken, which the call had taken by then: the press
+	/* The pad: a fresh press on the call's first tick. A start that asked
+	 * for her control taken found it taken by the call by then: the press
 	 * skipped the flyby before as well, and the call held her as Escape's
 	 * skip did. */
 	m = p;
@@ -34156,7 +34156,7 @@ static void zip_skip_rule()
  * looping, 25 frames). Cross is Action, as on every default pad page. */
 enum
 {
-	ZNS_BEFORE,	// #282: only a skipped scene ends a call
+	ZNS_BEFORE,	// a call that only a skipped scene ends
 	ZNS_AFTER	// a skip ends it, with or without a scene
 };
 
@@ -34856,7 +34856,7 @@ static void brawler_rule()
 	free(balance);
 }
 
-/* The brawler's reach (game\chef_rule.h, #291): the numbers against the
+/* The brawler's reach (game\chef_rule.h): the numbers against the
  * measurement they came from (BoneCheck -reach on his fist, frames 15 and
  * 16 of the chef's strike), the swing distance against the table that
  * gave it, the rule on the window, the reach, the cone and the band - and

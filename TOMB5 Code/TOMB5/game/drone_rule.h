@@ -46,8 +46,11 @@
  *
  * Lengths are world units, 1024 a sector; y grows downward. The model the
  * numbers are set for: 2269 long, 460 wide, 784 tall in its first frame,
- * the rotor 1935 across - the vulture's span. No engine header here:
- * ModernTest asserts on it. */
+ * the rotor 1935 across - the vulture's span. The band, the slack, the
+ * range, the cone, the height and its clearance, the burst, the pause,
+ * the leg, the speeds, the turn, the bank and the spread below are this
+ * project's free choices for a flyer of that size, left to play. No
+ * engine header here: ModernTest asserts on it. */
 
 // The distance band, horizontal.
 #define DRONE_NEAR			2048	// nearer than this it backs off

@@ -31,8 +31,8 @@
 //
 // Usage: BoneCheck <level.trc> <slot> -reach <mesh|all> <anim>
 //                  [<first> <last>] [-meshes <level.trc> <slot>]
-//   Where a mesh's sphere goes during an animation - the reach of a strike
-//   (#291). The arithmetic is GetSpheres' (game\sphere.cpp), the spheres
+//   Where a mesh's sphere goes during an animation - the reach of a
+//   strike. The arithmetic is GetSpheres' (game\sphere.cpp), the spheres
 //   TestCollision sets the touch bits from: the item at the origin facing
 //   +z, the frame's root offset, its rotations (gar_RotYXZsuperpack), the
 //   bones' push/pop and offsets, then the mesh's sphere centre. The joints

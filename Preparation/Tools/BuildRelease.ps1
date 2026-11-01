@@ -105,7 +105,7 @@ Say "Secret lists  : $lists files (data\secrets)"
 # slots trview has no entry for; four (460/461/469/471) lie beyond trview's
 # list, which ends at id 452; and two it knows but cannot tell apart - 41 and
 # 85 are both called "Dog" although only one is the husky, and "Soldier
-# Statue" no longer suffices now that two Roman gods can stand in one level.
+# Statue" cannot tell apart the two Roman gods that can stand in one level.
 #
 # Not needed to play. It is here because anyone reporting an oddity is asked
 # to look at the level, and a viewer showing "Crow" where a vulture stands

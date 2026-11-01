@@ -4940,9 +4940,9 @@ void GetRoomBounds()
 
 	/* The backstop: a walk that dequeues more than 32 rooms per room
 	 * of the level (4,096 at the least) is cut. A ring of rooms each
-	 * queuing the next can only come from a flaw in the window tests
-	 * - VisQueue had one until #256 - and a frame that never ends is
-	 * worse than a frame short of rooms. The rooms still queued are
+	 * queuing the next can only come from a flaw in the window tests,
+	 * and a frame that never ends is worse than a frame short of
+	 * rooms. The rooms still queued are
 	 * released as a dequeue releases them, so that the next frame's
 	 * walk can queue them again; the rooms listed so far are drawn.
 	 * Counted on the ROOMWALK runaway= line. */

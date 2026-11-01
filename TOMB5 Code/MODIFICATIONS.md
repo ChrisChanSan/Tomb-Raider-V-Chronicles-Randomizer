@@ -15492,13 +15492,13 @@ checks the dump. `docs/Engine-Manual.md` says what to send.
 2026-10-28
 
 **What.** Three things in the Submarine (JOBY3): the mess hall's benches drawn twice, HD
-and classic over each other; black openings wherever the remaster shows pipes and cables -
-the ceiling coves, the space under the grating floors, the walls behind the truss panels;
-and SD diving suits in the HD glass cases of the crew cabins, in JOBY5 as well. Now the
-benches are drawn once, the openings show the cavity's pipes, and the suits are the
-remaster's own models. The other slots the HD path draws classic - the keyholes KEY_HOLE6
-and KEY_HOLE7 of JOBY2, JOBY3 and JOBY5, the rolling balls of ANDREA3 and RICH1, six
-ANIMATING8 of RICH2 and two flat panels of JOBY3's room 4 - are not bound here.
+and classic over each other; black openings wherever the installation's art has pipes and
+cables - the ceiling coves, the space under the grating floors, the walls behind the truss
+panels; and SD diving suits in the HD glass cases of the crew cabins, in JOBY5 as well.
+Now the benches are drawn once, the openings show the cavity's pipes, and the suits are
+the remaster's own models. The other slots the HD path draws classic - the keyholes
+KEY_HOLE6 and KEY_HOLE7 of JOBY2, JOBY3 and JOBY5, the rolling balls of ANDREA3 and RICH1,
+six ANIMATING8 of RICH2 and two flat panels of JOBY3's room 4 - are not bound here.
 
 **Why.** (a) The art that models the benches is the underfloor room's, group 123, whose
 box ends at the mess hall's floor line; the classic bench stands on that line, and the
@@ -15866,9 +15866,10 @@ Page 8030's alpha is 240 or more on every texel, so the additive pass's weight b
 changes nothing, and the part's param[0] of 0.5 is the alpha reference of material 6, not
 a weight. Beside the shell the opaque parts were lit as ordinary gear, up to twice the
 light where the shell stops at its full value and the holsters with a gunmetal sheen, and
-the figure added more light than the reference: in the same flooded tunnel the shell adds
-61.6/82.2/83.9 to the wall behind her belly, the reference pictures of the remaster's
-X-ray Lara 41.2/60.7/32.3 (the mean of a front and a side view).
+the figure added more light than the reference pictures supplied for this project (an
+X-ray figure in a flooded brick tunnel): in the same tunnel the shell adds 61.6/82.2/83.9
+to the wall behind her belly, the reference pictures' mean 41.2/60.7/32.3 (a front and a
+side view).
 
 **How.** `specific/hd/hd_lara.cpp`: a table names the X-ray set part by part (`kXray`) -
 OUTFIT_XRAY, the eleven HAND_XRAY_ parts, HOLSTER_PISTOL_XRAY and the three weapons on the

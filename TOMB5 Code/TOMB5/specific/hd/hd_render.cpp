@@ -1222,9 +1222,8 @@ namespace
 	 * page 3219, slats of light steel over pure black, 72 % of its texels
 	 * under 24 of 765; page 3222, a truss, 41 % - and the black is where the
 	 * cavity shows. Drawn with its own page alone the grille's openings came
-	 * out black, which is what JOBY3's mess hall coves, its grating floors
-	 * and its truss walls showed in play (pictures of 2026-10-28), where the
-	 * remaster shows the cavity's pipes.
+	 * out black - JOBY3's mess hall coves, its grating floors and its truss
+	 * walls - where the installation's art has pipes and cables.
 	 *
 	 * So param[0] is read as the interior's layer and param[1] as its depth
 	 * in tiles of the grille's page, and the room shader's HD_INSIDE variant

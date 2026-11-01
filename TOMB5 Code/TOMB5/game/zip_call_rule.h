@@ -87,7 +87,7 @@ enum
  * ends there instead of holding her for good. A track that plays ends the
  * call on the first tick it no longer does: at its end the stream goes
  * back to the level's atmosphere by itself. A stage outside 0 to 2 does
- * nothing, as before. */
+ * nothing. */
 inline int ZipCallTick(int stage, int heard, int stands, int playing)
 {
 	if (stage == ZIP_STAGE_TAKE)

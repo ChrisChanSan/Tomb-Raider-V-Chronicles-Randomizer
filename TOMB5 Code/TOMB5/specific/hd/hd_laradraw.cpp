@@ -275,8 +275,8 @@ namespace
 				}
 
 				/* A body the wardrobe knows and does not offer - one made for
-				 * a cutscene, with no legs - is not worn in play, even where
-				 * an earlier build let the player choose it. */
+				 * a cutscene, with no legs - is not worn in play: the player
+				 * cannot choose it, and a key that names it falls back. */
 				if (found >= 0)
 					Log("HDLOG wardrobe hd_outfit=%s is not offered (a "
 						"cutscene's body) - level facts", chosen);
@@ -972,12 +972,12 @@ namespace
 	 *              is <stem>:install, read from the installs and never a
 	 *              mod, or <stem>:gun for the stand-in of a hand the
 	 *              installs have no X-ray file for, after the rest hands'
-	 *              (HDLaraXrayHand, #277)
+	 *              (HDLaraXrayHand)
 	 *   drawn=     hd or DrawLara__<n>, as on the SWAPLOG line
 	 *   tone=      the set's tone, level/red,green,blue (hd_lara.h,
 	 *              HDLaraXrayTone), - for the classic figure and when off
-	 *   thighs=    none: the look draws nothing at the thighs (#277,
-	 *              HDLaraXrayPick); - when off
+	 *   thighs=    none: the look draws nothing at the thighs
+	 *              (HDLaraXrayPick); - when off
 	 *
 	 * Written by whichever draw puts her on the screen, outside a mirror, as
 	 * SWAPLOG is. Level state, cleared in HDLaraDrawEnd: a level she is

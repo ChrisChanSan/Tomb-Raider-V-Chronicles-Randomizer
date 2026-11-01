@@ -67,6 +67,12 @@ namespace
 	int g_presents = 0;		// presents since the last ProfileFrameEnd
 	long g_sort_max = 0;		// the frame's longest sort list
 
+	// The fog bulbs' pass (ProfileNoteFog): this frame, and this second.
+	double g_fog_cpu = 0, g_fog_gpu = -1;
+	double g_fog_cpu_sum = 0, g_fog_cpu_max = 0;
+	double g_fog_gpu_sum = 0, g_fog_gpu_max = 0;
+	int g_fog_gpu_n = 0;
+
 	int g_level_late = 0;		// the level's totals, for the summary
 	int g_level_pauses = 0;
 
@@ -128,8 +134,9 @@ namespace
 				kName[i], p[i]);
 
 		if (at >= 0 && (size_t)at < size)
-			_snprintf_s(out + at, size - at, _TRUNCATE, "outrest=%.2f sortn=%d",
-				OutRest(p), (int)g_sort_max);
+			_snprintf_s(out + at, size - at, _TRUNCATE,
+				"outrest=%.2f sortn=%d fog=%.2f fog_gpu=%.2f", OutRest(p),
+				(int)g_sort_max, g_fog_cpu, g_fog_gpu);
 	}
 
 	/* The slot this frame asked for, in milliseconds. gPresentMinTicks is
@@ -161,8 +168,11 @@ namespace
 				"%s=%.2f/%.2f ", kName[i], g_sum[i] / n, g_max[i]);
 
 		if (at >= 0 && (size_t)at < size)
-			_snprintf_s(out + at, size - at, _TRUNCATE, "outrest=%.2f",
-				OutRest(g_sum) / n);
+			_snprintf_s(out + at, size - at, _TRUNCATE,
+				"outrest=%.2f fog=%.2f/%.2f fog_gpu=%.2f/%.2f",
+				OutRest(g_sum) / n, g_fog_cpu_sum / n, g_fog_cpu_max,
+				g_fog_gpu_n ? g_fog_gpu_sum / g_fog_gpu_n : 0.0,
+				g_fog_gpu_max);
 	}
 
 	void NewSecond()
@@ -177,6 +187,11 @@ namespace
 		g_frame_max = 0;
 		g_work_sum = 0;
 		g_work_max = 0;
+		g_fog_cpu_sum = 0;
+		g_fog_cpu_max = 0;
+		g_fog_gpu_sum = 0;
+		g_fog_gpu_max = 0;
+		g_fog_gpu_n = 0;
 		g_sec_frames = 0;
 		g_sec_intervals = 0;
 		g_sec_late = 0;
@@ -307,6 +322,14 @@ void ProfileNoteSort(long count)
 		g_sort_max = count;
 }
 
+void ProfileNoteFog(double cpuMs, double gpuMs)
+{
+	g_fog_cpu += cpuMs;
+
+	if (gpuMs >= 0)
+		g_fog_gpu = gpuMs;
+}
+
 void ProfileFrameBegin()
 {
 	LARGE_INTEGER now;
@@ -329,6 +352,8 @@ void ProfileFrameBegin()
 	}
 
 	g_sort_max = 0;
+	g_fog_cpu = 0;
+	g_fog_gpu = -1;
 	QueryPerformanceCounter(&now);
 	g_qpc_begin = now.QuadPart;
 }
@@ -422,6 +447,20 @@ void ProfileFrameEnd()
 
 	if (work_ms > g_work_max)
 		g_work_max = work_ms;
+
+	g_fog_cpu_sum += g_fog_cpu;
+
+	if (g_fog_cpu > g_fog_cpu_max)
+		g_fog_cpu_max = g_fog_cpu;
+
+	if (g_fog_gpu >= 0)
+	{
+		g_fog_gpu_sum += g_fog_gpu;
+		g_fog_gpu_n++;
+
+		if (g_fog_gpu > g_fog_gpu_max)
+			g_fog_gpu_max = g_fog_gpu;
+	}
 
 	/* Only a real interval goes into the frame clock: not the first frame of
 	 * a level, which has none, and not one that waited out a menu - a single

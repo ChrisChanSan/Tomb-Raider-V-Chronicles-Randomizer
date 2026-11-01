@@ -151,25 +151,27 @@ inline float HDFogFrac(float x)
  * the sky cloud's (hd_sky.hlsl, CloudHash): folded into 0..63 per axis,
  * then scrambled by two rounds in which each axis is multiplied by a linear
  * function of another and folded back into 0..1. Arithmetic only, as the
- * shader has it (ps_3_0 has no integers); the processor's float rounding
- * may land a different last bit than the card's. */
+ * shader had it (ps_3_0 has no integers), each of its multiply-adds one
+ * fmaf as the card fuses it: the pass reads this value out of its table
+ * (hd_render.cpp, fog_table), so the lattice is the one the shader that
+ * hashed in the pass drew, to the bit. */
 inline float HDFogHash(float x, float y, float z)
 {
 	float p[3] = { x - 64.0f * floorf(x / 64.0f), y - 64.0f * floorf(y / 64.0f),
 		z - 64.0f * floorf(z / 64.0f) };
 	float q[3];
 
-	p[0] = HDFogFrac(p[0] * 0.1361f + 0.317f);
-	p[1] = HDFogFrac(p[1] * 0.1187f + 0.317f);
-	p[2] = HDFogFrac(p[2] * 0.1543f + 0.317f);
+	p[0] = HDFogFrac(fmaf(p[0], 0.1361f, 0.317f));
+	p[1] = HDFogFrac(fmaf(p[1], 0.1187f, 0.317f));
+	p[2] = HDFogFrac(fmaf(p[2], 0.1543f, 0.317f));
 
 	for (int i = 0; i < 3; i++)
-		q[i] = HDFogFrac(p[i] * (p[(i + 1) % 3] * 47.31f + 13.73f));
+		q[i] = HDFogFrac(p[i] * fmaf(p[(i + 1) % 3], 47.31f, 13.73f));
 
 	for (int i = 0; i < 3; i++)
-		p[i] = HDFogFrac(q[i] * (q[(i + 2) % 3] * 31.17f + 7.91f));
+		p[i] = HDFogFrac(q[i] * fmaf(q[(i + 2) % 3], 31.17f, 7.91f));
 
-	return HDFogFrac(p[0] + p[1] * 1.618f + p[2] * 2.718f);
+	return HDFogFrac(fmaf(p[2], 2.718f, fmaf(p[1], 1.618f, p[0])));
 }
 
 /* The breath's field at q (in cells): the eight hashed corners of q's cell,
@@ -575,6 +577,90 @@ inline int HDFogArtVerdict(const float lo[3], const float hi[3],
 	return verdict;
 }
 
+/* The one pass (hd_render.cpp, fog_draw; hd_fog.hlsl). One draw a frame
+ * over the union of the taken bulbs' rectangles, each pixel walking the
+ * frame's bulbs - farthest first, each bulb's column as HDFogFieldTau
+ * takes it and its veil over the ones behind - where a quad per bulb
+ * walked each bulb's field once per bulb. The shader holds
+ * HD_FOG_PASS_SLOTS bulbs in its constants (HD_MAX_BULBS, the frame's
+ * most), unrolled, as ps_3_0 indexes no constant at run time; and the
+ * breath's lattice as a table of HD_FOG_TABLE points a side, the fold of
+ * HDFogHash. */
+#define HD_FOG_PASS_SLOTS	16
+#define HD_FOG_TABLE		64
+
+// The bulbs the pass walks for `taken` taken ones: the shader's loop bound.
+inline int HDFogPassCount(int taken)
+{
+	return taken < 0 ? 0 : taken > HD_FOG_PASS_SLOTS ? HD_FOG_PASS_SLOTS :
+		taken;
+}
+
+/* The one rectangle the pass draws: the union of `count` rectangles of
+ * HDFogBounds (ndc, four floats each - x0, y0, x1, y1) whose answers are
+ * `kinds` (1 a rectangle, 2 the whole screen), into out. 0: none; 1: the
+ * union; 2: the whole screen - a rectangle that is the screen, or a union
+ * that covers it. */
+inline int HDFogUnion(const float* rects, const int* kinds, int count,
+	float out[4])
+{
+	int any = 0;
+
+	for (int n = 0; n < count; n++)
+	{
+		const float* r = rects + n * 4;
+
+		if (kinds[n] <= 0)
+			continue;
+
+		if (kinds[n] == 2)
+		{
+			out[0] = -1.0f;
+			out[1] = -1.0f;
+			out[2] = 1.0f;
+			out[3] = 1.0f;
+			return 2;
+		}
+
+		if (!any)
+		{
+			for (int i = 0; i < 4; i++)
+				out[i] = r[i];
+
+			any = 1;
+			continue;
+		}
+
+		out[0] = r[0] < out[0] ? r[0] : out[0];
+		out[1] = r[1] < out[1] ? r[1] : out[1];
+		out[2] = r[2] > out[2] ? r[2] : out[2];
+		out[3] = r[3] > out[3] ? r[3] : out[3];
+	}
+
+	if (!any)
+		return 0;
+
+	return out[0] <= -1.0f && out[1] <= -1.0f && out[2] >= 1.0f &&
+		out[3] >= 1.0f ? 2 : 1;
+}
+
+/* The classic mist sheets. A room whose flags take the classic path's mist
+ * branch (drawroom.cpp, aRoomVertexWaterMarks: ROOM_MIST, and not
+ * ROOM_REFLECT with ROOM_REFLECT_CEILING) marks as its shimmer surface the
+ * vertices of its lowest floor that lie over a downward portal and that the
+ * room below does not share (IsMistVert); the faces whose every corner is
+ * such a vertex at the room's lowest floor - the classic water face's own
+ * test (hd_level.cpp, BuildWaterSurfaces) - are a sheet of mist laid over
+ * the opening, drawn additive over the HD room where the art has none in
+ * that plane. ROOM_REFLECT alone marks water. With hd_fog 1, where the pass
+ * draws, a sheet whose box meets a bulb's sphere or whose centre lies in
+ * its field (HDFogArtVerdict, as the art's mist) is left out: the bulbs'
+ * fog stands in its place. */
+inline bool HDFogSheetRoom(bool mist, bool reflect, bool reflectCeiling)
+{
+	return mist && !(reflect && reflectCeiling);
+}
+
 /* RoomProbe's numbers of an additive range (hd_render.cpp,
  * fog_add_weight): its group, its .TRG part (a book's, -1 for any other),
  * its material, its box's centre in the world and in view space and its
@@ -612,5 +698,25 @@ void HDRenderFogLevel(const float* bulbs, int count);
 void HDRenderFogFieldProbe(float factor);
 // RoomProbe's -fogdrop 0: no mist left out, whatever its verdict.
 void HDRenderFogDropProbe(int on);
+/* RoomProbe's -fogquads: the one pass's shader drawn one slot a draw, each
+ * over its bulb's rectangle - the frame blended after every bulb, as the
+ * quad per bulb drew it - to hold the one pass's single blend against. */
+void HDRenderFogQuadsProbe(int on);
 // The field's factor in force (HD_FOG_FIELD, or -fogfactor's).
 float HDRenderFogField();
+/* Whether the pass stands in for the level's mist: hd_fog 1, mist left
+ * out (not -fogdrop 0), the frame's depth and the level's water sheets,
+ * and the pass's shaders and table on the device - what fog_add_left asks
+ * of the art's mist and hd_level.cpp of the classic sheets. Defined in
+ * hd_render.cpp. */
+bool HDRenderFogStands();
+/* The breath's lattice filled on the processor (hd_render.cpp,
+ * fog_lattice), once: hd_level.cpp asks it at the level's build, so the
+ * first frame with a bulb only hands it to the card. */
+void HDRenderFogPrepare();
+/* -log's clock of the pass (profile.h, PROFLOG's fog= and fog_gpu=):
+ * HDRenderFogClock(1) before the bracket's end, and after it the
+ * processor's time in the pass's draw and the card's time for the last
+ * pass it has answered for, frames before, -1 for none. */
+void HDRenderFogClock(int on);
+void HDRenderFogClockRead(double* cpuMs, double* gpuMs);

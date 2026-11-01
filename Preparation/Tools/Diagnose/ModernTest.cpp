@@ -30467,6 +30467,106 @@ static void fog_field()
 		(long)(HD_FOG_FIELD * 100.0f), 400);
 }
 
+/* The one pass and the classic sheets of mist (hd_fog.h, #290): the
+ * bulbs the pass walks, the one rectangle it draws over the bulbs'
+ * rectangles, the rooms whose sheets are mist, and ANDY3's sheets against
+ * its mill bulbs (rooms 107 and 104, the -fogsheets census). */
+static void fog_pass()
+{
+	printf("the fog's one pass and the classic sheets of mist\n");
+
+	ok(HDFogPassCount(-1) == 0 && HDFogPassCount(0) == 0 &&
+		HDFogPassCount(11) == 11 &&
+		HDFogPassCount(HD_MAX_BULBS) == HD_FOG_PASS_SLOTS &&
+		HDFogPassCount(40) == HD_FOG_PASS_SLOTS &&
+		HD_FOG_PASS_SLOTS == HD_MAX_BULBS,
+		"fog pass: it walks every taken bulb, the slots its bound",
+		HDFogPassCount(40), HD_FOG_PASS_SLOTS);
+
+	const float rects[12] = { -0.5f, -0.2f, 0.1f, 0.3f, 0.0f, -0.6f, 0.4f,
+		0.0f, -1.0f, -1.0f, 1.0f, 1.0f };
+	const int two[3] = { 1, 1, 0 };
+	const int whole[3] = { 1, 1, 2 };
+	const int none[3] = { 0, 0, 0 };
+	float out[4] = { 9, 9, 9, 9 };
+	const int kind = HDFogUnion(rects, two, 3, out);
+
+	ok(kind == 1 && out[0] == -0.5f && out[1] == -0.6f && out[2] == 0.4f &&
+		out[3] == 0.3f,
+		"fog pass: one rectangle over the bulbs' rectangles", kind, 1);
+	ok(HDFogUnion(rects, none, 3, out) == 0 &&
+		HDFogUnion(rects, two, 0, out) == 0,
+		"fog pass: no rectangle, no draw", 0, 0);
+	ok(HDFogUnion(rects, whole, 3, out) == 2 && out[0] == -1.0f &&
+		out[3] == 1.0f,
+		"fog pass: a bulb over the near plane takes the screen", 0, 0);
+
+	const float halves[8] = { -1.0f, -1.0f, 0.2f, 1.0f, -0.1f, -1.0f,
+		1.0f, 1.0f };
+	const int pair[2] = { 1, 1 };
+
+	ok(HDFogUnion(halves, pair, 2, out) == 2,
+		"fog pass: rectangles that cover the screen take it", 0, 0);
+
+	// The rooms whose lowest floor's marked faces are mist, not water.
+	ok(HDFogSheetRoom(true, false, false) && HDFogSheetRoom(true, true,
+		false) && !HDFogSheetRoom(true, true, true) &&
+		!HDFogSheetRoom(false, true, false) &&
+		!HDFogSheetRoom(false, false, false),
+		"fog sheets: the mist branch takes ROOM_MIST, not the ceiling's",
+		0, 0);
+
+	/* ANDY3's sheets, 1,024 square at y 8,448: room 107's over the
+	 * sluice in bulb 7's field (35,328 / 8,192 / 48,640, radius 1,312),
+	 * room 104's in bulb 8's (42,496 / 8,192 / 47,616); a sheet the
+	 * sphere touches is the bulb's, one past every reach is kept. */
+	const float mill[8] = { 35328.0f, 8192.0f, 48640.0f, 1312.0f,
+		42496.0f, 8192.0f, 47616.0f, 1312.0f };
+	const float lo107[3] = { 34816.0f, 8448.0f, 51200.0f };
+	const float hi107[3] = { 35840.0f, 8448.0f, 52224.0f };
+	const float lo104[3] = { 40960.0f, 8448.0f, 51200.0f };
+	const float hi104[3] = { 41984.0f, 8448.0f, 52224.0f };
+	const float loNear[3] = { 34816.0f, 8448.0f, 49152.0f };
+	const float hiNear[3] = { 35840.0f, 8448.0f, 50176.0f };
+	const float loFar[3] = { 34816.0f, 8448.0f, 60416.0f };
+	const float hiFar[3] = { 35840.0f, 8448.0f, 61440.0f };
+	int meets = -1, meets104 = -1, meetsNear = -1, meetsFar = 0;
+	float gap = 0.0f;
+	const int v107 = HDFogArtVerdict(lo107, hi107, mill, 2, HD_FOG_FIELD,
+		&meets, &gap);
+	const int v104 = HDFogArtVerdict(lo104, hi104, mill, 2, HD_FOG_FIELD,
+		&meets104, 0);
+
+	ok(v107 == HD_FOG_ART_FIELD && meets == 0 && fabsf(gap - 2573.0f) <
+		1.0f && v104 == HD_FOG_ART_FIELD && meets104 == 1,
+		"fog sheets: the mill's sheets lie in bulbs 7 and 8's fields",
+		(long)gap, 2573);
+	ok(HDFogArtVerdict(loNear, hiNear, mill, 2, HD_FOG_FIELD, &meetsNear,
+		0) == HD_FOG_ART_BULB && meetsNear == 0 &&
+		HDFogArtVerdict(loFar, hiFar, mill, 2, HD_FOG_FIELD, &meetsFar,
+		0) == HD_FOG_ART_KEPT && meetsFar == -1,
+		"fog sheets: a sheet the sphere meets is the bulb's, one past the "
+		"reach kept", 0, 0);
+
+	/* The breath's table (hd_render.cpp, fog_table): the hash folds at
+	 * the table's side and its 16 bits hold it to a 65,535th. */
+	bool held = true;
+
+	for (int i = 0; i < 64; i++)
+	{
+		const float x = (float)(i * 7 % 64), y = (float)(i * 13 % 64),
+			z = (float)(i * 29 % 64);
+		const float h = HDFogHash(x, y, z);
+		const unsigned short t = (unsigned short)(h * 65535.0f + 0.5f);
+
+		held = held && h == HDFogHash(x + HD_FOG_TABLE, y - HD_FOG_TABLE,
+			z + 2 * HD_FOG_TABLE) && fabsf(t / 65535.0f - h) <=
+			0.5f / 65535.0f + 1e-7f;
+	}
+
+	ok(held, "fog pass: the table folds with the hash and holds it", 0, 0);
+}
+
 /* A keyframe for the pocket walk: box, offset, and one rotation word per
  * node of a two-node slot. */
 struct PocketKey
@@ -34582,6 +34682,7 @@ int main()
 	fog_body();
 	fog_art();
 	fog_field();
+	fog_pass();
 	object_rules();
 	install_names();
 	glow_normal();

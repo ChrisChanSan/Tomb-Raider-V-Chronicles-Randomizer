@@ -285,16 +285,26 @@ bool HDRoomShadowHD(int roomIndex);
  *
  * `face` counts inside the roomlet's quad list when `quad` is set and inside
  * its triangle list otherwise; the list is sorted by roomlet so that one
- * roomlet is transformed and lit once. See hd_level.cpp, BuildWaterSurfaces. */
+ * roomlet is transformed and lit once. See hd_level.cpp, BuildWaterSurfaces.
+ * `fogged`: a sheet of mist of a room on the classic mist branch (hd_fog.h,
+ * HDFogSheetRoom) in a fog bulb's reach - HD_FOG_ART_BULB or _FIELD, 0
+ * for every other face (hd_level.cpp, ReportFogLevel). */
 struct HDRoomWaterFace
 {
 	short roomlet;
 	short face;
 	unsigned char quad;
+	unsigned char fogged;
 };
 
 int HDRoomWaterFaceCount(int roomIndex);
 const HDRoomWaterFace* HDRoomWaterFaceAt(int roomIndex, int at);
+
+/* Whether the classic path leaves this water face out: a sheet of mist in
+ * a bulb's reach (`fogged`) while the fog's pass stands in for the mist -
+ * hd_fog 1, the frame's depth and the level's sheets (hd_fog.h,
+ * HDRenderFogStands). False for every other face and with hd_fog 0. */
+bool HDRoomWaterFaceFogged(const HDRoomWaterFace* face);
 
 /* The remaster's own picture of that water.
  *

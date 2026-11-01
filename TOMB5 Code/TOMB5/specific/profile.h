@@ -168,6 +168,14 @@ void ProfileEndPhase(int phase);
 void ProfileNotePresent();
 void ProfileNoteSort(long count);
 
+/* The fog bulbs' pass (hd_render.cpp, fog_draw), once a frame with -log:
+ * the processor's time in its draw, part of HD_DRAW, and the card's time
+ * of the last pass the card has answered for - a frame or two before, -1
+ * for none. PROFLOG prints them at the end of its lines, `fog=` like every
+ * phase and `fog_gpu=` beside it: per second the mean and the worst, the
+ * card's mean over the frames that had an answer. */
+void ProfileNoteFog(double cpuMs, double gpuMs);
+
 /* Marks a new level. Called from S_LoadLevelFile once the load thread has
  * joined and the HD build is done, with the level's file name - the
  * profile prints the seconds since this call, so a warm-up period has a

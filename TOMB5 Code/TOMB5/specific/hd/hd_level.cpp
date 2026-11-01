@@ -359,6 +359,9 @@ namespace
 	int g_water_face_rooms = 0;
 	int g_water_face_kept = 0;	// faces the .TRG does cover - left to it
 	int g_water_face_dry = 0;	// faces over dry ground the art covers
+	/* The sheets of mist the classic path left out in this frame
+	 * (HDRoomWaterFaceFogged), for the frame line; set back after it. */
+	int g_fog_sheets_frame = 0;
 
 	/* The game clock, in seconds.
 	 *
@@ -3056,6 +3059,7 @@ static void BuildWaterSurfaces()
 				entry.roomlet = (short)n;
 				entry.face = (short)(quad ? f : f - roomlet->nQuad);
 				entry.quad = quad ? 1 : 0;
+				entry.fogged = 0;	// ReportFogLevel, once the bulbs are known
 				g_water_faces[i].push_back(entry);
 				dryCopies.push_back(dryCopy ? 1 : 0);
 			}
@@ -7000,13 +7004,82 @@ static bool BulbUnderSheet(const FOGBULB_STRUCT& b)
 	return false;
 }
 
+/* The classic sheets of mist (hd_fog.h, HDFogSheetRoom): every restored
+ * water face (BuildWaterSurfaces) of a room on the classic mist branch,
+ * held against the level's bulbs as the art's mist is (HDFogArtVerdict,
+ * its box in the world at the field's factor in force): its verdict into
+ * the face's `fogged`, and with the log and where the pass draws one line
+ * per sheet the bulbs' fog stands in for - its room, its number in the
+ * room's faces (the quads, then the triangles, roomlet after roomlet), its
+ * verdict, the bulb it meets or whose field holds it and their distance. */
+static void ReportFogSheets(const std::vector<float>& bulbs, int count,
+	int pass)
+{
+	const float factor = HDRenderFogField();
+
+	for (int i = 0; i < number_rooms && i < HD_MAX_ROOMS; i++)
+	{
+		ROOM_INFO* r = &room[i];
+
+		if (g_water_faces[i].empty() || !r->pRoomlets ||
+			!HDFogSheetRoom((r->flags & ROOM_MIST) != 0,
+			(r->flags & ROOM_REFLECT) != 0,
+			(r->flags & ROOM_REFLECT_CEILING) != 0))
+			continue;
+
+		for (HDRoomWaterFace& e : g_water_faces[i])
+		{
+			e.fogged = HD_FOG_ART_KEPT;
+
+			if (e.roomlet < 0 || e.roomlet >= r->nRoomlets || count <= 0)
+				continue;
+
+			const ROOMLET* let = &r->pRoomlets[e.roomlet];
+			const short* ptr = e.quad ? let->pFac + e.face * 6 :
+				let->pFac + let->nQuad * 6 + e.face * 5;
+			float lo[3] = { 0, 0, 0 }, hi[3] = { 0, 0, 0 };
+
+			for (int c = 0; c < (e.quad ? 4 : 3); c++)
+			{
+				const float* v = let->pSVtx + ptr[c] * 7;
+				const float w[3] = { v[0] + r->x, v[1], v[2] + r->z };
+
+				for (int k = 0; k < 3; k++)
+				{
+					lo[k] = !c || w[k] < lo[k] ? w[k] : lo[k];
+					hi[k] = !c || w[k] > hi[k] ? w[k] : hi[k];
+				}
+			}
+
+			int meets = -1;
+			float gap = 0.0f;
+
+			e.fogged = (unsigned char)HDFogArtVerdict(lo, hi, bulbs.data(),
+				count, factor, &meets, &gap);
+
+			if (!gLogEnabled || !pass || e.fogged == HD_FOG_ART_KEPT)
+				continue;
+
+			int number = e.quad ? e.face : let->nQuad + e.face;
+
+			for (int k = 0; k < e.roomlet; k++)
+				number += r->pRoomlets[k].nQuad + r->pRoomlets[k].nTri;
+
+			Log("HDLOG fogsheet level=%s room=%d face=%d dropped=%s "
+				"meets=%d gap=%.0f", g_stem, i, number, e.fogged ==
+				HD_FOG_ART_BULB ? "bulb" : "field", meets, gap);
+		}
+	}
+}
+
 /* The level's fog bulbs for the art's mist (HDRenderFogLevel, hd_fog.h
  * HDFogArtVerdict), once the level is built: every bulb of the rooms'
  * lists in the order aRoomInit copies them (drawroom.cpp), its centre in
  * the world and its radius. With the log, one line per bulb with its
  * field's reach and whether the fog's pass draws in the level (hd_fog 1
  * and the water sheets, whose depth it reads), and one per mist range the
- * bulbs' fog stands in for, left out where the pass draws. */
+ * bulbs' fog stands in for, left out where the pass draws; then the
+ * classic sheets of mist the same (ReportFogSheets). */
 static void ReportFogLevel()
 {
 	std::vector<float> bulbs;
@@ -7026,10 +7099,15 @@ static void ReportFogLevel()
 
 	HDRenderFogLevel(bulbs.empty() ? 0 : bulbs.data(), (int)rooms.size());
 
+	const int pass = HDRenderFogOn() && HDRenderWaterSheetsBuilt() ? 1 : 0;
+
+	ReportFogSheets(bulbs, (int)rooms.size(), pass);
+
+	if (!rooms.empty())
+		HDRenderFogPrepare();
+
 	if (!gLogEnabled)
 		return;
-
-	const int pass = HDRenderFogOn() && HDRenderWaterSheetsBuilt() ? 1 : 0;
 
 	for (size_t i = 0; i < rooms.size(); i++)
 		Log("HDLOG fogfield level=%s bulb=%d room=%d radius=%.0f reach=%.0f "
@@ -9649,6 +9727,16 @@ const HDRoomWaterFace* HDRoomWaterFaceAt(int roomIndex, int at)
 	return &g_water_faces[roomIndex][(size_t)at];
 }
 
+// See the note in hd_level.h.
+bool HDRoomWaterFaceFogged(const HDRoomWaterFace* face)
+{
+	if (!face || face->fogged == HD_FOG_ART_KEPT || !HDRenderFogStands())
+		return false;
+
+	g_fog_sheets_frame++;
+	return true;
+}
+
 /* One FlipMap swap.
  *
  * Called from FlipMap (game\control.cpp) at the exact line where the two
@@ -11454,7 +11542,18 @@ void HDFrameDrawGlow()
 	// The pieces' glass and glows, last in this bracket as well.
 	HDDebrisDraw(App.dx.lpD3DDevice, &projection, &frame, 1);
 
+	/* The bracket's end draws the fog bulbs' pass; with -log its times go
+	 * to PROFLOG (profile.h, fog= and fog_gpu=). */
+	HDRenderFogClock(gLogEnabled ? 1 : 0);
 	HDRenderFrameEnd();
+
+	if (gLogEnabled)
+	{
+		double cpu = 0.0, gpu = -1.0;
+
+		HDRenderFogClockRead(&cpu, &gpu);
+		ProfileNoteFog(cpu, gpu);
+	}
 
 	g_frame_room_calls += HDRenderDrawCalls();
 	g_frame_book_calls += HDRenderBookCalls();
@@ -11475,7 +11574,7 @@ void HDFrameDrawGlow()
 			"cutout_calls=%d cutout_pages=%d flipbook_calls=%d "
 			"gloss_calls=%d water_calls=%d book_calls=%d clear_calls=%d "
 			"sheen_calls=%d fog_taken=%d fog_drawn=%d fog_field=%d "
-			"fog_dropped=%d",
+			"fog_dropped=%d fog_pass=%d fog_sheets=%d",
 			g_frame_count, g_frame_room_calls, g_frame_dropped,
 			frame.bulbCount, frame.distanceFogStart, (int)wibble,
 			frame.cameraUnderwater, tomb5.shimmer ? 1 : 0,
@@ -11484,8 +11583,10 @@ void HDFrameDrawGlow()
 			HDRenderFlipbookCalls(), HDRenderGlossCalls(),
 			HDRenderWaterCalls(), g_frame_book_calls, g_frame_clear_calls,
 			g_frame_sheen_calls, fog.offered, fog.drawn, fog.shared,
-			fog.dropped);
+			fog.dropped, fog.passes, g_fog_sheets_frame);
 	}
+
+	g_fog_sheets_frame = 0;
 
 	/* The followed book, page by page: the first book drawn in the level
 	 * writes one line each time its page changes, for its first 31 pages -

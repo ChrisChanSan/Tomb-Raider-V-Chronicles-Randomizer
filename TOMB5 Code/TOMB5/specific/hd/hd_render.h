@@ -98,12 +98,12 @@ void HDRenderFogSet(int on);
 int HDRenderFogOn();
 
 /* The fog's last pass, for RoomProbe: the bulbs the bracket offered it, the
- * quads it drew and their pixels, and with HDRenderFogProbe's timing on its
- * GPU time (timestamps round the pass, waited for - a stall, never in the
- * engine). HDRenderFogProbe's draws 0 takes the drawn bulbs' haze out of the
- * shaders and leaves the pass out: the picture of the scene with neither,
- * which RoomProbe holds against the one without bulbs. The engine never
- * calls it. */
+ * bulbs its one draw walked and the pixels of its rectangle, and with
+ * HDRenderFogProbe's timing on its GPU time (timestamps round the pass,
+ * waited for - a stall, never in the engine). HDRenderFogProbe's draws 0
+ * takes the drawn bulbs' haze out of the shaders and leaves the pass out:
+ * the picture of the scene with neither, which RoomProbe holds against the
+ * one without bulbs. The engine never calls it. */
 struct HDFogLast
 {
 	int offered;
@@ -111,6 +111,10 @@ struct HDFogLast
 	long pixels;
 	double gpuMs;
 	int timed;
+	// The one pass (hd_fog.h): its draws (1, or 0 for none) and its
+	// rectangle on the screen in pixels, x0, y0, x1, y1.
+	int passes;
+	float rect[4];
 	// Where the breath stood: the eye in the world, the world's axes in
 	// view space (rows), 0 when no room placed it.
 	int placed;

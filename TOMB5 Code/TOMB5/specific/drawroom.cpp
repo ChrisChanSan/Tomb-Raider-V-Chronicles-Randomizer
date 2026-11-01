@@ -100,7 +100,10 @@ static void InsertRoomWater(ROOM_INFO* r)
 	{
 		const HDRoomWaterFace* entry = HDRoomWaterFaceAt(room_number, i);
 
-		if (!entry || entry->roomlet < 0 || entry->roomlet >= r->nRoomlets)
+		/* A sheet of mist the bulbs' fog stands in for (hd_level.h,
+		 * HDRoomWaterFaceFogged) is left out while the fog's pass draws. */
+		if (!entry || entry->roomlet < 0 || entry->roomlet >= r->nRoomlets ||
+			HDRoomWaterFaceFogged(entry))
 			continue;
 
 		ROOMLET* roomlet = &r->pRoomlets[entry->roomlet];

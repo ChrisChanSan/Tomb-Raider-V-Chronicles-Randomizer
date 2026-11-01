@@ -5029,9 +5029,10 @@ namespace
 	/* --- the fog bulbs' body --------------------------------------------
 	 *
 	 * The frame's fog bulbs drawn as fog of their own (the rule is hd_fog.h's,
-	 * the pixel's arithmetic hd_fog.hlsl's): one quad per bulb over the
-	 * rectangle of its field's sphere on the screen - the bulb's reach, its
-	 * field (HD_FOG_FIELD) - at the end of the bracket that asked
+	 * the pixel's arithmetic hd_fog.hlsl's): one pass - one quad over the
+	 * union of the rectangles of the fields' spheres on the screen, each
+	 * sphere the bulb's reach, its field (HD_FOG_FIELD), each pixel walking
+	 * every bulb of the frame - at the end of the bracket that asked
 	 * the rooms' additive pass - the last HD pass of the frame, after the
 	 * glass, the glows and the water, before the classic path's sprites and
 	 * the HUD - over the frame's own depth. A bulb the pass draws leaves the
@@ -5058,6 +5059,8 @@ namespace
 	// This bracket's bulbs for the pass, view space, and their rectangles.
 	HDFogBulb g_fog_bulb[HD_MAX_BULBS];
 	float g_fog_rect[HD_MAX_BULBS][4];
+	// HDFogBounds' answer for each: 1 a rectangle, 2 the whole screen.
+	int g_fog_kind[HD_MAX_BULBS];
 	int g_fog_count = 0;
 	float g_fog_clock = 0.0f;
 	// The bracket asked a room's additive pass (HDRenderRoomMask).
@@ -5068,7 +5071,21 @@ namespace
 	float g_fog_eye[3] = { 0, 0, 0 };
 	IDirect3DVertexShader9* g_fog_vs = 0;
 	IDirect3DPixelShader9* g_fog_ps = 0;
+	/* The breath's lattice (hd_fog.h, HD_FOG_TABLE): HDFogHash at every
+	 * point of its fold, one 16 bit texel a point (8 where the card filters
+	 * no L16 volume), read by the card's filter (fog_table). */
+	IDirect3DVolumeTexture9* g_fog_table = 0;
 	IDirect3DDevice9* g_fog_made = 0;
+	/* -log's clock of the pass (HDRenderFogClock): the processor's time in
+	 * fog_draw, and the card's out of a ring of timestamp queries - the
+	 * disjoint bracket, the start, the end and the frequency - read back
+	 * frames later without a wait, so no frame is held for it. */
+	bool g_fog_clocked = false;
+	double g_fog_cpu_ms = 0.0;
+	double g_fog_gpu_ms = -1.0;
+	IDirect3DQuery9* g_fog_ring[4][4] = {};
+	bool g_fog_ring_busy[4] = {};
+	int g_fog_ring_at = 0;
 	// RoomProbe's numbers (HDRenderFogLast) and its two switches.
 	HDFogLast g_fog_last = {};
 	bool g_fog_timing = false;
@@ -5102,6 +5119,10 @@ namespace
 	float g_fog_factor = -1.0f;
 	int g_fog_dropped = 0;
 	bool g_fog_drop = true;
+	/* RoomProbe's -fogquads: the same shader one slot a draw, each over its
+	 * bulb's own rectangle and blended in turn - the frame's blend after
+	 * every bulb, as the quad per bulb before the one pass had it. */
+	bool g_fog_quads = false;
 
 	float fog_factor()
 	{
@@ -5312,16 +5333,140 @@ namespace
 		return weight;
 	}
 
+	void fog_release();
+	void fog_release_device();
+
+	/* The breath's lattice on the processor: HDFogHash at the point
+	 * (x, y, z) of its fold, 0..1 as 0..65535, at x + 64 (y + 64 z) - filled
+	 * once (HDRenderFogPrepare, at the level's build), so the first frame
+	 * with a bulb only hands it to the card. */
+	std::vector<unsigned short> g_fog_lattice;
+
+	void fog_lattice()
+	{
+		const int n = HD_FOG_TABLE;
+
+		if ((int)g_fog_lattice.size() == n * n * n)
+			return;
+
+		g_fog_lattice.resize((size_t)(n * n * n));
+
+		for (int z = 0; z < n; z++)
+			for (int y = 0; y < n; y++)
+				for (int x = 0; x < n; x++)
+					g_fog_lattice[(size_t)(x + n * (y + n * z))] =
+						(unsigned short)(HDFogHash((float)x, (float)y,
+						(float)z) * 65535.0f + 0.5f);
+	}
+
+	/* The breath's table (hd_fog.h, HD_FOG_TABLE): the lattice in texel
+	 * (x, y, z) - L16, or its upper byte in all four channels where the
+	 * card filters no L16 volume. Managed, so it lives through a reset. */
+	IDirect3DVolumeTexture9* fog_table()
+	{
+		IDirect3D9* d3d = 0;
+		D3DDEVICE_CREATION_PARAMETERS made;
+		D3DDISPLAYMODE mode;
+		D3DFORMAT format = D3DFMT_A8R8G8B8;
+
+		if (SUCCEEDED(g_device->GetDirect3D(&d3d)) && d3d)
+		{
+			if (SUCCEEDED(g_device->GetCreationParameters(&made)) &&
+				SUCCEEDED(g_device->GetDisplayMode(0, &mode)) &&
+				SUCCEEDED(d3d->CheckDeviceFormat(made.AdapterOrdinal,
+				made.DeviceType, mode.Format, D3DUSAGE_QUERY_FILTER,
+				D3DRTYPE_VOLUMETEXTURE, D3DFMT_L16)))
+				format = D3DFMT_L16;
+
+			d3d->Release();
+		}
+
+		const int n = HD_FOG_TABLE;
+		IDirect3DVolumeTexture9* table = 0;
+		D3DLOCKED_BOX box;
+
+		if (FAILED(g_device->CreateVolumeTexture(n, n, n, 1, 0, format,
+			D3DPOOL_MANAGED, &table, 0)) || !table)
+			return 0;
+
+		if (FAILED(table->LockBox(0, &box, 0, 0)))
+		{
+			table->Release();
+			return 0;
+		}
+
+		fog_lattice();
+
+		for (int z = 0; z < n; z++)
+			for (int y = 0; y < n; y++)
+			{
+				unsigned char* row = (unsigned char*)box.pBits +
+					z * box.SlicePitch + y * box.RowPitch;
+				const unsigned short* from = &g_fog_lattice[(size_t)(n *
+					(y + n * z))];
+
+				for (int x = 0; x < n; x++)
+				{
+					if (format == D3DFMT_L16)
+						((unsigned short*)row)[x] = from[x];
+					else
+					{
+						const unsigned int b = (from[x] + 128u) / 257u;
+
+						((unsigned int*)row)[x] = b | b << 8 | b << 16 |
+							b << 24;
+					}
+				}
+			}
+
+		table->UnlockBox(0);
+		return table;
+	}
+
+	/* The pass's shaders and table on the device in hand, made once a
+	 * device; false while one of them is missing - a card that runs no
+	 * shader this long, or has no volume - and then the pass draws
+	 * nothing and the bulbs keep their haze. */
+	bool fog_ready()
+	{
+		if (!g_device)
+			return false;
+
+		if (g_fog_made != g_device)
+		{
+			// The bracket's bulbs stay taken: fog_take asks this.
+			fog_release_device();
+			g_fog_made = g_device;
+
+			if (FAILED(g_device->CreateVertexShader((const DWORD*)kHDFogVS,
+				&g_fog_vs)))
+				g_fog_vs = 0;
+
+			if (FAILED(g_device->CreatePixelShader((const DWORD*)kHDFogPS,
+				&g_fog_ps)))
+				g_fog_ps = 0;
+
+			g_fog_table = fog_table();
+		}
+
+		return g_fog_vs && g_fog_ps && g_fog_table;
+	}
+
 	/* An additive range the bracket leaves out (draw_pass): the art's mist
 	 * whose box meets a bulb's sphere or lies in its field (HDRange::
 	 * addLeft, HDRenderFogLevel), with hd_fog 1 and where the pass draws
 	 * the bulbs' fog - the frame's depth and the level's sheets, as
 	 * fog_take asks - so the bulbs' fog stands in its place. Without the
 	 * pass the bulbs keep the haze and the mist keeps its weight. */
+	bool fog_stands()
+	{
+		return g_fog_on && g_fog_drop && g_depth_texture &&
+			HDRenderWaterSheetsBuilt() && fog_ready();
+	}
+
 	bool fog_add_left(const HDRange& range)
 	{
-		if (range.addLeft == HD_FOG_ART_KEPT || !g_fog_on || !g_fog_drop ||
-			!g_depth_texture || !HDRenderWaterSheetsBuilt())
+		if (range.addLeft == HD_FOG_ART_KEPT || !fog_stands())
 			return false;
 
 		g_fog_dropped++;
@@ -5366,7 +5511,7 @@ namespace
 			g_fog_all[g_fog_all_count++] = f->bulbs[j];
 
 		if (!f || !g_fog_on || !g_depth_texture ||
-			!HDRenderWaterSheetsBuilt() || count <= 0)
+			!HDRenderWaterSheetsBuilt() || count <= 0 || !fog_ready())
 			return;
 
 		// The projection's scales and its near plane (a - b / z = 0).
@@ -5386,10 +5531,12 @@ namespace
 			const float c[3] = { b.x, b.y, b.z };
 			const float reach = HDFogFieldReach(b.rad, factor);
 			float* rect = g_fog_rect[g_fog_count];
+			const int kind = HDFogBounds(c, reach, sx, sy, znear, rect);
 
-			if (!HDFogBounds(c, reach, sx, sy, znear, rect))
+			if (!kind)
 				continue;
 
+			g_fog_kind[g_fog_count] = kind;
 			g_fog_index[g_fog_count] = j;
 			g_fog_reach[g_fog_count] = reach;
 			g_fog_bulb[g_fog_count] = b;
@@ -5474,17 +5621,128 @@ namespace
 
 	void fog_release()
 	{
-		if (g_fog_vs) { g_fog_vs->Release(); g_fog_vs = 0; }
-		if (g_fog_ps) { g_fog_ps->Release(); g_fog_ps = 0; }
-		g_fog_made = 0;
+		fog_release_device();
 		g_fog_taken = false;
 	}
 
+	// The pass's objects on the device: its shaders, table and clock.
+	void fog_release_device()
+	{
+		if (g_fog_vs) { g_fog_vs->Release(); g_fog_vs = 0; }
+		if (g_fog_ps) { g_fog_ps->Release(); g_fog_ps = 0; }
+		if (g_fog_table) { g_fog_table->Release(); g_fog_table = 0; }
+
+		for (int k = 0; k < 4; k++)
+		{
+			for (int i = 0; i < 4; i++)
+				if (g_fog_ring[k][i])
+				{
+					g_fog_ring[k][i]->Release();
+					g_fog_ring[k][i] = 0;
+				}
+
+			g_fog_ring_busy[k] = false;
+		}
+
+		g_fog_made = 0;
+	}
+
+	// The ring's answers that came in: the last one read into g_fog_gpu_ms.
+	void fog_clock_poll()
+	{
+		for (int k = 0; k < 4; k++)
+		{
+			IDirect3DQuery9** q = g_fog_ring[k];
+			BOOL disjoint = TRUE;
+			UINT64 t0 = 0, t1 = 0, freq = 0;
+
+			if (!g_fog_ring_busy[k] ||
+				q[0]->GetData(&disjoint, sizeof(disjoint), 0) != S_OK ||
+				q[1]->GetData(&t0, sizeof(t0), 0) != S_OK ||
+				q[2]->GetData(&t1, sizeof(t1), 0) != S_OK ||
+				q[3]->GetData(&freq, sizeof(freq), 0) != S_OK)
+				continue;
+
+			g_fog_ring_busy[k] = false;
+
+			if (!disjoint && freq && t1 >= t0)
+				g_fog_gpu_ms = (double)(t1 - t0) * 1000.0 / (double)freq;
+		}
+	}
+
+	/* A free set of the ring, its four queries made once a device, the
+	 * bracket opened and the start stamped; 0 while every set waits for
+	 * the card or a query is refused. */
+	IDirect3DQuery9** fog_clock_start()
+	{
+		fog_clock_poll();
+
+		for (int k = 0; k < 4; k++)
+		{
+			const int at = (g_fog_ring_at + k) % 4;
+			IDirect3DQuery9** q = g_fog_ring[at];
+			const D3DQUERYTYPE kinds[4] = { D3DQUERYTYPE_TIMESTAMPDISJOINT,
+				D3DQUERYTYPE_TIMESTAMP, D3DQUERYTYPE_TIMESTAMP,
+				D3DQUERYTYPE_TIMESTAMPFREQ };
+
+			if (g_fog_ring_busy[at])
+				continue;
+
+			for (int i = 0; i < 4; i++)
+				if (!q[i] && FAILED(g_device->CreateQuery(kinds[i], &q[i])))
+					q[i] = 0;
+
+			if (!q[0] || !q[1] || !q[2] || !q[3])
+				return 0;
+
+			g_fog_ring_at = (at + 1) % 4;
+			g_fog_ring_busy[at] = true;
+			q[0]->Issue(D3DISSUE_BEGIN);
+			q[1]->Issue(D3DISSUE_END);
+			return q;
+		}
+
+		return 0;
+	}
+
+	void fog_clock_end(IDirect3DQuery9** q)
+	{
+		if (!q)
+			return;
+
+		q[2]->Issue(D3DISSUE_END);
+		q[3]->Issue(D3DISSUE_END);
+		q[0]->Issue(D3DISSUE_END);
+	}
+
 	/* The pass, at the bracket's end (HDRenderFrameEnd), when it is due and
-	 * holds a bulb. Its own states and registers are put back afterwards;
-	 * HDRenderStateRestore then hands the caller's back as ever. Nearest
-	 * bulb last, so a nearer fog lies over a farther one. */
+	 * holds a bulb: one quad over the union of the taken bulbs' rectangles
+	 * (hd_fog.h, HDFogUnion), the taken bulbs in the shader's slots,
+	 * farthest first, so a nearer fog lies over a farther one. Its own
+	 * states and registers are put back afterwards; HDRenderStateRestore
+	 * then hands the caller's back as ever. */
+	void fog_draw_body();
+
 	void fog_draw()
+	{
+		LARGE_INTEGER t0, t1, f;
+		const bool clocked = g_fog_clocked &&
+			QueryPerformanceFrequency(&f) && f.QuadPart;
+
+		if (clocked)
+			QueryPerformanceCounter(&t0);
+
+		fog_draw_body();
+
+		if (clocked)
+		{
+			QueryPerformanceCounter(&t1);
+			g_fog_cpu_ms = (double)(t1.QuadPart - t0.QuadPart) * 1000.0 /
+				(double)f.QuadPart;
+		}
+	}
+
+	void fog_draw_body()
 	{
 		const bool due = g_fog_due;
 
@@ -5521,32 +5779,21 @@ namespace
 			}
 
 		if (!due || !g_fog_count || !g_device || !g_depth_texture ||
-			!g_fog_draws)
+			!g_fog_draws || !fog_ready())
 			return;
-
-		if (g_fog_made != g_device)
-		{
-			fog_release();
-			g_fog_made = g_device;
-
-			if (FAILED(g_device->CreateVertexShader((const DWORD*)kHDFogVS,
-				&g_fog_vs)))
-				g_fog_vs = 0;
-
-			if (FAILED(g_device->CreatePixelShader((const DWORD*)kHDFogPS,
-				&g_fog_ps)))
-				g_fog_ps = 0;
-		}
 
 		D3DVIEWPORT9 vp;
 		D3DSURFACE_DESC desc;
+		float rect[4];
 
-		if (!g_fog_vs || !g_fog_ps || FAILED(g_device->GetViewport(&vp)) ||
+		if (FAILED(g_device->GetViewport(&vp)) ||
 			FAILED(g_depth_texture->GetLevelDesc(0, &desc)) || !vp.Width ||
-			!vp.Height || !desc.Width || !desc.Height)
+			!vp.Height || !desc.Width || !desc.Height ||
+			!HDFogUnion(&g_fog_rect[0][0], g_fog_kind, g_fog_count, rect))
 			return;
 
-		float c[9 * 4] = {};
+		const int count = HDFogPassCount(g_fog_count);
+		float c[4 * 4] = {};
 
 		c[0] = g_proj[0] != 0.0f ? 1.0f / g_proj[0] : 1.0f;
 		c[1] = g_proj[5] != 0.0f ? 1.0f / g_proj[5] : 1.0f;
@@ -5560,19 +5807,21 @@ namespace
 		c[9] = 1.0f / (float)desc.Height;
 		c[10] = g_fog_clock;
 		c[11] = g_fog_placed ? 1.0f : 0.0f;
+		// The fields the cap sums, and the slots the draw walks: all.
+		c[12] = (float)count;
+		c[13] = 0.0f;
+		c[14] = (float)count;
+
+		// c5 the eye in the world, c6 - c8 the world's axes in view space.
+		float e[4 * 4] = {};
 
 		for (int i = 0; i < 3; i++)
 		{
-			c[20 + i] = g_fog_eye[i];
+			e[i] = g_fog_eye[i];
 
 			for (int k = 0; k < 3; k++)
-				c[24 + i * 4 + k] = g_fog_axes[i * 3 + k];
+				e[4 + i * 4 + k] = g_fog_axes[i * 3 + k];
 		}
-
-		// What the pass changes beyond HDRenderStateRestore's list.
-		float saved[30 * 4];
-
-		g_device->GetPixelShaderConstantF(0, saved, 30);
 
 		const int order[HD_MAX_BULBS] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
 			11, 12, 13, 14, 15 };
@@ -5584,12 +5833,68 @@ namespace
 			return g_fog_bulb[a].z > g_fog_bulb[b].z;
 		});
 
-		g_device->SetPixelShaderConstantF(0, c, 3);
-		g_device->SetPixelShaderConstantF(5, c + 20, 4);
+		/* The bulbs in the shader's slots (hd_fog.hlsl, c10 - c53): the
+		 * fields the cap sums, centre in view space and one over the reach
+		 * squared, and their peaks; each one's colour and density, its
+		 * reach for the span and its own radius for the breath. */
+		float fields[HD_FOG_PASS_SLOTS * 4] = {};
+		float peaks[HD_FOG_PASS_SLOTS] = {};
+		float colours[HD_FOG_PASS_SLOTS * 4] = {};
+		float reach[HD_FOG_PASS_SLOTS] = {};
+		float own[HD_FOG_PASS_SLOTS] = {};
+
+		for (int n = 0; n < count; n++)
+		{
+			const HDFogBulb& b = g_fog_bulb[sorted[n]];
+			const float r = g_fog_reach[sorted[n]];
+
+			fields[n * 4 + 0] = b.x;
+			fields[n * 4 + 1] = b.y;
+			fields[n * 4 + 2] = b.z;
+			fields[n * 4 + 3] = r > 0.0f ? 1.0f / (r * r) : 0.0f;
+			peaks[n] = b.density * HD_FOG_PEAK;
+			colours[n * 4 + 0] = b.r;
+			colours[n * 4 + 1] = b.g;
+			colours[n * 4 + 2] = b.b;
+			colours[n * 4 + 3] = b.density;
+			reach[n] = r;
+			own[n] = b.rad;
+		}
+
+		/* What the pass changes beyond HDRenderStateRestore's list - the
+		 * registers - and stage 1, the table's, which the water's bracket
+		 * end after the pass may read as it was. */
+		float saved[54 * 4];
+		const D3DSAMPLERSTATETYPE kinds[7] = { D3DSAMP_MINFILTER,
+			D3DSAMP_MAGFILTER, D3DSAMP_MIPFILTER, D3DSAMP_ADDRESSU,
+			D3DSAMP_ADDRESSV, D3DSAMP_ADDRESSW, D3DSAMP_SRGBTEXTURE };
+		const DWORD table[7] = { D3DTEXF_LINEAR, D3DTEXF_LINEAR,
+			D3DTEXF_NONE, D3DTADDRESS_WRAP, D3DTADDRESS_WRAP,
+			D3DTADDRESS_WRAP, FALSE };
+		DWORD states[7];
+		IDirect3DBaseTexture9* stage = 0;
+
+		g_device->GetPixelShaderConstantF(0, saved, 54);
+		g_device->GetTexture(1, &stage);
+
+		for (int i = 0; i < 7; i++)
+		{
+			g_device->GetSamplerState(1, kinds[i], &states[i]);
+			g_device->SetSamplerState(1, kinds[i], table[i]);
+		}
+
+		g_device->SetPixelShaderConstantF(0, c, 4);
+		g_device->SetPixelShaderConstantF(5, e, 4);
+		g_device->SetPixelShaderConstantF(10, fields, HD_FOG_PASS_SLOTS);
+		g_device->SetPixelShaderConstantF(26, peaks, HD_FOG_PASS_SLOTS / 4);
+		g_device->SetPixelShaderConstantF(30, colours, HD_FOG_PASS_SLOTS);
+		g_device->SetPixelShaderConstantF(46, reach, HD_FOG_PASS_SLOTS / 4);
+		g_device->SetPixelShaderConstantF(50, own, HD_FOG_PASS_SLOTS / 4);
 		g_device->SetVertexShader(g_fog_vs);
 		g_device->SetPixelShader(g_fog_ps);
 		g_device->SetFVF(D3DFVF_XYZW);
 		g_device->SetTexture(0, g_depth_texture);
+		g_device->SetTexture(1, g_fog_table);
 		g_device->SetSamplerState(0, D3DSAMP_MINFILTER, D3DTEXF_POINT);
 		g_device->SetSamplerState(0, D3DSAMP_MAGFILTER, D3DTEXF_POINT);
 		g_device->SetSamplerState(0, D3DSAMP_MIPFILTER, D3DTEXF_NONE);
@@ -5612,6 +5917,7 @@ namespace
 			D3DCOLORWRITEENABLE_BLUE);
 
 		IDirect3DQuery9* q[3] = { 0, 0, 0 };
+		IDirect3DQuery9** ring = g_fog_clocked ? fog_clock_start() : 0;
 
 		if (g_fog_timing)
 		{
@@ -5626,67 +5932,48 @@ namespace
 			}
 		}
 
-		// Half a pixel round each rectangle, so no edge pixel is lost.
+		// Half a pixel round the rectangle, so no edge pixel is lost.
 		const float padX = 1.0f / (float)vp.Width;
 		const float padY = 1.0f / (float)vp.Height;
-
-		for (int n = 0; n < g_fog_count; n++)
+		const float x0 = rect[0] - padX, y0 = rect[1] - padY;
+		const float x1 = rect[2] + padX, y1 = rect[3] + padY;
+		const float corners[16] =
 		{
-			const HDFogBulb& b = g_fog_bulb[sorted[n]];
-			const float* r = g_fog_rect[sorted[n]];
-			// Its field's reach for the span, its own radius for the breath.
-			const float bulb[8] = { b.x, b.y, b.z, g_fog_reach[sorted[n]],
-				b.r, b.g, b.b, b.density };
+			x0, y0, 0.0f, 1.0f, x1, y0, 0.0f, 1.0f,
+			x1, y1, 0.0f, 1.0f, x0, y1, 0.0f, 1.0f
+		};
 
-			/* The fields the cap sums (hd_fog.hlsl, c9 - c29): its own
-			 * first, then each taken bulb's whose field meets it - no other
-			 * reaches a point of its own - with its centre in view space,
-			 * one over its reach squared and its peak. */
-			float fields[HD_MAX_BULBS * 4] = {};
-			float peaks[HD_MAX_BULBS] = {};
-			int count = 0;
-
-			for (int k = -1; k < g_fog_count; k++)
-			{
-				const int at = k < 0 ? sorted[n] : k;
-				const HDFogBulb& o = g_fog_bulb[at];
-				const float reach = g_fog_reach[at];
-				const float v[3] = { o.x - b.x, o.y - b.y, o.z - b.z };
-				const float both = reach + g_fog_reach[sorted[n]];
-
-				if (k == sorted[n] || (k >= 0 && !(v[0] * v[0] + v[1] * v[1] +
-					v[2] * v[2] < both * both)))
-					continue;
-
-				fields[count * 4 + 0] = o.x;
-				fields[count * 4 + 1] = o.y;
-				fields[count * 4 + 2] = o.z;
-				fields[count * 4 + 3] = reach > 0.0f ? 1.0f / (reach *
-					reach) : 0.0f;
-				peaks[count++] = o.density * HD_FOG_PEAK;
-			}
-
-			const float own[4] = { b.rad, b.density * HD_FOG_PEAK,
-				(float)count, 0.0f };
-
-			g_device->SetPixelShaderConstantF(10, fields, HD_MAX_BULBS);
-			g_device->SetPixelShaderConstantF(26, peaks, HD_MAX_BULBS / 4);
-			const float x0 = r[0] - padX, y0 = r[1] - padY;
-			const float x1 = r[2] + padX, y1 = r[3] + padY;
-			const float corners[16] =
-			{
-				x0, y0, 0.0f, 1.0f, x1, y0, 0.0f, 1.0f,
-				x1, y1, 0.0f, 1.0f, x0, y1, 0.0f, 1.0f
-			};
-
-			g_device->SetPixelShaderConstantF(3, bulb, 2);
-			g_device->SetPixelShaderConstantF(9, own, 1);
+		if (!g_fog_quads)
 			g_device->DrawPrimitiveUP(D3DPT_TRIANGLEFAN, 2, corners,
 				4 * sizeof(float));
-			g_fog_last.drawn++;
-			g_fog_last.pixels += (long)((r[2] - r[0]) * 0.5f * vp.Width *
-				(r[3] - r[1]) * 0.5f * vp.Height);
+
+		for (int n = 0; g_fog_quads && n < count; n++)
+		{
+			const float* r = g_fog_rect[sorted[n]];
+			const float walk[4] = { (float)count, (float)n, (float)(n + 1),
+				0.0f };
+			const float quad[16] =
+			{
+				r[0] - padX, r[1] - padY, 0.0f, 1.0f,
+				r[2] + padX, r[1] - padY, 0.0f, 1.0f,
+				r[2] + padX, r[3] + padY, 0.0f, 1.0f,
+				r[0] - padX, r[3] + padY, 0.0f, 1.0f
+			};
+
+			g_device->SetPixelShaderConstantF(3, walk, 1);
+			g_device->DrawPrimitiveUP(D3DPT_TRIANGLEFAN, 2, quad,
+				4 * sizeof(float));
 		}
+
+		fog_clock_end(ring);
+		g_fog_last.passes = g_fog_quads ? count : 1;
+		g_fog_last.drawn = count;
+		g_fog_last.rect[0] = (rect[0] + 1.0f) * 0.5f * (float)vp.Width;
+		g_fog_last.rect[1] = (1.0f - rect[3]) * 0.5f * (float)vp.Height;
+		g_fog_last.rect[2] = (rect[2] + 1.0f) * 0.5f * (float)vp.Width;
+		g_fog_last.rect[3] = (1.0f - rect[1]) * 0.5f * (float)vp.Height;
+		g_fog_last.pixels = (long)((g_fog_last.rect[2] - g_fog_last.rect[0]) *
+			(g_fog_last.rect[3] - g_fog_last.rect[1]));
 
 		if (q[0] && q[1] && q[2])
 		{
@@ -5741,7 +6028,14 @@ namespace
 			if (q[i])
 				q[i]->Release();
 
-		g_device->SetPixelShaderConstantF(0, saved, 30);
+		g_device->SetPixelShaderConstantF(0, saved, 54);
+		g_device->SetTexture(1, stage);
+
+		if (stage)
+			stage->Release();
+
+		for (int i = 0; i < 7; i++)
+			g_device->SetSamplerState(1, kinds[i], states[i]);
 	}
 
 	void apply_frame_lighting(const HDFrameLighting* f)
@@ -5841,6 +6135,41 @@ void HDRenderFogSet(int on)
 int HDRenderFogOn()
 {
 	return g_fog_on;
+}
+
+bool HDRenderFogStands()
+{
+	return fog_stands();
+}
+
+void HDRenderFogQuadsProbe(int on)
+{
+	g_fog_quads = on != 0;
+}
+
+void HDRenderFogPrepare()
+{
+	fog_lattice();
+}
+
+void HDRenderFogClock(int on)
+{
+	g_fog_clocked = on != 0;
+	g_fog_cpu_ms = 0.0;
+}
+
+void HDRenderFogClockRead(double* cpuMs, double* gpuMs)
+{
+	if (g_fog_clocked && g_device)
+		fog_clock_poll();
+
+	if (cpuMs)
+		*cpuMs = g_fog_cpu_ms;
+
+	if (gpuMs)
+		*gpuMs = g_fog_gpu_ms;
+
+	g_fog_gpu_ms = -1.0;
 }
 
 void HDRenderFogLast(HDFogLast* out)

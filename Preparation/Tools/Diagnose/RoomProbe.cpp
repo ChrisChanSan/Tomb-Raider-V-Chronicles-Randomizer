@@ -362,6 +362,20 @@
  *                     bulb's body alone
  *     -fogdrop 0      no mist left out, whatever its verdict: with
  *                     -fogfactor 1 the fog of the rules before the field
+ *     -fogquads       the one pass's shader drawn one bulb a draw over its
+ *                     own rectangle, the frame blended after each bulb as
+ *                     the quad per bulb before it blended it: the picture
+ *                     the one pass's single blend is held against
+ *     -fogsheets      (and -fogbulbs; -hdwater 1 for the sheets the
+ *                     engine asks) the classic sheets of mist (hd_fog.h,
+ *                     HDFogSheetRoom): every face of a room on the classic
+ *                     mist branch at its lowest floor with every corner
+ *                     marked, its room, number, texinfo, who draws it and
+ *                     its verdict against the level's bulbs, and the count
+ *                     (namespace probesheets). The picture line of
+ *                     -fogbulbs is followed by the one pass's: its draw's
+ *                     rectangle, its pixels, the bulbs it walks and its
+ *                     GPU time
  *     -underwater     the room carries ROOM_UNDERWATER and the camera is in
  *                     it: the WaterTable darkening on the colour and the
  *                     screen wobble on the position.
@@ -9088,6 +9102,7 @@ namespace probefog
 	static int g_pass = 1;			// -fogpass 0: the haze out, no pass
 	static bool g_art = false;		// -fogart
 	static bool g_field = false;		// -fogfield
+	static bool g_sheets = false;		// -fogsheets (probesheets)
 	static std::vector<Bulb> g_level;
 	static float g_origin[3] = { 0, 0, 0 };
 	// The level's number of each entry of g_bulbs; -1 for a -bulb.
@@ -9144,9 +9159,26 @@ namespace probefog
 			return true;
 		}
 
+		// -fogsheets (with -fogbulbs): the classic sheets of mist and
+		// their verdicts (probesheets, after the marks' twin).
+		if (!strcmp(a, "-fogsheets"))
+		{
+			g_sheets = true;
+			g_list = true;
+			return true;
+		}
+
 		if (!strcmp(a, "-fogfactor") && more)
 		{
 			HDRenderFogFieldProbe((float)atof(argv[++*at]));
+			return true;
+		}
+
+		/* -fogquads: the one pass's shader one slot a draw over each
+		 * bulb's rectangle, the frame blended after every bulb. */
+		if (!strcmp(a, "-fogquads"))
+		{
+			HDRenderFogQuadsProbe(1);
 			return true;
 		}
 
@@ -9470,7 +9502,8 @@ namespace probefog
 	static std::vector<double> g_times;
 
 	/* The fog's pass after a bracket (HDRenderFogLast): the bulbs offered,
-	 * the quads drawn, their pixels and the GPU time. With -fogbulbs. */
+	 * the bulbs its one draw walked, its rectangle's pixels and the GPU
+	 * time. With -fogbulbs. */
 	static void Report(const char* what)
 	{
 		if (!g_list)
@@ -9486,6 +9519,15 @@ namespace probefog
 			"%d mist draw(s) left out\n", what, HDRenderFogOn(), last.drawn,
 			last.offered, last.pixels, last.timed ? "" : "(not timed) ",
 			last.gpuMs, HDRenderFogField(), last.shared, last.dropped);
+
+		// The one pass (hd_fog.h): its draw's rectangle and its price.
+		if (last.passes)
+			printf("-fogbulbs: the one pass - %d draw over "
+				"%.0f,%.0f..%.0f,%.0f, %ld pixel(s), %d bulb(s) walked a "
+				"pixel, GPU %s%.4f ms\n",
+				last.passes, last.rect[0], last.rect[1], last.rect[2],
+				last.rect[3], last.pixels, last.drawn, last.timed ? "" :
+				"(not timed) ", last.gpuMs);
 
 		if (last.placed)
 			printf("-fogbulbs: the breath placed: eye %.3f %.3f %.3f, axes "
@@ -17968,6 +18010,226 @@ namespace probemarks
 	}
 }
 
+/* -fogsheets (with -fogbulbs and -roombox; -hdwater 1 builds the sheets the
+ * engine asks): the classic sheets of mist of the level (hd_fog.h,
+ * HDFogSheetRoom) - every face of a room on the classic mist branch whose
+ * corners are all at the room's lowest floor and all carry the shimmer
+ * mark (probemarks, the twin of the engine's marks), the classic water
+ * face's own test - each with its room, its number in the room's faces
+ * (the quads, then the triangles, roomlet after roomlet, as hd_level.cpp
+ * logs it), its roomlet, its texinfo and the texinfo's draw type, double-
+ * sided or not, its centre in the world, who draws it in the game, and its
+ * verdict against the level's bulbs at the field's factor in force
+ * (HDFogArtVerdict): the bulb it meets or whose field holds it and their
+ * distance. Who draws it, as BuildWaterSurfaces decides: `hd` restored
+ * over the HD room by the classic path, `art` left to the .TRG (its flat
+ * art over half the room's plane, or its own water there), `sheet` under a
+ * water sheet, `classic` a room without art, drawn by the classic path
+ * whole. The tool's answer for a room with art is "its group has
+ * triangles", not the engine's whole build test; the dry copies the
+ * engine leaves out beside a sheet are not asked. Then the count: rooms,
+ * sheets, restored, in a bulb's reach, and those the rule leaves out. */
+namespace probesheets
+{
+	static void List(const char* stem)
+	{
+		if (!probefog::g_sheets)
+			return;
+
+		if (g_roombox.empty())
+		{
+			printf("-fogsheets: needs -roombox\n");
+			return;
+		}
+
+		Tr5Level level;
+		std::string error;
+		const std::string trc = g_roombox + "\\" + stem + ".TRC";
+		std::wstring wide;
+
+		for (size_t i = 0; i < trc.size(); i++)
+			wide.push_back((wchar_t)(unsigned char)trc[i]);
+
+		if (!level.load(wide, error))
+		{
+			printf("-fogsheets: %s could not be read (%s)\n", trc.c_str(),
+				error.c_str());
+			return;
+		}
+
+		probemarks::Build(level);
+
+		const std::vector<uint8_t>& raw = level.debugBytes();
+		size_t texAt = 0;
+		int32_t texN = 0;
+
+		level.debugTexinfoBlock(texAt, texN);
+
+		std::vector<float> bulbs;
+
+		for (const probefog::Bulb& b : probefog::g_level)
+		{
+			bulbs.push_back(b.x);
+			bulbs.push_back(b.y);
+			bulbs.push_back(b.z);
+			bulbs.push_back(b.rad);
+		}
+
+		const int count = (int)probefog::g_level.size();
+		const float factor = HDRenderFogField();
+		const int pass = HDRenderFogOn() && HDRenderWaterSheetsBuilt();
+		int rooms = 0, sheets = 0, restored = 0, classic = 0, reach = 0;
+		int dropped = 0, droppedRooms = 0;
+		const int n = (std::min)(level.roomCount(),
+			(int)probemarks::g_rooms.size());
+
+		for (int r = 0; r < n; r++)
+		{
+			const probemarks::Room& pr = probemarks::g_rooms[(size_t)r];
+
+			if (!HDFogSheetRoom((pr.flags & probemarks::kMist) != 0,
+				(pr.flags & probemarks::kReflect) != 0,
+				(pr.flags & probemarks::kReflectCeiling) != 0))
+				continue;
+
+			std::vector<Tr5Level::FaceInfo> faces;
+
+			if (!level.roomFaces(r, faces, error))
+				continue;
+
+			struct Sheet
+			{
+				int number, roomlet, tex, ds, x0, z0, x1, z1;
+				float lo[3], hi[3];
+				bool covered, water, under;
+			};
+
+			std::vector<Sheet> list;
+			int number = 0, lastLet = -1, inLet = 0;
+
+			for (const Tr5Level::FaceInfo& f : faces)
+			{
+				if (f.roomlet != lastLet)
+				{
+					lastLet = f.roomlet;
+					inLet = 0;
+				}
+
+				const int at = number++;
+
+				inLet++;
+
+				if (f.roomlet < 0 || f.roomlet >= (int)pr.roomlets.size())
+					continue;
+
+				const probemarks::Roomlet& l = pr.roomlets[(size_t)f.roomlet];
+				const int corners = f.quad ? 4 : 3;
+				bool mist = true;
+				Sheet s = {};
+
+				for (int c = 0; c < corners && mist; c++)
+				{
+					if (f.index[c] < 0 || f.index[c] >= l.nVtx ||
+						f.v[c][1] != pr.minfloor ||
+						!(probemarks::Bits(pr, l, f.index[c]) & 2))
+						mist = false;
+				}
+
+				if (!mist)
+					continue;
+
+				s.number = at;
+				s.roomlet = f.roomlet;
+				s.tex = f.texInfo;
+				s.ds = f.doubleSided ? 1 : 0;
+
+				for (int c = 0; c < corners; c++)
+					for (int k = 0; k < 3; k++)
+					{
+						const float w = (float)f.v[c][k];
+
+						s.lo[k] = !c || w < s.lo[k] ? w : s.lo[k];
+						s.hi[k] = !c || w > s.hi[k] ? w : s.hi[k];
+					}
+
+				// Room local, as BuildWaterSurfaces asks the renderer.
+				s.x0 = (int)s.lo[0] - (int)pr.x;
+				s.x1 = (int)s.hi[0] - (int)pr.x;
+				s.z0 = (int)s.lo[2] - (int)pr.z;
+				s.z1 = (int)s.hi[2] - (int)pr.z;
+				list.push_back(s);
+			}
+
+			if (list.empty())
+				continue;
+
+			rooms++;
+
+			const bool art = r < HDRenderGroupCount() &&
+				HDRenderGroupTriangles(r, -1) > 0;
+			int covered = 0;
+
+			for (Sheet& s : list)
+			{
+				s.covered = art && HDRenderGroupFlatArt(r, (int)pr.minfloor,
+					s.x0, s.z0, s.x1, s.z1);
+				s.water = art && HDRenderGroupWaterArt(r, (int)pr.minfloor,
+					s.x0, s.z0, s.x1, s.z1);
+				s.under = art && HDRenderWaterSheetAt(r, s.x0, s.z0, s.x1,
+					s.z1);
+				covered += s.covered ? 1 : 0;
+			}
+
+			const bool majority = covered * 2 >= (int)list.size();
+			int here = 0;
+
+			for (const Sheet& s : list)
+			{
+				const char* who = !art ? "classic" : s.under ? "sheet" :
+					majority || s.water ? "art" : "hd";
+				int meets = -1;
+				float gap = 0.0f;
+				const int verdict = HDFogArtVerdict(s.lo, s.hi, bulbs.data(),
+					count, factor, &meets, &gap);
+				uint16_t draw = 0xFFFF;
+
+				if (s.tex < texN)
+					std::memcpy(&draw, raw.data() + texAt + (size_t)s.tex * 40,
+						2);
+
+				const bool drawn = !strcmp(who, "hd") || !strcmp(who,
+					"classic");
+				const bool left = pass && !strcmp(who, "hd") &&
+					verdict != HD_FOG_ART_KEPT;
+
+				sheets++;
+				restored += !strcmp(who, "hd") ? 1 : 0;
+				classic += !strcmp(who, "classic") ? 1 : 0;
+				reach += drawn && verdict != HD_FOG_ART_KEPT ? 1 : 0;
+				dropped += left ? 1 : 0;
+				here += left ? 1 : 0;
+				printf("fogsheet room %3d face %3d roomlet %2d tex %5d draw %d "
+					"ds %d centre %7.0f %6.0f %7.0f size %5.0f x %5.0f drawn "
+					"%-7s verdict %-5s meets %2d gap %6.0f%s\n", r, s.number,
+					s.roomlet, s.tex, (int)draw, s.ds, 0.5f * (s.lo[0] +
+					s.hi[0]), s.lo[1], 0.5f * (s.lo[2] + s.hi[2]), s.hi[0] -
+					s.lo[0], s.hi[2] - s.lo[2], who, verdict ==
+					HD_FOG_ART_BULB ? "bulb" : verdict == HD_FOG_ART_FIELD ?
+					"field" : "kept", meets, gap, left ? " left out" : "");
+			}
+
+			droppedRooms += here ? 1 : 0;
+		}
+
+		printf("-fogsheets: %s - %d room(s) on the mist branch hold %d "
+			"sheet(s): %d restored over the HD room, %d in rooms without art, "
+			"%d of the "
+			"drawn ones in a bulb's reach, %d left out in %d room(s) (pass %d, "
+			"factor %.2f, %d bulb(s))\n", stem, rooms, sheets, restored,
+			classic, reach, dropped, droppedRooms, pass, factor, count);
+	}
+}
+
 /* The HD/SD switch in the tool. Its state moves by the engine's own rule
  * (hd_switch.h, HDSwitchStep) from HD_SWITCH_START, drawn HD, and HDDrawn()
  * answers from it; in the game the state is the setting hd_enable, read by
@@ -24153,6 +24415,8 @@ static int ProbeMain(int argc, char** argv)
 
 	// -fogbulbs: the level's fog bulbs, the frame's taken into the list.
 	probefog::Take(stem, room, cx, cy, cz);
+	// -fogsheets: the classic sheets of mist against those bulbs.
+	probesheets::List(stem);
 	FillLighting(frame, lighting, (float)width * 0.5f, (float)height * 0.5f, view);
 	frame.wibbleTable = wibbleTable;
 	probefog::Frame(frame, projection, width, height);

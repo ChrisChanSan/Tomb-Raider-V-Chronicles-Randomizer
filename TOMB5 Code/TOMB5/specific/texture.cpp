@@ -19,6 +19,7 @@
 #include "LoadSave.h"
 #include "devicemove.h"
 #include "hd/hd_level.h"	// HDLevelDeviceRecreated
+#include "file.h"			// g_level_loading - the LOADBIND line
 
 // Raised from the original 64 - a Randomizer combining texture pages from
 // several source levels can plausibly need more than any single vanilla
@@ -53,6 +54,16 @@ void TextureStageLock()
 void TextureStageUnlock()
 {
 	LeaveCriticalSection(&g_stage_lock.cs);
+}
+
+/* LOADBIND, with -log: a bind of stage 0 by the loading thread - the entry
+ * of Textures[] it binds, or none - and the entries in use at that moment:
+ *   LOADBIND page=<entry|none> of <nTextures>
+ * Here the unbind before the pages go; nothing outside a level load. */
+static void LoadBindNote()
+{
+	if (gLogEnabled && g_level_loading)
+		Log("LOADBIND page=none of %ld", nTextures);
 }
 
 // Destination is always a plain 32-bit D3DFMT_A8R8G8B8 texture now (the old per-adapter
@@ -167,6 +178,7 @@ void FreeTextures()
 	TextureStageLock();	// on the loading thread under the bar's frames
 	DXAttempt(App.dx.lpD3DDevice->SetTexture(0, 0));
 	TextureStageUnlock();
+	LoadBindNote();
 
 	for (int i = 0; i < nTextures; i++)
 	{
@@ -195,6 +207,7 @@ void FreeTexturesFrom(long first)
 	TextureStageLock();	// on the loading thread under the bar's frames
 	DXAttempt(App.dx.lpD3DDevice->SetTexture(0, 0));
 	TextureStageUnlock();
+	LoadBindNote();
 
 	for (long i = first; i < nTextures; i++)
 	{

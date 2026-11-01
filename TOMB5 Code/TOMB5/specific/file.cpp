@@ -553,6 +553,10 @@ static long LoadTexturePagesKept(long RTPages, long OTPages, long BTPages)
 		TextureStageLock();	// under the bar's frames (texture.cpp)
 		App.dx.lpD3DDevice->SetTexture(0, Textures[RTPages + OTPages].tex);
 		TextureStageUnlock();
+
+		if (gLogEnabled)	// LOADBIND (texture.cpp)
+			Log("LOADBIND page=%ld of %ld", (long)(RTPages + OTPages),
+				g_pages_kept);
 	}
 
 	nTextures = g_pages_kept;
@@ -724,6 +728,10 @@ static void LoadTexturePages(long RTPages, long OTPages, long BTPages,
 		TextureStageLock();	// under the bar's frames (texture.cpp)
 		App.dx.lpD3DDevice->SetTexture(0, tSurf);
 		TextureStageUnlock();
+
+		if (gLogEnabled)	// LOADBIND (texture.cpp)
+			Log("LOADBIND page=%ld of %ld", nTex, nTextures);
+
 		S_LoadBar();
 	}
 
@@ -2411,6 +2419,7 @@ long S_LoadLevelFile(long num)
 	if (shown)
 	{
 		_BeginScene();
+		S_LoadFrameBegin();
 		InitBuckets();
 		InitialiseSortList();
 		DrawLoadingScreen();
@@ -2425,6 +2434,7 @@ long S_LoadLevelFile(long num)
 			S_LoadScreenKeepName();
 
 		S_DumpScreenFrame();
+		S_LoadFrameSeam();
 	}
 
 	/* The screen's clock starts with its first frame: the brake keeps it up

@@ -1232,6 +1232,21 @@ void DrawLoadingScreen()
 	S_DisplayMonoScreen();
 }
 
+/* What DrawLoadingScreen draws, for the loading screen's LOADFRAME line of
+ * -log (drawbars.cpp): 0 nothing, 1 a classic picture stretched onto the
+ * window, 2 an HD one fitted to it, 3 the first frame read back with the
+ * level's name (CaptureLoadingScreen). */
+long LoadingPictureKind()
+{
+	if (MonoScreenOn != 1 && MonoScreenOn != 2)
+		return 0;
+
+	if (MonoScreenHD)
+		return 2;
+
+	return MonoScreenView ? 3 : 1;
+}
+
 long GetSaveLoadFiles()
 {
 	FILE* file;

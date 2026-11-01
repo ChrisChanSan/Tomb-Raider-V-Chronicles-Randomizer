@@ -45,6 +45,8 @@ long LoadScreenHD(const char* name);
 long LoadScreenHDLogo();
 void ReleaseScreen();
 void DrawLoadingScreen();
+// The loading picture, for -log: 0 none, 1 classic, 2 HD, 3 read back.
+long LoadingPictureKind();
 long GetSaveLoadFiles();
 long S_DisplayPauseMenu(long reset);
 long S_PauseMenu();

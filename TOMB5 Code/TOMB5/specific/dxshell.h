@@ -34,6 +34,8 @@ HRESULT DXShowFrame();
  * before, true when the copy back after it has something to put back. */
 bool DXGammaStart();
 void DXGammaFinish(bool curved, HRESULT hr);
+// With -log, what the last present's pass drew with (LOADFRAME's gamma=).
+long DXGammaSeen(const void** tex);
 void DXMove(long x, long y);
 void DXClose();
 long DXCreate(long w, long h, long bpp, long Flags, DXPTR* dxptr, HWND hWnd, long WindowStyle);

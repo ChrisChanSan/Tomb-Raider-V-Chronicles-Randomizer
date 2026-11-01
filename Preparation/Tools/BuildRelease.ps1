@@ -232,9 +232,9 @@ Copy-Item "$RandoRoot\README.txt" "$OutDir\README.txt" -Force
 # it has no business in a player's folder.
 Copy-Item "$RandoRoot\package\*" $OutDir -Recurse -Force
 
-# The manuals and the pictures they show, beside Background.jpg in docs: the
-# package reads like the repository's docs folder, without the README's
-# forty other pictures.
+# The two manuals and the nine pictures they show, beside Background.jpg in
+# docs: the package reads like the repository's docs folder, without the
+# README's other pictures.
 $docsOut = Join-Path $OutDir "docs"
 New-Item -ItemType Directory -Force $docsOut | Out-Null
 foreach ($d in @("Engine-Manual.md", "Randomizer-Manual.md", "banner.jpg", "engine-settings.jpg",

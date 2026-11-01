@@ -32,18 +32,19 @@ The HD art read at run time carries code over from TROne, and the modern
 control scheme carries its design and its test expectations over.
 TROne is under the same licence as this project, which is what allows the
 combination. TROne was read in several copies and handovers between 2026-09-05
-and 2026-10-24, each named at its row: the TROne-main copies of 2026-09-05,
+and 2026-10-31, each named at its row: the TROne-main copies of 2026-09-05,
 2026-09-13, 2026-10-05 and 2026-10-06 (commit 75c4c843), the handovers of
-2026-10-14 and 2026-10-24, the copy of 2026-10-23 and the readings of 2026-10-19
-and 2026-10-24. On 2026-10-06 TROne restarted its public history at commit
-75c4c843, so the three earlier copies are no longer published; a citation that
-names one of them records what was taken from it, and every citation of the copy
-of 2026-10-06 was checked against that state on 2026-10-07. Where that state
-differs from what was taken, the row says so. Since its round K32, TROne's own
-input code carries this project's modern movement core, orbit camera and tests,
-named as such in its `docs/LEGAL.md` and `docs/CONTROLS.md`; the modern-control
-rows below describe what this project took from TROne's state of 2026-09-13,
-before that. What was taken, file by file:
+2026-10-14 and 2026-10-24, the copy of 2026-10-23 (commit a3c0c633) and the
+readings of 2026-10-19, 2026-10-24, 2026-10-29 and 2026-10-31. On 2026-10-06
+TROne restarted its public history at commit 75c4c843, so the three earlier
+copies are no longer published; a citation that names one of them records what
+was taken from it, and every citation of the copy of 2026-10-06 was checked
+against that state on 2026-10-07. Where that state differs from what was taken,
+the row says so. Since its round K32, TROne's own input code carries this
+project's modern movement core, orbit camera and tests, named as such in its
+`docs/LEGAL.md` and `docs/CONTROLS.md`; the modern-control rows below describe
+what this project took from TROne's state of 2026-09-13, before that. What was
+taken, file by file:
 
 | Here | From TROne | What |
 |---|---|---|
@@ -54,11 +55,11 @@ before that. What was taken, file by file:
 | `TOMB5 Code/TOMB5/game/draw.cpp`, `DrawStaticObjects` | `host/render/game_renderer.cpp`, the baked-mesh rule in `draw_mesh` (TROne-main, copy of 2026-10-06, commit 75c4c843) | The rule itself, not the code: a static mesh the remaster baked into the room art must not be drawn a second time (TROne's "double lantern" bug report). TROne suppresses by mesh pointer and needs an exception for a moveable that claims the same pointer; our seam skips one room's own `MESH_INFO` list, for which that exception cannot arise. |
 | `TOMB5 Code/TOMB5/specific/hd/hd_model.cpp` | `host/render/game_renderer.cpp`: `build_skinned_model`, `bind_pose_of_slot`, the model and head loops of `hd_load` (TROne-main, copy of 2026-10-06, commit 75c4c843) | The rules of the object path: one `.TRM` replaces the **whole** classic model; a vertex's three bone indices are nodes of the classic mesh tree; the bind pose is that tree's accumulated offsets with the rotations left out, walked with the same push and pop; a `<NAME>_HEAD.TRM` is drawn on the node nearest the face geometry's own centre (measured, not hard-coded) - **rigidly** here, where 75c4c843 splits the neck onto the parent node by default and keeps the rigid draw as the fallback; a part's three index runs are the three passes, additive blended `ONE, ONE` with the depth write off; and a node the caller never gave a matrix for gets the last one it did give rather than collapsing to the origin (`fill_unseen_joints`). The renderer under them is new: TROne is OpenGL 3.3 with vertex arrays and texture arrays, this is Direct3D 9 with a vertex declaration, one texture per page and compiled bytecode. |
 | `TOMB5 Code/TOMB5/specific/hd/hd_shader/hd_model.hlsl` | the same file's GLSL `k_trm_vert` / `k_trm_frag` (TROne-main, copy of 2026-10-06, commit 75c4c843) | The skinning rule — three bones and three weights per vertex, the bind offset off before the node matrix goes on, the normal through the same matrix's 3×3 part — and the alpha test in the alpha pass **only** (TROne's golden-skull report). Translated to HLSL for shader model 3, with the bind offset folded into the matrix on the processor instead of subtracted per vertex; not a line of the GLSL is copied. The lighting is **not** TROne's: its item light in its copy of 2026-09-05 was a flat ambient blown into a six-face cube plus four point lights of its own (in 75c4c843 the cube carries direction from the `.TRG` light cubes), while this engine has the classic path's own per-object light list, distance fog and fog bulbs. |
-| `TOMB5 Code/TOMB5/specific/hd/hd_object.cpp/.h` | `host/render/game_renderer.cpp`: the item bracket of `item_flush` and `draw_mesh`, `fill_unseen_joints`, `model.covered = ~0u` in `build_skinned_model` and the swap-key rule beside `item_flush` (TROne-main, copy of 2026-10-06, commit 75c4c843) | The **routing rules**, not the code: an item is drawn either wholly HD or wholly classic and never half of each; a node the model has no geometry for is drawn by NOBODY, not even classically (TROne tried the classic fallback there and took it out again after user reports of classic patches on HD bodies); a swapped mesh on a covered node loses to the model, so the model draws what the remaster drew; and a node the walk never reached keeps the last matrix it saw rather than collapsing to the origin. The seam itself is ours - TROne is a module beside a foreign engine and reads its brackets out of a stream of draw calls, this one rides on `DrawAnimatingItem`'s own node walk - and so are the skeleton test, the `mesh_bits` node ranges and the whole of the lighting. |
+| `TOMB5 Code/TOMB5/specific/hd/hd_object.cpp/.h` | `host/render/game_renderer.cpp`: the item bracket of `item_flush` and `draw_mesh`, `fill_unseen_joints`, `model.covered = ~0u` in `build_skinned_model` and the swap-key rule beside `item_flush` (TROne-main, copy of 2026-10-06, commit 75c4c843); and `hd_load`'s table of TR5 cut-actor states with `state_note`, the rule of `draw_mesh` for a mesh its table gives to another slot, and `fill_unseen_joints_rigid` (TROne-main, copy of 2026-10-23, commit a3c0c633, read on 2026-10-29) | The **routing rules**, not the code: an item is drawn either wholly HD or wholly classic and never half of each; a node the model has no geometry for is drawn by NOBODY, not even classically (TROne tried the classic fallback there and took it out again after user reports of classic patches on HD bodies); a swapped mesh on a covered node loses to the model, so the model draws what the remaster drew; and a node the walk never reached keeps the last matrix it saw rather than collapsing to the origin. The seam itself is ours - TROne is a module beside a foreign engine and reads its brackets out of a stream of draw calls, this one rides on `DrawAnimatingItem`'s own node walk - and so are the skeleton test, the `mesh_bits` node ranges and the whole of the lighting. From the copy of 2026-10-23 the **rules for a cutscene's borrowed meshes**, not the code: a node counts as borrowed when any mesh but its own arrives there; an actor whose set of borrowed nodes the install models as a whole model of its own is drawn as that model; and a borrowed mesh whose slot draws HD is drawn as that slot's node by that slot's model, hung rigidly in the model's bind pose (the attach is `hd_model.h`'s row below, the props in Lara's hand `hd_bind.cpp`'s). Not taken: the code, and TROne's taking such a mesh on the actor's own node number as the actor's own; here the faces are left out by what they are. Every state model was measured again on the player's files (ModelProbe `-name -nodes`), and the row for Pierre's node 11, `PIERRE_SWAP`, is this project's own. Origin ledger, entries 493 to 495. |
 | `TOMB5 Code/TOMB5/specific/hd/hd_object.cpp`, the inventory ring (`HDInvBegin` / `HDInvNode` / `HDInvEnd`) | `games/tr5/glue/hostglue_2d5.cpp`, `phd_PutPolygonsPickup`, and the `TRONE_LIGHT_EXACT_NODES` flag of `host/api/trone_host_api.h` (TROne-main, copy of 2026-10-06, commit 75c4c843) | The **idea**, not the code, and only half of it was kept: that the classic ring's off-centre projection - it moves the projection centre to each item's place on the screen - can be folded into the ITEM for the length of one draw, so that the HD path keeps one projection for the whole frame; and that the ring's light collapses to the ambient plus one sun taken from the ring's own brightness. TROne folds it into the item's own matrix as a **shear** of two rows against the third; this engine does **not**, because its shader takes the vertex normal through those same matrices and renormalises it, so a shear lights the ring by screen position (measured on the shader: 28 % too dark in the middle of the inventory row, 16 % too bright on the ammo row). The offset goes into the projection matrix instead, per draw call (`HDModelOffCentre`, `hd_model.cpp`), where the classic path has it and where a normal cannot reach it. The arithmetic was derived from TR5's own projection line (`aTransformLightClipMesh`, `specific/output.cpp`) and is written for this engine's matrices, not for TROne's float stack; the derivation stands in full over `HDInvNode` and over `HDModelOffCentre`. TROne also needs a flag to make the ring draw **exactly** the nodes it was given, because its default invents a matrix for an unseen node; ours takes `item->mesh_bits` as a mask and needs none. Not taken: TROne's scale term `f_mpersp/persp`, which corrects for a host projection built from the window's real width - TR5 computes `f_persp` from a 4:3 implied width whatever the window is, and the HD projection here is built from that very number, so the factor is exactly one (measured: `ModelProbe -ringcheck`, the bounding rectangle at the same **size** on 4:3 and on 16:9). |
 | `TOMB5 Code/TOMB5/specific/hd/hd_render.cpp`, the water marks | `host/render/game_renderer.cpp`, `hd_load` and `hd_water_mark` (TROne-main, copy of 2026-10-05) | The **road**, not the code: the remaster's geometry carries no water flag, so the classic level's own water vertices are matched to it by room-local position through a hash of the packed int16 x/y/z, per room, once at level build - and which group owns which vertex is recovered by walking the group's index runs. In its copy of 2026-10-05 TROne marked a vertex from the classic `RoomVertexMove` flag and from the room's underwater bit, one bit; in 75c4c843 it classes water, shore and underwater-dark from the engine's own split, keeps the hash for shore corners and matches water surfaces as horizontal planes. Ours marks it from `ROOMLET::nWVtx` and from the engine's own shimmer predicate, and carries three bits rather than one. |
 | `TOMB5 Code/TOMB5/specific/hd/hd_shader/hd_glow.hlsl` | TROne's rules for its glow material | The fade near the eye and the `|N.V|` term, translated to HLSL for Direct3D 9; not a line of the original is copied. The edge fade and the end fade are this project's own, and so is the per-part choice between the file's normal and the face's normal, re-derived on this project's own measurement. Origin ledger, entries 31 and 475. |
-| `TOMB5 Code/TOMB5/specific/hd/hd_vis.cpp/.h` | `host/render/hd_visibility_tr2.inc`, its TR2 visibility prototype (the copy handed over on 2026-10-14) | The **approach**, not the code: the portal walk as the room list, every listed room's art drawn whole, a group listed by its art in a listed room's box, and the count of eight triangles that makes a guest. The walk, the tables and their other rules are this project's own. Origin ledger, entries 209 and 210. |
+| `TOMB5 Code/TOMB5/specific/hd/hd_vis.cpp/.h` | `host/render/hd_visibility_tr2.inc`, its TR2 visibility prototype (the copy handed over on 2026-10-14); and `host/render/game_renderer.cpp`, `pv5_pairs_build`, the guests' height column built at the load (TROne-main, copy of 2026-10-23, commit a3c0c633, read on 2026-10-31) | The **approach**, not the code: the portal walk as the room list, every listed room's art drawn whole, a group listed by its art in a listed room's box, and the count of eight triangles that makes a guest. The walk, the tables and their other rules are this project's own. The sky table takes a **reading** of that column, not the code: art standing above a room's classic box counts for that room; the open air, the sky, the reach and the copies are this project's own. Origin ledger, entries 209, 210 and 509. |
 | `TOMB5 Code/TOMB5/specific/hd/hd_level.cpp`, `hd_render.cpp/.h`: the second shells (`BuildShellRooms`, `MarkSecondShells`) | `host/render/dupshell.h` and the `schacht` and `rich2lift` blocks of `hd_load` (the copy of 2026-10-23, read on 2026-10-24) | The **rule and its thresholds**, not the code: a group's art standing outside its own box (widened by 64) in exactly one other room's box (widened by 16) is a second shell of that room when 200 of its triangles, a fifth of the pair or more, lie in the plane of the room's own art (normals within 0.98, 16 units) and fewer than half of those are the room's very triangles, and then the whole pair goes; the rest of such a group by those rooms (within 512 in x and z, 64 in y) and its art in the open air of the rooms in their column (32 units off a square's floor and ceiling); a flipmap room's pair not taken whole. The scans, the plane cells, the mirror and the shared-face refusals, the log lines and the probe are this project's own. Origin ledger, entry 480. |
 | `TOMB5 Code/TOMB5/specific/hd/hd_scan.h` and its readers in `hd_level.cpp`, `hd_render.cpp/.h`, `hd_vis.cpp/.h` and `hd_gloss_seed.h`: a room group stored off its height (`HDYShiftScan`); `TOMB5 Code/TOMB5/game/lift_door_rule.h` and `game/control.cpp`: a lift door's delay | the handover of its rounds K166 (`trgyshift.h`, `test_trgyshift.cpp`, the notes on the shaft) and K159 (the lift doors' code and notes), given to this project by its author on 2026-10-24 | K166: the **finding and the rule with its thresholds**, not the code - a room group whose art reaches above y -32,768 lies in the `.TRG` a multiple of 16,384 too low (RICH2's group 61); per room group the room's classic corners looked for in the group at k * 16,384, k -2..2, within 4 units on every axis, the best shift taken when not 0, with 16 hits or more and twice the hits of 0; the shift per group, a shared corner keeping its place in the other group; a world y wider than int16; and the four tests, written again against this project's structures. This project's own: the shift kept per group and added by every reader instead of copied corners, the draw moving the group by its shift, the distinct corners, the hash cells, the cells' read-back below -32,768, the log lines and the probe. K159: the **condition**, as its code has it - a trigger's timer not written into a lift door that holds all its code bits when the timer is negative, the hit not heavy and the trigger no switch, heavy switch, antipad, antitrigger or heavy antitrigger; the pure function and its checks are this project's own. Origin ledger, entries 481 and 482. |
 | `TOMB5 Code/TOMB5/specific/hd/hd_level.cpp` (`g_group_hollow`, `g_hollow_host`, `HollowWindows`, `DrawRoomWindowed`), `hd_vis.h` (`HDVisClassicRoomEnclosed`, `HDVisHollowWindow`) and `hd_render.cpp/.h` (`NoteHollowGroups`, `HDHollowGroup`): a hollow group's art and its window | its renderer: the HD view of a listed room's group and its room rule, the host room's rectangle (read on 2026-10-24, for a comparison) | The **reading**, not the code: a room's group is drawn wherever the walk lists the room, and none of the room's classic faces in front of it; and a triangle whose centroid lies outside its own room's box and in another room's box passes the clip test against that room's screen rectangle as well as its own. This project keeps its hollow verdict and its stand and cover rules, leaves a hollow room's faces out by the enclosure it measures, and draws the whole art of a hollow group inside one rectangle: its room's window joined with the windows of the listed rooms whose grids hold its triangles - by group, not per triangle. Origin ledger, entry 483. |
@@ -67,8 +68,10 @@ before that. What was taken, file by file:
 | `TOMB5 Code/TOMB5/game/interpolate_math.h`, `InterpRootFlip` | its frame blend in `games/tr5/src/game/draw.cpp`, read for comparison | The **approach**, re-derived, no code: the previous frame expressed in the current one before the blend. TROne blends whole node matrices; this engine blends Euler angles and a separate offset, so that step is done by hand, two signs for half a turn. Not on the HD path, so not in the origin ledger: `MODIFICATIONS.md`, "Lara facing the wrong way for one tick in the jump twists: the early half turn". |
 | `TOMB5 Code/TOMB5/specific/hd/hd_object_rules.h`, the skeleton fit | `host/render/game_renderer.cpp`, the lambda `node_offset` used by `stub_donor` (the copy read on 2026-10-19) | The **comparison of places**, not the code: a model's node centres against the classic mesh's in the bind pose, within 256 units. Here the centres are the bind drift's own single-weight vertex means, and only a model the drift refuses is asked. Origin ledger, entries 371 and 372. |
 | `TOMB5 Code/TOMB5/specific/hd/hd_marble_math.h`, `HD_MARBLE_LEAN` | `host/render/reflection_plane.h`, `floor_plane` (the copy read on 2026-10-19) | **One number**, no code: 60 degrees as the line between a floor or ramp and a wall, TROne's own design. The census of the fifteen levels leaves every face of the mirror column on one side of the gap from 56.3 to 85 degrees, so the line chooses nothing there. Origin ledger, entry 389. |
+| `TOMB5 Code/TOMB5/specific/hd/hd_bind.cpp`, the hand table's four prop hands | `games/tr5/glue/hostglue_file5.cpp`, `TroneRegisterCutPropHands` (TROne-main, copy of 2026-10-23, commit a3c0c633, read on 2026-10-29) | A **table**, not the code: the four holder slots whose mesh a cutscene puts into Lara's hand, each with the install's hand file of that prop - `CROW_MIP` in ANDY1 with `HAND_BARE_CATAPULT`, `MESHSWAP2` in ANDY1 with `HAND_BARE_IRON_CLAPPER`, `MESHSWAP3` in RICH1 with `HAND_BARE_HAMMER` and `MAFIA_MIP` in ANDY3 with `HAND_BARE_CHALK` - TROne's measurement. Re-derived here on the player's files: the holders and the nodes they lend are the classic `do_*_meshswap` of `game/deltapak.cpp`, and each file's hand bone lies 10 to 25 units from the holder's mesh (ModelProbe `-bones`). The binding through this project's own hand table is ours. Origin ledger, entry 496. |
+| `TOMB5 Code/TOMB5/specific/hd/hd_model.h`, `HDModelBorrowJoints` (defined in `hd_model.cpp`) | `host/render/game_renderer.cpp`, `fill_unseen_joints_rigid` (TROne-main, copy of 2026-10-23, commit a3c0c633, read on 2026-10-29) | The **rule**, not the code: a borrowed node of the lending slot's model hung rigidly on the actor's node in the model's bind pose, every joint moved by its bind offset from that node, as TROne attaches a joint its walk never reached. The matrices and the arithmetic are this engine's own. Origin ledger, entry 495. |
 
-| `TOMB5 Code/TOMB5/specific/hd/hd_lara.cpp/.h`, and `hd_wardrobe.cpp/.h` with it | `host/render/game_renderer.cpp`: `lara_flush`, `lara_build_models`, `lara_load`, `draw_hair`, and `games/tr5/glue/hostglue_file5.cpp`: `RegisterLaraWardrobe` (TROne-main, copy of 2026-10-06, commit 75c4c843) | The **composite itself**: Lara is not one model but an outfit for the body, a separate `LARA_HEAD` drawn rigidly on the head node (75c4c843 splits the neck onto the parent node by default), a `HAIR_OG` braid on its own six-bone chain, a `HAND_` model chosen by the slot whose mesh sits at the hand node, and a `HOLSTER_` model for a worn weapon; an empty holster draws nothing because the straps are in the outfit; and the whole wardrobe lives in the shared `4\ITEM` folder, not in the running game's. The role table (which slot means which model) is TROne's, name for name. What is **not** TROne's: the section table - its TR5 glue of its copy of 2026-09-05 had `ANDY` and `JOBY` the wrong way round and would put the Russia outfit on Ireland (fixed in 75c4c843, which goes by `GF_YOUNGLARA` and `LaraDrawType` and records that the old mapping stood on its head) - and the outfit test, which here reads the engine's own `LaraDrawType` and its own braid predicate rather than the level's file name. Also this project's own is the split hand rule: TROne drew one hand model for both hands in its copy of 2026-09-05 (TROne-main, copy of 2026-10-06, commit 75c4c843, has a split of its own), which loses TR5's flare, torch and crowbar frames, so a frame whose two hands differ draws both models masked to one arm each. The role table and the search that finds those models live in `hd_wardrobe.cpp/.h`, which is why that file stands in this row rather than in one of its own. |
+| `TOMB5 Code/TOMB5/specific/hd/hd_lara.cpp/.h`, and `hd_wardrobe.cpp/.h` with it | `host/render/game_renderer.cpp`: `lara_flush`, `lara_build_models`, `lara_load`, `draw_hair`, and `games/tr5/glue/hostglue_file5.cpp`: `RegisterLaraWardrobe` (TROne-main, copy of 2026-10-06, commit 75c4c843); and `games/tr5/glue/hostglue_draw5.cpp`: `S_InitialisePolyList`, with `lara_build_models` and `lara_head_for_outfit` of `host/render/game_renderer.cpp` (TROne-main, copy of 2026-10-23, commit a3c0c633, read on 2026-10-29) | The **composite itself**: Lara is not one model but an outfit for the body, a separate `LARA_HEAD` drawn rigidly on the head node (75c4c843 splits the neck onto the parent node by default), a `HAIR_OG` braid on its own six-bone chain, a `HAND_` model chosen by the slot whose mesh sits at the hand node, and a `HOLSTER_` model for a worn weapon; an empty holster draws nothing because the straps are in the outfit; and the whole wardrobe lives in the shared `4\ITEM` folder, not in the running game's. The role table (which slot means which model) is TROne's, name for name. What is **not** TROne's: the section table - its TR5 glue of its copy of 2026-09-05 had `ANDY` and `JOBY` the wrong way round and would put the Russia outfit on Ireland (fixed in 75c4c843, which goes by `GF_YOUNGLARA` and `LaraDrawType` and records that the old mapping stood on its head) - and the outfit test, which here reads the engine's own `LaraDrawType` and its own braid predicate rather than the level's file name. Also this project's own is the split hand rule: TROne drew one hand model for both hands in its copy of 2026-09-05 (TROne-main, copy of 2026-10-06, commit 75c4c843, has a split of its own), which loses TR5's flare, torch and crowbar frames, so a frame whose two hands differ draws both models masked to one arm each. The role table and the search that finds those models live in `hd_wardrobe.cpp/.h`, which is why that file stands in this row rather than in one of its own. From the copy of 2026-10-23 the **X-ray rule**, not the code: while `lara.skelebob` holds she wears `OUTFIT_XRAY` with the X-ray hands and weapons, and that body worn from the wardrobe takes the same set, with no braid and no head. Not taken: the code, and the plain holster where the set has no X-ray one - this look draws nothing at the thighs. The inventory of the set's files is this project's own measurement (ModelProbe `-name -bones`), and so are the hull drawn from the front, the set's light and its tone. Origin ledger, entries 497 to 499, 506 and 507. |
 
 | `TOMB5 Code/TOMB5/specific/hd/hd_laradraw.cpp/.h` | `host/render/game_renderer.cpp`: `draw_hair` (its copy of 2026-09-05; in TROne-main, copy of 2026-10-06, commit 75c4c843, `draw_hair` skins the links its glues build the same way) | The **braid rule**: `HAIR_OG` has one bone per link, so all six links get a frame of their own built from the link's absolute position and its two angles - where TR5 itself builds a matrix for links 1, 3 and 5 only and draws 0, 2 and 4 as skinned connectors out of stashed vertices. Everything else in that file is this engine's own: the LMX-to-LM turn of `lara_matrices`, the per-node ambient out of `LaraNodeAmbient`, the hand-slot pointer comparison, the first-person mask and the mirror. |
 
@@ -82,14 +85,18 @@ before that. What was taken, file by file:
 The HD files above that carry TROne's code or a design taken over name
 Todesengel's copyright in their own headers, beside our modification notice, as
 GPLv3 section 5(a) asks; the files that took an approach, a rule or one number
-and no code (`hd_glow.hlsl`, `hd_vis.h` over the walk and over
-`HDVisHollowWindow`, `spotcam_math.h`, `hd_trl.h`, `interpolate_math.h`,
+and no code (`hd_glow.hlsl`, `hd_vis.h` over the walk, over `HDVisHollowWindow`
+and over the sky table, `spotcam_math.h`, `hd_trl.h`, `interpolate_math.h`,
 `hd_marble_math.h`, `hd_render.cpp/.h` over `MarkSecondShells` and `HDShellRoom`,
 `hd_level.cpp` over `HollowWindows`, `hd_scan.h` and `game/lift_door_rule.h`)
 carry the credit line "TROne (GPLv3) by Todesengel1931 -
-https://github.com/todesengel1931" where the taking stands;
-`hd_object_rules.h`, which took a comparison and no code, names Todesengel's
-copyright at that place. In the last two rows the
+https://github.com/todesengel1931" where the taking stands; `hd_object_rules.h`,
+which took a comparison and no code, names Todesengel's copyright at that place;
+and `hd_bind.cpp` over its four prop hands and `hd_model.h` over
+`HDModelBorrowJoints`, which took a table and a rule and no code, name
+Todesengel's copyright in their headers and TROne's copy, file and function where
+the taking stands, as `hd_object.cpp/.h` and `hd_lara.cpp` do for the rules they
+took from the copy of 2026-10-23. In the last two rows the
 notice sits in the file that carries the taking —
 `specific/polyinsert.cpp`, `game/modern_move.h` and
 `Preparation/Tools/Diagnose/ModernTest.cpp` — and the files named beside them
@@ -4540,6 +4547,566 @@ carries the tables.
     groups of the fifteen levels and the pixels left clear in the holes of JOBY2's two
     sniper windows seen from below, every one outside the room's own window and inside a
     host's.
+484. **The visibility path's walk: a window in whole pixels, and its backstop**
+    (`game/draw.cpp`, `VisQueue`, `GetRoomBounds`; the `ROOMWALK runaway=` line) - with
+    `hd_vis` 1 the test of what a room's window already holds is made on the whole
+    pixels the window is stored as, and a rectangle empty in whole pixels lists nothing
+    and is not queued; a walk that dequeues more than 32 rooms per room of the level,
+    4,096 at the least, is cut, the rooms still queued released as a dequeue releases
+    them, the rooms listed so far drawn and the cut counted on a line that must never
+    appear. CLASSIC: the window held in shorts (`ROOM_INFO`'s `test_*` and `left` to
+    `bottom`), and the classic walk, `SetRoomBounds`, testing whole pixels against whole
+    pixels. OWN: the backstop and its two numbers, free choices. `hd_vis` 0 is
+    untouched.
+485. **A static's corner on a cell's boundary asks the cells on both sides**
+    (`specific/hd/hd_render.cpp`, `GroupVertsIn`) - a vertex of a static whose
+    coordinate is a whole multiple of 256 belongs to the cell it falls into and to the
+    one before it, so a foot on a floor line or an end on a sector line finds the art on
+    either side; the statics' rule (entry 23) asks the cells so. OWN. DATA: JOBY3's mess
+    hall benches (room 49, slot 24) stand on the floor at 3,840, the ceiling line of the
+    underfloor room 123, whose art models them with their feet one unit higher; asked in
+    the one cell below, 10 of their 18 vertices found no art and the benches stayed
+    classic beside it (TrgProbe `-box`, RoomProbe `-statictable`); over the fifteen
+    levels no static's answer moved towards classic.
+486. **Material 17: `param[0]` the interior's layer, `param[1]` its depth**
+    (`specific/hd/hd_render.cpp`, `MaterialInside`, `HD_TRG_MATERIAL_INSIDE`; the
+    interior in every range's sort key and in the build's hash; the level line's
+    `inside_parts=` and `inside_dropped=`) - a part of material 17 is a grille with a
+    second page behind it: `param[0]`, a whole number, names that page as a layer of the
+    file's own texture list, and `param[1]` is the interior's depth in tiles of the
+    grille's page; a number that does not resolve - a layer outside the list, no whole
+    number, a page the cache has no slot for - leaves the part its own page alone, and a
+    depth not above 0 or above 0.5 reads as 0. DATA (TrgProbe `-mat 17`, `-matparts 17`
+    and `-layers` over the fifteen levels): 7,738 triangles in JOBY3, 441 in JOBY4 and
+    9,274 in JOBY5, none in another level, all in the opaque pass; `param[0]` 22 to 72
+    and a layer every time, JOBY3's 22, 25 and 36 its pages 3218, 3221 and 3223, each a
+    picture of a cavity; `param[1]` 0.05 or 0.1, `param[2]` and `param[3]` 0 in every
+    tuple; the part's own page the grille, page 3219 with 72 per cent of its texels
+    under 24 of 765, page 3222, a truss, with 41. OWN: `param[1]` read as the depth, and
+    its unit, this engine's reading of the two values the file carries; how the
+    remaster's own shader combines the two pages was not looked at.
+487. **The interior through the grille** (`specific/hd/hd_shader/hd_room.hlsl`,
+    `HD_INSIDE`, "The interior", `gInside` in c38, `sInside` on stage 4;
+    `kHDRoomInsidePS` in `hd_room_inside_ps.inc`, compiled by `bshader.bat` and stamped
+    by `be.bat`; `specific/hd/hd_render.cpp`, `draw_pass`) - a material 17 draw call
+    takes the room shader's interior variant with the second page on a stage of its own:
+    the page shows through the grille's dark texels, pushed back along the eye's ray by
+    the depth out of a tangent frame from the screen derivatives, the ray's cosine taken
+    as 0.2 at the least and the interior flat behind the bars where the derivatives are
+    degenerate; a texel under 3 per cent of white is open, one over 9 per cent a bar,
+    and the sliver between a mix. TEXTBOOK: parallax with a tangent frame out of the
+    screen derivatives. OWN: the 3 and 9 per cent, set on the grille pages, 41 to 72 per
+    cent of whose texels lie under 24 of 765 and whose bars are light steel (DATA:
+    JOBY3's pages 3219, 3220, 3222 and 4823), and the 0.2.
+488. **The diving suits' files, by their trees** (`specific/hd/hd_bind.cpp`, the hand
+    table's suit lines and `bind_against`; `specific/hd/hd_model.cpp`, the face table's
+    `EXTRA5_SUBSUIT_FULL` row) - in JOBY3 and JOBY5 `DOG_MIP` takes
+    `EXTRA5_SUBSUIT_TOP_CHAIN_JOBY5`, `ANIMATING12_MIP` `EXTRA5_SUBSUIT_BOTTOM_CHAIN`
+    and `GLADIATOR_MIP` `EXTRA5_SUBSUIT_BOTTOM`; in JOBY3 `ANIMATING10_MIP` takes
+    `EXTRA5_SUBSUIT_TOP_CHAIN`, `ANIMATING10` `EXTRA5_SUBSUIT_BOTTOM` and
+    `SWAT_PLUS_MIP` `EXTRA5_SUBSUIT_FULL`, and in JOBY4 `CROW_MIP` takes `FULL` too,
+    with `LARA_HEAD` on its node 14; a `.MAP` line whose file is in no `ITEM` folder
+    gives way to a hand-table line bound to that level. DATA, each slot's tree against
+    the files bone by bone (ModelProbe `-slot -model -bones`): every bone inside its
+    slot's node count and, the tops' torso apart, 4 to 40 units from its node's mesh,
+    the drift 0 to 6 against the limit of 256; the tops carry their torso on node 8, the
+    right tank's, which no keyframe and no cutscene frame turns against node 0
+    (CutseqProbe `-turns`); the cutscenes' actors out of `cutseq.bin` (CutseqProbe
+    `-actors`, `-frames`); the map's `DOG_MIP` line names `DOG_MIP_JOBY3_JOBY5.TRM`, a
+    file in no `ITEM` folder, and the map names none of the others (MapProbe). OWN: the
+    level-bound lines, and the map line giving way; the skeleton test is unchanged.
+489. **The console's holes and the suit top's three states** (`specific/hd/hd_bind.cpp`,
+    `dummy_hosts`, `HDBindDummyHost`, `HDBindGuestStates`, `HDBindGuestDone`;
+    `specific/hd/hd_object.cpp`, `SWAP_GUESTS`, `guest_state`; the `HDLOG dummy` and
+    `HDLOG guests` lines) - JOBY3's `PUZZLE_HOLE3` and `PUZZLE_HOLE4` and their done
+    slots, `DUMMY` in the map and standing at the place of the suit top
+    `ANIMATING10_MIP`, draw nothing while the top draws HD and classic otherwise; the
+    top's model follows them by the object numbers of the items at its place -
+    `EXTRA5_SUBSUIT_TOP_CHAIN` until a hole is done, `TOP_CHAIN_HALF` with
+    `PUZZLE_DONE3` there, `TOP_CHAIN_JOBY5` with `PUZZLE_DONE4`, the last done in the
+    table's order deciding. CLASSIC: a hole becomes its done slot in place when its item
+    goes in (`game/pickup.cpp`, `PuzzleDone`, the object number plus 8), and the four
+    classic meshes are the four looks: `PUZZLE_HOLE3`'s the empty frame,
+    `PUZZLE_HOLE4`'s the 76 vertices of `PUZZLE_DONE3`'s on 16 transparent texels, so
+    that it draws nothing, `PUZZLE_DONE3`'s the console with the battery's slot empty
+    and `PUZZLE_DONE4`'s the console with the battery. DATA: no room art in the holes'
+    box (TrgProbe `-boxes`); every vertex of `TOP_CHAIN` is in the other two files,
+    which add 825 and 1,297 vertices inside the holes' frame box. OWN: the table and the
+    rule.
+490. **Her legs hidden by the mesh bits on every body** (`specific/hd/hd_lara.h`,
+    `HDLaraNodesShown`; `specific/hd/hd_laradraw.cpp`, every body masked with it,
+    `HDLaraClassicLog`; `specific/drawlara.cpp`, `DrawLara__4` and `DrawLara__5`; the
+    `SWAPLOG` line's `hidden=`, the `HIDELOG` line, `drawn=`; ModelProbe `-larabits`) -
+    the nodes Lara's `mesh_bits` hide stay hidden on whatever body she wears: the HD
+    composite masks every outfit with the word, and the catsuit's and the diving suit's
+    classic draws put `DrawLara__1`'s own tests where `DrawLara__1` has them. CLASSIC:
+    those tests, `mesh_bits >> 16 & 1 << (15 - i)` round each skin node and
+    `mesh_bits & 1 << (14 - i)` round each of the catsuit's seam pieces
+    (`specific/drawlara.cpp`). DATA: the word 0x81FF01FF, which hides her legs (nodes 1
+    to 6), is written from frame 542 of JOBY3's cutscene 5 and up to frame 440 of
+    JOBY5's cutscene 32 and nowhere else, every other writer writing 0 or -1
+    (`game/deltapak.cpp`); a randomized outfit can bring the catsuit or the diving suit
+    into those cutscenes. THIRD, not followed: TROne-main, the copy of 2026-10-23, has
+    the same rule (`TR5CutLaraHiddenNodes`), read for a comparison on 2026-10-29; the
+    rule here is the engine's own test on the engine's own word.
+491. **A cutscene's body not offered** (`specific/hd/hd_wardrobe.cpp`, `kNotOffered`,
+    `HDWardrobeEntry::offered`; `specific/hd/hd_outfitmenu.cpp`;
+    `specific/hd/hd_laradraw.cpp`, a choice that is not offered not worn, and its
+    `HDLOG wardrobe` line) - the wardrobe knows `OUTFIT_RUSSIA_EXTRA` and does not offer
+    it, and a registry choice of it falls back to the level's own outfit. DATA (the
+    `.TRM`'s bone weights, ModelProbe): it has no vertex on nodes 1 to 6, her legs;
+    nodes 7 to 14 are `OUTFIT_RUSSIA`'s to the vertex count, and node 0 is a band of 684
+    vertices at the waist where `OUTFIT_RUSSIA`'s hips have 1,156 - the Russia body of
+    the two cutscenes that dress her in the diving suit, which hide those nodes on every
+    body (entry 490). OWN: a table by file name.
+492. **The sidecar's `item` line: an added item is never the art's**
+    (`specific/hd/hd_markers.cpp/.h`, `HDMarkersItemAdded`; `specific/hd/hd_object.cpp`,
+    `begin_decision`, `item_run_added`; `specific/hd/hd_level.cpp`, `BuildBakedBoxes`,
+    the `markers` line's `items=`; the `HDLOG level= ... added item=` line;
+    `TR5Randomizer/src/core/Tr5Level.cpp`, every index `addItem` appends, and
+    `core/ApplyPatch.cpp`, one `item <index>` line each, ascending, at the end of the
+    `.hdm`; MapProbe `-hdm`, HdmDump) - an item the run added is never one the room art
+    carries: in an HD room it is drawn as an item of a slot with no model is, classic,
+    and it stays out of the boxes of the art's objects; entry 504 gives such an item of
+    a `DUMMY` slot a copy of the art where a Core placement has one. OWN: the line,
+    which needs no version (an older engine counts it as a line it has no rule for), and
+    the rule: the `DUMMY` mark is per slot, the art's copies are per place, and only the
+    randomizer knows which items it added. DATA (TrgProbe `-boxes` in each item's
+    classic box, as `HDStandItemBox` makes it): 34 of the art's triangles, a strip of
+    the wall, in the box of the shelf the glitchless secret list adds to JOBY3's room
+    52, against 5,435 to 5,469 in each of the eight Core shelves' boxes; no level's
+    `.MAP` names a model for `SEARCH_OBJECT3`, four call it `DUMMY`, and neither model
+    folder holds a `SEARCH_OBJECT3.TRM`.
+493. **A cutscene's borrowed mesh, and the actor's whole model for it**
+    (`specific/hd/hd_object.cpp`, `HDObjectMeshTableTake`, `HDObjectCutActor`, the
+    `SWAP_BORROWED` rows of `kSwapRules`, the first rule of "a cutscene's borrowed
+    meshes"; `specific/hd/hd_object.h`; `game/deltapak.cpp`, the call before
+    `HDObjectBegin`; the `HDLOG cutseq actor` line's `swap=`, the `HDLOG cutswap` line;
+    ModelProbe `-meshes`) - a node whose drawn mesh is not the one its slot held when
+    the level loaded has borrowed it from the slot whose own mesh it was, Lara's slots
+    asked first; a mesh of one of Lara's slots, and a mesh on the node a separate HD
+    face rides on, are faces and are not borrowed. Where the install models the actor
+    with that set of borrowed nodes as a whole model of its own, keyed on the model's
+    name, that model is drawn: `PIERRE_SWAP` for Pierre's node 11, `PATRICK_1_TORCH` and
+    `PATRICK_2_TORCH` for the priest's node 8, `TWOGUN_LEFT` for the guard's node 5 and
+    `TWOGUN_EMPTY` for nodes 5 and 8 together. THIRD: TROne (GPLv3) by Todesengel1931 -
+    https://github.com/todesengel1931 - TROne-main, the copy of 2026-10-23, commit
+    a3c0c633, `host/render/game_renderer.cpp`, `hd_load`'s table of TR5 cut-actor states
+    and `state_note`, read on 2026-10-29: a node counts as swapped when any mesh but its
+    own arrives there, and a state model per set of swapped nodes - the rule, credited;
+    no code. CLASSIC: `game/deltapak.cpp` hands a thing over by writing another slot's
+    mesh into a node (`cranecut_init`, `do_pierre_gun_meshswap`,
+    `setup_preist_meshswap`, `richcut4_init`, the four `do_*_meshswap` of her hands,
+    `joby6_control`). DATA (ModelProbe `-name -nodes` and `-meshes`): `PIERRE` holds
+    guns on nodes 11 and 14 (3,205 and 3,214 vertices) and `PIERRE_SWAP` an empty node
+    11 (1,913) with nothing else changed; the priest's node 8 has 396 vertices bare and
+    556 with the torch; `TWOGUN` has 3,511 and 3,510 on nodes 5 and 8, `TWOGUN_LEFT` 302
+    on node 5, `TWOGUN_EMPTY` 302 and 301. OWN: `PIERRE_SWAP`'s row, which TROne's table
+    does not hold, and the faces left out by what they are.
+494. **A lending slot's node drawn by its own model** (`specific/hd/hd_object.cpp`, the
+    second and third rules of "a cutscene's borrowed meshes", `BORROW_NODE`,
+    `push_borrowed`; `specific/hd/hd_laradraw.cpp`, `borrow_scan`, for Lara while a
+    cutscene plays; the `SWAPLOG` line's `shows=`; ModelProbe `-borrow`) - where no
+    whole model holds the state (entry 493), and the slot the mesh belongs to draws HD
+    in the level with geometry on that node, that node of the slot's model is drawn on
+    the actor's node (entry 495) with the actor's light, and the actor's own node is
+    left out; else the actor's own node is drawn. The classic mesh is never drawn into
+    an HD body: it is the whole node, the hand with the thing in it, the patchwork the
+    swap rule refuses (entry 25). THIRD: TROne (GPLv3) by Todesengel1931 -
+    https://github.com/todesengel1931 - the same copy, `host/render/game_renderer.cpp`,
+    `draw_mesh`: a mesh its table gives to another slot is drawn as that slot's node by
+    that slot's model - the rule, credited; no code. Not followed: TROne takes such a
+    mesh on the actor's own node number as the actor's own, for its speech heads, and so
+    keeps every hand here as the model's own; this engine leaves the faces out by what
+    they are. OWN: the slot a mesh belongs to is the answer of the table taken at the
+    load, not of the live one - the catapult changes places with her hand. DATA: the
+    census of the fifteen levels changes in the four holders' rows alone, from classic
+    to `hand` (ModelProbe `-all`).
+495. **A borrowed node hung rigidly in its bind pose** (`specific/hd/hd_model.h/.cpp`,
+    `HDModelBorrowJoints`; `specific/hd/hd_object.h`, the header's credit;
+    `specific/hd/hd_object.cpp`, `borrow_matrices`; ModelProbe `-borrow`) - the joints
+    of the lending slot's model hang off the actor's node rigidly in the model's bind
+    pose, every joint moved by its bind offset from the borrowed node, so that the
+    node's own vertices land where its classic mesh is drawn. THIRD: TROne (GPLv3) by
+    Todesengel1931 - https://github.com/todesengel1931 - the same copy,
+    `host/render/game_renderer.cpp`, `fill_unseen_joints_rigid`, which attaches a joint
+    its walk never reached the same way - the rule, credited; no code. OWN: the
+    arithmetic, on this engine's row-major matrices from model space to view space; the
+    engine's draw and the probe take it from one place.
+496. **Lara's four prop hands** (`specific/hd/hd_bind.cpp`, the hand table's last four
+    lines) - a cutscene puts one node of a holder slot into her hand, and the holder is
+    bound to the install's hand file, where entry 494's rule finds it: `CROW_MIP` in
+    ANDY1 to `HAND_BARE_CATAPULT`, `MESHSWAP2` in ANDY1 to `HAND_BARE_IRON_CLAPPER`,
+    `MESHSWAP3` in RICH1 to `HAND_BARE_HAMMER` and `MAFIA_MIP` in ANDY3 to
+    `HAND_BARE_CHALK`. THIRD: TROne (GPLv3) by Todesengel1931 -
+    https://github.com/todesengel1931 - the same copy,
+    `games/tr5/glue/hostglue_file5.cpp`, `TroneRegisterCutPropHands`: the four pairs and
+    the files, TROne's measurement, credited; no code. CLASSIC: the holders and their
+    nodes are `game/deltapak.cpp`'s - `do_catapult_meshswap` exchanges her left hand
+    with `CROW_MIP`'s mesh 13 in ANDY1's cutscene 14, and its three siblings put mesh 10
+    of `MESHSWAP2`, `MESHSWAP3` and `MAFIA_MIP` into her right hand in ANDY1's cutscene
+    9, RICH1's 20 and ANDY3's 38. DATA, the pairs re-derived on the player's files: the
+    holders have her fifteen-node tree, no item and no line in the `.MAP` (ItemCheck,
+    MapProbe); each holder's mesh there is the hand holding the thing (ModelProbe
+    `-meshes`); each file's hand bone lies 10 to 25 units from the holder's mesh
+    (ModelProbe `-bones`).
+497. **The X-ray set** (`specific/hd/hd_lara.cpp`, `kXray`, `xray_model`, `wears_xray`;
+    `specific/hd/hd_lara.h`, `HDLaraPartXrayModel`, `HDLaraPartXraySlot`,
+    `HDLaraOutfitIsXray`, `HD_LARA_XRAY_SLOT_BASE`; `specific/hd/hd_laradraw.cpp`,
+    `skeleton_squares`, `HDLaraDrawXray`; `specific/drawlara.cpp`, `DrawLara__6`;
+    `specific/hd/hd_object.cpp`, the block's room in the plan; the `XRAYLOG` line and
+    the `HDLOG lara xray` lines; ModelProbe `-xray`) - while `lara.skelebob` holds, and
+    on an outfit whose body is `OUTFIT_XRAY`, she wears `OUTFIT_XRAY` with the set's
+    X-ray hands and its weapons on the back, and no face, braid, borrowed head or
+    holster rig; in a level whose floor carries a SKELETON trigger the set is planned
+    beside the outfit in a block of slots of its own, on the same slot list and bind
+    pose. THIRD: TROne (GPLv3) by Todesengel1931 - https://github.com/todesengel1931 -
+    TROne-main, the copy of 2026-10-23, commit a3c0c633, read on 2026-10-29:
+    `S_InitialisePolyList` in `games/tr5/glue/hostglue_draw5.cpp` puts `OUTFIT_XRAY`
+    with the X-ray hand and holster set on her while `lara.skelebob` holds, and
+    `lara_build_models` and `lara_head_for_outfit` in `host/render/game_renderer.cpp`
+    give that body the same set, no braid and no head, worn from the wardrobe as well -
+    the rule, credited; no code. CLASSIC: a frame with `lara.skelebob` set goes to
+    `DrawLara__6`, and `SetupSkelebobMeshswaps` (`game/draw.cpp`) puts the level's own
+    X-ray meshes on her. DATA (ModelProbe `-name` and `-bones` over `4\ITEM`):
+    `OUTFIT_XRAY` has 15 nodes and 21,545 vertices on page 8030, its bones in the opaque
+    run, the shell of her body in the additive run (material 6), its skull on node 14;
+    thirty `HAND_XRAY_` files, one for every `HAND_BARE_`; seven `HOLSTER_*_XRAY`, none
+    for the uzis or the Desert Eagle; no X-ray head and no X-ray braid; the trigger's 36
+    squares lie in RICH2's rooms 11 and 151 alone (ModelProbe `-xray`). OWN: the block,
+    and the count of the trigger's squares at the level build.
+498. **The X-ray hull from the front alone** (`specific/hd/hd_model.h/.cpp`,
+    `HDModelSlot::additiveOneSided`; `specific/hd/hd_lara.cpp`, asked for every part of
+    the set; ModelProbe `-passes`, `-bg`) - the set's additive run is drawn from the
+    front alone, the winding turned away from the eye culled, the other one under a
+    mirrored matrix, as the glass is; its other runs, and every other model's additive
+    runs, keep both sides. CLASSIC: the classic X-ray body adds every face single-sided
+    (`specific/output.cpp`, `phd_PutPolygonsSpcXLU`, `double_sided` 0;
+    `specific/polyinsert.cpp` drops the face turned away). PICTURE (ModelProbe, the worn
+    `OUTFIT_XRAY` from the front at full light): drawn from both sides the closed shell
+    lay on every pixel twice, over the abdomen the front layer adding 112/163/117 and
+    the back layer a whiter 121/86/127 on top of it. DATA: page 8030's alpha is 240 or
+    more on every texel (DdsProbe), so the additive pass's weight by alpha changes
+    nothing, and the part's `param[0]` of 0.5 is material 6's alpha reference (entry
+    38), not a weight. OWN: the bones keep both sides, their right half wound the other
+    way round (culled, up to 8.5 per cent of their pixels change); every other additive
+    run keeps both sides, as the classic draws those by each face's own flag, which a
+    `.TRM` does not carry.
+499. **The X-ray set lit as its hull, and its tone** (`specific/hd/hd_model.h/.cpp`,
+    `HDModelSlot::lightAsAdditive`; `specific/hd/hd_lara.cpp`, `kXrayToneLevel` 0.70,
+    `kXrayToneHue` 0.96, 1.06 and 0.55, `HDLaraXrayTone`; `specific/hd/hd_laradraw.cpp`,
+    the light handed the set; the `XRAYLOG` line's `tone=`) - every run of every part of
+    the set is lit with the pixel shader's own additive switches, the light held under
+    1.0, no sheen, the texel weighed by its alpha and a glow under the water, and the
+    light handed the set, the ambient of every node and every light, is multiplied by
+    one tone, channel by channel. OWN: the choice, one tone for every level and every
+    room, so that a bright room stays brighter than a dark one. PICTURE: what the hull
+    adds to the wall behind the belly, the patch's mean less the wall's beside it, on
+    two reference pictures supplied for this project of an X-ray figure in a flooded
+    brick tunnel, from the front 47.5/63.4/33.6 and from the side 34.9/57.9/31.0, their
+    mean 41.2/60.7/32.3 (luma 54.5), against 61.6/82.2/83.9 (luma 77.9) on a picture of
+    this engine in the same tunnel; the level is the ratio of the two lumas, the hue
+    each channel's ratio over it.
+500. **Cut-out cards back to back, drawn one-sided** (`specific/hd/hd_render.cpp`,
+    `MarkBackToBackCards`, `PartRunIsCard`, `CardHolds`, `kCardPlane` 16, `kCardEdge` 1,
+    the 256-unit world cells, `kShellDot` 0.98, `g_card_cull` into `HDTri::cull`;
+    `specific/hd/hd_render.h`, `HDCardLine`; the `HDLOG cards` lines; RoomProbe's cards
+    lines; ModernTest's `card_rule`) - on the visibility path a cut-out card, a triangle
+    of the opaque pass with an alpha test or of the alpha pass but for its glass, never
+    a water surface, is drawn one-sided, culled as an opaque range is, when its centroid
+    and its three corners, each pulled 1 unit inward, lie on cut-out cards of another
+    group drawn with it, facing the other way within `kShellDot`, within 16 units of
+    their plane and inside them with 1 unit to spare; the other group's room is linked
+    with its own by a portal or a floor link and is never its flipmap twin. From either
+    side the card facing the eye shows. OWN: the rule and its numbers, `kShellDot` the
+    second shells' (entry 480); a group's own cards, and a flipmap room's, keep their
+    two sides. DATA (RoomProbe's cards lines over the fifteen levels): 1,138 triangles
+    drawn one-sided, RICH1 828 (among them its catwalks, group 72's floor facing up over
+    group 70's ceiling facing down), RICH3 216, TITLE 72 and ANDY1 22; the scan costs
+    108 ms at most (TITLE, 725,744 cut-out triangles), 22 ms or less in thirteen levels.
+501. **A hanging guest refused under the sky** (`specific/hd/hd_vis.cpp`, the hanging
+    test of `guestRule` 2; `specific/hd/hd_vis.h`, `HDVisTables::guestsHanging`,
+    `hanging`; the `HDLOG level= vis=1` line's `guests_hanging=`, the
+    `HDLOG visguest ... refused=hanging` lines; TrgProbe `-vistable`; ModernTest's
+    `vis_hanging`) - a room under the sky does not take as a guest the art of a room it
+    has no link with when that art hangs below that room's floor, inside its floor plan,
+    and that room is not under the sky: such art comes from a room standing over the
+    holder, not across its sky. OWN. DATA (TrgProbe `-vistable` over the fifteen
+    levels): one pair refused, RICH2's group 55 in room 18, 63 triangles of a door frame
+    hanging 1,024 units below room 55's floor into the stairwell; every other guest
+    stays, ANDREA2's brick tower over room 232 among them.
+502. **The thrusters against the back she wears** (`specific/hd/hd_lara.cpp`,
+    `HDLaraThrusters`; `specific/hd/hd_lara.h`, `HD_LARA_THRUSTER_X`,
+    `HD_LARA_THRUSTER_Y` and `HD_LARA_THRUSTER_Z`, 80, -192 and -160, `HDLaraThrusters`,
+    `HDLaraThrusterSettle`; `specific/hd/hd_laradraw.cpp`, `HDLaraThrusterShift`;
+    `specific/drawlara.cpp`; `game/subsuit.cpp`, the mist; the `HDLOG lara thrusters`
+    line; ModelProbe `-thrusters`, `-thrustersclassic`) - the diving suit's two units
+    keep the place they have against the classic suit's back against the back of the
+    body she wears: both backs measured alike in the torso node's frame with the units
+    at rest, the most backward point under the units' box with what lies inside the box
+    left out, the classic one on the level's own torso mesh, the worn one on the body
+    file's node 7, each vertex on its heaviest bone; the difference, rounded, moves both
+    units and the mist's origin along z. CLASSIC: `DrawLara__5` hangs `LARA_EXTRA_MESH1`
+    twice on the torso's matrix, at (-80, -192, -160) and (80, -192, -160), turned about
+    x by `subsuit.XRot`, by up to 45 degrees. DATA (ModelProbe `-lara JOBY4 -thrusters`,
+    the classic suit against the 52 bodies of both installs' wardrobe): the classic back
+    at -112, `OUTFIT_SUBSUIT`'s at -113 (shift -1), `OUTFIT_TR3_ANTARC`'s at -88 (24),
+    nineteen more with a backpack at -86 to -90, the thirty-one without one at -38 to
+    -62; no `.TRM` of either install models the units on their own. OWN: the difference
+    and not the units set onto her back - turned, their corners reach 43 units further
+    forward, and the difference keeps the classic suit's 15 units of air in every pose.
+503. **A static's art copied from another placement of its slot**
+    (`specific/hd/hd_artcopy.h`, `HDArtCopyMake`, `HDArtCopyApply`, `HD_ARTCOPY_MARGIN`
+    32, `HD_ARTCOPY_WALL` 16, `HD_ARTCOPY_WALL_GAP` 512, `HD_ARTCOPY_WALL_DOT` 0.98,
+    `HD_ARTCOPY_STANDS` 16, `HD_ARTCOPY_STANDING` 1/2, `HD_ARTCOPY_ALIKE` 3/2,
+    `HD_ARTCOPY_QUARTER` 16,384; `specific/hd/hd_render.cpp`, `ArtCopies`;
+    `specific/hd/hd_level.cpp`, `BuildStaticPlaces`; the `HDLOG artcopy` lines, the
+    statics line's `copies= copied= copy_ms=`; RoomProbe `-artcopy`, `-artcopytable`;
+    ModernTest's `art_copy` and `art_rich2`) - on the visibility path, as the `.TRG` is
+    read, a static the art does not hold takes a copy of the art its slot has at a
+    donor, a placement of the slot in a room the same group draws, whole quarter turns
+    from it - no turn first, then the nearest, then the level's order - turned and moved
+    by the rigid motion between the two: the group's triangles wholly inside the donors'
+    boxes grown by 32 units, less those that are a room's surface at either place and
+    less those whose image would stand on the art already there, put into the group's
+    runs with the donor's material, texture, both colours and sway; the slot's art must
+    be alike at its donors, the most at three halves of the fewest. A donor has every
+    point in a 256-unit cell of its group's art, a target fewer than nine twentieths so
+    (`HDStaticOtherHolds`, the statics' rule). CLASSIC: a static is placed by a position
+    and a turn about the vertical axis alone (`MESH_INFO`), so whole quarter turns are
+    one rigid motion and the copy lands in whole units. OWN: the rule and every number,
+    `HD_ARTCOPY_WALL_DOT` the second shells' cosine (entry 480). DATA (RoomProbe
+    `-artcopytable` over the fifteen levels): nine copies, all in RICH2's stairwell,
+    5,881 triangles, after which its nine statics are answered by the art; nothing
+    copied in the other fourteen, whose one target with donors, RICH3's room 79 mesh 2,
+    is refused, its donors holding 260 to 15,290 triangles round them; the rule's cost
+    132 ms on RICH2 and 5 to 56 ms elsewhere.
+504. **An added item's art copied from a Core placement** (`specific/hd/hd_artcopy.h`,
+    `hdartcopy::MakeItems`, `hdartcopy::Level::RunIn`, `HD_ARTCOPY_LIT` 1/20;
+    `specific/hd/hd_object.cpp`, `begin_decision`; `specific/hd/hd_render.cpp`,
+    `HDRenderArtCopyItemHeld`; `specific/hd/hd_level.cpp`, `BuildStaticPlaces`,
+    `HDStandItemBox`, `BuildBakedBoxes`; the item `HDLOG artcopy` lines with their
+    reasons, the statics line's `items= item_copies=`; RoomProbe `-artcopytable`;
+    MapProbe `-hdm`; ModernTest's `art_items`) - an item the run added (entry 492) to a
+    slot the `.MAP` calls `DUMMY` takes, on the visibility path, a copy of the art of a
+    Core placement of its slot anywhere in the level - no turn first, then the nearest,
+    then the level's order, the slot's art alike at its donors the level over - and is
+    then baked as the slot's other items are: its classic mesh not drawn, its logic
+    untouched, its art standing still. A copy may leave its group, because a triangle's
+    page is named level-wide by its first corner's layer byte (entry 4) and a part's
+    material and four numbers mean the same in every group: it is read in the donor
+    group's frame and written in the target group's, each triangle into the run of its
+    pass of that group's first part with the same material and numbers. A donor must
+    carry light, a twentieth of the corners in its grown box with a colour byte above
+    zero; a target must stand in a room drawn by its own art at whole quarter turns;
+    else the item gets no copy and the line its reason (`skewed`, `no_donor`, `unlike`,
+    `no_part`, `empty`, `no_group`). OWN: the rule and its numbers. DATA (RoomProbe
+    `-artcopytable` on JOBY3 with the shelf the glitchless secret list adds): of the
+    slot's eight Core shelves the two in room 26 have 228 of 16,992 and 210 of 16,974
+    corners lit, the wall behind them, and the six others 70 to 82 per cent and 5,634 to
+    5,718 triangles each, alike; the copy is taken from item 227 in room 164, no turn,
+    5,612 triangles. No vanilla level adds such an item.
+505. **The thrusters hung from her shoulders** (`specific/hd/hd_lara.cpp`,
+    `HDLaraThrusterBack`; `specific/hd/hd_lara.h`, `HDLaraThrusterSettle`;
+    `game/subsuit.cpp`, the mist's origin and its targets, `TriggerAirBubbles`; the
+    `HDLOG lara thrusters` line's `shift=`, `hd_top=`, `classic_top=` and `down=`;
+    ModelProbe `-thrusters`, `-thrustersdown`; ModernTest's `thruster_move` and
+    `thruster_wiring`) - the units come down until their top stands at the top of the
+    torso she wears, her shoulder line, the least y of the same node 7, and never go up;
+    both moves are settled in one place and handed back together, and the mist, its two
+    targets and the air bubbles that leave from between the units follow both. CLASSIC:
+    the units' top at rest at -276, 55 units under the top of the classic suit's torso
+    (-331); the bubbles' point (0, -192, -160), the midpoint of the units' own two. DATA
+    (ModelProbe `-thrusters`): the worn torso's top at -329.6 on `OUTFIT_SUBSUIT` (no
+    move), at -196.6 on `OUTFIT_TR3_ANTARC` (79 down), at -188.5 to -199.6 on the
+    nineteen other bodies with a backpack (76 to 87) and at -185.2 to -196.6 on the
+    thirty-one without one (79 to 91); at the new height every body keeps 14.5 to 15.5
+    units of air before the units. OWN: her shoulder line as the height, never up; a
+    second height, the units' centre a third of the torso's height under its top, drawn
+    to compare and not built.
+506. **Nothing at the thighs in the X-ray look** (`specific/hd/hd_lara.h`,
+    `HDLaraXrayPick`, `HDLaraPartAtThighs`; `specific/hd/hd_lara.cpp`, `xray_model`; the
+    `XRAYLOG` line's `thighs=`; ModernTest's `xray_weapons`) - whatever the table holds
+    for a thigh holster, the pistols' to the Desert Eagle's, the look draws nothing
+    there, worn and in the scanner's block alike; the weapon on the back keeps its X-ray
+    file, and `HOLSTER_PISTOL_XRAY` stays in `kXray` as the file the install ships for
+    the part. OWN: one rule for all three. DATA: the installs have `HOLSTER_PISTOL_XRAY`
+    on nodes 1 and 4 and no X-ray holster for the uzis or the Desert Eagle (ModelProbe
+    `-name`). Not followed: TROne keeps the plain holster where the set has no X-ray one
+    (entry 497).
+507. **The X-ray set from the installs alone, and a hand that stands in**
+    (`specific/hd/hd_model.h/.cpp`, `HDModelSlot::installOnly`, `standIn`,
+    `standInDrop`, `find_model`; `specific/hd/hd_lara.cpp`, `xray_sources`;
+    `specific/hd/hd_lara.h`, `HDLaraXrayHand`) - every file of the set is read from the
+    installs and never from a mod; a hand of the set whose X-ray file the installs lack
+    is built from the install's `HAND_BARE_<x>` with every page of `HAND_BARE_REST`
+    dropped, its gun alone, beside the rest hands' X-ray bones, and with neither on the
+    card the rest hands' bones are drawn alone: never no hand, never a mod's gun. OWN,
+    both rules; a later mod with a true X-ray hand is not read either. DATA (ModelProbe
+    `-lara JOBY5 -outfit 46/OUTFIT_XRAY -guns uzi` with the mods and the Tomb Raider
+    I-III root): the IMI Uzis mod ships its one gun under all three hand names,
+    `HAND_BARE_UZI`, `HAND_GLOVES_UZI` and `HAND_XRAY_UZI`, 31,267 vertices on the same
+    four pages, its hands painted with pages 8002 and 8010 of the I-III bundle, so that
+    the rule for a mod's gun on another bundle's skin cut the hands away and found
+    nothing on the X-ray hand's page; it is the only X-ray name the mods measured ship;
+    the installs' `HAND_XRAY_UZI` has 8,705 vertices on page 8030.
+508. **An opening's room in the state that draws it** (`specific/hd/hd_vis.h`,
+    `HDVisRoom::flip`; `specific/hd/hd_level.cpp`, `BuildRoomVis`;
+    `specific/hd/hd_vis.cpp`, `HDVisBuild`'s table `together`, `inWorldAt`;
+    `HDVisTables::stateRefused`, `openingsState`; the `HDLOG level= vis=1` line's
+    `openings_state=`, the `HDLOG visopening ... refused=flipstate` lines; TrgProbe
+    `-vistable -visroom all`; ModernTest's `vis_flip_state`) - an opening (entry 211)
+    keeps the room behind a bare wall face only when the room the pair's number holds
+    while the opening's room is drawn is linked with it, by a portal or a floor link, in
+    a state of the flipmaps that has both rooms in the world; the closure over the twins
+    stays the link test's, and the guests, the enclosure, the wide portals and the walk
+    keep their own tests. CLASSIC: a flipmap swaps a pair's rooms at one number, the
+    main room while its map is off and the twin while it is on (`ROOM_INFO`,
+    `FlipNumber`). OWN: the rule, the openings' alone. DATA (TrgProbe over the fifteen
+    levels): two openings refused, RICH1 room 21's faces 4 and 15 behind room 85 - the
+    main room of a pair on flipmap 0, a box of three squares closed on all six sides
+    that no portal ever reaches - and every other line as before; on the guests the same
+    test would refuse 14 pairs that are never in the world together.
+509. **The sky table** (`specific/hd/hd_vis.h`, `HDVisParams::skyArt` 1 and `skyReach`
+    1,024, `HDVisInOpenAir`, `HDVisPointAgainstRoom`, `HDVisTables::sky`, `skyFirst`,
+    `skyCount`, `skyTris`, `skyOverSky`, `skyBeyond`, `skyOverClosed`, `skyCopyOf`,
+    `skyRoomClosed`; `specific/hd/hd_vis.cpp`, `HDVisBuild`, `kCopySlack` 2;
+    `specific/hd/hd_level.cpp`, `VisKeepGuests`, `HDVisRoomGuests`; the
+    `HDLOG level= vis=1` line's sky counts, the `HDLOG vissky` lines, the room lines'
+    `sky_art=`; TrgProbe `-vistable`, `-visroom`, `-visskyreach`; RoomProbe `-vissky 0`,
+    `-visskyreach`, `-visyshift 1`, the `vis=sky` of `-walkfinal`; ModernTest's
+    `vis_sky_art`) - a room under the sky lists, as guests, the rooms under the sky
+    whose art stands in the sky beside it: a triangle farther than the overhang outside
+    its own room's box, in no room's box and under no room's floor stands in the open
+    air, and over a room under the sky or past the level's rooms it is sky art; a group
+    of a room under the sky with eight such triangles or more is a sky group, the most
+    first, unless all but fewer than eight of them are copies of a taken group's,
+    centroids within two units; every room under the sky but the group's own and its
+    twin takes each sky group whose art there stands over its floor plan or within 1,024
+    units of it. Art over a closed room's roof is counted apart, and a room not under
+    the sky gives no sky group. THIRD, the reading only: art standing above a room's
+    classic box counts for that room, after TROne's guests' column - TROne (GPLv3) by
+    Todesengel1931 - https://github.com/todesengel1931 - TROne-main, the copy of
+    2026-10-23, commit a3c0c633, `host/render/game_renderer.cpp`, `pv5_pairs_build`, the
+    guests' height column built at the level's load, read on 2026-10-31; credited, no
+    code. OWN: the open air, the sky, the reach and the copies; 1,024 a sector, the
+    width of a wall ring, and two units for one face modelled into the art of two rooms
+    a unit apart (ANDREA3's skyline in groups 66, 67, 69 and 91); the overhang and the
+    eight triangles are the guests' (entry 210). DATA (TrgProbe `-vistable -visroom all`
+    over the fifteen levels): 501 sky pairs and 84 sky groups a room takes, every guest,
+    opening, wide and enclosure line as before; six groups left out as copies and 45
+    because their room is not under the sky, ANDREA2's room 50 among them, a street
+    under the roofs whose 11,234 triangles of the skyline are each a copy of one of room
+    55's; ANDREA2's skyline stands 889 units past the east wall of the courtyard, room
+    223, and RICH2's lift shaft rises in 188,974 triangles over a closed room's roof.
+510. **The bulbs' fog as a field** (`specific/hd/hd_fog.h`, `HD_FOG_FIELD` 4.0,
+    `HDFogFieldReach`, `HDFogFieldDensity`, `HDFogFieldShare`, `HDFogFieldTau`;
+    `specific/hd/hd_render.cpp`, `fog_take`, `fog_draw`;
+    `specific/hd/hd_shader/hd_fog.hlsl`; the frame line's `fog_field=`, the
+    `HDLOG fogfield` lines; RoomProbe `-fogfield`, `-fogfactor`; ModernTest's
+    `fog_field`) - with `hd_fog` 1 a bulb's body reaches past its radius over four
+    radii, the reach, its density falling with the body's own smooth fall,
+    `peak (1 - (distance / reach)^2)`, and its strength the band's top on the field's
+    own densest line; where the fields of neighbouring bulbs overlap their densities
+    add, each bulb keeping the share peak / sum where the sum passes its peak, so that
+    the sum stays at one field's peak; the fog fades to nothing one reach from the last
+    bulb, and the breath keeps its cells on the bulb's own radius. CLASSIC and OWN as
+    the body is (entries 357, 359 and 414). OWN: the field, and the cap on the density
+    at a point rather than on a pixel's veil. DATA and PICTURE: the factor measured in
+    steps of a quarter from 1 to 5 (RoomProbe `-fogfactor`) at ANDY3's mill - the ground
+    between its five bulbs lies within a bulb's reach from 3.75 on, the 95th percentile
+    of the light the fog adds stays under the band's top of 33 (entry 412) up to 4.25,
+    and the pass stays under a millisecond at 2,560 x 1,440 up to 4.0, 0.92 ms the most
+    (`-gpu 3 -gpuall`, medians of three); 4.0 is the largest step that meets all three,
+    one factor for every level.
+511. **The art's mist left out where the bulbs' fog stands** (`specific/hd/hd_fog.h`,
+    `HDFogBoxGap`, `HDFogArtVerdict`, `HD_FOG_ART_KEPT`, `HD_FOG_ART_BULB`,
+    `HD_FOG_ART_FIELD`; `specific/hd/hd_render.cpp`, `HDRenderFogLevel`, `fog_add_left`,
+    `HDRange`'s `addLeft`, `addMeets` and `addGap`; `specific/hd/hd_level.cpp`,
+    `ReportFogLevel`; the frame line's `fog_dropped=`, the `HDLOG fogart` lines;
+    RoomProbe's `-fogart` verdict, `-fogdrop 0`) - a mist range of the art (entry 411)
+    whose box meets a bulb's sphere is `BULB`, else one whose box's centre lies in a
+    bulb's field `FIELD`, else `KEPT`; with `hd_fog` 1, where the pass draws, the first
+    two are left out and the bulbs' fog stands in their place, and a kept mist keeps its
+    weight, `HD_FOG_ART_WEIGHT` 0.35 (entry 413), as every mist does in a level or a
+    setting where the pass does not draw. The verdict asks every bulb of the level, not
+    the frame's, so that a range keeps one verdict wherever the eye is. OWN: the rule,
+    the box's centre in a field as the body asks whether a part's centre lies in a
+    sphere. DATA (RoomProbe `-fogart` over the fifteen levels): 34 mist ranges; ANDY3's
+    three left out, its two lumps in groups 10 and 15, each drawn a second time by group
+    17, whose box holds bulb 7's centre and meets bulb 8's sphere, group 15's meeting
+    bulb 8's and group 10's centre lying in bulb 7's field at 3.14 radii; the other 31
+    the title's sand, in a level where the pass does not draw.
+512. **The sidecar's `scale` line, and a shrunk model's drift**
+    (`specific/hd/hd_markers.cpp/.h`, the `scale <slot> <num> <den>` line,
+    `HDMarkerDonor`'s `scaleNum` and `scaleDen`; `specific/hd/hd_object.cpp`;
+    `specific/hd/hd_model.h/.cpp`, `HDModelSlot::scale`; the `HDLOG donor` line's
+    `scale=`; `TR5Randomizer/src/core/Tr5Level.cpp`, `kScales`, `importScale`,
+    `hdMarkScale`; `core/Tr5Transfer.cpp`, the scaling step of `copyMoveableFrom`;
+    `core/ApplyPatch.cpp`, the line written after the `donor` lines, ascending by slot;
+    MapProbe `-hdm`, HdmDump, ModelProbe `-hdm`) - a copy the randomizer shrank says so
+    in the sidecar, as the two measured lengths its factor is the ratio of, and the HD
+    build multiplies every vertex position of the slot's `.TRM` by it right after the
+    file is read, before anything measures the model, so that the skeleton test, the
+    bounds and the floor rule see the model at the size its shrunk skeleton has. OWN:
+    the line and the rule; a slot without the line keeps its file's size. DATA: the one
+    pair, RICH3's gunship in the drone's slot 472 at 2290/7161, the longest side any one
+    keyframe box reaches - the vulture's glide (animation +7, key 4: 2,290 x 267 x 827)
+    against the gunship's rotor loop (animation 0, key 1: 4,595 x 2,594 x 7,161), the
+    first frames alone giving 1,108/7,095 (`Tr5Level.cpp`, over `kScales`); shrunk,
+    `GUNSHIP.TRM`'s bind drift reads 57.1 against the limit of 256, its 178.5 at full
+    size times the factor, and unshrunk on the shrunk skeleton 826.7, which the test
+    refuses (ModelProbe `-hdm`). The limit, `HD_SKELETON_DRIFT_LIMIT` in `hd_model.h`,
+    stands between 239, the most of a model that belongs where it stands, and 308, the
+    least of one that does not (ModelProbe `-all` over the fourteen randomized levels
+    and their vanilla twins).
+513. **The classic mist sheets left out likewise** (`specific/hd/hd_fog.h`,
+    `HDFogSheetRoom`; `specific/hd/hd_level.cpp`, `ReportFogSheets`,
+    `HDRoomWaterFace.fogged`, `HDRoomWaterFaceFogged`; `specific/drawroom.cpp`,
+    `InsertRoomWater`; the frame line's `fog_sheets=`, the `HDLOG fogsheet` lines;
+    RoomProbe `-fogsheets`) - a room on the classic path's mist branch lays additive
+    faces over its opening to the room below, which the HD path restores over the HD
+    room as it restores water; with `hd_fog` 1, where the pass draws, a sheet whose box
+    meets a bulb's sphere or whose centre lies in its field is left out, held against
+    the bulbs as the art's mist is (entry 511). CLASSIC: the mist branch, `ROOM_MIST`
+    and not `ROOM_REFLECT` with `ROOM_REFLECT_CEILING` (`specific/drawroom.cpp`,
+    `aRoomVertexWaterMarks`, `IsMistVert`), and its faces, every corner at the room's
+    lowest floor with the shimmer mark. OWN: the verdict reused. DATA (RoomProbe
+    `-fogsheets` over the fifteen levels): rooms with `ROOM_MIST` stand in ANDY3 alone,
+    and only its rooms 104 and 107 carry sheets, six faces at y 8,448, all in the fields
+    of bulbs 7 and 8; the data tells mist by the room's branch, not by its texture.
+514. **The bulbs' fog in one pass** (`specific/hd/hd_fog.h`, `HD_FOG_PASS_SLOTS` 16,
+    `HDFogPassCount`, `HDFogUnion`; `specific/hd/hd_render.cpp`, `fog_draw`,
+    `fog_ready`, `fog_stands`, `fog_clock_*`; `specific/hd/hd_shader/hd_fog.hlsl`,
+    `FogPS`, the bulbs in c10 to c53, the count in c3; `specific/profile.cpp`,
+    `ProfileNoteFog`; the frame line's `fog_pass=`, PROFLOG's `fog=` and `fog_gpu=`;
+    RoomProbe's pass line, `-fogquads`; ModernTest's `fog_pass`) - one quad a frame over
+    the union of the taken bulbs' rectangles (entry 362), the whole screen where one
+    reaches the near plane, in which every pixel walks the frame's bulbs farthest first,
+    takes each bulb's column as the field does and lays its veil over the veils behind
+    it; the frame is blended once. It takes the place of entry 360's quad per bulb.
+    TEXTBOOK: the veils composited back to front; a pixel shader of model 3 indexes no
+    constant at run time, so the slots are unrolled. OWN: 16 slots, the most bulbs a
+    frame takes (`HD_MAX_BULBS`); without the shaders and the table on the device there
+    is no pass and the bulbs keep their haze. DATA (RoomProbe `-fogquads` and `-gpu` at
+    2,560 x 1,440): the one pass lies within 2 of 255 of a quad per bulb, the difference
+    the eight bits of a blend after every bulb; of the quads' 1.77 ms at RICH2's bulb 4,
+    inside eleven fields, 0.14 were the eleven quads without their columns, 1.05 the
+    hashed breath and 0.12 the fields' sum.
+515. **The breath's lattice from a table** (`specific/hd/hd_fog.h`, `HD_FOG_TABLE` 64,
+    `HDFogHash` with its multiply-adds fused; `specific/hd/hd_render.cpp`,
+    `fog_lattice`, `fog_table`, `HDRenderFogPrepare`;
+    `specific/hd/hd_shader/hd_fog.hlsl`, the table on s1) - the breath (entry 359) reads
+    its lattice out of a volume texture of 64 x 64 x 64 points, the fold of the hash, in
+    16 bits, or in eight in every channel where the card filters no 16-bit volume,
+    blended by the card's filter at the smoothstep of the place in the cell; the
+    processor fills it once a device, at a level's build. OWN: `HDFogHash` is this
+    project's own arithmetic scramble, the sky cloud's `CloudHash` of `hd_sky.hlsl` with
+    the same constants and no sine, no curve; its multiply-adds are fused (`fmaf`) as
+    the card fuses them, so that the table holds the lattice the hashing shader drew.
+    TEXTBOOK: value noise blended by a smoothstep, read from a table in a texture. DATA:
+    the hashed breath was 1.05 of the quads' 1.77 ms at RICH2's bulb 4 (entry 514), and
+    the table gives the hashing shader's lattice there (RoomProbe `-fogquads`).
 
 ## Credited, but not contained here
 

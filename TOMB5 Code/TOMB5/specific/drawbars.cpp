@@ -892,11 +892,22 @@ static void LoadFrameLook()
 
 /* The start of a frame of the loading screen, before the picture's bind:
  * S_DrawLoadBar's under the stage lock, the first frame's in
- * S_LoadLevelFile. */
+ * S_LoadLevelFile. The frame draws with the fixed function whatever the
+ * frame or the build step before it left: no shader, the classic vertex
+ * format, and no texture on stages 1 and 2, where the HD room bracket
+ * binds its light field. Stage 0 is set by each draw of the frame. */
 void S_LoadFrameBegin()
 {
+	const LPDIRECT3DDEVICE9 dev = App.dx.lpD3DDevice;
+
 	if (gLogEnabled)
 		LoadFrameLook();
+
+	dev->SetVertexShader(0);
+	dev->SetPixelShader(0);
+	dev->SetFVF(FVF);
+	dev->SetTexture(1, 0);
+	dev->SetTexture(2, 0);
 }
 
 // The LOADFRAME line of the frame just presented (above).
@@ -964,8 +975,9 @@ long S_DrawLoadBar()
 	 * D3DSWAPEFFECT_DISCARD promises nothing of its contents after a
 	 * Present, so the picture is drawn again rather than expected to be
 	 * there. Nothing when no picture is up (MonoScreenOn 0).
-	 * The loading thread binds stage 0 meanwhile: the picture's and the bar's
-	 * binds and draws are held together up to DrawSortList (texture.cpp). */
+	 * The loading thread sets stage 0 meanwhile as the level's pages go:
+	 * the picture's and the bar's binds and draws are held together up to
+	 * DrawSortList (texture.cpp), from the device S_LoadFrameBegin set. */
 	TextureStageLock();
 	S_LoadFrameBegin();
 	DrawLoadingScreen();

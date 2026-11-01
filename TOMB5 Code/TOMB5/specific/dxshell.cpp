@@ -403,6 +403,12 @@ static bool GammaPass(LPDIRECT3DDEVICE9 dev, ulong row)
 		return GammaRefuse(row, "copy", hr);
 	}
 
+	/* From the read of stage 0 to its restore under the stage lock: while
+	 * a level loads, the loading thread sets stage 0 too as the level's
+	 * pages go (texture.cpp), and a set between the copy's bind and the
+	 * draw would fill the whole window with something else. */
+	TextureStageLock();
+
 	for (i = 0; i < nrs; i++)
 		dev->GetRenderState(rs[i], &rs_old[i]);
 
@@ -496,6 +502,8 @@ static bool GammaPass(LPDIRECT3DDEVICE9 dev, ulong row)
 
 	for (i = 0; i < nrs; i++)
 		dev->SetRenderState(rs[i], rs_old[i]);
+
+	TextureStageUnlock();
 
 	if (vb_old) vb_old->Release();
 	if (decl_old) decl_old->Release();

@@ -4,7 +4,7 @@
 
 This is a modified version of **TOMB5**, the PC Tomb Raider Chronicles decompilation
 project by Troye/Trxyebeep and contributors, <https://github.com/Trxyebeep/TOMB5>. It
-was modified between **2026-07-30 and 2026-10-31** (ongoing) for the *TR5 Randomizer*
+was modified between **2026-07-30 and 2026-11-01** (ongoing) for the *TR5 Randomizer*
 project.
 
 The upstream code as received is preserved as the first commit of this repository (no
@@ -17496,8 +17496,8 @@ The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
 `TR5Randomizer.exe` - is this project's own work from the first line, so it owes
 nobody a GPLv3 section 5(a) notice and has no record of the kind above. What
 changed in it since the public Beta 1.0 is listed here by task number.
-Forty-three files under `TR5Randomizer/src` changed in that span, five of them
-new.
+Forty-five files under `TR5Randomizer/src` changed in that span: five of them new,
+thirty-nine modified, one moved out into `package/`.
 
 - **#123 - the HD markers.** `Tr5Level.cpp` / `.h`, `ApplyPatch.cpp` / `.h`,
   `Randomize.cpp` and `gui/Main.cpp`: the randomizer writes the HD room markers
@@ -17669,16 +17669,24 @@ new.
   `RANDO_BUILD_ID` 22 to 23, `0.23` (`df83b76f`).
 
 - **#296 - the background picture beside the program.** `gui/Main.cpp`,
-  `gui/TR5Randomizer.rc`, `gui/TR5Randomizer.ico`, `package/Background.jpg`, `README.txt`:
-  the interface's background picture is no longer embedded in `TR5Randomizer.exe`. It
-  moves from `src/gui` into `package/`, which the release copies next to the EXE, and
-  `loadBackground` reads it at start from the EXE's folder, never from the current
-  directory; a missing or unreadable file is no error, and the window keeps its plain dark
-  background. The program icon keeps its six sizes and its pixels, now stored as
-  uncompressed 32-bit bitmaps instead of PNG entries. The reason for both: a megabyte of
-  compressed data at an entropy near 8 bits a byte inside an executable is what virus
-  scanners' heuristics take for a packed program. `THIRD-PARTY.md` names the picture's new
-  path (`cad68af7`, `0f80eb00`).
+  `gui/TR5Randomizer.rc`, `gui/TR5Randomizer.ico`, `package/docs/Background.jpg`,
+  `README.txt`: the interface's background picture is no longer embedded in
+  `TR5Randomizer.exe`. It moves from `src/gui` into `package/docs/`, which the release
+  copies beside the EXE, and `loadBackground` reads it at start from the `docs` folder
+  beside the EXE, never from the current directory; a missing or unreadable file is no
+  error, and the window keeps its plain dark background. The program icon keeps its six
+  sizes and its pixels, now stored as uncompressed 32-bit bitmaps instead of PNG entries.
+  The reason for both: a megabyte of compressed data at an entropy near 8 bits a byte
+  inside an executable is what virus scanners' heuristics take for a packed program.
+  `THIRD-PARTY.md` names the picture's new path (`cad68af7`, `0f80eb00`).
+- **#297 - Beta 5.0 and the package's docs folder.** `core/BuildId.h`,
+  `gui/TR5Randomizer.rc`, `Tools.rc`, `README.txt`, `package/docs/`,
+  `Preparation/Tools/BuildRelease.ps1` and `TOMB5 Code/tomb5.rc`: the version strings read
+  Beta_5.0 and 5,0,0,0; the build id stays 23, since the placement data did not change;
+  the engine's version block gains a CompanyName line. The package gets a `docs` folder:
+  `Background.jpg` moves into `package/docs/` and `loadBackground` reads it from there,
+  and the release copies the two manuals with the nine pictures they show beside it, so
+  the package reads like the repository's docs folder. Commits: `9ce96228`.
 
 ## 4. Building this yourself
 
@@ -17857,3 +17865,4 @@ entries above.
 | #292 | A savegame's pointers survive a moved pool, and null stays null |
 | #294 | The record in its one form again, and comments without task numbers |
 | #296 | section 3 (the randomizer) |
+| #297 | section 3 (the randomizer) |

@@ -17438,6 +17438,57 @@ which sets it.
 
 **Commits.** `c407dfdc`.
 
+### The record in its one form again, and comments without task numbers (#294)
+2026-11-01
+
+**What.** The entries of the rounds after the cleanup, #252 to #292, and the rows of
+section 3 are back in the record's one form: What, Why, How, Decisions and Commits, the
+date under the heading, no measurement, proof, parity, price or to-do paragraph, no
+narration of a run, a log, a dump or a picture, no branch sentence. Every file their How
+paragraphs named is still named, and the headers, includes and commits that no entry named
+are named. Forty-five commit hashes written with digits only, which named commits as they
+were before the last rewrite of the history, name the commits they became. The appendix
+covers the task numbers of the commit subjects since Beta 1.0, #259 and #265 have rows in
+section 3, and the sentence on commit texts that cannot change names, by class, the bodies
+of these rounds whose wording the record does not repeat. In the engine and the tools a
+comment carries no task number, date or history: ModernTest's regression cases are named
+by what they lack, the wardrobe's, the Zip call's and the walk's comments state the rule
+as it stands, the X-ray tone's comment names its model as reference pictures supplied for
+this project, the grille's comment says that the cavity shows where the installation's art
+has pipes and cables, and the drone's rule header says that its flight numbers are this
+project's free choices. `tomb5.vcxproj.filters`, `resource.h` and `tomb5.rc` carry the
+modification notice. The READMEs, the release script, the contract and the Randomizer
+manual count the drone's slot and describe the added shelf as it is drawn.
+
+**Why.** The rounds after the cleanup had brought back what this record is not -
+measurements per eye and per level, parity tallies, the narration of runs, branch
+sentences and open to-dos - against the form section 1 states. The record's all-digit
+hashes had escaped the update that followed the last rewrite of the history. A comment
+that names a task or a date tells a reader of the code nothing. The three project files
+beside `TOMB5/` had been modified without the notice GPLv3 section 5(a) asks of a modified
+file.
+
+**How.** `TOMB5 Code/MODIFICATIONS.md`, entry by entry against its earlier text; the dead
+hashes through the map the last rewrite left, each checked against its citation's label or
+its entry's title. Comments only in `game/draw.cpp`, `game/drone.cpp`,
+`game/drone_rule.h`, `game/zip_call_rule.h`, `specific/hd/hd_lara.cpp`,
+`specific/hd/hd_laradraw.cpp`, `specific/hd/hd_render.cpp` and `specific/hd/hd_vis.cpp`:
+no code changed, so every picture is the previous one by construction. The notice: an XML
+comment in `tomb5.vcxproj.filters` as in `tomb5.vcxproj`, two comment lines in
+`resource.h` and in `tomb5.rc`, the latter edited as UTF-16LE bytes with its BOM and its
+line ends kept. `Preparation/Tools/README.md`, `Preparation/Tools/BuildRelease.ps1`,
+`Preparation/Tools/Diagnose/ModernTest.cpp` and `BoneCheck.cpp`,
+`Preparation/Contract.md`, `TR5Randomizer/README.txt`, `docs/Engine-Manual.md` and
+`docs/Randomizer-Manual.md`.
+
+**Decisions.** A How keeps its files and its functions where the entry got shorter: a file
+a How no longer names would hide a modification. The numbers measured on the reference
+pictures stay, the pictures named as such. The TROne credits stand as they were.
+
+**Commits.** `2d109ad1` (the hashes), `f936737c`, `27335d39` and `9a42dc16` (the entries),
+`a21d8c91` (the index, section 3 and the commit lists), `f1f69374` (the comments),
+`e8bc3702` (the READMEs, the manuals and the notices).
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -17791,3 +17842,4 @@ entries above.
 | #290 | The bulbs' fog in one pass a frame, and the mill's old sheets of mist go |
 | #291 | The brawler's strike starts and lands where his fist reaches |
 | #292 | A savegame's pointers survive a moved pool, and null stays null |
+| #294 | The record in its one form again, and comments without task numbers |

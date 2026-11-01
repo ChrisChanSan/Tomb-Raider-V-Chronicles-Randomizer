@@ -137,8 +137,8 @@ static const BALANCE_LINE balanceLines[] =
 	HEALTH("HP_Lion",			hpLion,			50,	40,		LION),
 	HEALTH("HP_Crow",			hpCrow,			30,	10,		CROW),
 	/*
-	 * The drone's two lines were tuned in play on 2026-11-01: 100 hit
-	 * points and 50 a hit. Core never made it an enemy, so the vanilla
+	 * The drone's two lines were tuned in play: 100 hit points and 50 a
+	 * hit. Core never made it an enemy, so the vanilla
 	 * column repeats the standard, as the brawler's does.
 	 */
 	HEALTH("HP_Drone",			hpDrone,		100,	100,		DRONE),

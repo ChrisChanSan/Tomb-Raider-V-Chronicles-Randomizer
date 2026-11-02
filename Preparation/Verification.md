@@ -409,8 +409,8 @@ python <repo>\Preparation\Tools\Diagnose\xdiff.py rep_x86.log rep_x64.log > xdif
 takes them as switches of their own.
 
 **What to play in step 1**, about five minutes: from the title, load a
-savegame in slot `<n>` that the 32-bit build of this branch wrote (a save
-of a build before the 64-bit change is refused by the 64-bit build), play
+savegame in slot `<n>` that this 32-bit build wrote (an older save holds
+pool distances, see below, or is refused by the 64-bit build), play
 on into a level start, save into slot `<m>`, load it again, fight the
 brawler (`BRAWLLOG`) and a guard, climb a rope or a ladder, open the
 inventory and use something, and quit through the menu. Leave the keyboard,
@@ -420,25 +420,23 @@ file ends - and do not switch away from the window, which holds the game.
 **The save cross test** is part of the run: in step 3 the 64-bit build
 loads slot `<n>`, written by the 32-bit build, plays the recorded minutes
 and saves slot `<m>`; in step 2 the 32-bit build does the same.
-`SaveDiff x86_m.sav x64_m.sav` prints `IDENTICAL - every one of the 29491
-bytes.` when, at the save, no creature had an enemy and `GeneralPtr` named
-no item. Otherwise exactly these may differ, and nothing else: a creature's
-enemy (a run of at most 4 bytes in the savegame stream) and
-`Lara.GeneralPtr` with `Lara.target`. They hold a distance in the item pool
-of the build that wrote them (`game\save_pointer_rule.h`), and the 64-bit
-build's pool is laid out wider. Whether both builds name the same item
-there, the `SAVELOG` lines say: at the save `item= kind=`, at the next load
-`how= enemy=`/`general=`, which xdiff compares with the distances masked.
+`SaveDiff x86_m.sav x64_m.sav` must print `IDENTICAL - every one of the
+29491 bytes.` - no field is expected to differ. Every pointer a save holds
+is written by number (`game\save_pointer_rule.h`): an item by its item
+number, a creature's AI target by the number of its creature's item,
+Lara's meshes by their number; none is a distance in the pool, which the
+64-bit build lays out wider. At the next load `SAVELOG` says how each one
+was read - `how=tag_item`, `how=tag_ai`, `how=tag_num` or `how=null` - and
+a `SAVELOG save ... kind=outside` line names a pointer the rule could not
+name and wrote as null; send that line if one appears.
 The reverse: write slot `<n>` with the 64-bit build, record `run2.rec` on
 `PCtomb5_x64.exe`, play it again on both builds (steps 2 and 3 with
 `run2.rec`) and compare the two `<m>` files the same way.
 
-One case is known to fail the reverse and the forward test alike: a
-creature whose enemy is another item than Lara or its own AI target
-(`SAVELOG save ... kind=none`) is saved by its distance alone and read back
-as a distance in the reading build's pool, which on the other build is
-another item (`how=legacy_ok` with another number) or none
-(`how=legacy_null`). Both runs then differ from the load on.
+A save written by a build before this rule holds those pointers as
+distances. It is read the old way (`how=legacy_ok` or `how=legacy_null`),
+exact only on the build that wrote it, so slot `<n>` must be written by
+this build.
 
 **What a clean result prints.** `xdiff_x86.txt` proves the recorder: the
 recorded run and its replay on the same build. `xdiff_x64.txt` is the

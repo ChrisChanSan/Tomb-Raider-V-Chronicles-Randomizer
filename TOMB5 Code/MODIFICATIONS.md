@@ -17752,7 +17752,7 @@ with the same input on another build. With `-log`, `REPLAYLOG` names each level 
 that does not fit the run (`desync want= got= what= rec_tick= tick= record= at=`); after
 `end` or `desync` the run goes on with the devices. `GetCollidedObjects` keeps its two
 lists inside the room its callers give them in `tsv_buffer`. A save writes the level's
-name block zeroed.
+name block zeroed, and no pointer into the pool as a distance any more.
 
 **Why.** For the differential run of the 64-bit build (`Preparation/Verification.md`,
 section 8): the same game played on both builds and their seams compared line by line
@@ -17808,6 +17808,28 @@ reach of one item, 60 statics in a room with its neighbours and 17 rooms in a po
 list: a 32-bit build reaches no limit and keeps its lists' bytes. `game/collide.cpp`
 and `game/tomb4fx.h` carry the modification notice from this change on.
 
+`game/save_pointer_rule.h` (#292, #303) is closed: no pointer leaves a save as a
+distance into the pool. Until now a creature's enemy - Lara, its own `ai_target`, any
+other item - and `lara.GeneralPtr` naming an item were written as their distance from
+the pool's start; the value read back was right on the build that wrote it, but the
+bytes differed between a 32-bit and a 64-bit save of one game state, and an enemy that
+was neither Lara nor the own `ai_target` was read back on the other build at that
+distance in its own layout. Every assignment in `game/` gives an enemy null, Lara or the
+own `ai_target`, and `GeneralPtr` 0, an item number or an item of `items[]`;
+`lara.target` itself never reaches a save. Now a pointer to any item of `items[]` is
+`0x7D000000` over the item's number, a pointer to any creature's `ai_target` is
+`0x7B000000` over the number of the item that creature is (`SavePtrAiOwnerOf`, the
+slot's `item_num`; a load takes the slot that item holds in its own run,
+`SavePtrAiOfItem`, or null), and anything else is -1, with `SAVELOG save ...
+kind=outside` (for `GeneralPtr` the word appended to its line). The LOT byte's kind bits
+and `GeneralPtr`'s copy in the save's `target` are still written, so a build between
+#292 and this one reads Lara, the own `ai_target` and the pulley as before. A field
+that is a distance comes from a build before this closure and is read the old way, by
+the kind, the copy or the distance, now said as `how=legacy_ok` or `how=legacy_null`.
+Size and layout of the save are unchanged. `game/savegame.cpp`: `SavePointerSlots`
+(the slots' item numbers, read again before each enemy's decode, since a load deals the
+slots one creature at a time), `SaveLaraData`, `SaveLevelData`, `RestoreLevelData`.
+
 ModernTest's groups `replay_rule` and `collide_lists` hold both;
 `Preparation/Tools/Diagnose/xdiff.py` (new) compares two logs family by family.
 
@@ -17815,14 +17837,15 @@ ModernTest's groups `replay_rule` and `collide_lists` hold both;
 from there the runs are different games, and the line names the tick. The present's
 count is replaced where the logic takes it, not in `S_DumpScreen`, which more presents
 pass than the logic counts. Films stay out of the file; both builds are started with
-`-nofmv`. A creature's enemy and `GeneralPtr` are saved as distances in the item pool
-(#292), which the 64-bit build lays out wider: saves of one game state on the two
-builds differ in those fields, and an enemy that is neither Lara nor the creature's own
-AI target (`kind=none`) is read back on the other build as another item or none.
+`-nofmv`. The pointer fields of a save are tags, not distances, although a build
+before #292 adds its pool's start to them and gets wild pointers, as it already did
+for #292's tagged numbers and #303's mesh numbers; one save of one game state is the
+same file on both builds, which the cross test of `Preparation/Verification.md`,
+section 8, checks with SaveDiff.
 
 **Commits.** `7d7f324a` (the name block), `0a8578df` (the lists), `79afb7e9` (the
 recorder), `dfe69cb5` and `e52b0156` (the lists' comments), `22a1ddbf` (the checks),
-`fdd176e2` (xdiff.py).
+`fdd176e2` (xdiff.py), `4dc436d8` (the save's pointers by number).
 
 ## 3. Randomizer changes since Beta 1.0
 

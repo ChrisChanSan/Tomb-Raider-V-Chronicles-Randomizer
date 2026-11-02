@@ -17600,6 +17600,116 @@ under TOMB5's licence, and its pictures section names four pictures of this proj
 
 **Commits.** `a1461f45`, `aeb55675` (the ledger).
 
+### The engine builds as a 64-bit program; level file and save unchanged (#303)
+2026-11-02
+
+**What.** The engine project builds a 64-bit executable beside the 32-bit one:
+`Preparation/Tools/Diagnose/be64.bat` builds the `Release|x64` configuration into
+`release64/PCtomb5_x64.exe`. The 32-bit `release/PCtomb5.exe` stays the one that ships and
+the one the 64-bit build is measured against. Every place where the engine kept a pointer
+in 32 bits, read a struct with pointers raw from the level file or wrote one raw into the
+save now does it in a form that is the same on both builds:
+
+- The level file's room headers, roomlets and anims are read in their file form
+  (`ROOM_INFO_DISK`, `ROOMLET_DISK`, `ANIM_STRUCT_DISK`: 208, 56 and 40 bytes, the structs
+  of the 32-bit program that wrote the `.TRC`) and converted field by field, each offset
+  added as an `int32_t`. Where a roomlet is wider at run time (72 bytes on a 64-bit build)
+  the roomlets get an array of their own in the pool; the anims wait at the end of their
+  own block until the frames are read. The mesh offsets are read one by one into an array
+  sized by its pointers, the meshswap half copied by `sizeof(short*)`, `mesh_vtxbuf` sized
+  by `sizeof(MESH_DATA*)`. The room pointers no one reads (`data`, `light`, the vertex
+  buffer, the normals, `prelight`, `verts`, a roomlet's `pVtx`) are null.
+- The save file is one image of 29,397 bytes on both builds. Lara is held in the 32-bit
+  layout, `LARA_INFO_SAVE` (349 bytes, every pointer a `uint32_t`); the seven runs of
+  bytes between her 21 pointers are copied whole, each asserted the same length in both
+  structs. Her meshes go in by their number in `mesh_vtxbuf` - the table `ProcessMeshData`
+  fills once per level - under the tag 0x7C, her arms' frames as distances in the frames
+  block, `GeneralPtr` by #292's rule, and `spaz_effect`, `target` and `creature`, which
+  every load sets to null, as 0. The rope's pendulum is `PENDULUM_SAVE` (32 bytes), its
+  rope a distance from `RopeList`. Lara herself is no longer altered while she is saved.
+- #292's rule (`game/save_pointer_rule.h`) takes and gives addresses as `SavePtrAddr`,
+  64 bits on every build; only the fields the save writes stay 32 bits.
+- The closed doors are an array of `ITEM_INFO*`; the thread handles are `HANDLE`s; the
+  setup dialog's procedure returns `INT_PTR`; the pushable block Lara holds is named in
+  `lara.CornerX` by its item number, where it was its address.
+- A flare's age, an object's file offset and a debris piece's texture index, numbers
+  kept in pointer fields, go through `intptr_t`; string lengths and read counts kept in
+  32 bits are narrowed by cast. Thirteen log lines that printed a pointer with `%x` print
+  `LogAddr(p)`, its low 32 bits, with their words and width unchanged.
+- `DXPTR` is laid out naturally (pack 8) so that `InterlockedExchangePointer` finds the
+  joystick on its own width; `game_malloc` rounds a block to 8 bytes on the 64-bit build
+  only.
+- The 64-bit build plays no film: the game's `binkw32.dll` is 32-bit code, which a 64-bit
+  process cannot load. It writes `FMV off: no 64-bit Bink, films skipped` to the log and
+  goes on, without the message box the 32-bit build shows when the DLL is missing.
+- C4311, C4302 (a pointer cut), C4312 (a 32-bit value made a pointer), C4267 (a `size_t`
+  cut) and C4477 (a printf format that does not fit) are errors in all four
+  configurations; the 32-bit build never had any of them.
+
+On the 32-bit build every runtime value is what it was, but for the null room pointers
+no one reads, `lara.creature` (null after a load, never read), the held block's number in
+`CornerX` and, in the save, Lara's meshes by number and the three pointers written as 0;
+a room's header in its block keeps the file's offsets, which nothing reads after the
+load.
+
+**Why.** For a later use of a 64-bit executable. A pointer is 8 bytes there, and the
+engine had pointers in 32 bits in places that fail not at the first run but in edge
+cases: #292's rule cut every pool address to 32 bits, so a pool above 4 GB gave a wild
+`enemy` in the first tick after a load and a pool across a 4 GB line refused its own
+items; `meshes[]` was sized by `sizeof(long)` and lost its meshswap half; `mesh_vtxbuf`
+was sized `4 *` and overran into the next block of the pool; Lara's saved mesh distances
+count `MESH_DATA`, 70 bytes on a 32-bit build and 94 on a 64-bit one, and named other
+meshes there. Read raw, `ROOM_INFO` would be 280 bytes against the file's 208, `ROOMLET`
+72 against 56, `ANIM_STRUCT` 44 against 40, and every field behind the first pointer
+wrong; written raw, the save would be 29,481 bytes and the stream behind a rope shifted.
+
+**How.** `tomb5.vcxproj` and `.filters` (the two x64 configurations as EXE configurations
+mirroring Win32, output `release64\PCtomb5_x64`, zlib without the precompiled header,
+the discord-rpc libraries in the Win32 link only, the gate in all four);
+`global/types.h` (`ROOMLET_DISK`, `ANIM_STRUCT_DISK`, `ROOM_INFO_DISK`, `LARA_ARM_SAVE`,
+`LARA_INFO_SAVE`, `PENDULUM_SAVE`, `SAVEGAME_INFO.Lara`, `THREAD.handle`, `DXPTR`);
+`global/disk_layout.h` (new: `RoomFromDisk`, `RoomletFromDisk`, `RoomletsFromDisk`,
+`AnimFromDisk`, `AnimDiskSlot`, `AnimsFromDisk`, `LaraCopyRuns`, `PendulumToSave`,
+`PendulumFromSave`, and the sizes the level file and the save are read and written by as
+`static_assert`s, included by the five files that read or write them);
+`specific/alexstuff.cpp` (`aFixUpRoom`); `specific/file.cpp` (`LoadObjects`, `LoadRooms`,
+`LoadFile`, `S_LoadLevelFile`); `specific/drawroom.cpp` (`ProcessMeshData`);
+`game/savegame.cpp` (`SaveLaraData`, `RestoreLaraData`, the new `SaveLaraMesh`,
+`LoadLaraMesh`, `SaveArmFrames`, `LoadArmFrames`, `SaveAddress`, `SavePointerPool`,
+`SaveLevelData`, `RestoreLevelData`, `sgRestoreGame`); `game/save_pointer_rule.h`
+(`SavePtrAddr`, the address parameters, `SavePtrMeshField`, `SavePtrMeshNumber`);
+`game/rope.cpp` (`SaveRope`, `LoadRope`); `specific/gamemain.cpp` (the asserts);
+`game/door.cpp` (`ProcessClosedDoors`), `game/door.h`, `game/init.cpp`
+(`AddClosedDoor`); `game/moveblok.cpp` (`MovableBlockCollision`);
+`specific/setupdlg.cpp` (`SetupDlgProc`); `specific/winmain.cpp` (`WinMain`, the main
+thread's handle in `WinProcessCommands`, `WinHangCapture`, `WinHoldGame`, `WinFreeGame`,
+`WinWakeGame` and `WinMainWndProc`, the lengths in `WinProcessCommandLine`, the log
+lines in `WinClose`); `game/laraflar.cpp`
+(`CreateFlare`, `FlareControl`), `game/pickup.cpp` (`PickUpCollision`), `game/setup.cpp`
+(`InitialiseObjects`, `BuildOutsideTable`), `specific/specificfx.cpp` (`DrawDebris`);
+`specific/function_stubs.h` (`LogAddr`), the logging calls in `specific/dxshell.cpp`,
+`fmv.cpp`, `LoadSave.cpp` and `texture.cpp`; `specific/function_stubs.cpp`
+(`game_malloc`). ModernTest's group `x64_layout` holds the rule with pools above 4 GB and
+across a 4 GB line, the meshes' tag, the converted records (`ModernLayout.cpp`, built with
+the engine's `types.h` and `disk_layout.h`) and the converters' calls in the engine's
+text.
+
+**Decisions.** A save written before this build holds Lara's meshes as distances. The
+32-bit build reads them as before, exactly; the 64-bit build refuses such a save with the
+existing "incompatible or corrupted savegame" message rather than translating the
+distances into its own `MESH_DATA` layout - the one case where a save of one build does
+not load on the other. An older build loading a save of this one adds its `mesh_base` to
+the tagged numbers and gets wild mesh pointers, as it gets a wild `GeneralPtr` from
+#292's tagged item numbers. A tagged number the level does not have gives Lara her own
+mesh of that joint. The pushable block is named by its number in `CornerX` rather than
+kept in a global of its own: `CornerX` is a field of the save, and a number names the
+same block after a load in another run.
+
+**Commits.** `24fe16ca` (the configurations), `1b5002fc` (the 32-bit fields), `d7a25763`
+(the films), `36a9a045` (the loader), `42940084` (the save), `2eaa49f9` (numbers in
+pointers), `33748594` (lengths), `1ff2962f` (the log lines), `d543767a` (alignment),
+`42cd22e1` (the asserts), `67592dfa` (the gate and the checks).
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -17980,3 +18090,4 @@ entries above.
 | #299 | The engine builds with Control Flow Guard |
 | #300 | A loading screen shows no texture page of the level, not for a frame |
 | #301 | The missing-file message, the X-ray tone's comment and the engine icon's origin |
+| #303 | The engine builds as a 64-bit program; level file and save unchanged |

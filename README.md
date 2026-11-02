@@ -922,7 +922,9 @@ present in Visual Studio 2019 itself.
   or `Preparation\Tools\Diagnose\be.bat` on the command line, which first
   checks every compiled HD shader (`.inc`) against its `.hlsl` and rebuilds
   one that is out of step; a build from the Visual Studio window skips that
-  check.
+  check. `be64.bat` beside it builds the same engine as a 64-bit program
+  (x64, Release) into `release64\PCtomb5_x64.exe`; it plays no film and is
+  not part of the package.
 - **Randomizer:** `TR5Randomizer\build\b1.bat` (command line) and
   `b2.bat` (GUI).
 - **Package:** `Preparation\Tools\BuildRelease.ps1` assembles

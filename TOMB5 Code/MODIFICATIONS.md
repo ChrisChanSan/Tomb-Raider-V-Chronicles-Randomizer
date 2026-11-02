@@ -17711,6 +17711,15 @@ x=<x> y=<y> caller=PCtomb5+0x<offset>`, the return address less the module's bas
 the `.pdb` to resolve. A reading of the 55 calls found no argument that holds `LONG_MIN`
 on a 64-bit build and not on a 32-bit one; the line names the caller.
 
+The next 64-bit run wrote one such line, `ATANLOG x=6014 y=-2147483648`, and its caller
+was `DrawLightning` (`specific/specificfx.cpp`). Its angle loop runs over the bolt's 32
+points and takes each point's angle from the segment to the next point; for the 32nd that
+next vertex lay one past `float vtx[32 * 6]`. On a 32-bit build the stack held a finite
+float there, so the last point's width ran in a direction no vertex of the bolt gave; on
+a 64-bit build a NaN or a huge value, which `long()` turns into `LONG_MIN`. The 32nd point
+now keeps the last segment's angle (points 30 to 31). The draw loop's reads (points `lp`
+and `lp + 1` for `lp < 31`) stay inside the arrays. The clamp and `ATANLOG` stay.
+
 **Decisions.** A save written before this build holds Lara's meshes as distances. The
 32-bit build reads them as before, exactly; the 64-bit build refuses such a save with the
 existing "incompatible or corrupted savegame" message rather than translating the
@@ -17726,7 +17735,8 @@ same block after a load in another run.
 (the films), `36a9a045` (the loader), `42940084` (the save), `2eaa49f9` (numbers in
 pointers), `33748594` (lengths), `1ff2962f` (the log lines), `d543767a` (alignment),
 `42cd22e1` (the asserts), `67592dfa` (the gate and the checks), `f644b5a1` (the
-crash seam's dump), `39ee6a20` (the clamp and ATANLOG).
+crash seam's dump), `39ee6a20` (the clamp and ATANLOG), `64eed4ba` (the lightning's
+last point).
 
 ## 3. Randomizer changes since Beta 1.0
 

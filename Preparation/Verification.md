@@ -574,6 +574,12 @@ message (exit code 1):
 In this build the sanitizer reports an access violation or a division by
 zero itself (`kind=` names it), where the other builds' crash seam would.
 
+The first report ends the run. To collect every report of one run instead,
+`set ASAN_OPTIONS=continue_on_error=1` before the start, together with
+`-log`: each report then lands only in `log.txt` as `ASANLOG` lines, the game
+goes on after it (in whatever state the bad access left), and no `CRASH`
+line or dump is written for it.
+
 **How to read it.** The report's first frame is the line `#0 0x<address> in
 <function> <file>:<line>` under `ERROR: AddressSanitizer: <kind> on address
 ...`, repeated in the `SUMMARY:` line at its end. With `PCtomb5_asan.pdb`

@@ -18,7 +18,7 @@
  * effects' vertices. They are pointer lists, each closed by a 0: the items
  * at one place, the statics behind them. The callers gave the places in
  * bytes - 0 and 1024 for Lara, her flare, the torch and the pushable block,
- * 0x2000 and 0x3000 for the grenade and the burning floor - which on a
+ * 0x2000 and 0x3000 for the crossbow's bolt and an explosion - which on a
  * 32-bit build are 256 pointers to the items before the statics begin. On a
  * 64-bit build the same bytes are 128 pointers, and the 129th item would be
  * written over the first static.

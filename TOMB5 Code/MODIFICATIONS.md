@@ -17648,6 +17648,8 @@ original level about 9 ms.
 gives the drones' aim, the ledge test, the weapons, the fixed and look cameras, the
 cutscenes' hands, the bubbles and the drips - and her wet nodes from her pose at the
 logic tick, as the 30 fps mode does, and never from a frame drawn between two ticks.
+The logic's random numbers, `GetHeight`'s leftovers and the corpse fade's count no longer
+depend on how many frames the display shows between two ticks either.
 
 **Why.** A frame drawn between two ticks built `lara_joint_matrices` and the wet nodes
 from the blended pose. `InterpEndFrame` put the items, the camera and the aim back, not
@@ -17677,17 +17679,51 @@ is written as before, and the frame's calls are the old ones in the old order.
 `game/deltapak.h` carries the modification notice now. ModernTest's group `lara_joints`
 (13 checks) holds the order and the wiring in the engine's text.
 
+What the frames leave behind besides the joints, three more:
+- The generator's state. `game/interpolate.cpp`: `InterpBeginFrame` saves the state of
+  `GetRandomControl` at every frame, and `InterpEndFrame` gives it back after a tween
+  frame, after a blended frame and after every frame of the display's cadence. At
+  *Display* the frame that carries the tick is blended, and its draws (star twinkle,
+  floor lasers, muzzle flash, lens flare, speech head) stayed in the stream; how many
+  depended on what the blended camera saw. It is drawn live there only on a camera cut,
+  without a previous state, or when the clock holds its blend at 1 - the last is the
+  clock's doing, hence every frame of that cadence. At 60 the frame that keeps its draws
+  is the live one, drawn at the tick's state as at 30, so 60 plays the stream of 30 in
+  steady frames; *Display* keeps none and plays a stream of its own, the same at every
+  display rate. A late frame at 60 can put a tick behind a tween frame alone; that tick
+  misses one picture's draws, as a hitch at 30 does elsewhere.
+- GetHeight's five globals (`trigger_index`, `tiltxoff`, `tiltyoff`, `OnObject`,
+  `height_type`) go back with it, saved and given back by the same rule. The three
+  shadows, the footprints' draw, the rain's splash and a cutscene's braid call
+  `GetHeight` at the frame's positions. `AddFootprint` and `GetProperFootPos` read
+  `OnObject` with no `GetHeight` of their own, and every `trigger_index` reader whose
+  own `GetHeight` returns `NO_HEIGHT` reads the previous caller's value (`GetHeight` sets
+  it only past that return) - the frame's, when nothing in the tick called it first.
+  The classic mode has the same readers, so the shadows do not restore on their own: an
+  unconditional restore there would change it.
+- The corpse fade's marks. `game/draw.cpp`: `PrintObjects` marks a dead body only on a
+  frame that is no tween frame, one per tick: every frame at 30, the live one at 60, the
+  frame that carries the tick at *Display*. The tick had counted the union of every
+  picture since the last tick, two at 60 and two or three at 144 Hz. At *Display* that
+  frame is blended at an alpha the clock sets, so a room at the picture's edge can still
+  count differently between display rates; a room walk at the live state would close
+  that and was not built (it writes the rooms' bounds, which `ProcessClosedDoors` reads).
+
+With `-log`, `RNGLOG frames= given_back= undone= kept_frames= kept_draws= heights= over=`
+follows each `JOINTLOG` line (`InterpRngLevelEnd`): the draws counted as steps of the
+generator from the saved state, up to 65,536 (`over=` past it). ModernTest's group
+`logic_leftovers` (9 checks) holds the save, the give-back, the rule and the mark.
+
 **Measured.** 76 places in the tick read the joint set (the item controls run first, from
 `ControlPhase`'s item loop, before `LaraControl` and the camera); the frame's own readers
 are the lighting, the three shadows, the sparks and the HD soft body. Read by nothing in
 the logic and left as they are: the view set `lara_matrices`, the nodes' ambient and
 `GLaraShadowframe`. A pass costs the joint half of what every frame builds: one per tick
-at 60, nearly one per frame at the display's rate. Measured and not changed here: at the
-display's rate the frame that carries a tick is blended and keeps its draws from the
-logic's random numbers, and the corpse fade counts a body seen in any frame since the
-last tick (`StepAfterDeathFade`).
+at 60, nearly one per frame at the display's rate. Measured and not changed here:
+`ProcessClosedDoors`, which `DrawRooms` calls every frame, reads the frame's room walk
+and moves a closed door between its two rooms' item lists.
 
-**Commits.** `d377aa82`.
+**Commits.** `d377aa82`, `a4ccf29a`.
 
 ### A sound the level lacks is not stopped through info -1 (#311)
 2026-11-02

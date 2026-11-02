@@ -92,7 +92,8 @@ short no_rotation[12] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 
 /* Which dead bodies the draw saw this frame.
  *
- * PrintObjects sets a byte per item; StepAfterDeathFade, called once per
+ * PrintObjects sets a byte per item, on the one frame per tick that is no
+ * tween frame; StepAfterDeathFade, called once per
  * logic tick from ControlPhase, counts them up and kills the ones that
  * reached 128. One byte per item slot and no allocation; the notes at
  * PrintObjects and StepAfterDeathFade say why the counting is not in the draw. */
@@ -545,7 +546,8 @@ void LaraJointsLive()
 
 /* JOINTLOG, one line at the end of each level and of the title, with -log:
  * the passes against the level's ticks and the frames drawn as tween frames
- * and blended. fps_mode 0 writes passes=0 and blended_frames=0. */
+ * and blended. fps_mode 0 writes passes=0 and blended_frames=0. RNGLOG
+ * follows it, the same level's frames (game\interpolate.cpp). */
 void LaraJointsLevelEnd()
 {
 	const unsigned long serial = InterpTickSerial();
@@ -559,6 +561,7 @@ void LaraJointsLevelEnd()
 	g_joints.tweens = 0;
 	g_joints.blends = 0;
 	g_joints.serial = serial;
+	InterpRngLevelEnd();
 }
 
 long DrawPhaseGame()
@@ -1319,8 +1322,16 @@ void PrintObjects(short room_number)
 		 * being counted up to it: the skeleton writes the field directly
 		 * (`item->after_death = (short)(phd_sqrt(info.distance) >> 4)`,
 		 * game\skeleton.cpp). StepAfterDeathFade carries both tests over
-		 * unchanged. */
-		if (item->after_death > 0)
+		 * unchanged.
+		 *
+		 * Only the frame that steps the counters marks: the one frame per
+		 * tick that is no tween frame. At fps_mode 0 that is every frame;
+		 * at fps_mode 1 the live one, drawn at the tick's state as at 30 Hz;
+		 * at fps_mode 2 the frame that carries the tick. Marked by every
+		 * frame, the tick would count the union of two pictures at 60 Hz
+		 * and of two or three at 144 Hz, and a body at the edge of a
+		 * turning camera would vanish a tick sooner on a faster display. */
+		if (item->after_death > 0 && !InterpIsTweenFrame())
 			g_afterDeathSeen[i] = 1;
 	}
 

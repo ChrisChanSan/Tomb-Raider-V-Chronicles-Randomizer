@@ -1,5 +1,18 @@
+/*
+ * Modified 2026 by ChrisChanSan.
+ *
+ * Part of the TOMB5 native Windows 11 port (Direct3D 9 / XAudio2) and of the
+ * TR5 Randomizer project. The individual changes are recorded in the git
+ * history of this source tree.
+ *
+ * TOMB5 is free software: you can redistribute it and/or modify it under the
+ * terms of the GNU General Public License as published by the Free Software
+ * Foundation, either version 3 of the License, or (at your option) any later
+ * version. See the LICENSE file at the root of this source tree.
+ */
 #include "../tomb5/pch.h"
 #include "collide.h"
+#include "collide_lists.h"	// the two lists' room in tsv_buffer
 #include "control.h"
 #include "delstuff.h"
 #include "effects.h"
@@ -708,7 +721,8 @@ long GetCollidedObjects(ITEM_INFO* item, long rad, long noInvisible, ITEM_INFO**
 				if (rooms[j] == *doors)
 					break;
 
-			if (j == room_count)
+			// rooms[] holds 22; the fifteen levels need 17 at most.
+			if (j == room_count && room_count < 22)
 			{
 				rooms[room_count] = *doors;
 				room_count++;
@@ -743,8 +757,13 @@ long GetCollidedObjects(ITEM_INFO* item, long rad, long noInvisible, ITEM_INFO**
 
 							if (rad + num + 128 >= bounds[4] && num - rad - 128 <= bounds[5])
 							{
-								StoredStatics[statics_count] = mesh;
-								statics_count++;
+								// Kept inside its room in tsv_buffer
+								// (game\collide_lists.h).
+								if (statics_count < COLLIDE_STATICS_MAX)
+								{
+									StoredStatics[statics_count] = mesh;
+									statics_count++;
+								}
 
 								if (!rad)
 								{
@@ -845,8 +864,13 @@ long GetCollidedObjects(ITEM_INFO* item, long rad, long noInvisible, ITEM_INFO**
 
 				if (rad + num + 128 >= bounds[4] && num - rad - 128 <= bounds[5])
 				{
-					StoredItems[items_count] = item2;
-					items_count++;
+					// Kept inside its room in tsv_buffer, as the
+					// statics are.
+					if (items_count < COLLIDE_ITEMS_MAX)
+					{
+						StoredItems[items_count] = item2;
+						items_count++;
+					}
 
 					if (!rad)
 						return 1;

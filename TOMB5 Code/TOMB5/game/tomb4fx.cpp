@@ -66,7 +66,7 @@ short ScreenFading;
 short FadeScreenHeight;
 short DestFadeScreenHeight;
 short ScreenFadeSpeed = 8;
-char tsv_buffer[16384];
+char tsv_buffer[TSV_BUFFER_SIZE];
 
 static short FadeClipSpeed;
 

@@ -305,8 +305,8 @@ void ControlCrossbow(short item_number)
 	if (item->room_number != room_number)
 		ItemNewRoom(item_number, room_number);
 
-	itemlist = (ITEM_INFO**)&tsv_buffer[0x2000];
-	meshlist = (MESH_INFO**)&tsv_buffer[0x3000];
+	itemlist = (ITEM_INFO**)&tsv_buffer[CollideListByte(COLLIDE_ITEMS_AT_B)];
+	meshlist = (MESH_INFO**)&tsv_buffer[CollideListByte(COLLIDE_STATICS_AT_B)];
 	GetCollidedObjects(item, 128, 1, itemlist, meshlist, 1);
 
 	if (*itemlist)

@@ -3829,8 +3829,8 @@ void lara_col_all4s(ITEM_INFO* item, COLL_INFO* coll)
 			z = item->pos.z_pos;
 			item->pos.x_pos -= 100 * phd_sin(coll->facing) >> W2V_SHIFT;
 			item->pos.z_pos -= 100 * phd_cos(coll->facing) >> W2V_SHIFT;
-			itemlist = (ITEM_INFO**)&tsv_buffer[0];
-			meshlist = (MESH_INFO**)&tsv_buffer[1024];
+			itemlist = (ITEM_INFO**)&tsv_buffer[CollideListByte(COLLIDE_ITEMS_AT)];
+			meshlist = (MESH_INFO**)&tsv_buffer[CollideListByte(COLLIDE_STATICS_AT)];
 			collided = GetCollidedObjects(item, 100, 1, itemlist, meshlist, 0);
 			item->pos.x_pos = x;
 			item->pos.z_pos = z;
@@ -6229,8 +6229,8 @@ long LaraLedgeRefusals(ITEM_INFO* item, COLL_INFO* coll, long dir)
 
 	item->pos.x_pos -= 100 * phd_sin(coll->facing) >> W2V_SHIFT;
 	item->pos.z_pos -= 100 * phd_cos(coll->facing) >> W2V_SHIFT;
-	itemlist = (ITEM_INFO**)&tsv_buffer[0];
-	meshlist = (MESH_INFO**)&tsv_buffer[1024];
+	itemlist = (ITEM_INFO**)&tsv_buffer[CollideListByte(COLLIDE_ITEMS_AT)];
+	meshlist = (MESH_INFO**)&tsv_buffer[CollideListByte(COLLIDE_STATICS_AT)];
 
 	if (GetCollidedObjects(item, 100, 1, itemlist, meshlist, 0))
 		bits |= LEDGE_REFUSE_OBJECT;

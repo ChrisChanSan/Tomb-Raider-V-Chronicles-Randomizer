@@ -178,8 +178,8 @@ void ControlExplosion(short item_number)
 				}
 			}
 
-			itemlist = (ITEM_INFO**)&tsv_buffer[0x2000];
-			meshlist = (MESH_INFO**)&tsv_buffer[0x3000];
+			itemlist = (ITEM_INFO**)&tsv_buffer[CollideListByte(COLLIDE_ITEMS_AT_B)];
+			meshlist = (MESH_INFO**)&tsv_buffer[CollideListByte(COLLIDE_STATICS_AT_B)];
 			GetCollidedObjects(item, 2048, 1, itemlist, meshlist, 1);
 
 			if (*itemlist || *meshlist)

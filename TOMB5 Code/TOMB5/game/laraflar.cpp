@@ -126,8 +126,8 @@ void CreateFlare(short object, long thrown)
 	flare->pos.z_pos = pos.z;
 	room_number = lara_item->room_number;
 	floor = GetFloor(pos.x, pos.y, pos.z, &room_number);
-	itemlist = (ITEM_INFO**)&tsv_buffer[0];
-	meshlist = (MESH_INFO**)&tsv_buffer[1024];
+	itemlist = (ITEM_INFO**)&tsv_buffer[CollideListByte(COLLIDE_ITEMS_AT)];
+	meshlist = (MESH_INFO**)&tsv_buffer[CollideListByte(COLLIDE_STATICS_AT)];
 	collision = GetCollidedObjects(flare, 0, 1, itemlist, meshlist, 0);
 
 	if (collision || pos.y > GetHeight(floor, pos.x, pos.y, pos.z))

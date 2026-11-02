@@ -326,8 +326,8 @@ void FlameTorchControl(short item_number)
 	yv = item->fallspeed;
 	item->pos.y_pos += yv;
 	DoProperDetection(item_number, x, y, z, xv, yv, zv);
-	itemlist = (ITEM_INFO**)&tsv_buffer[0];
-	meshlist = (MESH_INFO**)&tsv_buffer[1024];
+	itemlist = (ITEM_INFO**)&tsv_buffer[CollideListByte(COLLIDE_ITEMS_AT)];
+	meshlist = (MESH_INFO**)&tsv_buffer[CollideListByte(COLLIDE_STATICS_AT)];
 
 	if (GetCollidedObjects(item, 0, 1, itemlist, meshlist, 0))
 	{

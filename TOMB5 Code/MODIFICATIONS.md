@@ -17795,10 +17795,25 @@ present's ticks, `S` a save or a load - `ReplayEncode`, `ReplayDecode`. Under
   before `WinProcessCommandLine` puts the command line in capitals; `WinClose` closes
   the file. `specific/function_stubs.cpp`, `.h`: `GetRandomDrawSeed`.
 - The clock in the logic, measured: the tick count `S_DumpScreen` takes from `Sync()`
-  is the one read whose value reaches the logic (`ControlPhase`'s ticks, the ring's
-  steps, the title's ticks). The other reads in `game/` only draw - `TIME_SubTick` in
-  the interpolation's and the ring's blend - or gate a log line (`VISLOG`'s
-  `GetTickCount`).
+  reaches the logic (`ControlPhase`'s ticks, the ring's steps, the title's ticks), and
+  at the display-bound frame rate so does `TIME_SubTick`, the frame's place between
+  two ticks: the frame is blended by it, `CalcLaraMatrices` leaves Lara's joints as
+  that frame drew them, and the next tick reads them - `GetLaraJointPos` in the
+  drone's aim at her torso, `TestForObjectOnLedge`, `TriggerLaraBlood`, a fixed
+  camera's target. The first recorded run left its own replay on the same build at
+  tick 193 that way (a drone's shot hit Lara in one run and the wall in the other).
+  Both blends (`game/interpolate.cpp` `InterpTickFraction`, `game/inventory_interp.cpp`)
+  read the clock through `ReplaySubTick`, which records the value and plays it back:
+  the record `A`, the double's eight bytes. The other reads in `game/` gate a log line
+  (`VISLOG`'s `GetTickCount`). No device is read outside the input point: `keymap`,
+  the mouse's counts and the pad's globals are written only there, and every other
+  reader - the modern camera's stored stick and mouse steps, the binding page's
+  `ReadJoystick`, the cheat keys - reads what that point left.
+- The input record carries a check of the game's state (the logic seed, Lara's
+  place, turn and life); `-replay` writes `REPLAYLOG drift tick=` once at the first
+  call where it differs and goes on. A file of version 1 is refused. The braid is
+  built from the drawn frame and nothing in the logic reads `hairs[]`: `HAIRLOG` is
+  a render family in xdiff.py.
 
 `game/collide_lists.h` (new): the places counted in pointers - items at 0 and 2048,
 statics at 256 and 3072 - the same bytes on a 32-bit build, twice them on a 64-bit
@@ -17851,7 +17866,8 @@ section 8, checks with SaveDiff.
 
 **Commits.** `7d7f324a` (the name block), `0a8578df` (the lists), `79afb7e9` (the
 recorder), `dfe69cb5` and `e52b0156` (the lists' comments), `22a1ddbf` (the checks),
-`fdd176e2` (xdiff.py), `4dc436d8` (the save's pointers by number).
+`fdd176e2` (xdiff.py), `4dc436d8` (the save's pointers by number), `62d924e5` (the frames'
+sub-tick), `3eb4f142` (xdiff.py's window).
 ### The engine reads its texture blocks with the project's own inflater; zlib goes (#308)
 2026-11-02
 

@@ -379,14 +379,21 @@ A person cannot play the same five minutes twice, so the 32-bit build
 records what the run takes from outside and both builds play it again:
 
 - `-record <file>` writes, once per call of the input function, what the
-  keyboard, the mouse and the pad delivered; per present the number of
-  1/60 s ticks the logic takes from it; at every level start the two random
-  generators' seeds and the frame counter; at every save and load the slot.
+  keyboard, the mouse and the pad delivered, with a check of the game's
+  state; per present the number of 1/60 s ticks the logic takes from it;
+  per drawn frame its place between two ticks as the clock gave it (at the
+  display-bound frame rate the frame is blended by it, and the next tick
+  reads Lara's joints from that frame - the camera's target, a drone's aim
+  at her torso); at every level start the two random generators' seeds and
+  the frame counter; at every save and load the slot.
 - `-replay <file>` puts the file's values in place of the devices and the
   clock, record by record, and checks each one against the run (its type
   and its tick). When the file ends, or a record does not fit, a
   `REPLAYLOG end` or `REPLAYLOG desync` line says so and the game goes on
-  with the devices.
+  with the devices. The first input call whose state check differs writes
+  `REPLAYLOG drift tick=`: from that tick the replayed game is another one.
+  A file of an older version (`run1.rec` of the first build of the
+  recorder) is refused; record again.
 
 **What must be the same in every run.** The level files (the same `data\`
 folder, or the byte-identical randomizer output of section 1), the options
@@ -478,12 +485,16 @@ no float-only difference
 0 logic/load lines differ, 0 audio, 0 float-only; ...
 ```
 
-and no `REPLAYLOG desync` line at the top. Between the recorded run and a
-replay a few `audio` lines may differ (a sound that waits for its last one
-starts by the audio device's clock); between the builds the `float-only`
-lines may differ in the last digit, where a seam prints a float the two C
-runtimes computed (`sin`, `cos`, `sqrt` differ in their last bit). The game
-logic itself is integer arithmetic and must not.
+and no `REPLAYLOG desync` or `drift` line at the top. Between the
+recorded run and a replay a few `audio` lines may differ (a sound that waits
+for its last one starts by the audio device's clock, and its volume follows
+the drawn camera); between the builds the `float-only` lines may differ in
+the last digit, where a seam prints a float the two C runtimes computed
+(`sin`, `cos`, `sqrt` differ in their last bit). The braid (`HAIRLOG`) is a
+render family and dropped. The game logic itself is integer arithmetic and
+must not differ. The summary's last lines say where each log was compared:
+from the first `REPLAYLOG level=` line to `REPLAYLOG end`; after it the
+devices drive the game again (the title the run returns to).
 
 **What a difference means.** `FIRST LOGIC DIFFERENCE` names the family,
 both lines with their line numbers, the logic second before it (`TICKLOG

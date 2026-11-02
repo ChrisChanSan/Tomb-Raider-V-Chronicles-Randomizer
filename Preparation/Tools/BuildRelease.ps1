@@ -152,8 +152,8 @@ Say ("Source        : $copied files ({0:N1} MB) - GPLv3 obligation" -f `
 # licence. Without these a recipient holds source that cannot rebuild the
 # program, which is exactly what the obligation exists to prevent. The two
 # scripts reach nowhere outside TR5Randomizer: the deflate reader they
-# compile is the randomizer's own (src\core\Inflate.cpp), not the engine's
-# zlib.
+# compile is the randomizer's own (src\core\Inflate.cpp), the file the
+# engine's project compiles as well, by its path beside it.
 $rsOut = "$OutDir\Source\TR5Randomizer"
 New-Item -ItemType Directory -Path $rsOut -Force | Out-Null
 Copy-Item "$RandoRoot\src" $rsOut -Recurse -Force
@@ -182,12 +182,9 @@ if (Test-Path $drpc) { Copy-Item $drpc "$lic\DiscordRPC-MIT.txt" -Force }
 # notice has to travel with the binary, not only with the source.
 $trf = "$EngineSrc\TOMB5\vendor\trforge\LICENSE"
 if (Test-Path $trf) { Copy-Item $trf "$lic\TRForge-MIT.txt" -Force }
-# zlib and stb_vorbis keep their notice inside their own source. It is lifted
-# from there rather than copied into a second file, so the package cannot end
-# up shipping a stale version of someone else's licence.
-$zh = Get-Content "$EngineSrc\TOMB5\tomb5\libs\zlib\zlib.h"
-$zEnd = ($zh | Select-String -Pattern '^\s*\*/' | Select-Object -First 1)
-if ($zEnd) { $zh[0..($zEnd.LineNumber - 1)] | Set-Content "$lic\zlib.txt" -Encoding utf8 }
+# stb_vorbis keeps its notice inside its own source. It is lifted from there
+# rather than copied into a second file, so the package cannot end up
+# shipping a stale version of someone else's licence.
 # Both stb files we use - stb_vorbis.c in the engine and stb_image.h in the
 # randomizer - carry the SAME dual-licence block verbatim, so one file
 # covers both. Shipping two byte-identical texts under different names
@@ -209,7 +206,7 @@ $tp = $tp.Replace('TR5Randomizer/', 'Source/TR5Randomizer/')
 $tp = $tp.Replace('](LICENSE)', '](GPLv3.txt)')
 [IO.File]::WriteAllText("$lic\THIRD-PARTY.md", $tp)
 $n = (Get-ChildItem $lic -File).Count
-Say "Licenses      : $n files (GPLv3, Dear ImGui, discord-rpc, zlib, stb, TRForge)"
+Say "Licenses      : $n files (GPLv3, Dear ImGui, discord-rpc, stb, TRForge)"
 
 # --- 6. Manual ---------------------------------------------------------------
 # One source of truth: the player README is versioned at

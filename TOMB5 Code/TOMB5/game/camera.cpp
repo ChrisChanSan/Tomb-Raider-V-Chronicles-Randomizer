@@ -1577,7 +1577,16 @@ void CalculateCamera()
 		camera.target.y = y;
 		gotit = 0;
 
-		if (camera.type != CHASE_CAMERA && camera.flags != 3)
+		// The forced fixed camera (top of this function) makes the type
+		// FIXED and never names a camera: camera.number is still the -1
+		// the reset at the end of the last pass left. camera.fixed[-1]
+		// is the 16 bytes before the table in the pool, the last sprite's
+		// texture corners, and its "flags" set the sniper lock and the
+		// torso target at random. No camera is no sniper camera: the lock
+		// stays 0 (cleared above) and the target is the ordinary one, as
+		// sniperCam above already reads it.
+		if (camera.type != CHASE_CAMERA && camera.flags != 3 &&
+			camera.number >= 0)
 		{
 			fixed = &camera.fixed[camera.number];
 			SniperCamActive = fixed->flags & 3;

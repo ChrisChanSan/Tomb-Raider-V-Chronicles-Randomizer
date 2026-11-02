@@ -956,8 +956,6 @@ present in Visual Studio 2019 itself.
   the interface.
 - **stb_vorbis / stb_image** by Sean Barrett (public domain) — HQ music and
   the background image.
-- **[zlib](https://zlib.net/)** by Jean-loup Gailly and Mark Adler — the
-  engine unpacks the level files with it.
 - **TRForge** by the TRForge contributors (MIT) — five of its files, the
   reader for the Remaster's own room-geometry format, are vendored into the
   engine and compiled in, byte for byte but for three comment passages left

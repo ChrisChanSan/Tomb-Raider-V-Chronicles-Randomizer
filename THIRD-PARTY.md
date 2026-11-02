@@ -116,26 +116,24 @@ fog model, fog bulbs and room lights of its own (`set_fog_model`,
 | Library | Licence | Full text in this tree |
 |---|---|---|
 | **Dear ImGui** — ocornut, <https://github.com/ocornut/imgui> | MIT | `TR5Randomizer/external/imgui/LICENSE.txt` |
-| **zlib** — Jean-loup Gailly and Mark Adler; in the engine, `PCtomb5.exe`, only | zlib licence | notice at the top of `TOMB5 Code/TOMB5/tomb5/libs/zlib/zlib.h` |
 | **stb_vorbis** — Sean Barrett, <https://github.com/nothings/stb> | MIT **or** public domain, your choice | notice at the end of `TOMB5 Code/TOMB5/tomb5/libs/stb/stb_vorbis.c` |
 | **stb_image** — Sean Barrett, <https://github.com/nothings/stb> | MIT **or** public domain, your choice | notice at the end of `TR5Randomizer/src/libs/stb/stb_image.h` |
 | **TRForge** — TRForge contributors | MIT | `TOMB5 Code/TOMB5/vendor/trforge/LICENSE` |
 
-zlib unpacks the level files' texture blocks when the engine loads a level.
-The randomizer and the diagnostic tools do not link it: they read and write
-deflate with this project's own `TR5Randomizer/src/core/Inflate.cpp`, written
-from RFC 1950 and RFC 1951, which holds no zlib code.
+The engine, `PCtomb5.exe`, compiles stb_vorbis, TRForge's five files and this
+project's own code; Dear ImGui and stb_image are the randomizer's. Deflate - the
+level files' texture blocks, the title's logo - is read in both programs and in
+the diagnostic tools, and written by the randomizer, with this project's own
+`TR5Randomizer/src/core/Inflate.cpp`, written from RFC 1950 and RFC 1951; the
+engine's project compiles that one file by its path beside it.
 
-Two of those libraries carry work by further authors, whose own notices sit
+One of those libraries carries work by further authors, whose own notices sit
 in the tracked files themselves and travel with every copy of this tree.
-**zlib**'s `contrib/` tree — none of it compiled here, all of it distributed —
-carries Gilles Vollant, Even Rouault, Mathias Svensson and Info-ZIP
-(`contrib/minizip/`), Borland (`contrib/delphi/ZLib.pas`) and Henrik Ravn
-(`contrib/dotzlib/`). **Dear ImGui** embeds two fonts that ARE compiled into
-`TR5Randomizer.exe`: ProggyClean and ProggyForever, both MIT, by Tristan
-Grimmer and, for the second, Disco Hello — their notices stand inline in
-`imgui_draw.cpp`, and `BuildRelease.ps1` ships `external/` whole, so they
-reach the recipient with the binary.
+**Dear ImGui** embeds two fonts that ARE compiled into `TR5Randomizer.exe`:
+ProggyClean and ProggyForever, both MIT, by Tristan Grimmer and, for the
+second, Disco Hello — their notices stand inline in `imgui_draw.cpp`, and
+`BuildRelease.ps1` ships `external/` whole, so they reach the recipient with
+the binary.
 
 **TRForge** is vendored, not linked against: five files are copied into
 `TOMB5 Code/TOMB5/vendor/trforge/src/` — the reader for the remasters'

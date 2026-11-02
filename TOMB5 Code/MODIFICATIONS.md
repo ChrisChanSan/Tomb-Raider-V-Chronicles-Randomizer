@@ -4,7 +4,7 @@
 
 This is a modified version of **TOMB5**, the PC Tomb Raider Chronicles decompilation
 project by Troye/Trxyebeep and contributors, <https://github.com/Trxyebeep/TOMB5>. It
-was modified between **2026-07-30 and 2026-11-01** (ongoing) for the *TR5 Randomizer*
+was modified between **2026-07-30 and 2026-11-02** (ongoing) for the *TR5 Randomizer*
 project.
 
 The upstream code as received is preserved as the first commit of this repository (no
@@ -15,12 +15,14 @@ commit made after this copy was taken (`setup.cpp`: Two Gun gains `undead = 1`) 
 small local fixes that predate this repository and are documented in the files themselves
 (`dxsound.cpp` LOCSOFTWARE, `function_stubs.cpp` DO_LOG).
 
-Measured on **2026-11-01** by comparing every file under `TOMB5/` against that first
-commit: **135 files changed, 199 entirely new - 334 in all**, none deleted, **284** of
-them carrying the modification notice at the top, which `grep -rl "Modified 2026 by
-ChrisChanSan" TOMB5/` lists. The project file `tomb5.vcxproj` and its filters file carry
-the same notice as an XML comment, and `resource.h` and `tomb5.rc` beside them as comment
-lines.
+Measured on **2026-11-02** by comparing every file under `TOMB5/` against that first
+commit: **135 files changed, 199 entirely new - 334 in all**, **284** of them carrying
+the modification notice at the top, which `grep -rl "Modified 2026 by ChrisChanSan"
+TOMB5/` lists. The project file `tomb5.vcxproj` and its filters file carry the same
+notice as an XML comment, and `resource.h` and `tomb5.rc` beside them as comment lines.
+
+234 are deleted: upstream's zlib, `tomb5/libs/zlib/`, since the engine reads deflate
+with the project's own reader (#308).
 
 50 of the 334 do not carry the notice, and none of them should:
 
@@ -17600,6 +17602,45 @@ under TOMB5's licence, and its pictures section names four pictures of this proj
 
 **Commits.** `a1461f45`, `aeb55675` (the ledger).
 
+### The engine reads its texture blocks with the project's own inflater; zlib goes (#308)
+2026-11-02
+
+**What.** The engine unpacks the deflate streams it loads - the texture blocks of a level
+file, of which a load unpacks two of the three, and the title's logo file - with the
+project's own reader, `TR5Randomizer/src/core/Inflate.cpp`, the one the randomizer uses
+since #306. zlib 1.2.12, which upstream TOMB5 carried in `tomb5/libs/zlib/` (234 files),
+leaves the tree; neither program holds third-party code for deflate any more.
+
+**Why.** Since #306 the randomizer reads and writes these streams with its own code. zlib
+in the engine was a second library for the same job: 234 files of other people's code and
+a licence notice in every package, for one call.
+
+**How.** `specific/file.cpp`, `Decompress`: one call of `Inflate::zlib` with the same
+buffers and sizes in place of `inflateInit` and `inflate(Z_FINISH)`. A failure logs `Error
+Decompressing Data` with the reader's reason and returns 0 as before, and the callers go
+on as before. The reader checks the Adler-32 trailer and the exact size, so a stream with
+a wrong check, a missing trailer or more output than the header's size is now reported
+where zlib's call let it pass; no read or write leaves the two buffers. `file.cpp`
+includes `Inflate.h` by its relative path, and `tomb5.vcxproj` compiles
+`..\TR5Randomizer\src\core\Inflate.cpp` by its relative path, without the precompiled
+header and as C++17: one source for both programs, also in the release package, where both
+folders sit under `Source\`. The project and its filters lose the six zlib sources and
+`zlib.h`, `BuildRelease.ps1` no longer writes `Licenses\zlib.txt`, and `.gitattributes`
+drops the folder's pattern. ModernTest's group `load_inflate` checks the call and the
+include, and that the engine's text, its project and the tree hold no zlib.
+
+**Measured.** Over the three blocks of the sixteen levels of the checksum list, of 52
+randomized levels (26 packed by zlib before #306, 26 with #306's stored blocks) and the
+three logo files, 207 streams, the new path gives the same bytes as zlib's. 48 broken
+streams (cut short, a flipped check or payload byte, a wrong size) read and write nothing
+outside the buffers, under AddressSanitizer as well. The reader is slower than zlib: a
+load of RICH1 as the randomizer packed it before #306 takes about 48 ms longer (120
+against 72 ms for the two blocks, 32-bit build), with #306's stored blocks about 3 ms, the
+original level about 9 ms.
+
+**Commits.** `7b5dcf50` (the call and the project), `7ec34954` (the release script and
+`.gitattributes`), `43975556`, `b51012c9` (the checks).
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -18000,3 +18041,4 @@ entries above.
 | #300 | A loading screen shows no texture page of the level, not for a frame |
 | #301 | The missing-file message, the X-ray tone's comment and the engine icon's origin |
 | #306 | section 3 (the randomizer); no engine entry: no file under `TOMB5 Code/TOMB5` changed |
+| #308 | The engine reads its texture blocks with the project's own inflater; zlib goes |

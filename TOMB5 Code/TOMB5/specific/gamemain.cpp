@@ -316,7 +316,7 @@ void GameClose()
 	if (logF)
 		fclose(logF);
 
-	free(malloc_buffer);
+	free_game_malloc();	// the heap's, or -high's VirtualAlloc
 	free(gfScriptFile);
 	free(gfLanguageFile);
 }

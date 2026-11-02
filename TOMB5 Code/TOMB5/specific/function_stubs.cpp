@@ -12,6 +12,8 @@
  */
 #include "../tomb5/pch.h"
 #include "function_stubs.h"
+#include "pool_guard.h"		// the pool under AddressSanitizer
+#include "high_pool.h"		// -high: the pool from the top
 
 // Keeps the logging code compiled in; gLogEnabled below controls whether
 // Log() actually does anything at runtime.
@@ -31,24 +33,56 @@ long malloc_free;
 
 long nPolyType;
 
-static long malloc_used;
+static long malloc_used;		// this level's blocks, without red zones
+static long malloc_blocks;		// and how many
+static bool malloc_high;		// the pool is -high's (VirtualAlloc)
 
 static long rand_1 = 0xD371F947;
 static long rand_2 = 0xD371F947;
 
 void init_game_malloc()
 {
-	malloc_buffer = (char*)malloc(MALLOC_SIZE);
-	malloc_size = MALLOC_SIZE;
+	const HighReserve* high = HighReserveDone();
+
+	// MALLOC_SIZE, and in the Asan build the room for the red zones on top
+	// (pool_guard.h); POOL_SPARE is 0 on every other build.
+	malloc_size = MALLOC_SIZE + POOL_SPARE;
+	malloc_buffer = 0;
+	malloc_high = false;
+
+	/* -high (high_pool.h): the pool from the top of the address space. Should
+	 * VirtualAlloc refuse it, the heap's, as without the switch. */
+	if (high)
+	{
+		malloc_buffer = (char*)HighPoolTake((size_t)malloc_size);
+		malloc_high = malloc_buffer != 0;
+	}
+
+	if (!malloc_buffer)
+		malloc_buffer = (char*)malloc(malloc_size);
+
 	malloc_ptr = malloc_buffer;
-	malloc_free = MALLOC_SIZE;
+	malloc_free = malloc_size;
 	malloc_used = 0;
+	malloc_blocks = 0;
+	PoolPoison(malloc_buffer, (size_t)malloc_size);
 
 	// Where the pool lies in this run: it moves at every start (bottom-up
 	// address randomisation), which is what game\save_pointer_rule.h has
 	// to survive - two logs' POOL lines show by how much.
 	Log("POOL base=0x%08lX size=%ld", (unsigned long)(uintptr_t)malloc_buffer,
 		(long)MALLOC_SIZE);
+
+	if (high)
+		Log("HIGHLOG reserved=%ld regions below 4 GB, pool base=0x%016llX%s",
+			high->regions, (unsigned long long)(uintptr_t)malloc_buffer,
+			malloc_high ? " top-down" : " heap: VirtualAlloc refused");
+
+#ifdef __SANITIZE_ADDRESS__
+	Log("ASANLOG pool base=0x%016llX span=%ld redzone=%d",
+		(unsigned long long)(uintptr_t)malloc_buffer, malloc_size,
+		POOL_REDZONE);
+#endif
 }
 
 void* game_malloc(long size)
@@ -64,18 +98,53 @@ void* game_malloc(long size)
 	size = (size + 3) & -4;
 #endif
 
-	if (size > malloc_free)
+	// The blocks alone against MALLOC_SIZE, as on every build; the Asan
+	// build's red zones come out of POOL_SPARE.
+	if (size > MALLOC_SIZE - malloc_used || size + POOL_REDZONE > malloc_free)
 	{
 		Log("OUT OF MEMORY");
 		return 0;
 	}
 
 	ptr = malloc_ptr;
-	malloc_free -= size;
+	malloc_free -= size + POOL_REDZONE;
 	malloc_used += size;
-	malloc_ptr += size;
+	malloc_blocks++;
+	malloc_ptr += size + POOL_REDZONE;
+	PoolUnpoison(ptr, (size_t)size);	// its red zone stays poisoned
 	memset(ptr, 0, size);
 	return ptr;
+}
+
+/* Every block handed back at once (FreeLevel). Every pointer into the pool
+ * is stale from here; specific\file.cpp's FreeLevel clears the ones that
+ * are read before the next level gives them a new block. */
+void reset_game_malloc()
+{
+#ifdef __SANITIZE_ADDRESS__
+	Log("ASANLOG pool freed used=%ld blocks=%ld span=%ld", malloc_used,
+		malloc_blocks, (long)(malloc_ptr - malloc_buffer));
+#endif
+	malloc_ptr = malloc_buffer;
+	malloc_free = malloc_size;
+	malloc_used = 0;
+	malloc_blocks = 0;
+	PoolPoison(malloc_buffer, (size_t)malloc_size);
+}
+
+void free_game_malloc()
+{
+	PoolUnpoison(malloc_buffer, (size_t)malloc_size);
+
+	if (malloc_high)
+		HighPoolRelease(malloc_buffer);
+	else
+		free(malloc_buffer);
+
+	malloc_buffer = 0;
+	malloc_ptr = 0;
+	malloc_free = 0;
+	malloc_high = false;
 }
 
 long GetRandomControl()

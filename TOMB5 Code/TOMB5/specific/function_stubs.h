@@ -15,6 +15,8 @@
 
 void init_game_malloc();
 void* game_malloc(long size);
+void reset_game_malloc();	// FreeLevel: every block handed back
+void free_game_malloc();	// GameClose: the pool itself
 long GetRandomControl();
 void SeedRandomControl(long seed);
 

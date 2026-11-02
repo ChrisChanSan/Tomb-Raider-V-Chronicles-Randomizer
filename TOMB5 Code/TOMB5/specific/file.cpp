@@ -502,8 +502,7 @@ void FreeLevel()
 	 * next level would find a bare set answering "available" through dead
 	 * pointers - the same stale-pool class as baddie_slots below. */
 	HDFeetLevelEnd();
-	malloc_ptr = malloc_buffer;
-	malloc_free = malloc_size;
+	reset_game_malloc();
 
 	// Resetting the bump allocator makes every pointer into the game_malloc
 	// pool stale: an address from the previous level now points into the

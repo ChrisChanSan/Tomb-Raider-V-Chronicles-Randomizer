@@ -70,7 +70,6 @@ static int otherEntries(const std::string& name)
     for (const auto& k : kTriggerCopies) n += sameName(name, k.level);
     for (const auto& k : kTriggerMoves) n += sameName(name, k.level);
     for (const auto& k : kTriggerObjectRemoves) n += sameName(name, k.level);
-    for (const auto& k : kTriggerObjectReplaces) n += sameName(name, k.level);
     for (const auto& k : kTriggerRewrites) n += sameName(name, k.level);
     for (const auto& k : kSightWindows) n += sameName(name, k.level);
     return n;

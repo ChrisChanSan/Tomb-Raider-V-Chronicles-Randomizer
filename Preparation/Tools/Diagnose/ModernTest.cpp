@@ -34967,9 +34967,9 @@ static void brawler_rule()
 		"brawler: the rule's slots are objects.h's enum",
 		brawler_enum_at(objects, "BRAWLER"), CHEF_RULE_BRAWLER);
 	ok(brawler_enum_at(objects, "NUMBER_OBJECTS") > CHEF_RULE_BRAWLER &&
-		brawler_enum_at(objects, "NUMBER_OBJECTS") == brawler_enum_at(objects, "DRONE") + 1,
-		"brawler: NUMBER_OBJECTS stands behind him and right behind the drone",
-		brawler_enum_at(objects, "NUMBER_OBJECTS"), brawler_enum_at(objects, "DRONE") + 1);
+		brawler_enum_at(objects, "NUMBER_OBJECTS") == brawler_enum_at(objects, "SCIENTIST_ARMED") + 1,
+		"brawler: NUMBER_OBJECTS stands behind him and the armed scientist",
+		brawler_enum_at(objects, "NUMBER_OBJECTS"), brawler_enum_at(objects, "SCIENTIST_ARMED") + 1);
 	ok(glass_define(objects, "#define SLOT_FILE_BOUNDARY") == 460,
 		"brawler: the file boundary stays at 460",
 		glass_define(objects, "#define SLOT_FILE_BOUNDARY"), 460);
@@ -35218,6 +35218,200 @@ static void brawler_reach()
 	free(setup);
 	free(box);
 	free(lara);
+}
+
+/* One line of a source file from `head` to its end, every blank taken out,
+ * or an empty string - a table row held as the compiler reads it. */
+static void scientist_line(const char* text, const char* head, char* out,
+	size_t size)
+{
+	const char* p = text ? strstr(text, head) : 0;
+	size_t n = 0;
+
+	for (; p && *p && *p != '\n' && n + 1 < size; p++)
+		if ((unsigned char)*p > ' ')
+			out[n++] = *p;
+
+	out[n] = 0;
+}
+
+/* The armed scientist, RICH1's scientist on SWAT's control (game\objects.h
+ * SCIENTIST_ARMED): the slot and the count behind it, the HD name table in
+ * step, setup.cpp's block SWAT's word for word, SasControl and lot.cpp
+ * naming neither SWAT nor him (so he takes SWAT's path everywhere), his
+ * Balance.txt line at SWAT's numbers, and the randomizer's side - the pool
+ * row's columns, the hands taken from SWAT (inside SWAT's 15 meshes, the
+ * gun's mesh among them), the names and the carrier list. */
+static void scientist_rule()
+{
+	printf("the armed scientist: SWAT's control on a slot of his own\n");
+
+	char* objects = hd_switch_text("../../game/objects.h");
+	char* setup = hd_switch_text("../../game/setup.cpp");
+	char* sas = hd_switch_text("../../game/sas.cpp");
+	char* lot = hd_switch_text("../../game/lot.cpp");
+	char* balance = hd_switch_text("../../game/balance.cpp");
+	char* bind = hd_switch_text("hd_bind.cpp");
+	char* bindh = hd_switch_text("hd_bind.h");
+	char* rando = hd_switch_text(
+		"../../../../TR5Randomizer/src/core/Randomizer.cpp");
+	char* randoh = hd_switch_text(
+		"../../../../TR5Randomizer/src/core/Randomizer.h");
+	char* transfer = hd_switch_text(
+		"../../../../TR5Randomizer/src/core/Tr5Transfer.cpp");
+	char* language = hd_switch_text(
+		"../../../../TR5Randomizer/src/gui/Language.cpp");
+	static char body[32768];
+	static char swat[4096];
+	char row[512];
+
+	// The slot, written out, and the count right behind it.
+	const long slot = brawler_enum_at(objects, "SCIENTIST_ARMED");
+
+	ok(slot == 473, "scientist: SCIENTIST_ARMED is 473", slot, 473);
+	ok(brawler_enum_at(objects, "NUMBER_OBJECTS") == slot + 1 &&
+		brawler_enum_at(objects, "DRONE") == 472,
+		"scientist: NUMBER_OBJECTS right behind him, the drone stays 472",
+		brawler_enum_at(objects, "NUMBER_OBJECTS"), slot + 1);
+	ok(glass_define(bindh, "#define HD_SLOT_COUNT") == slot + 1 &&
+		strstr(bind, "\"BRAWLER\", \"DRONE\", \"SCIENTIST_ARMED\"\r\n\t};"),
+		"scientist: the HD name table ends on his name, the count with it",
+		glass_define(bindh, "#define HD_SLOT_COUNT"), slot + 1);
+
+	// setup.cpp: his block is SWAT's but for the slot it names.
+	glass_body(setup, "if (objects[SWAT].loaded)", swat, sizeof(swat));
+	glass_body(setup, "if (objects[SCIENTIST_ARMED].loaded)", body,
+		sizeof(body));
+	const char* swatRest = strstr(swat, "obj->initialise=");
+	const char* ownRest = strstr(body, "obj->initialise=");
+
+	ok(strstr(swat, "obj=&objects[SWAT];") &&
+		strstr(body, "obj=&objects[SCIENTIST_ARMED];") && swatRest &&
+		ownRest && !strcmp(swatRest, ownRest),
+		"scientist: setup.cpp's block is SWAT's word for word", 0, 1);
+	ok(ownRest && strstr(ownRest, "obj->control=SasControl;") &&
+		strstr(ownRest, "obj->hit_points=24;") &&
+		strstr(ownRest, "MeshSwapSource(MESHSWAP_CROSS_SWAT,13);") &&
+		!strstr(body, "anim_index"),
+		"scientist: SasControl, 24 written, SWAT's halves, his own set", 0, 1);
+
+	// sas.cpp: every test of the item's own slot names one of five slots,
+	// never SWAT and never him - so each one sends him down SWAT's path.
+	glass_body(sas, "void SasControl(short item_number)", body,
+		sizeof(body));
+	static const char* const tested[] = { "SCIENTIST", "SWAT_PLUS",
+		"BLUE_GUARD", "BLUE_GUARD2", "CRANE_GUY" };
+	long tests = 0, foreign = 0;
+
+	for (const char* p = strstr(body, "item->object_number"); p;
+		p = strstr(p + 1, "item->object_number"))
+	{
+		const char* q = p + strlen("item->object_number");
+		char name[64];
+		size_t n = 0;
+
+		if ((q[0] != '=' && q[0] != '!') || q[1] != '=')
+			continue;
+
+		for (q += 2; (isalnum((unsigned char)*q) || *q == '_') &&
+			n + 1 < sizeof(name); q++)
+			name[n++] = *q;
+		name[n] = 0;
+		tests++;
+
+		int known = 0;
+
+		for (size_t k = 0; k < sizeof(tested) / sizeof(tested[0]); k++)
+			known |= !strcmp(name, tested[k]);
+		foreign += !known;
+	}
+
+	ok(tests == 12 && foreign == 0,
+		"scientist: SasControl's twelve slot tests name the five, no other",
+		tests * 100 + foreign, 1200);
+	ok(strstr(body, "index=objects[items[item_number].object_number]"
+		".anim_index;") && hd_switch_count(sas, "SCIENTIST_ARMED") == 0 &&
+		hd_switch_count(body, "objects[SWAT]") == 0,
+		"scientist: SasControl reads the item's own set, names him nowhere",
+		0, 1);
+
+	// lot.cpp: SWAT has no case, so neither does he - BASIC_ZONE both.
+	glass_body(lot, "switch (item->object_number)", body, sizeof(body));
+	ok(body[0] && strstr(body, "caseBLUE_GUARD2:") &&
+		!strstr(body, "caseSWAT:") && !strstr(body, "caseSCIENTIST_ARMED:"),
+		"scientist: lot.cpp names neither SWAT nor him - SWAT's zone", 0, 1);
+
+	// Balance.txt: SWAT's standard and SWAT's Core value.
+	const long swatHp = glass_define(balance,
+		"HEALTH(\"HP_Swat\",\t\t\thpSwat,\t\t\t");
+	const long hp = glass_define(balance,
+		"HEALTH(\"HP_ScientistArmed\",\thpScientistArmed,\t");
+
+	ok(swatHp > 0 && hp == swatHp, "scientist: HP_ScientistArmed is HP_Swat",
+		hp, swatHp);
+	ok(strstr(balance, "hpSwat,\t\t\t35,\t24,\t\tSWAT)") &&
+		strstr(balance, "hpScientistArmed,\t35,\t24,\tSCIENTIST_ARMED)"),
+		"scientist: the vanilla column is SWAT's 24", 0, 1);
+
+	// The randomizer's pool row: meshes rich1:69, animations rich3:33, the
+	// swap halves SWAT's (rich3 into 462), no base type, no animCount.
+	scientist_line(rando, "{ 473, \"rich1\",", row, sizeof(row));
+	ok(!strcmp(row, "{473,\"rich1\",{},{-1,-1},\"rich3\",462,0,0,nullptr,"
+		"69,\"rich3\",33},//Scientist"),
+		"scientist: the pool row - rich1:69 on rich3:33, SWAT's halves", 0, 1);
+	scientist_line(rando, "{ 33, \"rich3\",", row, sizeof(row));
+	ok(!strncmp(row, "{33,\"rich3\",{},{-1,-1},\"rich3\",462,0,0}", 38),
+		"scientist: SWAT's row has the same swap columns", 0, 1);
+
+	// The hands: the table's lines for him, inside SWAT's 15 meshes, the
+	// gun's mesh of sas.cpp among them.
+	const char* t = transfer ? strstr(transfer, "kMeshesFromAnims[] = {") : 0;
+	const char* tEnd = t ? strstr(t, "};") : 0;
+	const char* g = sas ? strstr(sas, "static BITE_INFO sas_gun = {") : 0;
+	long gunMesh = -1;
+	long hands = 0, inside = 0, gun = 0;
+
+	if (g)
+	{
+		const char* last = strchr(g, '}');
+
+		while (last && last > g && last[-1] != ',')
+			last--;
+		gunMesh = last ? strtol(last, 0, 10) : -1;
+	}
+
+	for (const char* p = t ? strstr(t, "{ 473, 33, ") : 0; p && p < tEnd;
+		p = strstr(p + 1, "{ 473, 33, "))
+	{
+		const long mesh = strtol(p + strlen("{ 473, 33, "), 0, 10);
+
+		hands++;
+		inside += mesh >= 0 && mesh < 15;
+		gun += mesh == gunMesh;
+	}
+
+	ok(gunMesh == 13, "scientist: SWAT's gun fires from mesh 13", gunMesh, 13);
+	ok(hands == 2 && inside == hands && gun == 1,
+		"scientist: two hands from SWAT, inside his 15, the gun's among them",
+		hands * 100 + inside * 10 + gun, 221);
+
+	// The names and the carrier list.
+	ok(strstr(rando, "{ 473, \"Scientist\",        nullptr },") &&
+		strstr(language, "{ \"Scientist\",                \"Wissenschaftler\" },")
+		&& strstr(randoh, "case 471: case 473:"),
+		"scientist: \"Scientist\", \"Wissenschaftler\", a carrier", 0, 1);
+
+	free(objects);
+	free(setup);
+	free(sas);
+	free(lot);
+	free(balance);
+	free(bind);
+	free(bindh);
+	free(rando);
+	free(randoh);
+	free(transfer);
+	free(language);
 }
 
 int main()
@@ -35471,6 +35665,7 @@ int main()
 	zip_skip_wiring();
 	brawler_rule();
 	brawler_reach();
+	scientist_rule();
 	save_pointer();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);

@@ -65,6 +65,7 @@
 //      the wrong page (the pixelated gunsmoke).
 //----------------------------------------------------------------------------
 #include "Tr5Level.h"
+#include "Inflate.h"
 
 #include <algorithm>
 #include <cstdio>
@@ -72,8 +73,6 @@
 #include <map>
 #include <set>
 #include <vector>
-
-#include <zlib.h>
 
 namespace
 {
@@ -153,31 +152,29 @@ namespace
         return true;
     }
 
+    // parseTexHeader has made sure the stream lies inside the file.
     bool inflateBlock(const std::vector<uint8_t>& b, size_t at, std::vector<uint8_t>& out, std::string& err)
     {
         const uint32_t un = rd32(b, at), comp = rd32(b, at + 4);
-        out.resize(un);
-        uLongf dstLen = un;
-        const int rc = uncompress(out.data(), &dstLen, b.data() + at + 8, comp);
-        if (rc != Z_OK || dstLen != un) { err = "texture block cannot be unpacked"; return false; }
+        std::string why;
+        if (!Inflate::zlibExact(b.data() + at + 8, comp, un, out, why))
+        {
+            err = "texture block cannot be unpacked (" + why + ")";
+            return false;
+        }
         return true;
     }
 
+    // Packed as stored blocks (Inflate.h): the engine's zlib reads them like
+    // any other stream, the randomizer needs no compressor, and the bytes
+    // depend on nothing but the raw block. The level file grows by what
+    // compression used to save there, and packing costs a copy.
     void deflateBlock(const std::vector<uint8_t>& raw, std::vector<uint8_t>& out)
     {
-        uLongf bound = compressBound(static_cast<uLong>(raw.size()));
-        std::vector<uint8_t> buffer(bound);
-        // Z_BEST_SPEED instead of Z_BEST_COMPRESSION: packing runs once per
-        // imported type over the target's complete texture block - under
-        // allsanity ten times per level on 30+ MB, and that is where several
-        // seconds of the enemy mix went (loading a level costs only 15 ms
-        // by comparison). The engine does not care about the level, the
-        // file gets a bit bigger, the time drops many-fold.
-        compress2(buffer.data(), &bound, raw.data(), static_cast<uLong>(raw.size()), Z_BEST_SPEED);
         out.clear();
         push32(out, static_cast<uint32_t>(raw.size()));
-        push32(out, static_cast<uint32_t>(bound));
-        out.insert(out.end(), buffer.begin(), buffer.begin() + bound);
+        push32(out, static_cast<uint32_t>(Inflate::storedSize(raw.size())));
+        Inflate::stored(raw.data(), raw.size(), out);
     }
 
     //------------------------------------------------------------------------

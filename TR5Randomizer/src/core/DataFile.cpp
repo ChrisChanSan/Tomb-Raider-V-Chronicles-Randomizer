@@ -17,8 +17,7 @@
  */
 #include "EmbeddedData.h"
 #include "DataFolder.h"     // PathUtil
-
-#include <zlib.h>
+#include "Inflate.h"
 
 #include <cstdio>
 
@@ -28,11 +27,10 @@
 // never overwrite logic.
 //
 // The streams are in zlib format on purpose, not raw deflate: the randomizer
-// already links zlib for the .TRC files, and uncompress() reads that format
-// straight off, header and checksum included. One call, no framing of our
-// own - and the Adler-32 at the end of the stream means a truncated or
-// mangled table is caught here instead of surfacing as a JSON parse error
-// three functions later.
+// reads that format for the .TRC files anyway (Inflate.h), header and
+// checksum included. One call, no framing of our own - and the Adler-32 at
+// the end of the stream means a truncated or mangled table is caught here
+// instead of surfacing as a JSON parse error three functions later.
 //----------------------------------------------------------------------------
 namespace
 {
@@ -97,14 +95,14 @@ bool EmbeddedData::read(const std::string& name, std::string& out, std::string& 
     if (!f) { error = "no built-in copy of " + name; return false; }
 
     out.resize(f->raw);
-    uLongf n = static_cast<uLongf>(f->raw);
-    const int rc = uncompress(reinterpret_cast<Bytef*>(f->raw ? &out[0] : nullptr), &n,
-                              f->data, static_cast<uLong>(f->packed));
-    if (rc != Z_OK || n != f->raw)
+    size_t n = 0;
+    const char* why = Inflate::zlib(f->data, f->packed,
+                                    reinterpret_cast<uint8_t*>(&out[0]), f->raw, n);
+    if (why || n != f->raw)
     {
-        char buf[160];
-        std::snprintf(buf, sizeof(buf), "built-in copy of %s is damaged (zlib %d, %lu of %llu bytes)",
-                      name.c_str(), rc, static_cast<unsigned long>(n),
+        char buf[200];
+        std::snprintf(buf, sizeof(buf), "built-in copy of %s is damaged (%s, %llu of %llu bytes)",
+                      name.c_str(), why ? why : "short", static_cast<unsigned long long>(n),
                       static_cast<unsigned long long>(f->raw));
         error = buf;
         out.clear();

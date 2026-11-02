@@ -1577,21 +1577,28 @@ void CalculateCamera()
 		camera.target.y = y;
 		gotit = 0;
 
-		// The forced fixed camera (top of this function) makes the type
-		// FIXED and never names a camera: camera.number is still the -1
-		// the reset at the end of the last pass left. camera.fixed[-1]
-		// is the 16 bytes before the table in the pool, the last sprite's
-		// texture corners, and its "flags" set the sniper lock and the
-		// torso target at random. No camera is no sniper camera: the lock
-		// stays 0 (cleared above) and the target is the ordinary one, as
-		// sniperCam above already reads it.
-		if (camera.type != CHASE_CAMERA && camera.flags != 3 &&
-			camera.number >= 0)
+		if (camera.type != CHASE_CAMERA && camera.flags != 3)
 		{
-			fixed = &camera.fixed[camera.number];
-			SniperCamActive = fixed->flags & 3;
+			// The forced fixed camera (top of this function) makes the
+			// type FIXED and never names a camera: camera.number is still
+			// the -1 the reset at the end of the last pass left, and
+			// camera.fixed[-1] was the 16 bytes before the table in the
+			// pool, the last sprite's texture corners. Their "flags" set
+			// the torso target in most level files and the ordinary one
+			// in a few. Without a number the table is not read: the
+			// torso target is taken every time, as most files had it,
+			// and the look-key lock stays 0 (cleared above) - it only
+			// clears a key the animation leaves no use for.
+			long torso = 1;
 
-			if (fixed->flags & 2)
+			if (camera.number >= 0)
+			{
+				fixed = &camera.fixed[camera.number];
+				SniperCamActive = fixed->flags & 3;
+				torso = fixed->flags & 2;
+			}
+
+			if (torso)
 			{
 				v.x = 0;
 				v.y = 0;

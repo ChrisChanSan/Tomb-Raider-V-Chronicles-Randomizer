@@ -11483,9 +11483,11 @@ static void sound_stop()
 /* The fixed camera that is not there (game\camera.cpp, CalculateCamera):
  * the forced fixed camera makes the type FIXED and leaves camera.number at
  * -1, and the target block indexed camera.fixed with it. It now asks for
- * a number first, as the sniper test at the top of the function does; the
- * sniper lock is cleared before and stays 0, the target is the ordinary
- * one. Every camera.fixed[camera.number] in the function sits behind a
+ * a number first, as the sniper test at the top of the function does.
+ * Without one it takes the torso target, as most level files' bytes before
+ * the table had it, and the look-key lock stays at the 0 it was cleared
+ * to; a named camera reads its flags as before. Every
+ * camera.fixed[camera.number] in the function sits behind a
  * camera.number >= 0. */
 static void camera_fixed_none()
 {
@@ -11499,14 +11501,19 @@ static void camera_fixed_none()
 		"!FirstPersonEnabled())camera.type=FIXED_CAMERA;");
 	const char* sniper = strstr(body, "camera.number>=0&&"
 		"(camera.fixed[camera.number].flags&2);");
-	const char* target = strstr(body, "if(camera.type!=CHASE_CAMERA&&"
-		"camera.flags!=3&&camera.number>=0)fixed=&camera.fixed["
-		"camera.number];SniperCamActive=fixed->flags&3;");
+	const char* block = strstr(body, "if(camera.type!=CHASE_CAMERA&&"
+		"camera.flags!=3)//");
+	const char* target = strstr(body, "longtorso=1;if(camera.number>=0)"
+		"fixed=&camera.fixed[camera.number];SniperCamActive=fixed->flags&3;"
+		"torso=fixed->flags&2;}if(torso)v.x=0;v.y=0;v.z=0;"
+		"GetLaraJointPos(&v,LMX_TORSO);camera.target.x=v.x;"
+		"camera.target.y=v.y;camera.target.z=v.z;gotit=1;}");
 
-	ok(clear && forced && sniper && target && clear < forced &&
-		forced < sniper && sniper < target,
+	ok(clear && forced && sniper && block && target && clear < forced &&
+		forced < sniper && sniper < block && block < target,
 		"camera fixed none: the target block asks camera.number >= 0 "
-		"before camera.fixed", !!clear + !!forced + !!sniper + !!target, 4);
+		"before camera.fixed and takes the torso without one",
+		!!clear + !!forced + !!sniper + !!block + !!target, 5);
 
 	long n = 0;
 

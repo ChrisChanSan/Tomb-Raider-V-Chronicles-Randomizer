@@ -31,22 +31,32 @@
  *       are not 0 as a count (uint16) and index/value byte pairs, the
  *       mouse's two counts and buttons (int32), a flag byte (bit 0 the
  *       cursor captured, bit 1 a pad read, bit 2 the pad on XInput), then
- *       the pad's x, y, buttons and the two sticks' four raw axes (int32)
+ *       the pad's x, y, buttons and the two sticks' four raw axes (int32),
+ *       and a check of the game's state the call found (int32: the logic
+ *       generator's seed and Lara's place mixed), which -replay compares
  *   'P' a present whose tick count the logic takes: the tick (uint16) and
  *       the count (int32)
  *   'S' a save or a load: the tick (uint16), 's' or 'l', the slot (int32)
+ *   'A' a drawn frame's place between two ticks as the clock gave it
+ *       (TIME_SubTick, a double): the tick (uint16) and the double's eight
+ *       bytes. The display-bound frame rate blends a frame by it, and the
+ *       next tick reads Lara's joints as that frame left them.
+ *
+ * Version 2 added 'A' and the input record's check; a file of version 1
+ * is refused.
  */
 
-#define REPLAY_VERSION		1
+#define REPLAY_VERSION		2
 #define REPLAY_HEADER_SIZE	48
 #define REPLAY_STAMP_SIZE	40
 #define REPLAY_KEYS		256
-#define REPLAY_RECORD_MAX	(1 + 2 + 2 + 2 * REPLAY_KEYS + 12 + 1 + 28)
+#define REPLAY_RECORD_MAX	(1 + 2 + 2 + 2 * REPLAY_KEYS + 12 + 1 + 32)
 
 #define REPLAY_LEVEL	'L'
 #define REPLAY_INPUT	'I'
 #define REPLAY_FRAMES	'P'
 #define REPLAY_SLOT	'S'
+#define REPLAY_SUBTICK	'A'
 
 #define REPLAY_CAPTURED	1
 #define REPLAY_PAD_READ	2
@@ -78,6 +88,7 @@ struct ReplayRecord
 	int32_t raw_ly;
 	int32_t raw_rx;
 	int32_t raw_ry;
+	int32_t check;
 
 	// 'P'
 	int32_t frames;
@@ -85,6 +96,9 @@ struct ReplayRecord
 	// 'S'
 	uint8_t slot_kind;
 	int32_t slot;
+
+	// 'A'
+	double subtick;
 };
 
 inline uint8_t* ReplayPut16(uint8_t* p, uint32_t v)
@@ -208,6 +222,7 @@ inline size_t ReplayEncode(const ReplayRecord* r, uint8_t* out)
 		p = ReplayPut32(p, r->raw_ly);
 		p = ReplayPut32(p, r->raw_rx);
 		p = ReplayPut32(p, r->raw_ry);
+		p = ReplayPut32(p, r->check);
 		break;
 	}
 
@@ -221,6 +236,17 @@ inline size_t ReplayEncode(const ReplayRecord* r, uint8_t* out)
 		*p++ = r->slot_kind;
 		p = ReplayPut32(p, r->slot);
 		break;
+
+	case REPLAY_SUBTICK:
+	{
+		uint64_t bits;
+
+		memcpy(&bits, &r->subtick, sizeof(bits));
+		p = ReplayPut16(p, r->tick);
+		p = ReplayPut32(p, (int32_t)(uint32_t)bits);
+		p = ReplayPut32(p, (int32_t)(uint32_t)(bits >> 32));
+		break;
+	}
 
 	default:
 		return 0;
@@ -265,7 +291,7 @@ inline size_t ReplayDecode(const uint8_t* in, size_t size, ReplayRecord* r)
 
 		const uint32_t n = ReplayGet16(p + 2);
 
-		need = 5 + 2 * (size_t)n + 41;
+		need = 5 + 2 * (size_t)n + 45;
 
 		if (n > REPLAY_KEYS || size < need)
 			return 0;
@@ -287,6 +313,7 @@ inline size_t ReplayDecode(const uint8_t* in, size_t size, ReplayRecord* r)
 		r->raw_ly = ReplayGet32(p + 29);
 		r->raw_rx = ReplayGet32(p + 33);
 		r->raw_ry = ReplayGet32(p + 37);
+		r->check = ReplayGet32(p + 41);
 		return need;
 	}
 
@@ -306,6 +333,19 @@ inline size_t ReplayDecode(const uint8_t* in, size_t size, ReplayRecord* r)
 		r->slot_kind = p[2];
 		r->slot = ReplayGet32(p + 3);
 		return 8;
+
+	case REPLAY_SUBTICK:
+	{
+		if (size < 11)
+			return 0;
+
+		const uint64_t bits = (uint64_t)(uint32_t)ReplayGet32(p + 2) |
+			((uint64_t)(uint32_t)ReplayGet32(p + 6) << 32);
+
+		r->tick = ReplayGet16(p);
+		memcpy(&r->subtick, &bits, sizeof(bits));
+		return 11;
+	}
 	}
 
 	return 0;

@@ -19,13 +19,18 @@
 #include "../game/control.h"	// GlobalCounter
 #include "../game/text.h"	// GnFrameCounter
 #include "../game/gameflow.h"	// gfLevelId
+#include "../game/lara.h"		// lara_item - the input record's check
 
 /* -record and -replay.
  *
  * What a run consumes that is not in the level file: the devices, read once
  * per call of S_UpdateInput, and the clock, read by S_DumpScreen as the
  * number of 1/60 s ticks a present took (specific\output.cpp), which
- * ControlPhase turns into logic ticks and the inventory ring into steps.
+ * ControlPhase turns into logic ticks and the inventory ring into steps,
+ * and at the display-bound frame rate each drawn frame's place between two
+ * ticks (TIME_SubTick): the frame is blended by it, and the next tick reads
+ * Lara's joints as that frame left them (GetLaraJointPos: the camera's
+ * target, TestForObjectOnLedge, TriggerLaraBlood).
  * -record writes both as they were read; -replay puts them in their place,
  * so a run plays the same ticks with the same input on any build and at
  * any speed of the machine. A level's start writes the two generators'
@@ -46,6 +51,28 @@ static size_t g_size = 0;
 static size_t g_pos = 0;
 static long g_records = 0;
 static long g_inputs = 0;
+static bool g_drift_said = false;
+
+/* The game's state as an input call finds it, mixed into one number: the
+ * logic generator's seed and Lara's place, turn and life. -record writes it
+ * beside the devices; -replay compares, and says the first tick where the
+ * replayed game is no longer the recorded one (REPLAYLOG drift) - a menu
+ * reached at another moment shows only much later, as a desync. */
+static int32_t ReplayCheck()
+{
+	uint32_t h = (uint32_t)GetRandomControlSeed();
+
+	if (lara_item)
+	{
+		h = h * 31 + (uint32_t)lara_item->pos.x_pos;
+		h = h * 31 + (uint32_t)lara_item->pos.y_pos;
+		h = h * 31 + (uint32_t)lara_item->pos.z_pos;
+		h = h * 31 + (uint32_t)(unsigned short)lara_item->pos.y_rot;
+		h = h * 31 + (uint32_t)(unsigned short)lara_item->hit_points;
+	}
+
+	return (int32_t)h;
+}
 
 static void ReplayStop(const char* why)
 {
@@ -205,6 +232,7 @@ void ReplayInputSeam(char* keys, long* mouse_dx, long* mouse_dy,
 		r.raw_ly = joystick_raw_ly;
 		r.raw_rx = joystick_raw_rx;
 		r.raw_ry = joystick_raw_ry;
+		r.check = ReplayCheck();
 		ReplayPut(&r);
 
 		// About ten seconds of input at a time reach the disk.
@@ -221,6 +249,15 @@ void ReplayInputSeam(char* keys, long* mouse_dx, long* mouse_dy,
 	{
 		ReplayDesync(REPLAY_INPUT, &r, "tick");
 		return;
+	}
+
+	// Said once, and the replay goes on: what follows shows how far apart.
+	if (!g_drift_said && r.check != ReplayCheck())
+	{
+		g_drift_said = true;
+		Log("REPLAYLOG drift tick=%d record=%ld rec=0x%08lX now=0x%08lX",
+			(int)GlobalCounter, g_records, (unsigned long)(uint32_t)r.check,
+			(unsigned long)(uint32_t)ReplayCheck());
 	}
 
 	memcpy(keys, r.keys, REPLAY_KEYS);
@@ -263,6 +300,32 @@ long ReplayFrames(long frames)
 	}
 
 	return r.frames;
+}
+
+double ReplaySubTick(double subtick)
+{
+	ReplayRecord r;
+
+	if (g_mode == REPLAY_RECORD)
+	{
+		memset(&r, 0, sizeof(r));
+		r.type = REPLAY_SUBTICK;
+		r.tick = GlobalCounter;
+		r.subtick = subtick;
+		ReplayPut(&r);
+		return subtick;
+	}
+
+	if (!ReplayNext(REPLAY_SUBTICK, &r))
+		return subtick;
+
+	if (r.tick != GlobalCounter)
+	{
+		ReplayDesync(REPLAY_SUBTICK, &r, "tick");
+		return subtick;
+	}
+
+	return r.subtick;
 }
 
 void ReplayLevelStart()

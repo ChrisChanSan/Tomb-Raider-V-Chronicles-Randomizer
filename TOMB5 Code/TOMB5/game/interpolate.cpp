@@ -37,6 +37,7 @@ static_assert(CHASE_CAMERA == INTERP_CAM_CHASE && LOOK_CAMERA == INTERP_CAM_LOOK
 #include "../specific/function_stubs.h"	// Log, gLogEnabled
 #include "../specific/output.h"		// ActiveFpsMode, GameFrameMinTicks
 #include "../specific/time.h"		// TIME_SubTick
+#include "../specific/replay.h"	// ReplaySubTick - -record and -replay
 #include "../specific/file.h"		// commands - where turn180_effect fires (InterpTurnOf)
 #include "../tomb5/tomb5.h"		// tomb5.fps_mode
 #include "modern_camera.h"		// ModernCameraDrawnEye - the drawn eye at a corner
@@ -1175,7 +1176,9 @@ void InterpCapturePrev()
  * accumulator and the clock's remainder; see InterpRefreshAlpha. */
 float InterpTickFraction()
 {
-	return InterpRefreshAlpha(framecount, TIME_SubTick());
+	// The clock's reading goes through -record and -replay: the next tick
+	// reads Lara's joints as this frame leaves them (specific\replay.cpp).
+	return InterpRefreshAlpha(framecount, ReplaySubTick(TIME_SubTick()));
 }
 
 float InterpAlphaNow()

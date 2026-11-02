@@ -18,6 +18,7 @@
 #include "../specific/function_stubs.h"	// Log, gLogEnabled
 #include "../specific/output.h"		// ActiveFpsMode, PresentSlotMs
 #include "../specific/time.h"		// TIME_SubTick - the display-bound blend factor
+#include "../specific/replay.h"	// ReplaySubTick - -record and -replay
 
 /* The design note for this whole file is in the header; what is written
  * down here is the arithmetic and the log. */
@@ -388,7 +389,8 @@ bool InvInterpBeginFrame()
 	 * exactly 0.5 and 1.0 by turns, so the parity is used directly and no
 	 * clock is read: (-1 + 1 + 1)/2 on the frame whose step ran, (0 + 1 + 1)/2
 	 * on the frame between. InterpTest asserts that the two agree. */
-	g_alpha = InterpRingAlpha(ActiveFpsMode(), g_acc, TIME_SubTick(), g_step);
+	g_alpha = InterpRingAlpha(ActiveFpsMode(), g_acc,
+		ReplaySubTick(TIME_SubTick()), g_step);
 
 	/* The tween latch. The ring's present no longer waits two ticks, so
 	 * S_DumpScreen's InterpNoteClassicPresent does not fire for it any more

@@ -28226,7 +28226,8 @@ static long replay_same(const ReplayRecord* a, const ReplayRecord* b)
 		a->pad_fire == b->pad_fire && a->raw_lx == b->raw_lx && a->raw_ly ==
 		b->raw_ly && a->raw_rx == b->raw_rx && a->raw_ry == b->raw_ry &&
 		a->frames == b->frames && a->slot_kind == b->slot_kind &&
-		a->slot == b->slot;
+		a->slot == b->slot && a->check == b->check &&
+		!memcmp(&a->subtick, &b->subtick, sizeof(a->subtick));
 }
 
 /* How often each clock read stands in the files of game\: `what` the call's
@@ -28308,10 +28309,10 @@ static void replay_rule()
 
 	// The header.
 	ok(ReplayHeaderWrite(head, 64, "PCtomb5 built Nov  2 2026 21:00:00") ==
-		REPLAY_HEADER_SIZE && !memcmp(head, "TR5R", 4) && head[4] == 1 &&
+		REPLAY_HEADER_SIZE && !memcmp(head, "TR5R", 4) && head[4] == 2 &&
 		head[5] == 64 && head[6] == 0 && head[7] == 0,
-		"replay: the header's magic, version byte 1 and pointer width",
-		head[4], 1);
+		"replay: the header's magic, version byte 2 and pointer width",
+		head[4], 2);
 	const int read = ReplayHeaderRead(head, sizeof(head), &version, &bits,
 		stamp);
 
@@ -28324,11 +28325,14 @@ static void replay_rule()
 		strlen(stamp) == REPLAY_STAMP_SIZE - 1 && bits == 32,
 		"replay: a long stamp cut to 39 characters", (long)strlen(stamp),
 		REPLAY_STAMP_SIZE - 1);
-	head[4] = 2;
-	ok(ReplayHeaderRead(head, sizeof(head), &version, &bits, stamp) == -1 &&
-		version == 2, "replay: another version is refused, named", version,
-		2);
 	head[4] = 1;
+	ok(ReplayHeaderRead(head, sizeof(head), &version, &bits, stamp) == -1 &&
+		version == 1, "replay: a file of version 1 is refused, named",
+		version, 1);
+	head[4] = 3;
+	ok(ReplayHeaderRead(head, sizeof(head), &version, &bits, stamp) == -1,
+		"replay: and a later version", version, 3);
+	head[4] = REPLAY_VERSION;
 	ok(ReplayHeaderRead(head, sizeof(head) - 1, &version, &bits, stamp) ==
 		0 && ReplayHeaderRead((const uint8_t*)"TR5X0000000000000000000000000"
 		"0000000000000000000000", REPLAY_HEADER_SIZE, &version, &bits,
@@ -28367,11 +28371,16 @@ static void replay_rule()
 	a.raw_ly = 1;
 	a.raw_rx = -32768 / 256;
 	a.raw_ry = 32767 / 256;
+	a.check = (int32_t)0x9E3779B9;
 	n = ReplayEncode(&a, buf);
-	ok(n == 5 + 3 * 2 + 41 && ReplayDecode(buf, n, &b) == n &&
+	ok(n == 5 + 3 * 2 + 45 && ReplayDecode(buf, n, &b) == n &&
 		replay_same(&a, &b),
 		"replay: an input call there and back, three keys and the pad",
-		(long)n, 5 + 3 * 2 + 41);
+		(long)n, 5 + 3 * 2 + 45);
+	ok(buf[n - 4] == 0xB9 && buf[n - 3] == 0x79 && buf[n - 2] == 0x37 &&
+		buf[n - 1] == 0x9E && b.check == a.check,
+		"replay: the state check closes the input record", buf[n - 1],
+		0x9E);
 	ok(buf[0] == 'I' && buf[1] == 0xEF && buf[2] == 0xBE && buf[3] == 3 &&
 		buf[4] == 0 && buf[5] == 1 && buf[6] == 0x80 && buf[7] == 0xC8 &&
 		buf[9] == 0xFF && buf[10] == 0x01 && buf[11] == 0xDB &&
@@ -28419,6 +28428,23 @@ static void replay_rule()
 	ok(n == 8 && ReplayDecode(buf, n, &b) == n && b.slot_kind == 'l' &&
 		ReplayDecode(buf, n - 1, &b) == 0,
 		"replay: a load's slot, and cut", b.slot, 0);
+
+	// A drawn frame's place between two ticks: the double's eight bytes.
+	memset(&a, 0, sizeof(a));
+	a.type = REPLAY_SUBTICK;
+	a.tick = 591;
+	a.subtick = 0.734375;
+	n = ReplayEncode(&a, buf);
+	ok(n == 11 && buf[0] == 'A' && buf[1] == 0x4F && buf[2] == 0x02 &&
+		buf[10] == 0x3F && buf[9] == 0xE7 && buf[8] == 0x80 &&
+		ReplayDecode(buf, n, &b) == n && replay_same(&a, &b) &&
+		b.subtick == 0.734375,
+		"replay: a frame's sub-tick, its eleven bytes", (long)n, 11);
+	a.subtick = 1.0 / 3.0;
+	n = ReplayEncode(&a, buf);
+	ok(ReplayDecode(buf, n, &b) == n && b.subtick == 1.0 / 3.0 &&
+		ReplayDecode(buf, n - 1, &b) == 0,
+		"replay: a third comes back to the last bit, a cut one not", 0, 0);
 
 	// The decoder zeroes what a record does not carry.
 	memset(&b, 0x5A, sizeof(b));
@@ -28568,6 +28594,21 @@ static void replay_rule()
 		ok(!strcmp(seen, "inventory_interp.cpp=1 "),
 			"replay: Sync() in game\\ only as a word of a comment", 0, 1);
 	}
+
+	{
+		char* interp = hd_switch_text("../../game/interpolate.cpp");
+		char* ring = hd_switch_text("../../game/inventory_interp.cpp");
+
+		ok(hd_switch_count(interp, "ReplaySubTick(TIME_SubTick())") == 1 &&
+			hd_switch_count(ring, "ReplaySubTick(TIME_SubTick())") == 1,
+			"replay: both blends read the clock through the file", 0, 1);
+		free(interp);
+		free(ring);
+	}
+	ok(hd_switch_count(replay, "r.check = ReplayCheck();") == 1 &&
+		hd_switch_count(replay, "REPLAYLOG drift tick=") == 1,
+		"replay: the input record's check written, its drift said once", 0,
+		1);
 
 	free(input);
 	free(winmain);

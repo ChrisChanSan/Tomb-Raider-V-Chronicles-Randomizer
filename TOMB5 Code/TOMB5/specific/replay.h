@@ -35,6 +35,10 @@ void ReplayInputSeam(char* keys, long* mouse_dx, long* mouse_dy,
  * -replay. */
 long ReplayFrames(long frames);
 
+/* A drawn frame's place between two ticks, as the clock gave it
+ * (TIME_SubTick); the recorded one under -replay. */
+double ReplaySubTick(double subtick);
+
 /* A level's first tick: the generators' seeds and the frame counter. */
 void ReplayLevelStart();
 

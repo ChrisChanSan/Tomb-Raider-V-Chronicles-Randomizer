@@ -118,13 +118,19 @@ fog model, fog bulbs and room lights of its own (`set_fog_model`,
 | **Dear ImGui** — ocornut, <https://github.com/ocornut/imgui> | MIT | `TR5Randomizer/external/imgui/LICENSE.txt` |
 | **zlib** — Jean-loup Gailly and Mark Adler; in the engine, `PCtomb5.exe`, only | zlib licence | notice at the top of `TOMB5 Code/TOMB5/tomb5/libs/zlib/zlib.h` |
 | **stb_vorbis** — Sean Barrett, <https://github.com/nothings/stb> | MIT **or** public domain, your choice | notice at the end of `TOMB5 Code/TOMB5/tomb5/libs/stb/stb_vorbis.c` |
-| **stb_image** — Sean Barrett, <https://github.com/nothings/stb> | MIT **or** public domain, your choice | notice at the end of `TR5Randomizer/src/libs/stb/stb_image.h` |
 | **TRForge** — TRForge contributors | MIT | `TOMB5 Code/TOMB5/vendor/trforge/LICENSE` |
 
 zlib unpacks the level files' texture blocks when the engine loads a level.
 The randomizer and the diagnostic tools do not link it: they read and write
 deflate with this project's own `TR5Randomizer/src/core/Inflate.cpp`, written
 from RFC 1950 and RFC 1951, which holds no zlib code.
+
+The randomizer compiles Dear ImGui, with its two fonts, into its window and
+nothing else that is not this project's own: the background picture beside
+`TR5Randomizer.exe` is decoded by the Windows Imaging Component
+(`TR5Randomizer/src/gui/Picture.cpp`), and Direct3D 11 and `bcrypt` are
+Windows' own interfaces as well, part of the system and not copied into this
+tree.
 
 Two of those libraries carry work by further authors, whose own notices sit
 in the tracked files themselves and travel with every copy of this tree.

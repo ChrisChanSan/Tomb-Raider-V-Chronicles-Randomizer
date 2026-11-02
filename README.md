@@ -954,8 +954,7 @@ present in Visual Studio 2019 itself.
   every single zone boundary of this randomizer was verified with.
 - **[Dear ImGui](https://github.com/ocornut/imgui)** by Omar Cornut (MIT) —
   the interface.
-- **stb_vorbis / stb_image** by Sean Barrett (public domain) — HQ music and
-  the background image.
+- **stb_vorbis** by Sean Barrett (public domain) — HQ music.
 - **[zlib](https://zlib.net/)** by Jean-loup Gailly and Mark Adler — the
   engine unpacks the level files with it.
 - **TRForge** by the TRForge contributors (MIT) — five of its files, the

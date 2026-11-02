@@ -17606,8 +17606,8 @@ The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
 `TR5Randomizer.exe` - is this project's own work from the first line, so it owes
 nobody a GPLv3 section 5(a) notice and has no record of the kind above. What
 changed in it since the public Beta 1.0 is listed here by task number.
-Forty-seven files under `TR5Randomizer/src` changed in that span: six of them new,
-forty modified, one moved out into `package/`.
+Fifty files under `TR5Randomizer/src` changed in that span: eight of them new, forty
+modified, one moved out into `package/`, one removed.
 
 - **#123 - the HD markers.** `Tr5Level.cpp` / `.h`, `ApplyPatch.cpp` / `.h`,
   `Randomize.cpp` and `gui/Main.cpp`: the randomizer writes the HD room markers
@@ -17815,6 +17815,19 @@ forty modified, one moved out into `package/`.
   build line of the randomizer or of a diagnostic tool compiles it.
   The build id stays 23: a seed places the same things (`e7fa928e`, `05c0c423`,
   `5a45193f`, `dd1c3c8e`, `ab00f0c1`, `9379893d`).
+- **#307 - the background picture through Windows' own decoder.** `gui/Picture.cpp` /
+  `.h` new, `gui/Main.cpp`, `build/b2.bat`; `libs/stb/stb_image.h` removed. The
+  picture beside the GUI (`docs\Background.jpg`) is read through the Windows Imaging
+  Component: `loadPictureRgba` decodes frame 0 and converts it to 32-bit RGBA, the
+  byte order the R8G8B8A8 texture took from stb_image before; a missing, empty or
+  non-picture file leaves the window plain, as before. COM is the one `wWinMain`
+  already starts for the folder dialog, and COM loads `windowscodecs.dll` itself, so
+  the GUI's import table is unchanged. Against the old decoder the shipped picture
+  keeps its size and every channel stays within 3 (rounding of the inverse DCT and
+  the colour conversion); PNG pictures come out identical. The randomizer now
+  compiles Dear ImGui and its own code only; `BuildRelease.ps1` names stb_vorbis
+  alone in the stb notice it ships. The build id stays 23: the GUI's picture places
+  nothing (`3c9695a1`, `7f2d7e6f`).
 
 ## 4. Building this yourself
 
@@ -18000,3 +18013,4 @@ entries above.
 | #300 | A loading screen shows no texture page of the level, not for a frame |
 | #301 | The missing-file message, the X-ray tone's comment and the engine icon's origin |
 | #306 | section 3 (the randomizer); no engine entry: no file under `TOMB5 Code/TOMB5` changed |
+| #307 | section 3 (the randomizer); no engine entry: no file under `TOMB5 Code/TOMB5` changed |

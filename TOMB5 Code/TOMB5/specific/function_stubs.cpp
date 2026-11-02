@@ -55,7 +55,14 @@ void* game_malloc(long size)
 {
 	char* ptr;
 
+	// Blocks start on 4 bytes, as they always did; on a 64-bit build on 8,
+	// the width of the pointers many of them hold. The 32-bit pool stays
+	// exactly as it was, block for block.
+#ifdef _WIN64
+	size = (size + 7) & -8;
+#else
 	size = (size + 3) & -4;
+#endif
 
 	if (size > malloc_free)
 	{

@@ -2176,6 +2176,11 @@ struct DXINFO
 	bool bHardware;
 };
 
+/* DXPTR is laid out naturally, outside this file's pack(1): dxshell.cpp
+ * hands Joystick to InterlockedExchangePointer, which wants the pointer on
+ * its own width. Packed, a 64-bit build put it at offset 148. On a 32-bit
+ * build every field is 4 bytes and the layout is the packed one. */
+#pragma pack(push, 8)
 struct DXPTR
 {
 	LPDIRECT3D9 lpD3D;
@@ -2207,6 +2212,10 @@ struct DXPTR
 	volatile long WaitAtBeginScene;
 	volatile long DoneBlit;
 };
+#pragma pack(pop)
+
+static_assert(offsetof(DXPTR, Joystick) % sizeof(void*) == 0,
+	"DXPTR: Joystick on its own width for InterlockedExchangePointer");
 
 struct WINAPP
 {

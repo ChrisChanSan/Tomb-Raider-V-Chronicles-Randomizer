@@ -17694,6 +17694,23 @@ across a 4 GB line, the meshes' tag, the converted records (`ModernLayout.cpp`, 
 the engine's `types.h` and `disk_layout.h`) and the converters' calls in the engine's
 text.
 
+The first run of the 64-bit build ended in RICH1 with a division by zero in `phd_atan`
+and no dump. `specific/crashseam.h`: `CrashSeamDumpInfo`, our form of
+`MINIDUMP_EXCEPTION_INFORMATION`, is declared under pack(4) as dbghelp declares it; laid
+out naturally it put the exception pointer at offset 8 instead of 4 on a 64-bit build,
+and `MiniDumpWriteDump` failed with 0x800703E6, so no 64-bit dump was ever written (on a
+32-bit build both forms are the same 12 bytes). The `CRASH` and `HANG` lines say after
+the dump's name how far it got: `err=<GetLastError of the failing call, 0 when written>
+step=<load|proc|file|write>`; RoomProbe's `-crash` and `-hang` read the name up to the
+next blank. `specific/atan_math.h` (new) holds `phd_atan`'s arithmetic unchanged
+(`AtanMath`) and `AtanClamp`: the one input that divides by zero is `LONG_MIN` - its
+negation is itself, the shift loop leaves the other side 0 - and it becomes `-LONG_MAX`
+before the arithmetic. `specific/3dmath.cpp` (`phd_atan`, no longer inlined, and
+`AtanSeam`): with `-log` one line per caller and run, for the first 16 callers, `ATANLOG
+x=<x> y=<y> caller=PCtomb5+0x<offset>`, the return address less the module's base, for
+the `.pdb` to resolve. A reading of the 55 calls found no argument that holds `LONG_MIN`
+on a 64-bit build and not on a 32-bit one; the line names the caller.
+
 **Decisions.** A save written before this build holds Lara's meshes as distances. The
 32-bit build reads them as before, exactly; the 64-bit build refuses such a save with the
 existing "incompatible or corrupted savegame" message rather than translating the
@@ -17708,7 +17725,8 @@ same block after a load in another run.
 **Commits.** `24fe16ca` (the configurations), `1b5002fc` (the 32-bit fields), `d7a25763`
 (the films), `36a9a045` (the loader), `42940084` (the save), `2eaa49f9` (numbers in
 pointers), `33748594` (lengths), `1ff2962f` (the log lines), `d543767a` (alignment),
-`42cd22e1` (the asserts), `67592dfa` (the gate and the checks).
+`42cd22e1` (the asserts), `67592dfa` (the gate and the checks), `f644b5a1` (the
+crash seam's dump), `39ee6a20` (the clamp and ATANLOG).
 
 ## 3. Randomizer changes since Beta 1.0
 

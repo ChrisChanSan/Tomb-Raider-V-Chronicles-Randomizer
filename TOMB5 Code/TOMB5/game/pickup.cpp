@@ -1052,7 +1052,7 @@ void PickUpCollision(short item_number, ITEM_INFO* l, COLL_INFO* coll)
 				lara.gun_type = 7;
 				InitialiseNewWeapon();
 				lara.gun_status = 5;
-				lara.flare_age = (long)(item->data) & 0x7FFF;
+				lara.flare_age = (long)(intptr_t)(item->data) & 0x7FFF;
 				KillItem(item_number);
 			}
 		}
@@ -1114,7 +1114,7 @@ void PickUpCollision(short item_number, ITEM_INFO* l, COLL_INFO* coll)
 			lara.gun_type = WEAPON_FLARE;
 			InitialiseNewWeapon();
 			lara.gun_status = LG_FLARE;
-			lara.flare_age = (long)(item->data) & 0x7FFF;
+			lara.flare_age = (long)(intptr_t)(item->data) & 0x7FFF;
 			draw_flare_meshes();
 			KillItem(item_number);
 		}

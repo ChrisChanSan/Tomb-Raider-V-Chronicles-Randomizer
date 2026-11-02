@@ -663,7 +663,7 @@ void SaveLevelData(long FullSave)
 
 				if (item->object_number == FLARE_ITEM)
 				{
-					flare_age = (long)item->data;
+					flare_age = (long)(intptr_t)item->data;
 					WriteSG(&flare_age, sizeof(long));
 				}
 				else if (item->object_number == BURNING_TORCH_ITEM)
@@ -1158,7 +1158,7 @@ void RestoreLevelData(long FullSave)
 
 			case FLARE_ITEM:
 				ReadSG(&flare_age, sizeof(long));
-				item->data = (void*)flare_age;
+				item->data = (void*)(intptr_t)flare_age;
 				break;
 
 			case CHAFF:

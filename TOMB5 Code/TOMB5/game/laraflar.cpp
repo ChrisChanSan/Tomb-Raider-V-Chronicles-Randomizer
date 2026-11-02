@@ -1,3 +1,15 @@
+/*
+ * Modified 2026 by ChrisChanSan.
+ *
+ * Part of the TOMB5 native Windows 11 port (Direct3D 9 / XAudio2) and of the
+ * TR5 Randomizer project. The individual changes are recorded in the git
+ * history of this source tree.
+ *
+ * TOMB5 is free software: you can redistribute it and/or modify it under the
+ * terms of the GNU General Public License as published by the Free Software
+ * Foundation, either version 3 of the License, or (at your option) any later
+ * version. See the LICENSE file at the root of this source tree.
+ */
 #include "../tomb5/pch.h"
 #include "laraflar.h"
 #include "gameflow.h"
@@ -56,7 +68,7 @@ void FlareControl(short item_number)
 	yv = flare->fallspeed;
 	flare->pos.y_pos += yv;
 	DoProperDetection(item_number, x, y, z, xv, yv, zv);
-	flare_age = (long)flare->data & 0x7FFF;
+	flare_age = (long)(intptr_t)flare->data & 0x7FFF;
 
 	if (flare_age < 900)
 		flare_age++;
@@ -81,7 +93,7 @@ void FlareControl(short item_number)
 		flare_age |= 0x8000;
 	}
 
-	flare->data = (void*)flare_age;
+	flare->data = (void*)(intptr_t)flare_age;
 }
 
 void CreateFlare(short object, long thrown)
@@ -159,9 +171,9 @@ void CreateFlare(short object, long thrown)
 	if (object == FLARE_ITEM)
 	{
 		if (DoFlareLight((PHD_VECTOR*)&flare->pos, lara.flare_age))
-			flare->data = (void*)(lara.flare_age | 0x8000);
+			flare->data = (void*)(intptr_t)(lara.flare_age | 0x8000);
 		else
-			flare->data = (void*)(lara.flare_age & 0x7FFF);
+			flare->data = (void*)(intptr_t)(lara.flare_age & 0x7FFF);
 	}
 	else
 		flare->item_flags[3] = lara.LitTorch;

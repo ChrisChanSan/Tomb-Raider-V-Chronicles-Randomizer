@@ -2267,7 +2267,7 @@ void InitialiseObjects()
 		obj->hit_points = -16384;
 		obj->explodable_meshbits = 0;
 		obj->draw_routine_extra = 0;
-		obj->frame_base = (short*)((long)obj->frame_base + (char*)frames);
+		obj->frame_base = (short*)((intptr_t)obj->frame_base + (char*)frames);
 		obj->object_mip = 0;
 	}
 
@@ -2575,7 +2575,7 @@ void BuildOutsideTable()
 				{
 					if (!memcmp(cTable, pTable, z))
 					{
-						OutsideRoomOffsets[offset] = short((long)cTable - (long)OutsideRoomTable);
+						OutsideRoomOffsets[offset] = short(cTable - (uchar*)OutsideRoomTable);
 						break;
 					}
 
@@ -2586,7 +2586,7 @@ void BuildOutsideTable()
 
 				if (cTable >= oTable)
 				{
-					OutsideRoomOffsets[offset] = short((long)oTable - (long)OutsideRoomTable);
+					OutsideRoomOffsets[offset] = short(oTable - (uchar*)OutsideRoomTable);
 
 					do
 					{

@@ -3034,7 +3034,7 @@ void DrawDebris()
 		v[1].specular |= 0xFF000000;
 		v[2].specular |= 0xFF000000;
 
-		tex = &textinfo[(long)dptr->TextInfo & 0x7FFF];
+		tex = &textinfo[(long)(intptr_t)dptr->TextInfo & 0x7FFF];
 		drawbak = tex->drawtype;
 
 		if (dptr->flags & 1)

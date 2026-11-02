@@ -1071,7 +1071,7 @@ bool LoadObjects()
 		obj->nmeshes = ReadShort();
 		obj->mesh_index = ReadShort();
 		obj->bone_index = ReadLong();
-		obj->frame_base = (short*)ReadLong();
+		obj->frame_base = (short*)(intptr_t)ReadLong();	// the offset; setup.cpp adds frames
 		obj->anim_index = ReadShort();
 		obj->loaded = 1;
 

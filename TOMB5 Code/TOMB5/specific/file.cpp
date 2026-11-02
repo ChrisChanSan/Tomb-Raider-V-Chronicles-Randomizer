@@ -987,10 +987,10 @@ bool LoadObjects()
 	Log("OBJLOG mesh data %d words", num);
 
 	// The file's mesh pointers are 4-byte byte offsets into mesh_base, one
-	// per mesh; they are read one by one rather than into the pointer array,
-	// whose entries are 8 bytes wide on a 64-bit build.
+	// per mesh, read one by one into the pointer array (8-byte entries on a
+	// 64-bit build), which is twice as long for the meshswaps.
 	num = ReadLong();
-	meshes = (short**)game_malloc(num * (long)sizeof(short*) * 2);	//*2 for meshswaps
+	meshes = (short**)game_malloc(num * (long)sizeof(short*) * 2);
 
 	for (lp = 0; lp < num; lp++)
 		meshes[lp] = &mesh_base[ReadLong() / 2];
@@ -1066,7 +1066,7 @@ bool LoadObjects()
 		obj->nmeshes = ReadShort();
 		obj->mesh_index = ReadShort();
 		obj->bone_index = ReadLong();
-		obj->frame_base = (short*)(intptr_t)ReadLong();	// the offset; setup.cpp adds frames
+		obj->frame_base = (short*)(intptr_t)ReadLong();	// offset, setup.cpp
 		obj->anim_index = ReadShort();
 		obj->loaded = 1;
 

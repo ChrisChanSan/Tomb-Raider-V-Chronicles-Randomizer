@@ -201,8 +201,9 @@ static void roomlets(LayoutOk ok)
 			pass ? "x64 layout: roomlets into their own array, streams in step"
 			: "x64 layout: roomlets where they lie, streams in step",
 			(long)(out[1].pFac - fac), 17);
-		ok(out[0].nVtx == 3 && out[0].nWVtx == 11 && out[0].bBox[5] == 640.5f &&
-			out[1].nSVtx == 9 && out[1].nTri == 2 && out[1].bBox[0] == -128.0f &&
+		ok(out[0].nVtx == 3 && out[0].nWVtx == 11 &&
+			out[0].bBox[5] == 640.5f && out[1].nSVtx == 9 &&
+			out[1].nTri == 2 && out[1].bBox[0] == -128.0f &&
 			!out[0].pVtx && !out[1].pVtx,
 			pass ? "x64 layout: ...their counts and boxes kept, pVtx null"
 			: "x64 layout: ...counts and boxes kept in place, pVtx null",
@@ -230,8 +231,8 @@ static void anims(LayoutOk ok)
 	one.jump_anim_num = 12;
 	one.command_index = 33;
 	AnimFromDisk(&a, &one, frames);
-	ok((char*)a.frame_ptr - (char*)frames == 0x40 && a.interpolation == 0x0103 &&
-		a.current_anim_state == 7 && a.velocity == 0x12345678 &&
+	ok((char*)a.frame_ptr - (char*)frames == 0x40 &&
+		a.interpolation == 0x0103 && a.current_anim_state == 7 && a.velocity == 0x12345678 &&
 		a.Xacceleration == -65536 && a.frame_base == 100 &&
 		a.frame_end == 140 && a.jump_anim_num == 12 && a.command_index == 33,
 		"x64 layout: an anim's frames from the frames block, its numbers kept",
@@ -255,7 +256,7 @@ static void anims(LayoutOk ok)
 		block[2].frame_base, 20);
 	ok((char*)slot - (char*)block ==
 		3 * (long)(sizeof(ANIM_STRUCT) - sizeof(ANIM_STRUCT_DISK)),
-		"x64 layout: ...the slot is the block's end, the anims' growth before it",
+		"x64 layout: ...the slot is the block's end, behind the anims' growth",
 		(long)((char*)slot - (char*)block), 0);
 }
 

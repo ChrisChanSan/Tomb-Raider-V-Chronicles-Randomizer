@@ -60,6 +60,9 @@
 #include "../game/lara.h"
 #include "drawbars.h"
 #include "../game/lot.h"
+#include "../game/rat.h"		// Rats, Bats, Spiders - cleared with the level
+#include "../game/bat.h"
+#include "../game/spider.h"
 #include "../tomb5/tomb5.h"
 #include "../global/disk_layout.h"	// the file's anims, converted
 
@@ -514,6 +517,34 @@ void FreeLevel()
 	// land in the new level's data, e.g. an item's room_number, and the
 	// level then crashes while loading on room[2047].
 	baddie_slots = 0;
+
+	/* The others of that kind: pointers into the pool that a level which
+	 * has no use for them does not set again, while something reads them
+	 * on the strength of being set. Every other pointer into the pool gets
+	 * its new block before its first read (MODIFICATIONS.md, #309).
+	 *
+	 * - The AI objects: LoadAIInfo returns before it sets either when the
+	 *   level has none (ANDREA3, ANDY1, the title, the two cut levels), and
+	 *   GetAIPickups, FindAITargetObject, Pierre and the gas clouds walked
+	 *   the old count through the old address - GetAIPickups writing
+	 *   NO_ROOM where an entry seemed to match.
+	 * - Rats, bats and spiders are allocated only for a level that loads
+	 *   them; the interpolation (game\interpolate.cpp, GatherMovers) takes
+	 *   any that is not null for live and blends and restores positions
+	 *   through it.
+	 * - The resident cutscenes: aMakeCutsceneResident clears the table only
+	 *   for a level that names one, and aFetchCutData takes any entry set
+	 *   for the pool's data - writing the origin for cuts 1 to 4.
+	 * - A mesh smashed in the tick a level ended stayed in the list for the
+	 *   next level's first tick, which reads its position and tests the
+	 *   triggers there. */
+	AIObjects = 0;
+	nAIObjects = 0;
+	Rats = 0;
+	Bats = 0;
+	Spiders = 0;
+	memset(cutseq_resident_addresses, 0, sizeof(cutseq_resident_addresses));
+	SmashedMeshCount = 0;
 }
 
 /* A load that keeps the pages (TexturePagesKeep): the file is walked past the

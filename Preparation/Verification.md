@@ -564,8 +564,10 @@ message (exit code 1):
 - `asan_report.<pid>`: the sanitizer's report.
 - `log.txt`: the same report line by line as `ASANLOG ...`, then the crash
   seam's line `CRASH code=asan at=0x<pc> module=PCtomb5_asan.exe+0x<offset>
-  thread=game kind=<kind> addr=0x<address> access=write size=<n>
-  report=asan_report.<pid>` and `CRASH dump=PCtomb5_<date>_<time>.dmp`.
+  thread=<main|game|other> kind=<kind> addr=0x<address> access=write
+  size=<n> report=asan_report.<pid>` and `CRASH
+  dump=PCtomb5_<date>_<time>.dmp`. A level loads on a thread of its own,
+  `other` on the line.
   Without `-log` the `CRASH` line goes into `crash.txt`.
 - `PCtomb5_<date>_<time>.dmp`: the threads at the moment of the report.
 

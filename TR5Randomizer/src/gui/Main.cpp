@@ -45,19 +45,14 @@
 #include "core/Tr3Source.h"
 
 #include "Language.h"
+// The background picture is read through the Windows Imaging Component
+// (Picture.cpp): a system interface every Windows carries, so no copy of
+// a foreign decoder is compiled in.
+#include "Picture.h"
 
 #include "imgui.h"
 #include "backends/imgui_impl_dx11.h"
 #include "backends/imgui_impl_win32.h"
-
-// stb_image (Public Domain, Sean Barrett) - only for the background picture
-// beside the EXE, read through a FILE (stbi_load_from_file), so stdio stays
-// in. Shipped under libs/stb so the source package compiles without any
-// further procurement.
-#define STB_IMAGE_IMPLEMENTATION
-#define STBI_ONLY_JPEG
-#define STBI_ONLY_PNG
-#include "libs/stb/stb_image.h"
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -66,6 +61,7 @@
 #include <shlobj.h>
 
 #include <algorithm>
+#include <cstdio>
 #include <map>
 #include <set>
 #include <string>
@@ -100,21 +96,15 @@ namespace
     {
         // From the EXE's folder, never from the current directory, which a
         // shortcut or a command line may set anywhere. The path stays wide
-        // up to _wfopen_s, so a folder name outside the code page opens too.
-        // A missing or unreadable file is no error: nothing is said, and the
-        // window keeps its plain background.
+        // up to the decoder, so a folder name outside the code page opens
+        // too. A missing or unreadable file is no error: nothing is said,
+        // and the window keeps its plain background.
         const std::wstring dir = PathUtil::exeDir();
         if (dir.empty()) return;
 
-        FILE* f = nullptr;
         const std::wstring path = PathUtil::join(dir, L"docs\\Background.jpg");
-        if (_wfopen_s(&f, path.c_str(), L"rb") != 0 || !f) return;
-
-        int channels = 0;
-        stbi_uc* pixel = stbi_load_from_file(f, &g_bgWidth, &g_bgHeight,
-                                             &channels, 4);
-        std::fclose(f);
-        if (!pixel) return;
+        std::vector<unsigned char> pixel;
+        if (!loadPictureRgba(path, pixel, g_bgWidth, g_bgHeight)) return;
 
         D3D11_TEXTURE2D_DESC td{};
         td.Width = g_bgWidth;
@@ -127,7 +117,7 @@ namespace
         td.BindFlags = D3D11_BIND_SHADER_RESOURCE;
 
         D3D11_SUBRESOURCE_DATA sd{};
-        sd.pSysMem = pixel;
+        sd.pSysMem = pixel.data();
         sd.SysMemPitch = g_bgWidth * 4;
 
         ID3D11Texture2D* tex = nullptr;
@@ -140,8 +130,6 @@ namespace
             g_dev->CreateShaderResourceView(tex, &vd, &g_background);
             tex->Release();
         }
-
-        stbi_image_free(pixel);
     }
 
     void freeBackground()

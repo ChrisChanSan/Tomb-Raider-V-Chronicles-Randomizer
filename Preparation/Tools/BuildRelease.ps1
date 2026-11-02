@@ -188,15 +188,13 @@ if (Test-Path $trf) { Copy-Item $trf "$lic\TRForge-MIT.txt" -Force }
 $zh = Get-Content "$EngineSrc\TOMB5\tomb5\libs\zlib\zlib.h"
 $zEnd = ($zh | Select-String -Pattern '^\s*\*/' | Select-Object -First 1)
 if ($zEnd) { $zh[0..($zEnd.LineNumber - 1)] | Set-Content "$lic\zlib.txt" -Encoding utf8 }
-# Both stb files we use - stb_vorbis.c in the engine and stb_image.h in the
-# randomizer - carry the SAME dual-licence block verbatim, so one file
-# covers both. Shipping two byte-identical texts under different names
-# would only invite the question which one is authoritative.
+# stb_vorbis.c is the one stb file left, compiled into the engine; the
+# randomizer reads its background picture through Windows' own image
+# decoder (#307) and carries no stb code any more.
 $sv = Get-Content "$EngineSrc\TOMB5\tomb5\libs\stb\stb_vorbis.c"
 $sStart = ($sv | Select-String -Pattern 'available under 2 licenses' | Select-Object -First 1)
 if ($sStart) {
-    @("Applies to stb_vorbis.c (engine) and stb_image.h (randomizer) alike -",
-      "both carry this same notice.", "") +
+    @("Applies to stb_vorbis.c, compiled into the engine (PCtomb5.exe).", "") +
         $sv[($sStart.LineNumber - 3)..($sv.Count - 1)] | Set-Content "$lic\stb.txt" -Encoding utf8
 }
 # The document gives repository paths. In the package everything sits one

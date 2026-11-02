@@ -270,7 +270,7 @@ license).
 
 The engine can play music in the OGG format (for HQ soundtracks you
 provide yourself - we ship none). The decoder for that is
-stb_vorbis and stb_image by Sean Barrett and contributors
+stb_vorbis by Sean Barrett and contributors
 (public domain or MIT, your choice):
 
     https://github.com/nothings/stb

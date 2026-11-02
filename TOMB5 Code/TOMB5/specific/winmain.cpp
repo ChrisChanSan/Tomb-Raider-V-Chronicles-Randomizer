@@ -1595,6 +1595,16 @@ int __stdcall WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 		}
 	}
 
+#ifdef _WIN64
+	// The game's binkw32.dll is 32-bit code, which a 64-bit process cannot
+	// load: the x64 build plays no film and goes on at once, with a line in
+	// the log instead of the message box below at every start.
+	if (!fmvs_disabled)
+	{
+		Log("FMV off: no 64-bit Bink, films skipped");
+		fmvs_disabled = 1;
+	}
+#else
 	if (!fmvs_disabled)
 	{
 		if (!LoadBinkStuff())
@@ -1603,6 +1613,7 @@ int __stdcall WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 			fmvs_disabled = 1;
 		}
 	}
+#endif
 
 	SetWindowPos(App.hWnd, 0, App.dx.rScreen.left, App.dx.rScreen.top, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
 	desktop = GetDesktopWindow();

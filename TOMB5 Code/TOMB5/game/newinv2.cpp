@@ -42,6 +42,7 @@
 #include "../specific/dxshell.h"
 #include "savegame.h"
 #include "../specific/hd/hd_object.h"	// draws the ring's items through the HD path
+#include "../specific/replay.h"	// ReplayFrames - -record and -replay
 #include "inventory_interp.h"		// the ring's frame-rate interpolation
 #include "laramisc.h"			// CheatLog - shares the seam with the hotkey cheats
 #include "../tomb5/tomb5.h"			// tomb5.action_split, for the ring's confirm key
@@ -837,7 +838,8 @@ long S_CallInventory2()
 		 * default. */
 		RestoreRingInput(&shadow);
 		gPresentMinTicks = InvFrameMinTicks();
-		camera.number_frames = S_DumpScreen();
+		// The ticks this present took, as -replay plays them back.
+		camera.number_frames = ReplayFrames(S_DumpScreen());
 		gPresentMinTicks = 2;
 		InvInterpPresent(camera.number_frames);
 

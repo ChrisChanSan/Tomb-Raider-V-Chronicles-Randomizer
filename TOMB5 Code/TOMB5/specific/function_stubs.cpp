@@ -89,7 +89,8 @@ void SeedRandomControl(long seed)
 	rand_1 = seed;
 }
 
-// Read-only, and used only by interpolate.cpp; see function_stubs.h for why.
+// Read-only, and used only by interpolate.cpp and -record's level header;
+// see function_stubs.h for why.
 long GetRandomControlSeed()
 {
 	return rand_1;
@@ -104,6 +105,11 @@ long GetRandomDraw()
 void SeedRandomDraw(long seed)
 {
 	rand_2 = seed;
+}
+
+long GetRandomDrawSeed()
+{
+	return rand_2;
 }
 
 void Log(const char* s, ...)

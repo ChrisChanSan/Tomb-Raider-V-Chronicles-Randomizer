@@ -34,6 +34,7 @@
 #include "hd/hd_switch.h"		// the HD/SD switch's press
 #include "../tomb5/tomb5.h"
 #include "function_stubs.h"		// Log, gLogEnabled - MODERNLOG mode=tank
+#include "replay.h"			// -record and -replay
 
 const char* KeyboardButtons[272] =
 {
@@ -1294,6 +1295,17 @@ long S_UpdateInput()
 	WinMouseWant(tomb5.control_modern ? 1 : 0, App.fmv ? 1 : 0);
 	WinMouseTake(&mouse_dx, &mouse_dy, &mouse_buttons);
 
+	/* The one input point of -record and -replay (specific\replay.cpp):
+	 * every device has been read - the pad into joystick_read_* and
+	 * joystick_raw_*, the keyboard into keymap, the mouse above - and
+	 * nothing has been built from them yet. -record writes them as they
+	 * are, -replay puts the file's in their place. The capture is taken
+	 * once, here, for both readers below. A film's own loop is left out. */
+	long mouse_captured = WinMouseCaptured();
+
+	ReplayInputSeam(keymap, &mouse_dx, &mouse_dy, &mouse_buttons,
+		&mouse_captured, App.fmv ? 1 : 0);
+
 	// Read unconditionally. Reading has no effect of its own - every use of
 	// joy_x/joy_y/joy_fire below is behind ControlMethod - but it keeps the
 	// values current for JoyMenuStep, which the controls screen needs
@@ -1378,7 +1390,7 @@ long S_UpdateInput()
 		 * tick's step is large enough to be taken for a camera cut at 60 fps
 		 * (game\modern_camera.h). What is owed is forgotten when the cursor is
 		 * let go, as the gathered counts are. */
-		if (!WinMouseCaptured())
+		if (!mouse_captured)
 		{
 			mouse_owed_x = 0;
 			mouse_owed_y = 0;
@@ -1431,7 +1443,7 @@ long S_UpdateInput()
 			Log("MOUSELOG f=%ld dx=%ld dy=%ld buttons=0x%lX yaw=%ld pitch=%ld sens=%ld captured=%ld"
 				" owed_x=%ld owed_y=%ld",
 				(long)GlobalCounter, mouse_dx, mouse_dy, mouse_buttons, mouse_yaw, mouse_pitch,
-				(long)tomb5.mouse_sensitivity, WinMouseCaptured(), mouse_owed_x, mouse_owed_y);
+				(long)tomb5.mouse_sensitivity, mouse_captured, mouse_owed_x, mouse_owed_y);
 		}
 	}
 

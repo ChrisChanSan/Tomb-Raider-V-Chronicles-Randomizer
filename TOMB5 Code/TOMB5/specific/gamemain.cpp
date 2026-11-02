@@ -31,6 +31,7 @@
 #include "../tomb5/tomb5.h"
 #include "zrange_math.h"		// ZFAR_UNITS - the far plane
 #include "../global/disk_layout.h"	// the save's image, asserted
+#include "replay.h"			// ReplaySlot - -record and -replay
 
 WATERTAB WaterTable[22][64];
 THREAD MainThread;
@@ -155,6 +156,7 @@ long S_SaveGame(long slot_num)
 	for (int i = 0; i < 20; i++)
 		buffer[i] = '\0';
 
+	ReplaySlot('s', slot_num);
 	SaveGamePath(buffer, slot_num);
 	file = CreateFile(buffer, GENERIC_WRITE, 0, 0, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
 
@@ -193,6 +195,7 @@ long S_LoadGame(long slot_num)
 	long value;
 	char buffer[80];
 
+	ReplaySlot('l', slot_num);
 	SaveGamePath(buffer, slot_num);
 	file = CreateFile(buffer, GENERIC_READ, 0, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
 

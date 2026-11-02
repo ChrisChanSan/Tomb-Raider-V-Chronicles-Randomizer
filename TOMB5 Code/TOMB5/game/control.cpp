@@ -61,6 +61,7 @@
 #include "../specific/gamemain.h"
 #include "../specific/hd/hd_level.h"
 #include "../specific/hd/hd_feet.h"	// HDFeetStepItem - her weapon's step
+#include "../specific/replay.h"	// ReplayFrames - -record and -replay
 #include "../tomb5/tomb5.h"
 #include "lift_door_rule.h"	// LiftDoorKeepsTimer - a held pad's delay
 #include "menu_nav.h"	// MenuStepSource - the MENULOG death line
@@ -370,7 +371,8 @@ static long S_Death()
 		}
 
 		S_OutputPolyList();
-		camera.number_frames = S_DumpScreen();
+		// The ticks this present took, as -replay plays them back.
+		camera.number_frames = ReplayFrames(S_DumpScreen());
 	}
 
 	FreeMonoScreen();

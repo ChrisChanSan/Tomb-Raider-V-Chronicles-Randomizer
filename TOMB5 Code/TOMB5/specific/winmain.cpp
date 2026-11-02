@@ -37,6 +37,7 @@
 #include "hd/hd_level.h"		// HDFramesPresented - the hang watch's pulse
 #include "zrange_math.h"		// ZFAR_UNITS - the far plane
 #include "../game/spotcam.h"	// CurrentFov - kept over a new window size
+#include "replay.h"		// -record and -replay
 
 WINAPP App;
 long resChangeCounter;
@@ -88,6 +89,50 @@ static bool WinCheckLogFlag(LPSTR cmd)
 			continue;
 
 		return 1;
+	}
+
+	return 0;
+}
+
+// -record <file> and -replay <file> (specific\replay.cpp): the switch as a
+// whole word behind '-' or '/', then the file, in quotes when it holds a
+// blank. Read by hand like -log and before WinProcessCommandLine, which
+// writes the command line over in capitals. 1 with the file in `out`.
+static bool WinCheckPathFlag(LPSTR cmd, const char* word, char* out,
+	size_t size)
+{
+	const size_t n = strlen(word);
+	size_t len, i, j;
+
+	out[0] = 0;
+
+	if (!cmd)
+		return 0;
+
+	len = strlen(cmd);
+
+	for (i = 1; i + n <= len; i++)
+	{
+		if (_strnicmp(cmd + i, word, n) || (cmd[i - 1] != '-' &&
+			cmd[i - 1] != '/') || (i > 1 && cmd[i - 2] != ' '))
+			continue;
+
+		if (i + n < len && cmd[i + n] != ' ')
+			continue;
+
+		for (j = i + n; j < len && cmd[j] == ' '; j++);
+
+		const char stop = cmd[j] == '"' ? '"' : ' ';
+		size_t k = 0;
+
+		if (stop == '"')
+			j++;
+
+		for (; j < len && cmd[j] != stop && k + 1 < size; j++)
+			out[k++] = cmd[j];
+
+		out[k] = 0;
+		return k != 0;
 	}
 
 	return 0;
@@ -1392,6 +1437,7 @@ LRESULT CALLBACK WinMainWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 void WinClose()
 {
 	Log(__FUNCTION__);
+	ReplayClose();		// -record's file closed, -replay's end said
 	WinMouseRelease();	// the clip is the whole system's, not only this window's
 	SaveSettings();
 	CloseHandle(App.mutex);
@@ -1518,6 +1564,22 @@ int __stdcall WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 	// that need them have to print them themselves.
 	if (gLogEnabled)
 		Log("Logging enabled by -log. PCtomb5 built " __DATE__ " " __TIME__);
+
+	/* -record <file> or -replay <file>: the same inputs played again
+	 * (specific\replay.cpp). Opened before anything reads a device; the
+	 * file's header carries this build's stamp. */
+	{
+		char replayPath[MAX_PATH];
+
+		if (WinCheckPathFlag(lpCmdLine, "record", replayPath,
+			sizeof(replayPath)))
+			ReplayOpen(REPLAY_RECORD, replayPath,
+				"PCtomb5 built " __DATE__ " " __TIME__);
+		else if (WinCheckPathFlag(lpCmdLine, "replay", replayPath,
+			sizeof(replayPath)))
+			ReplayOpen(REPLAY_PLAY, replayPath,
+				"PCtomb5 built " __DATE__ " " __TIME__);
+	}
 
 	/* The crash seam, as early as the log: an exception nobody catches
 	 * writes its CRASH line into the log (with -log) or into crash.txt

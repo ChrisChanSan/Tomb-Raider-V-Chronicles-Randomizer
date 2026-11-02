@@ -47,6 +47,7 @@
 #include "cutseq.h"
 #include "../tomb5/tomb5.h"
 #include "../specific/loadbar_math.h"	// LOADBAR_OFF
+#include "../specific/replay.h"	// ReplayLevelStart - -record and -replay
 
 GAMEFLOW* Gameflow;
 PHD_VECTOR gfLensFlare;
@@ -912,6 +913,7 @@ void DoTitle(uchar name, uchar audio)
 	 * of an accumulator. */
 	framecount = 0;
 	InterpInvalidate("title start");
+	ReplayLevelStart();	// -record and -replay: the seeds, the frame counter
 	gfStatus = ControlPhase(2, 0);
 	JustLoaded = 0;
 
@@ -1149,6 +1151,7 @@ void DoLevel(uchar Name, uchar Audio)
 	 * clears are already 0. */
 	InputModeLatchReset();
 
+	ReplayLevelStart();	// -record and -replay: the seeds, the frame counter
 	gfStatus = ControlPhase(2, 0);
 	Log("DoLevel: first logic phase done");
 	dbinput = 0;

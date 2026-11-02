@@ -45,6 +45,7 @@
 #include "twogun.h"
 #include "mirror.h"
 #include "../specific/alexstuff.h"
+#include "../specific/replay.h"	// ReplayFrames - -record and -replay
 #include "lara_states.h"
 #include "control.h"
 #include "camera.h"
@@ -539,7 +540,8 @@ long DrawPhaseGame()
 	 * holds that rule; the measurement is written over it in
 	 * specific\output.cpp. */
 	gPresentMinTicks = GameFrameMinTicks();
-	camera.number_frames = S_DumpScreen();
+	// The ticks this present took, as -replay plays them back.
+	camera.number_frames = ReplayFrames(S_DumpScreen());
 
 	S_AnimateTextures(camera.number_frames);
 

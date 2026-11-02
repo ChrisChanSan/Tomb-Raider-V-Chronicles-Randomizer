@@ -1,0 +1,42 @@
+/*
+ * Modified 2026 by ChrisChanSan.
+ *
+ * Part of the TOMB5 native Windows 11 port (Direct3D 9 / XAudio2) and of the
+ * TR5 Randomizer project. The individual changes are recorded in the git
+ * history of this source tree.
+ *
+ * TOMB5 is free software: you can redistribute it and/or modify it under the
+ * terms of the GNU General Public License as published by the Free Software
+ * Foundation, either version 3 of the License, or (at your option) any later
+ * version. See the LICENSE file at the root of this source tree.
+ */
+#pragma once
+
+/* -record <file> and -replay <file>: the devices' readings written once per
+ * call of the input function, and played back in their place (replay.cpp,
+ * the format in replay_format.h). Without either switch every function
+ * here returns at its first line and changes nothing. */
+
+#define REPLAY_OFF	0
+#define REPLAY_RECORD	1
+#define REPLAY_PLAY	2
+
+void ReplayOpen(long mode, const char* path, const char* stamp);
+void ReplayClose();
+
+/* The one input point (S_UpdateInput, specific\input.cpp), after the
+ * keyboard, the mouse and the pad are read and before anything is built
+ * from them. `fmv` is a film's own loop, which is left out of the file: a
+ * 64-bit build plays no film. */
+void ReplayInputSeam(char* keys, long* mouse_dx, long* mouse_dy,
+	long* mouse_buttons, long* captured, long fmv);
+
+/* A present's tick count, where the logic takes it; the recorded one under
+ * -replay. */
+long ReplayFrames(long frames);
+
+/* A level's first tick: the generators' seeds and the frame counter. */
+void ReplayLevelStart();
+
+/* A save ('s') or a load ('l') of `slot`. */
+void ReplaySlot(char kind, long slot);

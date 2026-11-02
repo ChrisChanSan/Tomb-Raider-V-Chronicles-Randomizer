@@ -60,7 +60,7 @@
 #include "bc7.h"
 #define HDSCREEN_NO_ENGINE
 #include "hdscreen.h"
-#include "zlib.h"
+#include "core/Inflate.h"
 
 static unsigned char* ReadWhole(const char* path, unsigned long* size)
 {
@@ -111,10 +111,10 @@ static void PngChunk(FILE* f, const char* tag, const unsigned char* data, unsign
 	if (len)
 		fwrite(data, 1, len, f);
 
-	crc = crc32(0, (const Bytef*)tag, 4);
+	crc = Inflate::crc32((const uint8_t*)tag, 4);
 
 	if (len)
-		crc = crc32(crc, (const Bytef*)data, len);
+		crc = Inflate::crc32((const uint8_t*)data, len, crc);
 
 	PutBE(tail, crc);
 	fwrite(tail, 1, 4, f);
@@ -154,10 +154,12 @@ static bool WritePng(const char* path, const unsigned long* px, long w, long h)
 		}
 	}
 
-	zLen = compressBound(rawLen);
+	// Stored deflate blocks (Inflate.h): every PNG reader takes them, and
+	// the file is the raw scanlines plus a few bytes per 64 KB.
+	zLen = (unsigned long)Inflate::storedSize(rawLen);
 	zbuf = (unsigned char*)malloc(zLen);
 
-	if (!zbuf || compress2(zbuf, &zLen, raw, rawLen, 6) != Z_OK)
+	if (!zbuf || Inflate::storedTo(raw, rawLen, zbuf) != zLen)
 	{
 		free(raw);
 		free(zbuf);

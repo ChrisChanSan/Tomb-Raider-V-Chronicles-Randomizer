@@ -14,14 +14,16 @@
 // floordata, items, triggers, meshes, animations, sound infos, texinfos.
 // If it is byte-equal, only images were exchanged.
 //
-// Build (64 bit): bld.bat next to this file, which runs
-//   set R=..\..\..\TR5Randomizer\src
-//   set Z=..\..\..\TOMB5 Code\TOMB5\tomb5\libs\zlib
-//   cl /nologo /EHsc /O2 /std:c++17 /w /I "%R%" /I "%Z%" LevelDiff.cpp
-//       "%R%\core\Tr5Level.cpp" "%R%\core\DataFolder.cpp" "%Z%\*.c"
-//       /Fe:LevelDiff.exe
+// LevelDiff -content <a.trc> <b.trc> asks the narrower question of the
+// regression recipe (Preparation/Verification.md section 1): the same
+// level, whatever the packing of its texture blocks? See contentCompare.
+//
+// Build (64 bit): bld.bat next to this file, which compiles LevelDiff.cpp
+// with the randomizer's Tr5Level.cpp, Inflate.cpp, DataFolder.cpp and
+// Tr5Transfer.cpp - no zlib.
 #include "core/Tr5Level.h"
 #include "core/DataFolder.h"
+#include "core/Inflate.h"
 
 #include <cstdio>
 #include <cstring>
@@ -172,13 +174,84 @@ const char* yesNo(bool b) { return b ? "yes" : "NO"; }
 std::wstring toW(const char* s)
 { std::wstring w; while (*s) w += static_cast<wchar_t>(static_cast<unsigned char>(*s++)); return w; }
 
+// -content: the same level, however its texture blocks are packed? The
+// three texture blocks are unpacked on both sides (Inflate.h) and their
+// CONTENT compared; every byte outside them - the ten header bytes in front
+// and everything from data[16] to the end of the file - is compared as it
+// stands. The randomizer writes the blocks it grows as stored deflate and
+// once wrote them with zlib's compressor, so two builds that agree on every
+// pixel still differ in those bytes; this is the comparison that stays
+// true across that. Exit 0 for IDENTICAL or SAME CONTENT, 1 otherwise.
+int contentCompare(const std::vector<uint8_t>& a, const std::vector<uint8_t>& b)
+{
+    if (a == b) { std::printf("IDENTICAL (%zu bytes)\n", a.size()); return 0; }
+
+    const Header kA = readHeader(a);
+    const Header kB = readHeader(b);
+    if (!kA.ok || !kB.ok)
+    {
+        std::printf("DIFFERENT: header not interpretable (A %s, B %s)\n",
+                    yesNo(kA.ok), yesNo(kB.ok));
+        return 1;
+    }
+
+    bool same = std::memcmp(a.data(), b.data(), 10) == 0;
+    std::printf("  header (10 bytes):        %s\n", same ? "equal" : "DIFFERENT");
+
+    for (int i = 0; i < 3; ++i)
+    {
+        std::vector<uint8_t> xa, xb;
+        std::string ea, eb;
+        const Block& A = kA.tex[i];
+        const Block& B = kB.tex[i];
+        bool okA = true, okB = true;
+        if (kA.compressed)
+            okA = Inflate::zlibExact(a.data() + A.at, A.len, (size_t)A.size, xa, ea);
+        else
+            xa.assign(a.begin() + A.at, a.begin() + A.at + A.len);
+        if (kB.compressed)
+            okB = Inflate::zlibExact(b.data() + B.at, B.len, (size_t)B.size, xb, eb);
+        else
+            xb.assign(b.begin() + B.at, b.begin() + B.at + B.len);
+
+        const bool eq = okA && okB && xa == xb;
+        same = same && eq;
+        std::printf("  texture block %d:          %s  (unpacked %d / %d, packed %d / %d)",
+                    i, eq ? "content equal" : "DIFFERENT", A.size, B.size, A.comp, B.comp);
+        if (!okA) std::printf("  A: %s", ea.c_str());
+        if (!okB) std::printf("  B: %s", eb.c_str());
+        std::printf("\n");
+    }
+
+    const size_t restA = kA.tex[2].at + kA.tex[2].len;
+    const size_t restB = kB.tex[2].at + kB.tex[2].len;
+    const Match m = compare(a, restA, a.size() - restA, b, restB, b.size() - restB);
+    const bool restEq = m.sameLength && m.different == 0;
+    same = same && restEq;
+    std::printf("  data[16] to the end:      %s", restEq ? "equal" : "DIFFERENT");
+    if (!restEq)
+        std::printf("  (%lld bytes different, first at +%lld)", m.different, m.firstAt);
+    std::printf("  (%zu bytes)\n", a.size() - restA);
+
+    std::printf("%s\n", same ? "SAME CONTENT" : "DIFFERENT");
+    return same ? 0 : 1;
+}
+
 }   // namespace
 
 int main(int argc, char** argv)
 {
+    if (argc == 4 && std::strcmp(argv[1], "-content") == 0)
+    {
+        std::vector<uint8_t> a, b;
+        if (!readAll(toW(argv[2]), a)) { std::printf("not readable: %s\n", argv[2]); return 2; }
+        if (!readAll(toW(argv[3]), b)) { std::printf("not readable: %s\n", argv[3]); return 2; }
+        return contentCompare(a, b);
+    }
     if (argc < 3)
     {
-        std::printf("usage: LevelDiff <a.trc> <b.trc>\n");
+        std::printf("usage: LevelDiff <a.trc> <b.trc>\n"
+                    "       LevelDiff -content <a.trc> <b.trc>\n");
         return 2;
     }
 

@@ -487,23 +487,32 @@ size_t Inflate::storedSize(size_t n)
     return 2 + n + 5 * blocks + 4;
 }
 
-void Inflate::stored(const uint8_t* raw, size_t n, std::vector<uint8_t>& out)
+size_t Inflate::storedTo(const uint8_t* raw, size_t n, uint8_t* out)
 {
-    out.reserve(out.size() + storedSize(n));
-    out.push_back(0x78);      // deflate, 32 KB window
-    out.push_back(0x01);      // check bits: 0x7801 = 31 * 991, no dictionary
+    uint8_t* o = out;
+    *o++ = 0x78;              // deflate, 32 KB window
+    *o++ = 0x01;              // check bits: 0x7801 = 31 * 991, no dictionary
     size_t p = 0;
     do
     {
         const size_t k = n - p < 65535 ? n - p : 65535;
-        out.push_back(p + k == n ? 1 : 0);    // final bit, type 00
-        out.push_back(static_cast<uint8_t>(k & 0xFF));
-        out.push_back(static_cast<uint8_t>(k >> 8));
-        out.push_back(static_cast<uint8_t>(~k & 0xFF));
-        out.push_back(static_cast<uint8_t>((~k >> 8) & 0xFF));
-        out.insert(out.end(), raw + p, raw + p + k);
+        *o++ = p + k == n ? 1 : 0;            // final bit, type 00
+        *o++ = static_cast<uint8_t>(k & 0xFF);
+        *o++ = static_cast<uint8_t>(k >> 8);
+        *o++ = static_cast<uint8_t>(~k & 0xFF);
+        *o++ = static_cast<uint8_t>((~k >> 8) & 0xFF);
+        if (k) std::memcpy(o, raw + p, k);
+        o += k;
         p += k;
     } while (p < n);
     const uint32_t a = adler32(raw, n);
-    for (int i = 3; i >= 0; --i) out.push_back(static_cast<uint8_t>(a >> (8 * i)));
+    for (int i = 3; i >= 0; --i) *o++ = static_cast<uint8_t>(a >> (8 * i));
+    return static_cast<size_t>(o - out);
+}
+
+void Inflate::stored(const uint8_t* raw, size_t n, std::vector<uint8_t>& out)
+{
+    const size_t at = out.size();
+    out.resize(at + storedSize(n));
+    storedTo(raw, n, out.data() + at);
 }

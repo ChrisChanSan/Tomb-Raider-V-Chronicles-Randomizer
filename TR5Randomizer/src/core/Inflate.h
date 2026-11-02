@@ -79,4 +79,8 @@ namespace Inflate
 
     // Length of the stream stored() writes for n raw bytes.
     size_t storedSize(size_t n);
+
+    // The same stream into a buffer of storedSize(n) bytes, for the tools
+    // written against malloc. Returns storedSize(n).
+    size_t storedTo(const uint8_t* raw, size_t n, uint8_t* out);
 }

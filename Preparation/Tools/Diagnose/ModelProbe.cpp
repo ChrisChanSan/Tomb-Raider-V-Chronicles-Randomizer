@@ -876,8 +876,7 @@
 #include <string>
 #include <vector>
 
-#include "zlib.h"
-
+#include "core/Inflate.h"
 #include "core/Tr5Level.h"
 
 /* By path, not through a /I of specific\: that folder holds the engine's own
@@ -920,7 +919,7 @@ char tomb5_hd_install_tr3[260];
 
 /* ------------------------------------------------------------------ PNG -- */
 /* The same writer RoomProbe and DdsProbe use: 24 bit truecolour, filter 0 on
- * every scanline, deflate through the zlib the engine already links. */
+ * every scanline, the data as stored deflate blocks (core/Inflate.h). */
 
 static void PutBE(unsigned char* p, unsigned long v)
 {
@@ -942,10 +941,10 @@ static void PngChunk(FILE* f, const char* tag, const unsigned char* data, unsign
 	if (len)
 		fwrite(data, 1, len, f);
 
-	crc = crc32(0, (const Bytef*)tag, 4);
+	crc = Inflate::crc32((const uint8_t*)tag, 4);
 
 	if (len)
-		crc = crc32(crc, (const Bytef*)data, len);
+		crc = Inflate::crc32((const uint8_t*)data, len, crc);
 
 	PutBE(head, crc);
 	fwrite(head, 1, 4, f);
@@ -1120,11 +1119,11 @@ static bool WritePng(const char* path, const unsigned long* px, long w, long h)
 		}
 	}
 
-	uLongf packed = (uLongf)compressBound((uLong)raw_size);
+	unsigned long packed = (unsigned long)Inflate::storedSize(raw_size);
 	unsigned char* out = (unsigned char*)malloc(packed);
 	bool ok = false;
 
-	if (out && compress2(out, &packed, raw, (uLong)raw_size, 9) == Z_OK)
+	if (out && Inflate::storedTo(raw, raw_size, out) == packed)
 	{
 		PngChunk(f, "IDAT", out, packed);
 		PngChunk(f, "IEND", 0, 0);
@@ -2677,10 +2676,10 @@ static ToolBand ToolClassicBand(const Tr5Level& level, int slot, int nodes,
 		memcpy(sizes, &bytes[10], 8);
 		s_tex32.assign(sizes[0], 0);
 
-		uLongf length = sizes[0];
+		size_t length = 0;
 
-		if (18 + (size_t)sizes[1] > bytes.size() || uncompress(s_tex32.data(),
-			&length, &bytes[18], sizes[1]) != Z_OK)
+		if (18 + (size_t)sizes[1] > bytes.size() || Inflate::zlib(&bytes[18],
+			sizes[1], s_tex32.data(), s_tex32.size(), length))
 			s_tex32.clear();
 
 		s_level = &level;

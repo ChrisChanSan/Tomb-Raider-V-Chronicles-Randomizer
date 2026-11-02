@@ -17738,6 +17738,92 @@ pointers), `33748594` (lengths), `1ff2962f` (the log lines), `d543767a` (alignme
 crash seam's dump), `39ee6a20` (the clamp and ATANLOG), `64eed4ba` (the lightning's
 last point).
 
+### -record and -replay; the collision lists kept inside tsv_buffer (#305)
+2026-11-02
+
+**What.** Two command-line switches. `-record <file>` writes what a run takes from
+outside the level files: the devices' readings at every call of the input function, the
+number of 1/60 s ticks of every present whose count the logic takes, the two random
+generators' seeds and the frame counter at every level start, the slot of every save
+and load. `-replay <file>` puts the file's values in their place, so the same ticks run
+with the same input on another build. With `-log`, `REPLAYLOG` names each level start
+(`level= tick= seed= draw= frames= fps=`), save and load (`save slot= tick=`,
+`load slot= tick=`), the file's `open` and `end`, and under `-replay` the first record
+that does not fit the run (`desync want= got= what= rec_tick= tick= record= at=`); after
+`end` or `desync` the run goes on with the devices. `GetCollidedObjects` keeps its two
+lists inside the room its callers give them in `tsv_buffer`. A save writes the level's
+name block zeroed.
+
+**Why.** For the differential run of the 64-bit build (`Preparation/Verification.md`,
+section 8): the same game played on both builds and their seams compared line by line
+needs the same input, the same ticks and the same seeds, and no one plays the same
+minutes twice. `tsv_buffer`: the callers give the lists' places in bytes - 0 and 1024,
+0x2000 and 0x3000 - which are 256 pointers before the statics on a 32-bit build and
+128 on a 64-bit one, where the 129th item was written over the first static; neither
+list had a limit. The name block: `S_SaveGame` zeroed 20 of its 75 bytes and the rest
+came from the stack, so two saves of one game state differed there.
+
+**How.** `specific/replay.cpp` and `replay.h` (new): `ReplayOpen`, `ReplayClose`,
+`ReplayInputSeam`, `ReplayFrames`, `ReplayLevelStart`, `ReplaySlot`; without a switch
+each returns at once. `specific/replay_format.h` (new): a header of 48 bytes (`TR5R`,
+version 1, the pointer width, the build's stamp) and records of a type byte and
+little-endian fields written byte by byte - `L` a level start, `I` an input call, `P` a
+present's ticks, `S` a save or a load - `ReplayEncode`, `ReplayDecode`. Under
+`-replay` each record's type and tick are checked against the run.
+
+- `specific/input.cpp` (`S_UpdateInput`): the one input point, after `DXUpdateJoystick`,
+  `DXReadKeyboard` and `WinMouseTake`, before the pad word is read - `keymap`, the
+  mouse's counts and buttons, its capture (taken once there for both of its readers),
+  the pad's `joystick_read_*`, both sticks' raw axes and `joystick_is_xinput`. A film's
+  own loop is left out: the 64-bit build has no films.
+- `game/draw.cpp` (`DrawPhaseGame`), `game/newinv2.cpp` (the ring), `game/control.cpp`
+  (`S_Death`): the present's tick count through `ReplayFrames`. `S_DumpScreen` still
+  waits for the clock; the presents of the menus, the boot screen and a window's clear
+  count nothing and are not in the file, nor the loading screen's, whose number
+  follows the load's duration.
+- `game/gameflow.cpp` (`DoTitle`, `DoLevel` after the restore): `ReplayLevelStart`
+  before the first tick; under `-replay` the seeds and `GnFrameCounter`, which the
+  loading screen steps by its clock, come from the file.
+- `specific/gamemain.cpp` (`S_SaveGame`, `S_LoadGame`): the slot; the name buffer
+  zeroed whole. `specific/winmain.cpp`: `WinCheckPathFlag` reads the two switches
+  before `WinProcessCommandLine` puts the command line in capitals; `WinClose` closes
+  the file. `specific/function_stubs.cpp`, `.h`: `GetRandomDrawSeed`.
+- The clock in the logic, measured: the tick count `S_DumpScreen` takes from `Sync()`
+  is the one read whose value reaches the logic (`ControlPhase`'s ticks, the ring's
+  steps, the title's ticks). The other reads in `game/` only draw - `TIME_SubTick` in
+  the interpolation's and the ring's blend - or gate a log line (`VISLOG`'s
+  `GetTickCount`).
+
+`game/collide_lists.h` (new): the places counted in pointers - items at 0 and 2048,
+statics at 256 and 3072 - the same bytes on a 32-bit build, twice them on a 64-bit
+one; `TSV_BUFFER_SIZE`, 4096 pointers (16384 bytes on a 32-bit build, as before);
+`COLLIDE_ITEMS_MAX` 255 and `COLLIDE_STATICS_MAX` 1023, each list with its 0 inside its
+smallest room. `game/collide.cpp` (`GetCollidedObjects`): both stores ask the limits,
+`rooms[22]` takes at most 22. `game/tomb4fx.cpp`, `.h` (`tsv_buffer`), and the places
+from the header in `game/lara.cpp` (`lara_col_all4s`, `LaraLedgeRefusals`),
+`flmtorch.cpp` (`FlameTorchControl`), `laraflar.cpp` (`CreateFlare`), `lara1gun.cpp`
+(`ControlCrossbow`), `moveblok.cpp` (`TestBlockPush`, `TestBlockPull`) and `traps.cpp`
+(`ControlExplosion`). The game's sixteen level files hold at most 33 other items within
+reach of one item, 60 statics in a room with its neighbours and 17 rooms in a portal
+list: a 32-bit build reaches no limit and keeps its lists' bytes. `game/collide.cpp`
+and `game/tomb4fx.h` carry the modification notice from this change on.
+
+ModernTest's groups `replay_rule` and `collide_lists` hold both;
+`Preparation/Tools/Diagnose/xdiff.py` (new) compares two logs family by family.
+
+**Decisions.** A replay ends at the first record that does not fit instead of going on:
+from there the runs are different games, and the line names the tick. The present's
+count is replaced where the logic takes it, not in `S_DumpScreen`, which more presents
+pass than the logic counts. Films stay out of the file; both builds are started with
+`-nofmv`. A creature's enemy and `GeneralPtr` are saved as distances in the item pool
+(#292), which the 64-bit build lays out wider: saves of one game state on the two
+builds differ in those fields, and an enemy that is neither Lara nor the creature's own
+AI target (`kind=none`) is read back on the other build as another item or none.
+
+**Commits.** `7d7f324a` (the name block), `0a8578df` (the lists), `79afb7e9` (the
+recorder), `dfe69cb5` and `e52b0156` (the lists' comments), `22a1ddbf` (the checks),
+`fdd176e2` (xdiff.py).
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -18119,3 +18205,4 @@ entries above.
 | #300 | A loading screen shows no texture page of the level, not for a frame |
 | #301 | The missing-file message, the X-ray tone's comment and the engine icon's origin |
 | #303 | The engine builds as a 64-bit program; level file and save unchanged |
+| #305 | -record and -replay; the collision lists kept inside tsv_buffer |

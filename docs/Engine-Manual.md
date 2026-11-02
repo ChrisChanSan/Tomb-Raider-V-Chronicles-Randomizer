@@ -108,6 +108,16 @@ Run the game normally, or use the two helpers in the package:
 | **`Setup.bat`** | opens the setup dialog (`PCTomb5.exe -setup`) |
 | **`Log.bat`** | starts the game writing a log (`PCTomb5.exe -log`) |
 
+Two more switches play the same inputs again. `PCTomb5.exe -record <file>`
+writes what the run takes from the keyboard, the mouse, the pad and the clock
+into `<file>`; `PCTomb5.exe -replay <file>` plays the same inputs again in
+their place, and when the file ends the game goes on with the devices. Both go
+with `-log`, which then writes a `REPLAYLOG` line at every level start, save
+and load; a file name with a blank goes in quotes, and a file name must not
+contain the words `setup` or `nofmv`, which the command line takes as switches
+of their own. How the two are used to compare the 64-bit build with the
+32-bit one is in `Preparation\Verification.md`, section 8.
+
 The setup dialog also opens by itself the very first time the game is run.
 
 <p align="center"><img src="setup-dialog.jpg" alt="The setup dialog" width="670"></p>

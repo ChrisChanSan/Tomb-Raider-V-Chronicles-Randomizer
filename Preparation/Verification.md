@@ -339,3 +339,150 @@ The same applies to the TR3 extraction cache: it is a cache, and the code
 says so - "extract anew every time - slower, but always correct". If a cache
 key changes, entries are orphaned and re-extracted. That was measured, not
 assumed: the re-extracted files came back byte-identical.
+
+---
+
+## 8. Does the 64-bit build play the same game?
+
+The 64-bit build (`release64\PCtomb5_x64.exe`, `be64.bat`) must play
+exactly the game the 32-bit one plays. A pointer cut to 32 bits, a struct
+laid out wider or a list running into its neighbour does not show at once;
+it shows as a line of the `-log` seams that differs. So the same game is
+played on both builds and their logs are compared line by line: the same
+level files, the same input, the same ticks.
+
+A person cannot play the same five minutes twice, so the 32-bit build
+records what the run takes from outside and both builds play it again:
+
+- `-record <file>` writes, once per call of the input function, what the
+  keyboard, the mouse and the pad delivered; per present the number of
+  1/60 s ticks the logic takes from it; at every level start the two random
+  generators' seeds and the frame counter; at every save and load the slot.
+- `-replay <file>` puts the file's values in place of the devices and the
+  clock, record by record, and checks each one against the run (its type
+  and its tick). When the file ends, or a record does not fit, a
+  `REPLAYLOG end` or `REPLAYLOG desync` line says so and the game goes on
+  with the devices.
+
+**What must be the same in every run.** The level files (the same `data\`
+folder, or the byte-identical randomizer output of section 1), the options
+(both builds read the same stored settings - do not change an option during
+the recorded run, or the replays start with the changed one), and the
+savegame folder as it was when the recording began (a replay loads what
+the recording loaded). Films are left out with `-nofmv`: the 64-bit build
+has none, and the 32-bit one must not play them either.
+
+**The run.** In a Command Prompt in the game folder, with `PCtomb5.exe`
+and `PCtomb5_x64.exe` (and their `.pdb`) side by side, `<repo>` the clone:
+
+```
+rem 0. once: keep the savegames as they are now
+xcopy /e /i /y savegame savegame_before
+
+rem 1. record on the 32-bit build
+PCtomb5.exe -log -nofmv -record run1.rec
+ren log.txt rec_x86.log
+copy savegame\savegame.<m> rec_m.sav
+
+rem 2. play it again on the 32-bit build
+rmdir /s /q savegame
+xcopy /e /i /y savegame_before savegame
+PCtomb5.exe -log -nofmv -replay run1.rec
+ren log.txt rep_x86.log
+copy savegame\savegame.<m> x86_m.sav
+
+rem 3. play it again on the 64-bit build
+rmdir /s /q savegame
+xcopy /e /i /y savegame_before savegame
+PCtomb5_x64.exe -log -nofmv -replay run1.rec
+ren log.txt rep_x64.log
+copy savegame\savegame.<m> x64_m.sav
+
+rem 4. compare
+python <repo>\Preparation\Tools\Diagnose\xdiff.py rec_x86.log rep_x86.log > xdiff_x86.txt
+python <repo>\Preparation\Tools\Diagnose\xdiff.py rep_x86.log rep_x64.log > xdiff_x64.txt
+<repo>\Preparation\Tools\Diagnose\SaveDiff.exe x86_m.sav x64_m.sav
+```
+
+`SaveDiff.exe` is built once with `bsd.bat`. A file name for `-record` and
+`-replay` must not contain the words `setup` or `nofmv`: the command line
+takes them as switches of their own.
+
+**What to play in step 1**, about five minutes: from the title, load a
+savegame in slot `<n>` that the 32-bit build of this branch wrote (a save
+of a build before the 64-bit change is refused by the 64-bit build), play
+on into a level start, save into slot `<m>`, load it again, fight the
+brawler (`BRAWLLOG`) and a guard, climb a rope or a ladder, open the
+inventory and use something, and quit through the menu. Leave the keyboard,
+the mouse and the pad alone while a replay runs - it ignores them until its
+file ends - and do not switch away from the window, which holds the game.
+
+**The save cross test** is part of the run: in step 3 the 64-bit build
+loads slot `<n>`, written by the 32-bit build, plays the recorded minutes
+and saves slot `<m>`; in step 2 the 32-bit build does the same.
+`SaveDiff x86_m.sav x64_m.sav` prints `IDENTICAL - every one of the 29491
+bytes.` when, at the save, no creature had an enemy and `GeneralPtr` named
+no item. Otherwise exactly these may differ, and nothing else: a creature's
+enemy (a run of at most 4 bytes in the savegame stream) and
+`Lara.GeneralPtr` with `Lara.target`. They hold a distance in the item pool
+of the build that wrote them (`game\save_pointer_rule.h`), and the 64-bit
+build's pool is laid out wider. Whether both builds name the same item
+there, the `SAVELOG` lines say: at the save `item= kind=`, at the next load
+`how= enemy=`/`general=`, which xdiff compares with the distances masked.
+The reverse: write slot `<n>` with the 64-bit build, record `run2.rec` on
+`PCtomb5_x64.exe`, play it again on both builds (steps 2 and 3 with
+`run2.rec`) and compare the two `<m>` files the same way.
+
+One case is known to fail the reverse and the forward test alike: a
+creature whose enemy is another item than Lara or its own AI target
+(`SAVELOG save ... kind=none`) is saved by its distance alone and read back
+as a distance in the reading build's pool, which on the other build is
+another item (`how=legacy_ok` with another number) or none
+(`how=legacy_null`). Both runs then differ from the load on.
+
+**What a clean result prints.** `xdiff_x86.txt` proves the recorder: the
+recorded run and its replay on the same build. `xdiff_x64.txt` is the
+answer. Both end in the family table and, when the builds agree:
+
+```
+no logic difference
+
+no load difference
+
+no audio difference
+
+no float-only difference
+...
+0 logic/load lines differ, 0 audio, 0 float-only; ...
+```
+
+and no `REPLAYLOG desync` line at the top. Between the recorded run and a
+replay a few `audio` lines may differ (a sound that waits for its last one
+starts by the audio device's clock); between the builds the `float-only`
+lines may differ in the last digit, where a seam prints a float the two C
+runtimes computed (`sin`, `cos`, `sqrt` differ in their last bit). The game
+logic itself is integer arithmetic and must not.
+
+**What a difference means.** `FIRST LOGIC DIFFERENCE` names the family,
+both lines with their line numbers, the logic second before it (`TICKLOG
+at=`), the last tick counter a logic line wrote and the last `ITEMLOG` item
+before it; the `item=` of the line itself where it has one. The first one is
+the one that counts: everything after it may be its consequence. A hard
+difference in a family that also has float-only ones may be a float that
+crossed an integer step - read the float lines before it. A `REPLAYLOG
+desync` line means the replay left the recorded run at that tick: the run
+asked for input or a present at another moment, and from there the two runs
+are different games; the first difference before it is the cause. The
+`load` lines differ when the two builds read a level differently - the
+level file's records are converted on the 64-bit build.
+
+**What to send:** `run1.rec`, `rec_x86.log`, `rep_x86.log`,
+`rep_x64.log`, `xdiff_x86.txt`, `xdiff_x64.txt`, the SaveDiff output and
+the slot files `<n>`, `rec_m.sav`, `x86_m.sav`, `x64_m.sav`.
+
+**What it does not see.** The families of the drawn frames (`ARMLOG`,
+`ROOMLIST`, `HDLOG`, ...) are dropped: they depend on the frame rate, the
+window and the card. Two replays at the same frame-rate mode draw the same
+frames, so `--keep-render` compares them too, but the HD renderer's lines
+also differ with the card's memory. The loading screen's frames are not in
+the file; their number follows how long the load took.

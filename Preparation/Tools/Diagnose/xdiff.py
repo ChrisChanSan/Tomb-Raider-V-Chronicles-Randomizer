@@ -211,7 +211,7 @@ def family_of(text):
     words = text.split()
 
     if not words:
-        return ('', '')
+        return ('<text>', '<text>')
 
     first = words[0]
 
@@ -524,6 +524,7 @@ def self_test():
           'SFXLOG footsteps:', 'sfx footsteps')
     check(family_of('d2fdab00') == ('<address>', '<address>'), 'bare hex')
     check(family_of('Released Keyboard @ x')[0] == '<text>', 'free text')
+    check(family_of('   ')[0] == '<text>', 'empty line')
     check(class_of(*family_of('NEWLOG x=1')) == 'unclassified', 'unknown')
     check(class_of(*family_of('REPLAYLOG level=3 tick=5')) == LOGIC,
           'replaylog level')

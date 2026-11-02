@@ -17,11 +17,10 @@ What is in here
   screens\            Where your own remaster's loading screens go;
                       there is a note in it.
   savegame\           Savegames live here, not loose in the folder.
-  data\               Precomputed data. The randomizer carries the same
-                      data inside itself, so these files are optional -
-                      but any one of them that IS there is used instead
-                      of the built-in copy, and spoiler.txt names which
-                      of the two each run took.
+  data\               Precomputed data the randomizer needs: the zone
+                      files, the checksum lists, the secret lists. The
+                      program carries no copy of them; if one is
+                      missing, it says which and where it looked.
   Source\             The complete source code: TOMB5 engine\ is the
                       engine, TR5Randomizer\ the tool.
   Licenses\           The licenses.
@@ -271,7 +270,7 @@ license).
 
 The engine can play music in the OGG format (for HQ soundtracks you
 provide yourself - we ship none). The decoder for that is
-stb_vorbis and stb_image by Sean Barrett and contributors
+stb_vorbis by Sean Barrett and contributors
 (public domain or MIT, your choice):
 
     https://github.com/nothings/stb

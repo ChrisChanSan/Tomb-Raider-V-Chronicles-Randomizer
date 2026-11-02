@@ -66,11 +66,10 @@ public:
     // Loads the bundled checksum list. Without it nothing can be checked,
     // hence a hard error instead of silently carrying on.
     //
-    // Two entry points since the list is baked into the EXE as well
-    // (EmbeddedData.h): callers that follow the "a file in data\ wins,
-    // the baked copy is the floor" rule already hold the text and pass it
-    // in; the path variant stays for tools that are handed one explicit
-    // file and should read exactly that one.
+    // Two entry points: callers that read the list through DataFile.h
+    // (the one reader of data\, which logs the path) hold the text and
+    // pass it in; the path variant stays for tools that are handed one
+    // explicit file and should read exactly that one.
     bool loadChecksums(const std::wstring& csvPath, std::string& error);
     bool loadChecksumsText(const std::string& csvText, std::string& error);
 

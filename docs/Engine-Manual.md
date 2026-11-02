@@ -5623,10 +5623,11 @@ visible. The same goes for **TROne (GPLv3) by Todesengel1931**,
 <https://github.com/todesengel1931>, which the HD work and the modern control
 carry over from — see the two credits in those chapters.
 
-Compiled into `PCtomb5.exe` itself are **zlib**, **stb_vorbis** and
-**TRForge** (MIT); `Dear ImGui` is the *randomizer's* window and is compiled
-into `TR5Randomizer.exe`, not into the game. **discord-rpc** is in the source
-tree as upstream shipped it and is switched off at the source
+Compiled into `PCtomb5.exe` itself are **stb_vorbis** and **TRForge** (MIT); the
+level files' deflate blocks are read by the project's own code, the reader the
+randomizer uses as well. `Dear ImGui` is the *randomizer's* window and is
+compiled into `TR5Randomizer.exe`, not into the game. **discord-rpc** is in the
+source tree as upstream shipped it and is switched off at the source
 (`TOMB5_DISCORD_RPC 0`) — nothing of it is linked into either program, and its
 notice travels because the source does. All of them are named in
 `THIRD-PARTY.md`, and every licence text is in `Licenses\`.

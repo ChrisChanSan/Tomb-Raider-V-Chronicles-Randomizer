@@ -60,13 +60,16 @@ if (Test-Path $RandoExe) {
 # This way the tool needs NO PowerShell at runtime. That was an explicit
 # requirement: a PowerShell dependency would be unreasonable for normal
 # users and moreover regularly draws the attention of virus scanners.
+# This folder is the randomizer's only copy of the files below - the EXEs
+# carry none (src\core\DataFile.h) - so the fifteen zone exports, the two
+# checksum lists and data\secrets must all land here.
 $dataOut = "$OutDir\data"
 New-Item -ItemType Directory -Path $dataOut -Force | Out-Null
 Copy-Item "$LevelInfo\VanillaLevelChecksums.csv" $dataOut -Force
 # The Tomb Raider III files the four guests were ported against, by size
-# and SHA256. Nothing reads it at run time - it is there so a player whose
-# dinosaurs look wrong can check whether their installation is the one the
-# port was built from.
+# and SHA256. The randomizer names the edition of a player's files with it
+# (Tr3Edition), and a player whose dinosaurs look wrong can check by hand
+# whether their installation is the one the port was built from.
 Copy-Item "$Root\Preparation\Tr3Checksums.csv" $dataOut -Force
 $zones = 0
 foreach ($f in (Get-ChildItem "$LevelInfo\*.json" | Sort-Object Name)) {
@@ -147,9 +150,10 @@ Say ("Source        : $copied files ({0:N1} MB) - GPLv3 obligation" -f `
 # the GPL counts "the scripts used to control compilation" as part of the
 # source - so b1.bat and b2.bat travel too, and imgui brings its own MIT
 # licence. Without these a recipient holds source that cannot rebuild the
-# program, which is exactly what the obligation exists to prevent. zlib is
-# not repeated here: the build scripts read it out of the engine source,
-# which this package already ships in full.
+# program, which is exactly what the obligation exists to prevent. The two
+# scripts reach nowhere outside TR5Randomizer: the deflate reader they
+# compile is the randomizer's own (src\core\Inflate.cpp), the file the
+# engine's project compiles as well, by its path beside it.
 $rsOut = "$OutDir\Source\TR5Randomizer"
 New-Item -ItemType Directory -Path $rsOut -Force | Out-Null
 Copy-Item "$RandoRoot\src" $rsOut -Recurse -Force
@@ -158,17 +162,6 @@ Copy-Item "$RandoRoot\LICENSE" $rsOut -Force
 New-Item -ItemType Directory -Path "$rsOut\build" -Force | Out-Null
 Copy-Item "$RandoRoot\build\b1.bat" "$rsOut\build" -Force
 Copy-Item "$RandoRoot\build\b2.bat" "$rsOut\build" -Force
-
-# The scripts reach sideways into the engine tree for zlib, and this package
-# renames that folder to "TOMB5 engine" so a user can tell the two apart.
-# Without pulling the path along, the shipped build scripts point at a folder
-# that does not exist HERE - source that looks complete and does not build.
-foreach ($bf in @("b1.bat", "b2.bat")) {
-    $bp = "$rsOut\build\$bf"
-    $t  = [IO.File]::ReadAllText($bp)
-    $t  = $t.Replace("TOMB5 Code", "TOMB5 engine")
-    [IO.File]::WriteAllText($bp, $t)
-}
 $rsCount = (Get-ChildItem $rsOut -Recurse -File).Count
 Say "Source        : randomizer included ($rsCount files, buildable)"
 
@@ -189,21 +182,16 @@ if (Test-Path $drpc) { Copy-Item $drpc "$lic\DiscordRPC-MIT.txt" -Force }
 # notice has to travel with the binary, not only with the source.
 $trf = "$EngineSrc\TOMB5\vendor\trforge\LICENSE"
 if (Test-Path $trf) { Copy-Item $trf "$lic\TRForge-MIT.txt" -Force }
-# zlib and stb_vorbis keep their notice inside their own source. It is lifted
-# from there rather than copied into a second file, so the package cannot end
-# up shipping a stale version of someone else's licence.
-$zh = Get-Content "$EngineSrc\TOMB5\tomb5\libs\zlib\zlib.h"
-$zEnd = ($zh | Select-String -Pattern '^\s*\*/' | Select-Object -First 1)
-if ($zEnd) { $zh[0..($zEnd.LineNumber - 1)] | Set-Content "$lic\zlib.txt" -Encoding utf8 }
-# Both stb files we use - stb_vorbis.c in the engine and stb_image.h in the
-# randomizer - carry the SAME dual-licence block verbatim, so one file
-# covers both. Shipping two byte-identical texts under different names
-# would only invite the question which one is authoritative.
+# stb_vorbis keeps its notice inside its own source. It is lifted from there
+# rather than copied into a second file, so the package cannot end up
+# shipping a stale version of someone else's licence.
+# stb_vorbis.c is the one stb file left, compiled into the engine; the
+# randomizer reads its background picture through Windows' own image
+# decoder (#307) and carries no stb code any more.
 $sv = Get-Content "$EngineSrc\TOMB5\tomb5\libs\stb\stb_vorbis.c"
 $sStart = ($sv | Select-String -Pattern 'available under 2 licenses' | Select-Object -First 1)
 if ($sStart) {
-    @("Applies to stb_vorbis.c (engine) and stb_image.h (randomizer) alike -",
-      "both carry this same notice.", "") +
+    @("Applies to stb_vorbis.c, compiled into the engine (PCtomb5.exe).", "") +
         $sv[($sStart.LineNumber - 3)..($sv.Count - 1)] | Set-Content "$lic\stb.txt" -Encoding utf8
 }
 # The document gives repository paths. In the package everything sits one
@@ -216,7 +204,7 @@ $tp = $tp.Replace('TR5Randomizer/', 'Source/TR5Randomizer/')
 $tp = $tp.Replace('](LICENSE)', '](GPLv3.txt)')
 [IO.File]::WriteAllText("$lic\THIRD-PARTY.md", $tp)
 $n = (Get-ChildItem $lic -File).Count
-Say "Licenses      : $n files (GPLv3, Dear ImGui, discord-rpc, zlib, stb, TRForge)"
+Say "Licenses      : $n files (GPLv3, Dear ImGui, discord-rpc, stb, TRForge)"
 
 # --- 6. Manual ---------------------------------------------------------------
 # One source of truth: the player README is versioned at

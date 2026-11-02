@@ -4,7 +4,7 @@
 
 This is a modified version of **TOMB5**, the PC Tomb Raider Chronicles decompilation
 project by Troye/Trxyebeep and contributors, <https://github.com/Trxyebeep/TOMB5>. It
-was modified between **2026-07-30 and 2026-11-01** (ongoing) for the *TR5 Randomizer*
+was modified between **2026-07-30 and 2026-11-02** (ongoing) for the *TR5 Randomizer*
 project.
 
 The upstream code as received is preserved as the first commit of this repository (no
@@ -15,12 +15,14 @@ commit made after this copy was taken (`setup.cpp`: Two Gun gains `undead = 1`) 
 small local fixes that predate this repository and are documented in the files themselves
 (`dxsound.cpp` LOCSOFTWARE, `function_stubs.cpp` DO_LOG).
 
-Measured on **2026-11-01** by comparing every file under `TOMB5/` against that first
-commit: **135 files changed, 199 entirely new - 334 in all**, none deleted, **284** of
-them carrying the modification notice at the top, which `grep -rl "Modified 2026 by
-ChrisChanSan" TOMB5/` lists. The project file `tomb5.vcxproj` and its filters file carry
-the same notice as an XML comment, and `resource.h` and `tomb5.rc` beside them as comment
-lines.
+Measured on **2026-11-02** by comparing every file under `TOMB5/` against that first
+commit: **135 files changed, 199 entirely new - 334 in all**, **284** of them carrying
+the modification notice at the top, which `grep -rl "Modified 2026 by ChrisChanSan"
+TOMB5/` lists. The project file `tomb5.vcxproj` and its filters file carry the same
+notice as an XML comment, and `resource.h` and `tomb5.rc` beside them as comment lines.
+
+234 are deleted: upstream's zlib, `tomb5/libs/zlib/`, since the engine reads deflate
+with the project's own reader (#308).
 
 50 of the 334 do not carry the notice, and none of them should:
 
@@ -17850,6 +17852,44 @@ section 8, checks with SaveDiff.
 **Commits.** `7d7f324a` (the name block), `0a8578df` (the lists), `79afb7e9` (the
 recorder), `dfe69cb5` and `e52b0156` (the lists' comments), `22a1ddbf` (the checks),
 `fdd176e2` (xdiff.py), `4dc436d8` (the save's pointers by number).
+### The engine reads its texture blocks with the project's own inflater; zlib goes (#308)
+2026-11-02
+
+**What.** The engine unpacks the deflate streams it loads - the texture blocks of a level
+file, of which a load unpacks two of the three, and the title's logo file - with the
+project's own reader, `TR5Randomizer/src/core/Inflate.cpp`, the one the randomizer uses
+since #306. zlib 1.2.12, which upstream TOMB5 carried in `tomb5/libs/zlib/` (234 files),
+leaves the tree; neither program holds third-party code for deflate any more.
+
+**Why.** Since #306 the randomizer reads and writes these streams with its own code. zlib
+in the engine was a second library for the same job: 234 files of other people's code and
+a licence notice in every package, for one call.
+
+**How.** `specific/file.cpp`, `Decompress`: one call of `Inflate::zlib` with the same
+buffers and sizes in place of `inflateInit` and `inflate(Z_FINISH)`. A failure logs `Error
+Decompressing Data` with the reader's reason and returns 0 as before, and the callers go
+on as before. The reader checks the Adler-32 trailer and the exact size, so a stream with
+a wrong check, a missing trailer or more output than the header's size is now reported
+where zlib's call let it pass; no read or write leaves the two buffers. `file.cpp`
+includes `Inflate.h` by its relative path, and `tomb5.vcxproj` compiles
+`..\TR5Randomizer\src\core\Inflate.cpp` by its relative path, without the precompiled
+header and as C++17: one source for both programs, also in the release package, where both
+folders sit under `Source\`. The project and its filters lose the six zlib sources and
+`zlib.h`, `BuildRelease.ps1` no longer writes `Licenses\zlib.txt`, and `.gitattributes`
+drops the folder's pattern. ModernTest's group `load_inflate` checks the call and the
+include, and that the engine's text, its project and the tree hold no zlib.
+
+**Measured.** Over the three blocks of the sixteen levels of the checksum list, of 52
+randomized levels (26 packed by zlib before #306, 26 with #306's stored blocks) and the
+three logo files, 207 streams, the new path gives the same bytes as zlib's. 48 broken
+streams (cut short, a flipped check or payload byte, a wrong size) read and write nothing
+outside the buffers, under AddressSanitizer as well. The reader is slower than zlib: a
+load of RICH1 as the randomizer packed it before #306 takes about 48 ms longer (120
+against 72 ms for the two blocks, 32-bit build), with #306's stored blocks about 3 ms, the
+original level about 9 ms.
+
+**Commits.** `7b5dcf50` (the call and the project), `7ec34954` (the release script and
+`.gitattributes`), `43975556`, `b51012c9` (the checks).
 
 ## 3. Randomizer changes since Beta 1.0
 
@@ -17857,8 +17897,8 @@ The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
 `TR5Randomizer.exe` - is this project's own work from the first line, so it owes
 nobody a GPLv3 section 5(a) notice and has no record of the kind above. What
 changed in it since the public Beta 1.0 is listed here by task number.
-Forty-five files under `TR5Randomizer/src` changed in that span: five of them new,
-thirty-nine modified, one moved out into `package/`.
+Fifty files under `TR5Randomizer/src` changed in that span: eight of them new, forty
+modified, one moved out into `package/`, one removed.
 
 - **#123 - the HD markers.** `Tr5Level.cpp` / `.h`, `ApplyPatch.cpp` / `.h`,
   `Randomize.cpp` and `gui/Main.cpp`: the randomizer writes the HD room markers
@@ -18047,6 +18087,38 @@ thirty-nine modified, one moved out into `package/`.
   `Background.jpg` moves into `package/docs/` and `loadBackground` reads it from there,
   and the release copies the two manuals with the nine pictures they show beside it, so
   the package reads like the repository's docs folder (`9ce96228`).
+- **#306 - deflate of its own, and the data as files only.** `core/Inflate.cpp` / `.h`
+  and `core/DataFile.h` new, `core/Tr5Transfer.cpp`, `core/DataFile.cpp`,
+  `core/DataFolder.h`, `Randomize.cpp`, `gui/Main.cpp`, `SelfTest.cpp`, `build/b1.bat`,
+  `build/b2.bat`; `core/EmbeddedData.cpp` / `.h` and `Preparation/Tools/EmbedData.ps1`
+  removed. The randomizer reads the levels' texture blocks with a deflate reader of its
+  own, written from RFC 1950 and RFC 1951 (stored, fixed and dynamic blocks, the window
+  from the header, the Adler-32 trailer; every read and write bounds-checked, a corrupt
+  stream refused with a message), and writes the two blocks a run grows as stored
+  deflate blocks, which the engine's zlib reads like any other stream. A level that
+  takes pages from another level therefore carries those two blocks unpacked, about
+  twice its packed size; their content and every other byte stay as before, and
+  `LevelDiff -content` (Verification.md section 1) is the comparison across the change.
+  The fifteen zone exports and the two checksum lists are no longer baked into the
+  EXEs (about 140 KB of each): `DataFile::read` takes the file in `data\` or fails with
+  its name and folder, and the CLI now stops without the checksum list rather than skip
+  the check against an already randomized level. zlib stays in the engine alone; no
+  build line of the randomizer or of a diagnostic tool compiles it.
+  The build id stays 23: a seed places the same things (`e7fa928e`, `05c0c423`,
+  `5a45193f`, `dd1c3c8e`, `ab00f0c1`, `9379893d`).
+- **#307 - the background picture through Windows' own decoder.** `gui/Picture.cpp` /
+  `.h` new, `gui/Main.cpp`, `build/b2.bat`; `libs/stb/stb_image.h` removed. The
+  picture beside the GUI (`docs\Background.jpg`) is read through the Windows Imaging
+  Component: `loadPictureRgba` decodes frame 0 and converts it to 32-bit RGBA, the
+  byte order the R8G8B8A8 texture took from stb_image before; a missing, empty or
+  non-picture file leaves the window plain, as before. COM is the one `wWinMain`
+  already starts for the folder dialog, and COM loads `windowscodecs.dll` itself, so
+  the GUI's import table is unchanged. Against the old decoder the shipped picture
+  keeps its size and every channel stays within 3 (rounding of the inverse DCT and
+  the colour conversion); PNG pictures come out identical. The randomizer now
+  compiles Dear ImGui and its own code only; `BuildRelease.ps1` names stb_vorbis
+  alone in the stb notice it ships. The build id stays 23: the GUI's picture places
+  nothing (`3c9695a1`, `7f2d7e6f`).
 
 ## 4. Building this yourself
 
@@ -18233,3 +18305,6 @@ entries above.
 | #301 | The missing-file message, the X-ray tone's comment and the engine icon's origin |
 | #303 | The engine builds as a 64-bit program; level file and save unchanged |
 | #305 | -record and -replay; the collision lists kept inside tsv_buffer |
+| #306 | section 3 (the randomizer); no engine entry: no file under `TOMB5 Code/TOMB5` changed |
+| #307 | section 3 (the randomizer); no engine entry: no file under `TOMB5 Code/TOMB5` changed |
+| #308 | The engine reads its texture blocks with the project's own inflater; zlib goes |

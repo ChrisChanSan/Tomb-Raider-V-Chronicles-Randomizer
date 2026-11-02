@@ -32,8 +32,8 @@
 #include "core/LevelFix.h"
 #include "core/BuildId.h"
 #include "core/Config.h"
+#include "core/DataFile.h"
 #include "core/DataFolder.h"
-#include "core/EmbeddedData.h"
 #include "core/Json.h"
 #include "core/LevelInfo.h"
 #include "core/Randomizer.h"
@@ -45,19 +45,14 @@
 #include "core/Tr3Source.h"
 
 #include "Language.h"
+// The background picture is read through the Windows Imaging Component
+// (Picture.cpp): a system interface every Windows carries, so no copy of
+// a foreign decoder is compiled in.
+#include "Picture.h"
 
 #include "imgui.h"
 #include "backends/imgui_impl_dx11.h"
 #include "backends/imgui_impl_win32.h"
-
-// stb_image (Public Domain, Sean Barrett) - only for the background picture
-// beside the EXE, read through a FILE (stbi_load_from_file), so stdio stays
-// in. Shipped under libs/stb so the source package compiles without any
-// further procurement.
-#define STB_IMAGE_IMPLEMENTATION
-#define STBI_ONLY_JPEG
-#define STBI_ONLY_PNG
-#include "libs/stb/stb_image.h"
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -66,6 +61,7 @@
 #include <shlobj.h>
 
 #include <algorithm>
+#include <cstdio>
 #include <map>
 #include <set>
 #include <string>
@@ -100,21 +96,15 @@ namespace
     {
         // From the EXE's folder, never from the current directory, which a
         // shortcut or a command line may set anywhere. The path stays wide
-        // up to _wfopen_s, so a folder name outside the code page opens too.
-        // A missing or unreadable file is no error: nothing is said, and the
-        // window keeps its plain background.
+        // up to the decoder, so a folder name outside the code page opens
+        // too. A missing or unreadable file is no error: nothing is said,
+        // and the window keeps its plain background.
         const std::wstring dir = PathUtil::exeDir();
         if (dir.empty()) return;
 
-        FILE* f = nullptr;
         const std::wstring path = PathUtil::join(dir, L"docs\\Background.jpg");
-        if (_wfopen_s(&f, path.c_str(), L"rb") != 0 || !f) return;
-
-        int channels = 0;
-        stbi_uc* pixel = stbi_load_from_file(f, &g_bgWidth, &g_bgHeight,
-                                             &channels, 4);
-        std::fclose(f);
-        if (!pixel) return;
+        std::vector<unsigned char> pixel;
+        if (!loadPictureRgba(path, pixel, g_bgWidth, g_bgHeight)) return;
 
         D3D11_TEXTURE2D_DESC td{};
         td.Width = g_bgWidth;
@@ -127,7 +117,7 @@ namespace
         td.BindFlags = D3D11_BIND_SHADER_RESOURCE;
 
         D3D11_SUBRESOURCE_DATA sd{};
-        sd.pSysMem = pixel;
+        sd.pSysMem = pixel.data();
         sd.SysMemPitch = g_bgWidth * 4;
 
         ID3D11Texture2D* tex = nullptr;
@@ -140,8 +130,6 @@ namespace
             g_dev->CreateShaderResourceView(tex, &vd, &g_background);
             tex->Release();
         }
-
-        stbi_image_free(pixel);
     }
 
     void freeBackground()
@@ -670,14 +658,14 @@ static std::wstring cacheDir(const App& a)
 
 // The edition of the TR3 files this run reads, once a run: the four levels
 // the guests and the TR3 outfits come from and the bank, and Gold's level -
-// each checked by size and SHA-256 against Tr3Checksums.csv (a file in
-// data\ wins, the baked copy is the floor), the hashes kept in the package
-// cache beside them. Never a reason to stop.
+// each checked by size and SHA-256 against Tr3Checksums.csv in data\, the
+// hashes kept in the package cache beside them. Never a reason to stop:
+// without the list every file reads as of no known edition, and the
+// missing list stands in spoiler.txt (DataFile::log).
 static void checkTr3Editions(App& a)
 {
     std::string csv, err;
-    DataFile::Source src = DataFile::Source::Embedded;
-    DataFile::read(a.payloadDir(), "Tr3Checksums.csv", csv, src, err);
+    DataFile::read(a.payloadDir(), "Tr3Checksums.csv", csv, err);
 
     std::vector<std::wstring> tr3, gold;
     const std::wstring t = tr3Folder(a);
@@ -872,15 +860,15 @@ static void checkTr3Editions(App& a)
         return true;
     }
 
-    // The zone export for one level. data\ beside the program wins, the copy
-    // baked into the EXE is the floor - see EmbeddedData.h. Which of the two
-    // it was lands in DataFile::log() and from there in spoiler.txt: a bug
-    // report is worth little without knowing which curation actually ran.
+    // The zone export for one level, from data\ beside the program and
+    // nowhere else (DataFile.h); a missing file stops this level with its
+    // name and folder. The path lands in DataFile::log() and from there in
+    // spoiler.txt: a bug report is worth little without knowing which
+    // curation actually ran.
     bool loadZones(const App& a, const std::string& base, JsonValue& zone, std::string& err)
     {
         std::string text;
-        DataFile::Source src = DataFile::Source::External;
-        if (!DataFile::read(a.payloadDir(), "zones_" + base + ".json", text, src, err)) return false;
+        if (!DataFile::read(a.payloadDir(), "zones_" + base + ".json", text, err)) return false;
         return Json::parseString(text, zone, err);
     }
 
@@ -1399,14 +1387,13 @@ static void checkTr3Editions(App& a)
         //--------------------------------------------------------------------
         // Where the precomputed data came from.
         //
-        // Every zone export and the checksum list exist twice: baked into the
-        // EXE, and possibly as a file in data\ that outranks it
-        // (EmbeddedData.h). Two runs of the same seed give different results
-        // if one of them found a hand-dropped export and the other did not -
-        // and from the outside the two are indistinguishable. So the choice
-        // is logged, one line per file. Repeated reads of the same file
-        // collapse; the startup stamp check reads them all once before the
-        // run does.
+        // Every zone export and the checksum lists are files in data\
+        // (DataFile.h). Two runs of the same seed give different results if
+        // one of them read a hand-edited export and the other did not - and
+        // from the outside the two are indistinguishable. So every read is
+        // logged with its path, one line per file, and a missing file with
+        // its folder. Repeated reads of the same file collapse; the startup
+        // stamp check reads them all once before the run does.
         //--------------------------------------------------------------------
         {
             line("DATA");
@@ -3010,23 +2997,16 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
     };
 
     std::string err;
-    // data\ beside the program wins, the baked copy is the floor
-    // (EmbeddedData.h). This used to be the one thing that could not go
-    // missing without the whole program being useless - which is precisely
-    // what a copying accident produced once.
+    // The checksum list, from data\ beside the program (DataFile.h). Without
+    // it nothing can be checked and no run starts; the status line then
+    // says which file is missing and where it was looked for - the case a
+    // copying accident produced once.
     {
         std::string csvText;
-        DataFile::Source csvSrc = DataFile::Source::External;
-        app.payloadOk = DataFile::read(app.payloadDir(), "VanillaLevelChecksums.csv", csvText, csvSrc, err)
+        app.payloadOk = DataFile::read(app.payloadDir(), "VanillaLevelChecksums.csv", csvText, err)
                      && app.data.loadChecksumsText(csvText, err);
         if (!app.payloadOk)
-        {
-            // With a built-in copy this can now only mean a broken build or
-            // a damaged file in data\ - hence say what was tried.
-            app.payloadError = "The checksum list could not be read (" + err + "). Tried: "
-                             + PathUtil::narrow(PathUtil::join(app.payloadDir(), L"VanillaLevelChecksums.csv"))
-                             + ", then the copy built into the program.";
-        }
+            app.payloadError = "The checksum list could not be read: " + err;
     }
 
     //------------------------------------------------------------------------
@@ -3047,20 +3027,11 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
     // does not stand out this way, but that is the rarer case, and when
     // packaging, BuildRelease.ps1 regenerates everything fresh anyway.
     //------------------------------------------------------------------------
-    // Since the exports are baked into the EXE, the set to compare is no
-    // longer "whatever lies in data\": it is every baked name plus anything
-    // extra the folder holds, each one resolved by the same rule the run
-    // uses. That keeps the check honest in the case it now has to cover -
-    // fourteen baked exports and one hand-dropped file with an older stamp
-    // would otherwise never be compared against each other.
     if (app.payloadOk)
     {
         std::map<std::string, std::vector<std::string>> stamps;
 
-        std::vector<std::string> files = EmbeddedData::names();
-        files.erase(std::remove_if(files.begin(), files.end(), [](const std::string& n) {
-                        return n.rfind("zones_", 0) != 0;
-                    }), files.end());
+        std::vector<std::string> files;
         {
             WIN32_FIND_DATAW fd{};
             const std::wstring pattern = PathUtil::join(app.payloadDir(), L"zones_*.json");
@@ -3079,8 +3050,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
         for (const std::string& file : files)
         {
             std::string text, jerr;
-            DataFile::Source zsrc = DataFile::Source::External;
-            if (!DataFile::read(app.payloadDir(), file, text, zsrc, jerr)) continue;
+            if (!DataFile::read(app.payloadDir(), file, text, jerr)) continue;
 
             JsonValue z;
             if (!Json::parseString(text, z, jerr)) continue;

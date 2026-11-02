@@ -15052,8 +15052,9 @@ static void load_inflate()
 	ok(n == 1, "inflate: Decompress calls it once", n, 1);
 	n = hd_switch_count(file, "Log(\"Error Decompressing Data - %s\", error);");
 	ok(n == 1, "inflate: a failure is logged with its reason", n, 1);
-	n = hd_switch_count(file, "zlib.h") + hd_switch_count(file, "z_stream") +
-		hd_switch_count(file, "inflateInit") + hd_switch_count(file, "Z_FINISH");
+	n = hd_switch_count(file, "zlib.h") + hd_switch_count(file, "z_stream");
+	n += hd_switch_count(file, "inflateInit");
+	n += hd_switch_count(file, "Z_FINISH");
 	ok(n == 0, "inflate: no zlib left in file.cpp", n, 0);
 	n = hd_switch_count(proj,
 		"<ClCompile Include=\"..\\TR5Randomizer\\src\\core\\Inflate.cpp\">");

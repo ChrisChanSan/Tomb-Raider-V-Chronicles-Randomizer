@@ -364,12 +364,7 @@
     <ClCompile Include="TOMB5\specific\time.cpp" />
     <ClCompile Include="TOMB5\tomb5\troyestuff.cpp" />
     <ClCompile Include="TOMB5\specific\clipping.cpp" />
-    <ClCompile Include="TOMB5\tomb5\libs\zlib\adler32.c" />
-    <ClCompile Include="TOMB5\tomb5\libs\zlib\crc32.c" />
-    <ClCompile Include="TOMB5\tomb5\libs\zlib\inffast.c" />
-    <ClCompile Include="TOMB5\tomb5\libs\zlib\inflate.c" />
-    <ClCompile Include="TOMB5\tomb5\libs\zlib\inftrees.c" />
-    <ClCompile Include="TOMB5\tomb5\libs\zlib\zutil.c" />
+    <ClCompile Include="..\TR5Randomizer\src\core\Inflate.cpp" />
     <ClCompile Include="TOMB5\specific\drawbars.cpp" />
     <ClCompile Include="TOMB5\specific\setupdlg.cpp" />
     <ClCompile Include="TOMB5\game\balance.cpp">
@@ -872,7 +867,6 @@
     <ClInclude Include="TOMB5\tomb5\libs\discordRPC\discord_register.h" />
     <ClInclude Include="TOMB5\tomb5\libs\discordRPC\discord_rpc.h" />
     <ClInclude Include="TOMB5\specific\clipping.h" />
-    <ClInclude Include="TOMB5\tomb5\libs\zlib\zlib.h" />
     <ClInclude Include="TOMB5\specific\drawbars.h" />
     <ClInclude Include="TOMB5\specific\setupdlg.h" />
     <ClInclude Include="TOMB5\game\balance.h">

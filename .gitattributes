@@ -1,10 +1,11 @@
 # Which code is ours and which only travels with us.
 #
 # GitHub guesses a project's languages by counting file extensions, and it
-# counts everything - including the four vendored libraries. zlib alone ships
-# example bindings in Ada, C#, Pascal and Java under contrib, so the language
-# bar announced this project as partly Ada. That is not a small cosmetic point:
-# the bar is the first thing a visitor reads about what the code IS.
+# counts everything - including the vendored libraries. zlib, which the
+# engine carried until #308, shipped example bindings in Ada, C#, Pascal and
+# Java under contrib, so the language bar announced this project as partly
+# Ada. That is not a small cosmetic point: the bar is the first thing a
+# visitor reads about what the code IS.
 #
 # linguist-vendored says "present, but not written here". The files still ship -
 # they have to, the GPL asks for the complete source - they simply stop being
@@ -20,7 +21,6 @@
 # diagnostic programs are this project's own work, and the few per cent they
 # contribute to the bar are honest.
 
-**/tomb5/libs/zlib/**        linguist-vendored
 **/tomb5/libs/stb/**         linguist-vendored
 **/tomb5/libs/discordRPC/**  linguist-vendored
 **/external/imgui/**         linguist-vendored

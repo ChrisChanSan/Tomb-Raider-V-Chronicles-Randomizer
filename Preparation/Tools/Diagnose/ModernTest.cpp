@@ -15031,6 +15031,42 @@ static void load_brake()
 	free(opts);
 }
 
+/* The texture blocks' reader (specific\file.cpp, Decompress): the project's
+ * own deflate reader, the randomizer's TR5Randomizer\src\core\Inflate.cpp
+ * compiled by its path beside the engine, in place of zlib. The text says
+ * the call is there and zlib is not - not in file.cpp, not in the project,
+ * not in the tree. */
+static void load_inflate()
+{
+	char* file = hd_switch_text("../file.cpp");
+	char* proj = hd_switch_text("../../../tomb5.vcxproj");
+	char* zlib = hd_switch_text("../../tomb5/libs/zlib/zlib.h");
+	long n;
+
+	ok(file && proj, "inflate: file.cpp and the project are read",
+		!!file + !!proj, 2);
+	n = hd_switch_count(file,
+		"#include \"../../../TR5Randomizer/src/core/Inflate.h\"");
+	ok(n == 1, "inflate: file.cpp includes the own reader", n, 1);
+	n = hd_switch_count(file, "error = Inflate::zlib(");
+	ok(n == 1, "inflate: Decompress calls it once", n, 1);
+	n = hd_switch_count(file, "Log(\"Error Decompressing Data - %s\", error);");
+	ok(n == 1, "inflate: a failure is logged with its reason", n, 1);
+	n = hd_switch_count(file, "zlib.h") + hd_switch_count(file, "z_stream");
+	n += hd_switch_count(file, "inflateInit");
+	n += hd_switch_count(file, "Z_FINISH");
+	ok(n == 0, "inflate: no zlib left in file.cpp", n, 0);
+	n = hd_switch_count(proj,
+		"<ClCompile Include=\"..\\TR5Randomizer\\src\\core\\Inflate.cpp\">");
+	ok(n == 1, "inflate: the project compiles the reader by its path", n, 1);
+	n = hd_switch_count(proj, "zlib");
+	ok(n == 0, "inflate: the project names no zlib", n, 0);
+	ok(!zlib, "inflate: zlib's header is gone from the tree", !!zlib, 0);
+	free(file);
+	free(proj);
+	free(zlib);
+}
+
 /* The page class of the HD room renderer (specific\hd\hd_pageclass.h): which
  * alpha-pass pages are drawn as a clear floor, out of the smallest and the
  * largest alpha of the page's top mip. The pairs are the measured ones where
@@ -35297,6 +35333,7 @@ int main()
 	load_frame();
 	load_mode();
 	load_brake();
+	load_inflate();
 	ledge_hang();
 	ledge_trigger();
 	deferred();

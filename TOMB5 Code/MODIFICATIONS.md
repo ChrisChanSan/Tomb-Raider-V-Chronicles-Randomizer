@@ -17679,7 +17679,7 @@ is written as before, and the frame's calls are the old ones in the old order.
 `game/deltapak.h` carries the modification notice now. ModernTest's group `lara_joints`
 (13 checks) holds the order and the wiring in the engine's text.
 
-What the frames leave behind besides the joints, three more:
+What the frames leave behind besides the joints, four more:
 - The generator's state. `game/interpolate.cpp`: `InterpBeginFrame` saves the state of
   `GetRandomControl` at every frame, and `InterpEndFrame` gives it back after a tween
   frame, after a blended frame and after every frame of the display's cadence. At
@@ -17708,22 +17708,40 @@ What the frames leave behind besides the joints, three more:
   frame is blended at an alpha the clock sets, so a room at the picture's edge can still
   count differently between display rates; a room walk at the live state would close
   that and was not built (it writes the rooms' bounds, which `ProcessClosedDoors` reads).
+- The closed doors' room lists. `game/door.cpp`: `ProcessClosedDoors` puts a closed door
+  into the item list of the room across (`draw_room`) when the frame's walk reached that
+  room, else back into its own room's list, at the head of the list it enters. Lara's
+  object collision, `GetCollidedObjects` (the ledge grab, the block tests, the flare,
+  the torch) and `ObjectOnLOS2` (Lara's and the drones' shots) walk those lists, and a
+  door in the other room's list escapes them where only one side is walked. It ran on
+  every frame, so the tick read the last frame's choice. It now returns at once on a
+  tween frame, which gates both callers (`DrawRooms`; `RenderIt` has none): every frame
+  at 30, the live one at 60 - the lists of 30 -, the frame that carries the tick at
+  *Display*. A tween frame draws the door from the list the carrying frame chose,
+  clipped to that room's window, and not at all where its own walk left that room out -
+  for the rest of the tick at most, with the door's portal at the edge of the view. At
+  *Display* the residual is the corpse marks': the lists follow that blended frame's
+  camera, once per tick.
 
 With `-log`, `RNGLOG frames= given_back= undone= kept_frames= kept_draws= heights= over=`
 follows each `JOINTLOG` line (`InterpRngLevelEnd`): the draws counted as steps of the
-generator from the saved state, up to 65,536 (`over=` past it). ModernTest's group
-`logic_leftovers` (9 checks) holds the save, the give-back, the rule and the mark.
+generator from the saved state, up to 65,536 (`over=` past it). `DOORLOG moves= frames=
+skipped_tween=` follows it (`ClosedDoorsLevelEnd`, `game/gameflow.cpp`): the doors'
+moves, the frames that walked them and the tween frames that did not. ModernTest's group
+`logic_leftovers` (14 checks) holds the save, the give-back, the rule, the mark and the
+doors' gate, its two callers and the line.
 
 **Measured.** 76 places in the tick read the joint set (the item controls run first, from
 `ControlPhase`'s item loop, before `LaraControl` and the camera); the frame's own readers
 are the lighting, the three shadows, the sparks and the HD soft body. Read by nothing in
 the logic and left as they are: the view set `lara_matrices`, the nodes' ambient and
 `GLaraShadowframe`. A pass costs the joint half of what every frame builds: one per tick
-at 60, nearly one per frame at the display's rate. Measured and not changed here:
-`ProcessClosedDoors`, which `DrawRooms` calls every frame, reads the frame's room walk
-and moves a closed door between its two rooms' item lists.
+at 60, nearly one per frame at the display's rate. Of the rooms' item-list walkers in
+`game/` and `specific/`, three in the logic can find a closed door or miss it by its
+list (above); the others filter by slot, by state or by exact place, or run at the load.
+The save writes `items[]` by index and no list, so it is not one of them.
 
-**Commits.** `d377aa82`, `a4ccf29a`.
+**Commits.** `d377aa82`, `a4ccf29a`, `b5c16db6`.
 
 ### A sound the level lacks is not stopped through info -1 (#311)
 2026-11-02

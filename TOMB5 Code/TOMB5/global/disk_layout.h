@@ -12,11 +12,15 @@
  */
 #pragma once
 #include "types.h"
+#include "../game/save_pointer_rule.h"	// the save's tags, asserted below
 #include <stddef.h>
 #include <string.h>
 
-/* The level file's records that hold pointers at run time, and how the
- * loader turns them into the runtime structs.
+/* The level file's records that hold pointers at run time, how the loader
+ * turns them into the runtime structs, and the sizes the level file and the
+ * save are read and written by - asserted here, so that no build can change
+ * one of them unnoticed. Included by the level loader (file.cpp,
+ * alexstuff.cpp) and the save (savegame.cpp, rope.cpp, gamemain.cpp).
  *
  * The .TRC was written by a 32-bit program. Its room headers, roomlets and
  * anims are that program's structs: ROOM_INFO of 208 bytes, ROOMLET of 56,
@@ -33,6 +37,8 @@
  * the old pointer arithmetic did, and the 64-bit build adds the same
  * signed distance. */
 
+// The level file's records that hold pointers, in their file form; a mesh
+// pointer is a 4-byte offset, read by ReadLong.
 static_assert(sizeof(ROOM_INFO_DISK) == 208, "the file's room header");
 static_assert(offsetof(ROOM_INFO_DISK, pRoomlets) == 172,
 	"the file's room header: pRoomlets");
@@ -40,6 +46,53 @@ static_assert(sizeof(ROOMLET_DISK) == 56, "the file's roomlet");
 static_assert(sizeof(ANIM_STRUCT_DISK) == 40, "the file's anim");
 static_assert(offsetof(ANIM_STRUCT_DISK, frame_ptr) == 0,
 	"the file's anim: frame_ptr");
+static_assert(sizeof(long) == 4, "the file's mesh offsets, read as longs");
+
+// The level file's records without a pointer, read raw on both builds.
+static_assert(sizeof(MESH_INFO) == 20, "a room's static mesh");
+static_assert(sizeof(FLOOR_INFO) == 8, "a floor sector");
+static_assert(sizeof(PCLIGHT_INFO) == 88, "a room light");
+static_assert(sizeof(BOX_INFO) == 8, "a box");
+static_assert(sizeof(AIOBJECT) == 24, "an AI object");
+static_assert(sizeof(CHANGE_STRUCT) == 6, "an anim change");
+static_assert(sizeof(RANGE_STRUCT) == 8, "an anim range");
+static_assert(sizeof(OBJECT_VECTOR) == 16, "a camera or sink");
+static_assert(sizeof(SPOTCAM) == 40, "a spot camera");
+static_assert(sizeof(SAMPLE_INFO) == 8, "a sound's info");
+static_assert(sizeof(PHDTEXTURESTRUCT) == 40, "a texture info");
+static_assert(sizeof(PHDSPRITESTRUCT) == 16, "a sprite");
+static_assert(sizeof(NEW_CUTSCENE) == 104, "a cutseq.bin header");
+
+// The save: the file image, the same on both builds.
+static_assert(sizeof(SAVEGAME_INFO) == 29397, "the save's image");
+static_assert(offsetof(SAVEGAME_INFO, buffer) == 417, "the save: buffer");
+static_assert(sizeof(LARA_INFO_SAVE) == 349, "the save: Lara");
+static_assert(offsetof(LARA_INFO_SAVE, mesh_ptrs) == 96,
+	"the save: Lara's meshes");
+static_assert(offsetof(LARA_INFO_SAVE, CornerX) == 222, "the save: CornerX");
+static_assert(offsetof(LARA_INFO_SAVE, GeneralPtr) == 258,
+	"the save: GeneralPtr");
+static_assert(sizeof(PENDULUM_SAVE) == 32, "the save: the pendulum");
+static_assert(offsetof(PENDULUM_SAVE, Rope) == 28,
+	"the save: the pendulum's rope");
+static_assert(sizeof(ROPE_STRUCT) == 1460, "the save: a rope");
+static_assert(sizeof(PHD_3DPOS) == 18, "the save: a position");
+static_assert(sizeof(STATS) == 20, "the save: the statistics");
+static_assert(sizeof(tomb5_save_info) == 7, "the save's tail");
+static_assert(offsetof(CREATURE_INFO, enemy) == 18 &&
+	offsetof(CREATURE_INFO, enemy) + sizeof(int32_t) == 22,
+	"the save: a creature's 22 bytes end with its enemy's field");
+
+// The save's tags lie above every distance into the pool, and apart.
+static_assert(MALLOC_SIZE - 1 < SAVE_PTR_TAG_MESH,
+	"the save: a distance into the pool is no tag");
+static_assert(SAVE_PTR_TAG_MESH != SAVE_PTR_TAG_ITEM &&
+	SAVE_PTR_TAG_MESH != SAVE_PTR_TAG_NUM &&
+	SAVE_PTR_TAG_ITEM != SAVE_PTR_TAG_NUM, "the save: three tags apart");
+static_assert((SAVE_PTR_TAG_MESH & SAVE_PTR_NUM_MASK) == 0 &&
+	(SAVE_PTR_TAG_ITEM & SAVE_PTR_NUM_MASK) == 0 &&
+	(SAVE_PTR_TAG_NUM & SAVE_PTR_NUM_MASK) == 0,
+	"the save: a tag leaves the number its 24 bits");
 
 /* `base` plus the file's offset `off`. */
 template <class T> inline T* DiskOffset(char* base, uint32_t off)

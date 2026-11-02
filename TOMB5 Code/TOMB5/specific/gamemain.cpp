@@ -30,6 +30,7 @@
 #include "input.h"			// ApplyKeyScheme - the one-time keyboard seat
 #include "../tomb5/tomb5.h"
 #include "zrange_math.h"		// ZFAR_UNITS - the far plane
+#include "../global/disk_layout.h"	// the save's image, asserted
 
 WATERTAB WaterTable[22][64];
 THREAD MainThread;

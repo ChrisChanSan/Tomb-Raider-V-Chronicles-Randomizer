@@ -25276,7 +25276,7 @@ static int CrashTest(const char* self, const char* folder)
 	{
 		char name[MAX_PATH];
 		char full[MAX_PATH];
-		size_t n = strcspn(dump + 6, "\r\n");
+		size_t n = strcspn(dump + 6, " \r\n");	// err= and step= follow
 
 		_snprintf_s(name, sizeof(name), _TRUNCATE, "%.*s", (int)n, dump + 6);
 		_snprintf_s(full, sizeof(full), _TRUNCATE, "%s\\%s", folder, name);
@@ -25392,7 +25392,7 @@ static int HangTest(const char* self, const char* folder)
 	{
 		char name[MAX_PATH];
 		char full[MAX_PATH];
-		size_t n = strcspn(dump + 6, "\r\n");
+		size_t n = strcspn(dump + 6, " \r\n");	// err= and step= follow
 
 		_snprintf_s(name, sizeof(name), _TRUNCATE, "%.*s", (int)n, dump + 6);
 		_snprintf_s(full, sizeof(full), _TRUNCATE, "%s\\%s", folder, name);

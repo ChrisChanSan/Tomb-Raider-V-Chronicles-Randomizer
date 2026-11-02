@@ -28,6 +28,10 @@
  * dbghelp.dll, which is loaded only now, so a machine without it loses the
  * dump and keeps the line ("dump=none" at the end of crash.txt). The module
  * and offset are what the build's own .pdb resolves to a source line.
+ * After the dump's name the line says how far the dump got: err=<the
+ * failing call's GetLastError, 0 when written> step=<load|proc|file|write>,
+ * the last step tried - dbghelp loaded, MiniDumpWriteDump found, the file
+ * made, the dump written.
  *
  * MiniDumpNormal: the threads' stacks and the loaded modules - 31,860
  * bytes from RoomProbe -crash's child, more from the engine with its
@@ -43,6 +47,7 @@
  * Header only, so the engine and the diagnostic tool (RoomProbe -crash,
  * -hang) take the very same code without a build file to change. */
 #include <windows.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -69,12 +74,24 @@ typedef BOOL (WINAPI* CrashSeamDumpFn)(HANDLE process, DWORD processId,
 	HANDLE file, int type, PEXCEPTION_POINTERS exception, void* user,
 	void* callback);
 
+/* MINIDUMP_EXCEPTION_INFORMATION's shape. dbghelp.h declares it under
+ * pack(4) (pshpack4.h in minidumpapiset.h), so on a 64-bit build the
+ * pointer lies at offset 4 and the struct is 16 bytes; laid out naturally
+ * it was 24, the pointer at 8, and MiniDumpWriteDump read the exception's
+ * pointers from the wrong bytes and refused - no 64-bit dump was ever
+ * written. On a 32-bit build both layouts are the same 12 bytes. */
+#pragma pack(push, 4)
 struct CrashSeamDumpInfo
 {
 	DWORD threadId;
 	PEXCEPTION_POINTERS pointers;
 	BOOL clientPointers;
 };
+#pragma pack(pop)
+
+static_assert(sizeof(CrashSeamDumpInfo) == 8 + sizeof(void*) &&
+	offsetof(CrashSeamDumpInfo, pointers) == 4,
+	"CrashSeamDumpInfo is MINIDUMP_EXCEPTION_INFORMATION");
 
 // The module an address lies in, by file name, and the offset into it.
 inline void CrashSeamWhere(void* at, char* module, size_t size,
@@ -134,22 +151,43 @@ inline void CrashSeamReport(const char* kind, const char* infix,
 		now.wMonth, now.wDay, now.wHour, now.wMinute, now.wSecond);
 
 	bool dumped = false;
+	const char* step = "load";
+	DWORD err = 0;
 	HMODULE help = LoadLibraryA("dbghelp.dll");
-	CrashSeamDumpFn dump = help ?
-		(CrashSeamDumpFn)GetProcAddress(help, "MiniDumpWriteDump") : 0;
+	CrashSeamDumpFn dump = 0;
+
+	if (!help)
+		err = GetLastError();
+	else
+	{
+		step = "proc";
+		dump = (CrashSeamDumpFn)GetProcAddress(help, "MiniDumpWriteDump");
+
+		if (!dump)
+			err = GetLastError();
+	}
 
 	if (dump)
 	{
+		step = "file";
+
 		HANDLE file = CreateFileA(dumpName, GENERIC_WRITE, 0, 0, CREATE_ALWAYS,
 			FILE_ATTRIBUTE_NORMAL, 0);
 
-		if (file != INVALID_HANDLE_VALUE)
+		if (file == INVALID_HANDLE_VALUE)
+			err = GetLastError();
+		else
 		{
 			CrashSeamDumpInfo ex = { threadId, info, FALSE };
 
 			// 0 is MiniDumpNormal.
+			step = "write";
 			dumped = dump(GetCurrentProcess(), GetCurrentProcessId(), file,
 				0, info ? (PEXCEPTION_POINTERS)&ex : 0, 0, 0) != FALSE;
+
+			if (!dumped)
+				err = GetLastError();
+
 			CloseHandle(file);
 
 			if (!dumped)
@@ -163,17 +201,18 @@ inline void CrashSeamReport(const char* kind, const char* infix,
 
 		if (!fopen_s(&out, "crash.txt", "a") && out)
 		{
-			fprintf(out, "%s dump=%s\n", line, dumped ? dumpName : "none");
+			fprintf(out, "%s dump=%s err=%lu step=%s\n", line,
+				dumped ? dumpName : "none", (unsigned long)err, step);
 			fclose(out);
 		}
 	}
 
-	if (state.writer && dumped)
+	if (state.writer)
 	{
 		char note[160];
 
-		_snprintf_s(note, sizeof(note), _TRUNCATE, "%s dump=%s", kind,
-			dumpName);
+		_snprintf_s(note, sizeof(note), _TRUNCATE, "%s dump=%s err=%lu step=%s",
+			kind, dumped ? dumpName : "none", (unsigned long)err, step);
 		state.writer(note);
 	}
 }

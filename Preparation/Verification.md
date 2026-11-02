@@ -645,3 +645,51 @@ contain ` -high`.
 
 **What to send:** `rep_x64_high.log`, `xdiff_high.txt`, and a `.dmp` if one
 was written.
+## 10. Does the 60 fps mode play the classic game?
+
+The logic runs thirty steps a second at every frame rate; the 60 fps modes
+only add pictures between two steps. The logic must read nothing back from
+such a picture. Lara's joint set (what `GetLaraJointPos` gives the drones'
+aim, the ledge test, the weapons, the cameras and the drips) and her wet
+nodes are built again from the step's own pose after every blended picture
+(`game\draw.cpp`, `LaraJointsLive`). The proof is a replay whose pictures
+fall at other places between the steps than the recording's. It needs the
+recorder, which the 64-bit build carries:
+
+1. Record a stretch with fights at *Frame rate: Display*, best with
+   something shooting at Lara (the drones of ANDREA2):
+   `PCtomb5.exe -log -record run.rec`.
+2. Replay it with the replaying machine's own clock in place of the
+   recorded sub-ticks: `PCtomb5.exe -log -replay run.rec -liveclock`.
+3. The log of the replay holds no `REPLAYLOG drift` line, and
+   `REPLAYLOG end` names the recording's last tick. A drift line names the
+   tick where the replayed game left the recorded one.
+4. `JOINTLOG passes=<n> ticks=<m> tween_frames=<k> blended_frames=<b>`,
+   one line at the end of each level and of the title: `passes` equals
+   `blended_frames`; at 30 both are 0; at 60 they are about `ticks` (a
+   late frame adds one); at *Display* nearly every frame is blended.
+
+5. `RNGLOG frames=<f> given_back=<g> undone=<u> kept_frames=<k>
+   kept_draws=<d> heights=<h> over=<o>` right after each `JOINTLOG`: the
+   pictures that gave the random numbers and `GetHeight`'s globals back
+   (`given_back`, `undone` draws) and those that kept them (`kept_frames`,
+   `kept_draws`). At 30 `given_back` is 0 and `kept_frames` equals
+   `frames`; at 60 each is about `ticks`; at *Display* `kept_frames` is 0.
+   Compare the recording's
+   and the replay's: at *Display* `kept_draws` is 0 in both, whatever the
+   two displays' rates; `over` is 0.
+   `DOORLOG moves=<m> frames=<f> skipped_tween=<s>` right after each
+   `RNGLOG`: the closed doors' moves between two rooms' item lists, the
+   pictures that walked the doors and the tween pictures that did not. At
+   30 `skipped_tween` is 0; at 60 `frames` is about `ticks` and
+   `skipped_tween` about as many; at *Display* `frames` is about `ticks`
+   too, whatever the display's rate.
+
+The corpse fade (`StepAfterDeathFade`) counts a body seen by one picture
+per step, the one that is no tween picture. At *Display* that picture is
+blended at a fraction the clock sets, so a drift on the tick a body
+vanishes, with the body's room at the picture's edge, is the one leftover
+#310 measured and left. `ProcessClosedDoors`, which moves a closed door
+between its two rooms' item lists by what the picture's walk saw, follows
+the same rule and leaves the same residual: at *Display* the lists follow
+that blended picture, once per step.

@@ -34,6 +34,14 @@ void gar_RotYXZsuperpack(short** pprot, long skip);
 void phd_PutPolygons_I(short* ptr, long clip);
 void aInterpolateMatrix();
 long DrawPhaseGame();
+
+/* Lara's matrices and wet nodes: the frame's build (draw 1) and the build
+ * from the live state after a blended frame (LaraJointsLive), one function;
+ * JOINTLOG at a level's end. See draw.cpp. */
+void LaraJointsBuild(long draw);
+void LaraJointsLive();
+void LaraJointsLevelEnd();
+
 void SkyDrawPhase();
 void UpdateSkyLightning();
 void CalculateObjectLighting(ITEM_INFO* item, short* frame);

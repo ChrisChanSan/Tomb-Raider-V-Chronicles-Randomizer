@@ -3261,13 +3261,18 @@ void GetJointAbsPositionCutSeq(ITEM_INFO* item, OBJECT_INFO* obj, short* rot, PH
 	phd_PopMatrix();
 }
 
-void frigup_lara()
+/* Lara in a cutscene, out of her actor's node table. `draw` is DrawPhaseGame's
+ * call, which this function has always been; without it only what the logic
+ * reads is built - her place and the joint set GetLaraJointPos reads - for
+ * the pass after a frame drawn between two ticks (game\draw.cpp,
+ * LaraJointsBuild). The order of the draw's calls is the old one. */
+void frigup_lara(long draw)
 {
 	OBJECT_INFO* object;
 	long* bone;
 	short* frame;
 
-	if (cutseq_num == 18 && GLOBAL_cutseq_frame <= 130)
+	if (draw && cutseq_num == 18 && GLOBAL_cutseq_frame <= 130)
 		PrintString(phd_centerx, phd_winymax - 3 * font_height, 5, SCRIPT_TEXT(TXT_cack), FF_CENTER);
 
 	lara_item->pos.x_pos = GLOBAL_cutme->orgx;
@@ -3288,10 +3293,15 @@ void frigup_lara()
 		frame[8] = 267;
 	}
 
-	Rich_CalcLaraMatrices_Normal(frame, bone, 0);
+	if (draw)
+		Rich_CalcLaraMatrices_Normal(frame, bone, 0);
+
 	phd_PushUnitMatrix();
 	Rich_CalcLaraMatrices_Normal(frame, bone, 1);
 	phd_PopMatrix();
+
+	if (!draw)
+		return;
 
 	/* The braid is a simulation that steps once per call (hair.cpp: each link
 	 * moves by three quarters of its velocity and falls by gravity), and in a

@@ -104,6 +104,18 @@ void StopSoundEffect(long sfx)
 	{
 		lut = sample_lut[sfx];
 
+		// A sound the level does not carry: -1 as read, -2 once SoundEffect
+		// has logged it - the same contract SoundEffect keeps. The original
+		// went on to read sample_infos[-1], which is the last entry of
+		// sample_lut in the bump allocator, and took a variation count out
+		// of it: 15 for an empty entry, so the loop stopped every running
+		// sound whose info index lay below 14 (and the idle channels of
+		// the free slots). Lara's stop state asks to stop the slide sound
+		// every tick, so a level without that sound cut its first infos.
+		// No log line: this runs every tick.
+		if (lut < 0)
+			return;
+
 		for (int i = 0; i < 32; i++)
 		{
 			if (LaSlot[i].nSampleInfo >= lut && LaSlot[i].nSampleInfo < (lut + ((sample_infos[lut].flags >> 2) & 0xF)))

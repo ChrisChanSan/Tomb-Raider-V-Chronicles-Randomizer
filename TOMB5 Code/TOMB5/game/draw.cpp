@@ -93,7 +93,8 @@ short no_rotation[12] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 
 /* Which dead bodies the draw saw this frame.
  *
- * PrintObjects sets a byte per item; StepAfterDeathFade, called once per
+ * PrintObjects sets a byte per item, on the one frame per tick that is no
+ * tween frame; StepAfterDeathFade, called once per
  * logic tick from ControlPhase, counts them up and kills the ones that
  * reached 128. One byte per item slot and no allocation; the notes at
  * PrintObjects and StepAfterDeathFade say why the counting is not in the draw. */
@@ -474,6 +475,96 @@ void aInterpolateMatrix()
 		matrixp[i] = InterpBlendFloat(matrixp[i], iMatrixp[i], IM_alpha);
 }
 
+/* JOINTLOG's counts for one level (LaraJointsLevelEnd). */
+static struct
+{
+	bool blended;		// the joint set standing now is a blended frame's
+	long passes;		// LaraJointsLive builds from the live state
+	long tweens;		// frames drawn as tween frames (InterpIsTweenFrame)
+	long blends;		// frames drawn blended (InterpFrameBlended)
+	unsigned long serial;	// InterpTickSerial at the level's start
+} g_joints;
+
+/* Lara's matrices, as the frame builds them, and as the logic reads them.
+ *
+ * With `draw` this is DrawPhaseGame's block, in the order it always had:
+ * the view set (lara_matrices: DrawLara, the HD body, the mirror, ARMLOG),
+ * the joint set (lara_joint_matrices: GetLaraJointPos and everything that
+ * aims, climbs, bleeds, fires or films from her bones), a cutscene's build
+ * over both, and the wet nodes (SetLaraUnderwaterNodes).
+ *
+ * The logic reads the joint set and the wet nodes until the next frame
+ * builds them again. At fps_mode 0 that is the state of the tick. A frame
+ * drawn between two ticks builds them from a blend, and which blend depends
+ * on when the display presents: a 144 Hz run would aim the drone, test the
+ * ledge and wet her nodes from other poses than a 60 Hz run. So after such a
+ * frame LaraJointsLive runs this again without `draw`, on the state
+ * InterpEndFrame put back: the joint set, a cutscene's joint set and the wet
+ * nodes, by the same calls, and nothing that draws, logs the frame or steps
+ * the braid. There is no second copy of the joint chain to drift from it. */
+void LaraJointsBuild(long draw)
+{
+	if (draw)
+	{
+		CalcLaraMatrices(0);
+		InterpArmLogFrame();	// ARMLOG: the view set, once per drawn frame
+	}
+
+	phd_PushUnitMatrix();
+	CalcLaraMatrices(1);
+	phd_PopMatrix();
+
+	if (GLOBAL_playing_cutseq)
+		frigup_lara(draw);
+
+	SetLaraUnderwaterNodes();
+
+	g_joints.blended = draw && InterpFrameBlended();
+
+	if (draw && InterpIsTweenFrame())
+		g_joints.tweens++;
+
+	if (g_joints.blended)
+		g_joints.blends++;
+}
+
+/* The pass after a blended frame (see LaraJointsBuild). It runs where the
+ * frame lets go of the blend, right after InterpEndFrame, and not at the top
+ * of the next tick: DoLevel calls handle_cutseq_triggering between the frame
+ * and ControlPhase, and a cutscene's start there writes lara.gun_type,
+ * lara.gun_status and lara.holster, which the arms of the joint chain read -
+ * the tick after it would find joints of a pose no frame at fps_mode 0
+ * builds. Here the state is the last tick's, exactly. Never at fps_mode 0,
+ * where no frame is blended. */
+void LaraJointsLive()
+{
+	if (!g_joints.blended)
+		return;
+
+	LaraJointsBuild(0);
+	g_joints.passes++;
+}
+
+/* JOINTLOG, one line at the end of each level and of the title, with -log:
+ * the passes against the level's ticks and the frames drawn as tween frames
+ * and blended. fps_mode 0 writes passes=0 and blended_frames=0. RNGLOG
+ * follows it, the same level's frames (game\interpolate.cpp). */
+void LaraJointsLevelEnd()
+{
+	const unsigned long serial = InterpTickSerial();
+
+	if (gLogEnabled)
+		Log("JOINTLOG passes=%ld ticks=%lu tween_frames=%ld blended_frames=%ld",
+			g_joints.passes, serial - g_joints.serial, g_joints.tweens,
+			g_joints.blends);
+
+	g_joints.passes = 0;
+	g_joints.tweens = 0;
+	g_joints.blends = 0;
+	g_joints.serial = serial;
+	InterpRngLevelEnd();
+}
+
 long DrawPhaseGame()
 {
 	ProfileFrameBegin();
@@ -485,7 +576,7 @@ long DrawPhaseGame()
 	 * InterpEndFrame, at the bottom of this function, puts the original bytes
 	 * back before the next tick reads them.
 	 *
-	 * It stands above CalcLaraMatrices because that is the first reader of
+	 * It stands above LaraJointsBuild because that is the first reader of
 	 * lara_item->pos in the frame, and the HD seam takes Lara's matrices from
 	 * what it produces - so specific\hd\ needs no change of its own.
 	 *
@@ -500,16 +591,7 @@ long DrawPhaseGame()
 		PoisonLogFrame(alpha);
 
 	ProfBegin(PROF_GATHER);
-	CalcLaraMatrices(0);
-	InterpArmLogFrame();	// ARMLOG: the view set, once per drawn frame
-	phd_PushUnitMatrix();
-	CalcLaraMatrices(1);
-	phd_PopMatrix();
-
-	if (GLOBAL_playing_cutseq)
-		frigup_lara();
-
-	SetLaraUnderwaterNodes();
+	LaraJointsBuild(1);
 	ProfBegin(PROF_ROOMS);
 	DrawRooms(camera.pos.room_number);
 	ProfEnd(PROF_ROOMS);
@@ -549,8 +631,11 @@ long DrawPhaseGame()
 	 * counted in `work` like everything else the frame did. Every value
 	 * InterpBeginFrame overwrote goes back to the byte, and the view matrix
 	 * is rebuilt from the live camera - the next ControlPhase may run no tick
-	 * at all, and then nothing else would rebuild it. */
+	 * at all, and then nothing else would rebuild it. Then Lara's joint set
+	 * and wet nodes are built again from that state if this frame blended
+	 * them, before anything of the logic can read them. */
 	InterpEndFrame();
+	LaraJointsLive();
 
 	/* ProfileFrameEnd comes before the restore: it judges this frame
 	 * against the slot this frame actually asked for, and gPresentMinTicks is
@@ -1239,8 +1324,16 @@ void PrintObjects(short room_number)
 		 * being counted up to it: the skeleton writes the field directly
 		 * (`item->after_death = (short)(phd_sqrt(info.distance) >> 4)`,
 		 * game\skeleton.cpp). StepAfterDeathFade carries both tests over
-		 * unchanged. */
-		if (item->after_death > 0)
+		 * unchanged.
+		 *
+		 * Only the frame that steps the counters marks: the one frame per
+		 * tick that is no tween frame. At fps_mode 0 that is every frame;
+		 * at fps_mode 1 the live one, drawn at the tick's state as at 30 Hz;
+		 * at fps_mode 2 the frame that carries the tick. Marked by every
+		 * frame, the tick would count the union of two pictures at 60 Hz
+		 * and of two or three at 144 Hz, and a body at the edge of a
+		 * turning camera would vanish a tick sooner on a faster display. */
+		if (item->after_death > 0 && !InterpIsTweenFrame())
 			g_afterDeathSeen[i] = 1;
 	}
 

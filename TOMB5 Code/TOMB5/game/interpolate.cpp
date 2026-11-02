@@ -380,9 +380,29 @@ namespace
 	unsigned long g_tickSerial = 0;
 	unsigned long g_steppedSerial = 0;
 
-	// The logic RNG over a tween frame - see the header's note on rand_1.
+	/* What a frame takes from the logic and gives back - see the header's
+	 * note on rand_1: the generator's state and the five globals GetHeight
+	 * leaves (control.cpp), saved at every frame, given back when
+	 * g_seedSaved says so (InterpBeginFrame). */
 	long g_seed = 0;
 	bool g_seedSaved = false;
+	short* g_hTrigger = 0;
+	long g_hTiltX = 0;
+	long g_hTiltY = 0;
+	long g_hOnObject = 0;
+	long g_hType = 0;
+
+	/* RNGLOG, per level (InterpRngLevelEnd): the frames, the frames that
+	 * gave back and the draws they undid, the frames that kept and the
+	 * draws they left in the stream, the given-back frames that had moved
+	 * a GetHeight global, and the frames past the count's bound. */
+	long g_rngFrames = 0;
+	long g_rngBack = 0;
+	long g_rngUndone = 0;
+	long g_rngKept = 0;
+	long g_rngKeptDraws = 0;
+	long g_rngHeights = 0;
+	long g_rngOver = 0;
 
 	// TICKLOG. What stepped this second, by kind.
 	int g_step[INTERP_STEP_COUNT] = { 0 };
@@ -1228,13 +1248,14 @@ float InterpAlphaNow()
 	 *   framecount -1, frame at 0.5, +1 -> 0, no tick
 	 *   framecount 0, frame at 1.0, +1 -> 1, TICK, ...
 	 *
-	 * So no logic tick reads what a tween frame left in lara_matrices and
-	 * lara_joint_matrices (delstuff.cpp), from which the first person and
-	 * look cameras take the head bone. Only a late frame (two ticks or more)
-	 * can put a tick behind a tween frame, leaving the camera's head bone half
-	 * a step stale for one frame; nothing in the simulation or the savegame
-	 * depends on those matrices, and HairControl builds its own stack from
-	 * lara_item->pos (hair.cpp), already restored by InterpEndFrame. */
+	 * So a tick mostly follows a live frame. A late frame (two ticks or
+	 * more) can put a tick behind a tween frame, whose joint set
+	 * (lara_joint_matrices, delstuff.cpp) the drone's aim, the ledge test,
+	 * the cameras and the weapons read; the pass after every blended frame
+	 * builds it again from the live state (draw.cpp, LaraJointsLive), at
+	 * fps_mode 2 as well, where nearly every frame is blended. HairControl
+	 * builds its own stack from lara_item->pos (hair.cpp), already restored
+	 * by InterpEndFrame. */
 	return framecount < 0 ? 0.5F : 1.0F;
 }
 
@@ -1363,6 +1384,11 @@ bool InterpDrawnFrameWasTween()
 	return g_drawnTween;
 }
 
+bool InterpFrameBlended()
+{
+	return g_applied;
+}
+
 void InterpNoteClassicPresent()
 {
 	/* A present that waited its full two ticks is a 30 Hz one: the load/save
@@ -1424,7 +1450,9 @@ void InterpBeginFrame(float alpha)
 	 * reads `alpha`, not what the snapshot did; fps_mode 0 passes 1 and it
 	 * stays false. At fps_mode 2 there are several frames per tick, so the
 	 * frame carrying the tick claims it from the serial (see g_tickSerial). */
-	if (ActiveFpsMode() == 2 && GameFrameMinTicks() == 0)
+	const bool displayBound = ActiveFpsMode() == 2 && GameFrameMinTicks() == 0;
+
+	if (displayBound)
 	{
 		const bool carries = g_tickSerial != g_steppedSerial;
 
@@ -1436,16 +1464,24 @@ void InterpBeginFrame(float alpha)
 
 	g_drawnTween = g_tween;
 
-	/* The logic RNG is saved: several drawing routines call
-	 * GetRandomControl, the simulation's generator. InterpEndFrame restores
-	 * it, so the next tick finds the stream where a 30 Hz run leaves it. */
-	g_seedSaved = false;
-
-	if (g_tween)
-	{
-		g_seed = GetRandomControlSeed();
-		g_seedSaved = true;
-	}
+	/* What the frame takes from the logic is saved, and InterpEndFrame
+	 * gives it back: the generator's state (the draw routines call
+	 * GetRandomControl, the simulation's generator) and GetHeight's five
+	 * globals (the shadows, the footprints and the rain call GetHeight at
+	 * the frame's positions, and AddFootprint reads OnObject after no
+	 * GetHeight of its own). Given back on a tween frame, on a blended
+	 * frame (at g_applied below) and on every frame of fps_mode 2's display
+	 * cadence: there the frame that carries the tick is drawn blended, and
+	 * whether it is drawn live instead can be the clock's doing (alpha
+	 * clamped at 1), not the state's. What is kept is kept by the frame
+	 * drawn at the tick's own state at fps_mode 0 and 1, as at 30 Hz. */
+	g_seed = GetRandomControlSeed();
+	g_hTrigger = trigger_index;
+	g_hTiltX = tiltxoff;
+	g_hTiltY = tiltyoff;
+	g_hOnObject = OnObject;
+	g_hType = height_type;
+	g_seedSaved = g_tween || displayBound;
 
 	g_applied = false;
 	g_alpha = 1.0F;
@@ -1557,6 +1593,10 @@ void InterpBeginFrame(float alpha)
 
 	g_applied = true;
 	g_alpha = alpha;
+
+	// A blended frame gives back what it took (see the top of this
+	// function); at fps_mode 1 it is a tween frame already.
+	g_seedSaved = true;
 
 	/* The cutscene actors, written before anything is drawn: Lara's
 	 * matrices (frigup_lara) and the other actors (DrawCutSeqActors) are
@@ -1910,6 +1950,73 @@ void InterpBeginFrame(float alpha)
 	}
 }
 
+/* How many draws lead the generator from `from` to `to`: GetRandomControl's
+ * step (specific\function_stubs.cpp) taken until it arrives, -1 past the
+ * bound. RNGLOG only. */
+static long RngDistance(long from, long to)
+{
+	unsigned long x = (unsigned long)from;
+
+	for (long n = 0; n <= 65536; n++)
+	{
+		if (x == (unsigned long)to)
+			return n;
+
+		x = 0x41C64E6DUL * x + 12345UL;
+	}
+
+	return -1;
+}
+
+// RNGLOG: one frame's draws and leftovers, before InterpEndFrame gives back.
+static void NoteGiveBack()
+{
+	const long draws = RngDistance(g_seed, GetRandomControlSeed());
+
+	g_rngFrames++;
+
+	if (draws < 0)
+		g_rngOver++;
+
+	if (g_seedSaved)
+	{
+		g_rngBack++;
+
+		if (draws > 0)
+			g_rngUndone += draws;
+
+		if (trigger_index != g_hTrigger || tiltxoff != g_hTiltX ||
+			tiltyoff != g_hTiltY || OnObject != g_hOnObject ||
+			height_type != g_hType)
+			g_rngHeights++;
+	}
+	else
+	{
+		g_rngKept++;
+
+		if (draws > 0)
+			g_rngKeptDraws += draws;
+	}
+}
+
+/* RNGLOG, one line at the end of each level and of the title, with -log
+ * (from LaraJointsLevelEnd, game\draw.cpp, right after JOINTLOG). */
+void InterpRngLevelEnd()
+{
+	if (gLogEnabled)
+		Log("RNGLOG frames=%ld given_back=%ld undone=%ld kept_frames=%ld "
+			"kept_draws=%ld heights=%ld over=%ld", g_rngFrames, g_rngBack,
+			g_rngUndone, g_rngKept, g_rngKeptDraws, g_rngHeights, g_rngOver);
+
+	g_rngFrames = 0;
+	g_rngBack = 0;
+	g_rngUndone = 0;
+	g_rngKept = 0;
+	g_rngKeptDraws = 0;
+	g_rngHeights = 0;
+	g_rngOver = 0;
+}
+
 void InterpEndFrame()
 {
 	if (gLogEnabled && GLOBAL_playing_cutseq)
@@ -1987,13 +2094,23 @@ void InterpEndFrame()
 		g_applied = false;
 	}
 
-	/* The logic RNG goes back whether or not the snapshot was applied: a
-	 * cutscene frame drawn live still has frigup_lara roll Lara's speech head
-	 * from GetRandomControl. The next tick reads the stream as a 30 Hz run
-	 * leaves it. */
+	/* What the frame took goes back whether or not the snapshot was
+	 * applied: a cutscene frame drawn live still has frigup_lara roll Lara's
+	 * speech head from GetRandomControl. The next tick reads the stream's
+	 * position and GetHeight's globals as the last frame drawn at a tick's
+	 * own state left them, or the last tick when no frame was (fps_mode 2).
+	 * RNGLOG counts first. */
+	if (gLogEnabled)
+		NoteGiveBack();
+
 	if (g_seedSaved)
 	{
 		SeedRandomControl(g_seed);
+		trigger_index = g_hTrigger;
+		tiltxoff = g_hTiltX;
+		tiltyoff = g_hTiltY;
+		OnObject = g_hOnObject;
+		height_type = g_hType;
 		g_seedSaved = false;
 	}
 

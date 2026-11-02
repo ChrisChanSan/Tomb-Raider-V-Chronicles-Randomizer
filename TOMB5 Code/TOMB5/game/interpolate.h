@@ -32,10 +32,13 @@
  *
  * Particles with a velocity are walked back by that velocity instead
  * (InterpTrailLong); lightning is re-rolled each tick and stays at 30 Hz.
- * The logic RNG (rand_1) is restored after a tween frame because the draw
- * path calls GetRandomControl (star twinkle, floor lasers, muzzle flash, lens
+ * The logic RNG (rand_1) is restored after a tween frame, a blended frame
+ * and every frame of fps_mode 2's display cadence, because the draw path
+ * calls GetRandomControl (star twinkle, floor lasers, muzzle flash, lens
  * flare, speech head); without that the simulation would diverge between the
- * frame rates. At fps_mode 0 nothing here writes a byte. */
+ * frame rates. GetHeight's globals (trigger_index, tiltxoff, tiltyoff,
+ * OnObject, height_type), which the shadows, the footprints and the rain set
+ * in the frame, go back with it. At fps_mode 0 nothing here writes a byte. */
 
 // The state before the last logic tick. Called once per tick.
 void InterpCapturePrev();
@@ -153,6 +156,23 @@ bool InterpIsTweenFrame();
  * DrawPhaseGame and before the tick it equals InterpIsTweenFrame(). Always
  * false at fps_mode 0. */
 bool InterpDrawnFrameWasTween();
+
+/* The frame being drawn wrote the blended state into the live one (the
+ * snapshot was applied): items, the camera, Lara's aim and the cutscene's
+ * actors stand between two ticks until InterpEndFrame puts them back. Not
+ * the tween latch: at fps_mode 2 the frame that carries the tick is drawn
+ * blended too, and at 60 Hz there the other one as well, at an alpha of 0.5
+ * or more (live only when the clock clamps it at 1). What the draw builds
+ * from this state and the logic reads - Lara's joint set and her wet nodes
+ * (game\draw.cpp, LaraJointsBuild) - is built again from the live state
+ * when it is true. Always false at fps_mode 0. */
+bool InterpFrameBlended();
+
+/* RNGLOG, one line per level with -log: the frames, the frames that gave
+ * the generator's state and GetHeight's globals back and the draws they
+ * undid, the frames that kept them and the draws they left in the stream.
+ * Called from LaraJointsLevelEnd (game\draw.cpp). */
+void InterpRngLevelEnd();
 
 /* A present that is not a 60 Hz game frame's own. Called from S_DumpScreen
  * and S_DumpScreenFrame; clears the tween latch. */

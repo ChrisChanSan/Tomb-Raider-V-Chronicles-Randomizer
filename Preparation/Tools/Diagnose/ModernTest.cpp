@@ -11460,6 +11460,112 @@ static void shell_rule()
 	free(level);
 }
 
+/* Stopping a sound the level does not carry (game\sound.cpp,
+ * StopSoundEffect): its soundmap entry is -1, or -2 once SoundEffect has
+ * logged it, and the function returns before it indexes sample_infos with
+ * it - the contract SoundEffect keeps. Without the test the read landed
+ * before the table and the loop cut running sounds. */
+static void sound_stop()
+{
+	char* sound = hd_switch_text("../../game/sound.cpp");
+	static char body[4096];
+
+	glass_body(sound, "void StopSoundEffect(long sfx)", body, sizeof(body));
+
+	const char* read = strstr(body, "lut=sample_lut[sfx];");
+	const char* test = strstr(body, "if(lut<0)return;");
+	const char* index = strstr(body, "sample_infos[lut]");
+
+	ok(read && test && index && read < test && test < index,
+		"sound stop: StopSoundEffect tests lut before sample_infos[lut]",
+		!!read + !!test + !!index, 3);
+
+	glass_body(sound, "long SoundEffect(long sfx, PHD_3DPOS* pos, long flags)",
+		body, sizeof(body));
+	ok(strstr(body, "if(lut==-1)Log(\"Nonpresentsample:%d\",sfx);"
+		"sample_lut[sfx]=-2;return0;}if(lut==-2)return0;") != 0,
+		"sound stop: SoundEffect keeps its -1 and -2", 0, 0);
+
+	free(sound);
+}
+
+/* The fixed camera that is not there (game\camera.cpp, CalculateCamera):
+ * the forced fixed camera makes the type FIXED and leaves camera.number at
+ * -1, and the target block indexed camera.fixed with it. It now asks for
+ * a number first, as the sniper test at the top of the function does.
+ * Without one it takes the torso target, as most level files' bytes before
+ * the table had it, and the look-key lock stays at the 0 it was cleared
+ * to; a named camera reads its flags as before. Every
+ * camera.fixed[camera.number] in the function sits behind a
+ * camera.number >= 0. */
+static void camera_fixed_none()
+{
+	char* camera = hd_switch_text("../../game/camera.cpp");
+	static char body[131072];
+
+	glass_body(camera, "void CalculateCamera()", body, sizeof(body));
+
+	const char* clear = strstr(body, "SniperCamActive=0;");
+	const char* forced = strstr(body, "if(UseForcedFixedCamera&&"
+		"!FirstPersonEnabled())camera.type=FIXED_CAMERA;");
+	const char* sniper = strstr(body, "camera.number>=0&&"
+		"(camera.fixed[camera.number].flags&2);");
+	const char* block = strstr(body, "if(camera.type!=CHASE_CAMERA&&"
+		"camera.flags!=3)//");
+	const char* target = strstr(body, "longtorso=1;if(camera.number>=0)"
+		"fixed=&camera.fixed[camera.number];SniperCamActive=fixed->flags&3;"
+		"torso=fixed->flags&2;}if(torso)v.x=0;v.y=0;v.z=0;"
+		"GetLaraJointPos(&v,LMX_TORSO);camera.target.x=v.x;"
+		"camera.target.y=v.y;camera.target.z=v.z;gotit=1;}");
+
+	ok(clear && forced && sniper && block && target && clear < forced &&
+		forced < sniper && sniper < block && block < target,
+		"camera fixed none: the target block asks camera.number >= 0 "
+		"before camera.fixed and takes the torso without one",
+		!!clear + !!forced + !!sniper + !!block + !!target, 5);
+
+	long n = 0;
+
+	for (const char* p = body; (p = strstr(p, "camera.fixed[camera.number]"));
+		p++)
+		n++;
+
+	ok(n == 2, "camera fixed none: two reads of camera.fixed[camera.number] "
+		"in CalculateCamera, both guarded", n, 2);
+
+	free(camera);
+}
+
+/* The inventory's empty slots (game\newinv2.cpp,
+ * setup_objectlist_startposition2): the ring is cleared to NO_ITEM and
+ * filled up to numobjectsinlist, and the walk over all NUM_INVOBJ slots
+ * indexed inventry_objects_list with an empty slot's -1. It skips them
+ * now and keeps the sibling's bound; the sibling compares invitem itself
+ * and stays as it was. */
+static void inventory_start_empty()
+{
+	char* inv = hd_switch_text("../../game/newinv2.cpp");
+	static char body[4096];
+
+	glass_body(inv, "void setup_objectlist_startposition2(short newobj)",
+		body, sizeof(body));
+	ok(strstr(body, "for(inti=0;i<NUM_INVOBJ;i++)invitem=rings["
+		"RING_INVENTORY]->current_object_list[i].invitem;if(invitem>=0&&"
+		"inventry_objects_list[invitem].object_number==newobj)rings["
+		"RING_INVENTORY]->curobjinlist=i;}") != 0 &&
+		strstr(body, "inventry_objects_list[rings[") == 0,
+		"inventory start: empty slots are skipped before the table", 0, 0);
+
+	glass_body(inv, "void setup_objectlist_startposition(short newobj)",
+		body, sizeof(body));
+	ok(strstr(body, "for(inti=0;i<NUM_INVOBJ;i++)if(rings[RING_INVENTORY]"
+		"->current_object_list[i].invitem==newobj)rings[RING_INVENTORY]->"
+		"curobjinlist=i;}") != 0,
+		"inventory start: the sibling compares invitem itself", 0, 0);
+
+	free(inv);
+}
+
 /* The split of a see-through draw call (hd_render.cpp, GlassSplits) and the
  * additive run's glass (AddGlass): their numbers and their bodies read out
  * of the engine's text, and their rules run over the census of the fifteen
@@ -36330,6 +36436,254 @@ static void brawler_reach()
 	free(lara);
 }
 
+/* Where a body's text stands in an engine text, or -1. */
+static long joints_at(const char* text, const char* what)
+{
+	const char* p = text && what ? strstr(text, what) : 0;
+
+	return p ? (long)(p - text) : -1L;
+}
+
+/* Lara's joints for the logic (game\draw.cpp, LaraJointsBuild and
+ * LaraJointsLive). One function builds her matrices and wet nodes, called by
+ * the frame with `draw` 1 and by the pass after a blended frame with 0; its
+ * `draw` body is DrawPhaseGame's old block in the old order; the pass runs
+ * right after InterpEndFrame; at fps_mode 0 no frame is blended, so the pass
+ * never runs and the wet nodes are written as before. Read from the tree. No
+ * arithmetic check beside it: the joint chain (CalcLaraMatrices) runs on the
+ * matrix stack of specific\3dmath.cpp with the level's bones, animations and
+ * lara_item, none of which builds beside this suite - and both calls go
+ * through that one function. */
+static void lara_joints()
+{
+	char* draw = hd_switch_text("../../game/draw.cpp");
+	char* cut = hd_switch_text("../../game/deltapak.cpp");
+	char* lara = hd_switch_text("../drawlara.cpp");
+	char* interp = hd_switch_text("../../game/interpolate.cpp");
+	char* flow = hd_switch_text("../../game/gameflow.cpp");
+	static char body[65536];
+	long a, b, c, d, e;
+
+	printf("Lara's joints for the logic: one build, the pass after a blend\n");
+
+	ok(draw && cut && lara && interp && flow, "lara joints: the five files",
+		!!draw + !!cut + !!lara + !!interp + !!flow, 5);
+
+	glass_body(draw, "void LaraJointsBuild(long draw)", body, sizeof(body));
+	a = joints_at(body, "if(draw)CalcLaraMatrices(0);InterpArmLogFrame();");
+	b = joints_at(body, "}phd_PushUnitMatrix();CalcLaraMatrices(1);"
+		"phd_PopMatrix();if(GLOBAL_playing_cutseq)frigup_lara(draw);"
+		"SetLaraUnderwaterNodes();g_joints.blended=draw&&"
+		"InterpFrameBlended();");
+	ok(a >= 0 && b > a, "lara joints: the build keeps the frame's old order",
+		b, a + 1);
+	ok(hd_switch_count(draw, "CalcLaraMatrices(0);") == 1 &&
+		hd_switch_count(draw, "CalcLaraMatrices(1);") == 1 &&
+		hd_switch_count(draw, "frigup_lara(") == 1 &&
+		hd_switch_count(draw, "SetLaraUnderwaterNodes();") == 1,
+		"lara joints: one build in draw.cpp, no second chain",
+		hd_switch_count(draw, "CalcLaraMatrices(1);"), 1);
+
+	glass_body(draw, "long DrawPhaseGame()", body, sizeof(body));
+	a = joints_at(body, "InterpBeginFrame(alpha);");
+	b = joints_at(body, "LaraJointsBuild(1);");
+	c = joints_at(body, "S_DumpScreen()");
+	d = joints_at(body, "InterpEndFrame();LaraJointsLive();");
+	e = joints_at(body, "ProfileFrameEnd();");
+	ok(a >= 0 && b > a && c > b && d > c && e > d,
+		"lara joints: the frame builds, presents, lets go, then the pass",
+		d, c + 1);
+	ok(hd_switch_count(body, "LaraJointsBuild(1);") == 1 &&
+		hd_switch_count(body, "CalcLaraMatrices(") == 0 &&
+		hd_switch_count(body, "LaraJointsLive();") == 1,
+		"lara joints: the frame calls the build once and the pass once",
+		hd_switch_count(body, "LaraJointsBuild(1);"), 1);
+
+	glass_body(draw, "void LaraJointsLive()", body, sizeof(body));
+	ok(!strcmp(body, "if(!g_joints.blended)return;LaraJointsBuild(0);"
+		"g_joints.passes++;"),
+		"lara joints: the pass runs only after a blended frame", 0, 1);
+
+	/* fps_mode 0: InterpAlphaNow gives 1, InterpBeginFrame returns before
+	 * the snapshot is applied, so InterpFrameBlended stays false. */
+	glass_body(interp, "bool InterpFrameBlended()", body, sizeof(body));
+	ok(!strcmp(body, "returng_applied;"),
+		"lara joints: blended is the applied snapshot", 0, 1);
+	glass_body(interp, "void InterpBeginFrame(float alpha)", body,
+		sizeof(body));
+	a = joints_at(body, "if(alpha>=1.0F||!items||!g_prevCam.valid)");
+	b = joints_at(body, "g_applied=true;");
+	ok(a >= 0 && b > a && hd_switch_count(interp, "g_applied = true;") == 1,
+		"lara joints: a frame at alpha 1 is never blended", b, a + 1);
+	glass_body(interp, "float InterpAlphaNow()", body, sizeof(body));
+	ok(strstr(body, "if(mode!=1)return1.0F;") != 0,
+		"lara joints: fps_mode 0 draws at alpha 1", 0, 1);
+
+	glass_body(cut, "void frigup_lara(long draw)", body, sizeof(body));
+	a = joints_at(body, "if(draw&&cutseq_num==18&&GLOBAL_cutseq_frame<=130)");
+	b = joints_at(body, "if(draw)Rich_CalcLaraMatrices_Normal(frame,bone,0);"
+		"phd_PushUnitMatrix();Rich_CalcLaraMatrices_Normal(frame,bone,1);"
+		"phd_PopMatrix();if(!draw)return;");
+	c = joints_at(body, "HairControl(0,0,frame);");
+	d = joints_at(body, "GLaraShadowframe=frig_shadow_bbox;");
+	ok(a >= 0 && b > a && c > b && d > c,
+		"lara joints: the cutscene's build, the pass stops at the joints",
+		c, b + 1);
+
+	glass_body(lara, "void SetLaraUnderwaterNodes()", body, sizeof(body));
+	ok(hd_switch_count(body, "if(!InterpFrameBlended())lara.wet[i]=252;")
+		== 1 && hd_switch_count(body, "lara.wet[i]=252;") == 1,
+		"lara joints: a blended frame wets no node", 0, 1);
+
+	glass_body(cut, "void handle_cutseq_triggering(long name)", body,
+		sizeof(body));
+	ok(body[0] && !strstr(body, "GetLaraJointPos(") &&
+		!strstr(body, "lara_joint_matrices"),
+		"lara joints: nothing between the frame and the tick reads them",
+		0, 1);
+
+	ok(hd_switch_count(flow, "LaraJointsLevelEnd();") == 2 &&
+		hd_switch_count(draw, "\"JOINTLOG passes=%ld ticks=%lu "
+		"tween_frames=%ld blended_frames=%ld\"") == 1,
+		"lara joints: JOINTLOG at the end of a level and of the title",
+		hd_switch_count(flow, "LaraJointsLevelEnd();"), 2);
+
+	free(draw);
+	free(cut);
+	free(lara);
+	free(interp);
+	free(flow);
+}
+
+/* What a frame leaves the logic besides Lara's joints (game\interpolate.cpp,
+ * InterpBeginFrame / InterpEndFrame; game\draw.cpp, PrintObjects). The
+ * generator's state and GetHeight's five globals are saved at every frame
+ * and given back after a tween frame, a blended frame and every frame of
+ * fps_mode 2's display cadence; at fps_mode 0 none of the three holds, so
+ * nothing is given back and the draws feed the stream as before. A corpse is
+ * marked only by the frame that is no tween frame, one per tick. RNGLOG
+ * counts both kinds of frame per level. A closed door changes rooms' item
+ * lists only on that frame too (game\door.cpp, ProcessClosedDoors, called
+ * by DrawRooms and RenderIt), and DOORLOG follows RNGLOG with its counts.
+ * Read from the tree. */
+static void logic_leftovers()
+{
+	char* draw = hd_switch_text("../../game/draw.cpp");
+	char* interp = hd_switch_text("../../game/interpolate.cpp");
+	char* stubs = hd_switch_text("../function_stubs.cpp");
+	char* door = hd_switch_text("../../game/door.cpp");
+	char* flow = hd_switch_text("../../game/gameflow.cpp");
+	static char body[65536];
+	long a, b, c, d;
+
+	printf("What a frame leaves the logic: the generator, GetHeight, the "
+		"corpses, the doors\n");
+
+	ok(draw && interp && stubs, "leftovers: the three files",
+		!!draw + !!interp + !!stubs, 3);
+
+	glass_body(interp, "void InterpBeginFrame(float alpha)", body,
+		sizeof(body));
+	a = joints_at(body, "constbooldisplayBound=ActiveFpsMode()==2&&"
+		"GameFrameMinTicks()==0;if(displayBound)");
+	b = joints_at(body, "elseg_tween=(alpha<1.0F);");
+	c = joints_at(body, "g_seed=GetRandomControlSeed();"
+		"g_hTrigger=trigger_index;g_hTiltX=tiltxoff;g_hTiltY=tiltyoff;"
+		"g_hOnObject=OnObject;g_hType=height_type;"
+		"g_seedSaved=g_tween||displayBound;");
+	d = joints_at(body, "if(alpha>=1.0F||!items||!g_prevCam.valid)");
+	ok(a >= 0 && b > a && c > b && d > c,
+		"leftovers: saved at every frame before the first exit, kept back "
+		"on a tween frame and at fps_mode 2's cadence", c, b + 1);
+
+	a = joints_at(body, "g_applied=true;g_alpha=alpha;");
+	b = joints_at(body, "g_seedSaved=true;");
+	ok(a > d && b > a && hd_switch_count(body, "g_seedSaved=true;") == 1,
+		"leftovers: a blended frame gives back, and only it besides the two",
+		b, a + 1);
+
+	/* At fps_mode 0 the alpha is 1 (lara joints checks InterpAlphaNow) and
+	 * no display cadence runs, so the tween latch, the blend and the
+	 * cadence are all false: g_seedSaved is written only five times, its
+	 * declaration, the two above, the give-back and InterpInvalidate. */
+	ok(hd_switch_count(interp, "g_seedSaved = ") == 5,
+		"leftovers: no other path gives back",
+		hd_switch_count(interp, "g_seedSaved = "), 5);
+
+	glass_body(interp, "void InterpEndFrame()", body, sizeof(body));
+	ok(hd_switch_count(body, "if(gLogEnabled)NoteGiveBack();"
+		"if(g_seedSaved)SeedRandomControl(g_seed);"
+		"trigger_index=g_hTrigger;tiltxoff=g_hTiltX;tiltyoff=g_hTiltY;"
+		"OnObject=g_hOnObject;height_type=g_hType;g_seedSaved=false;}") == 1,
+		"leftovers: the frame's end counts, then gives back all six", 0, 1);
+
+	ok(hd_switch_count(stubs, "rand_1 = 0x41C64E6D * rand_1 + 12345;") == 1 &&
+		hd_switch_count(interp, "x = 0x41C64E6DUL * x + 12345UL;") == 1,
+		"leftovers: RNGLOG steps the generator as GetRandomControl does",
+		0, 1);
+	ok(hd_switch_count(interp, "\"RNGLOG frames=%ld given_back=%ld "
+		"undone=%ld kept_frames=%ld \"") == 1,
+		"leftovers: one RNGLOG line", 0, 1);
+	glass_body(draw, "void LaraJointsLevelEnd()", body, sizeof(body));
+	a = (long)strlen(body) - (long)strlen("InterpRngLevelEnd();");
+	ok(a > 0 && joints_at(body, "InterpRngLevelEnd();") == a,
+		"leftovers: RNGLOG follows JOINTLOG", 0, 1);
+
+	glass_body(draw, "void PrintObjects(short room_number)", body,
+		sizeof(body));
+	ok(hd_switch_count(body, "if(item->after_death>0&&!InterpIsTweenFrame())"
+		"g_afterDeathSeen[i]=1;") == 1 &&
+		hd_switch_count(draw, "g_afterDeathSeen[i] = 1;") == 1,
+		"leftovers: a corpse is marked by the tick's frame only", 0, 1);
+
+	ok(door && flow, "leftovers: the door and the flow", !!door + !!flow, 2);
+
+	glass_body(door, "void ProcessClosedDoors()", body, sizeof(body));
+	a = joints_at(body, "if(InterpIsTweenFrame())g_doorTweens++;return;}"
+		"g_doorFrames++;");
+	b = joints_at(body, "for(inti=0;i<32;i++)");
+	c = joints_at(body, "ItemNewRoom(");
+	ok(a >= 0 && b > a && c > b && hd_switch_count(body, "ItemNewRoom(") == 2
+		&& hd_switch_count(body, "g_doorMoves++;") == 2,
+		"leftovers: a closed door changes lists on the tick's frame only",
+		b, a + 1);
+
+	/* The gate stands in the function, so it covers every caller: the two
+	 * walks that call it, and no other file of the two. */
+	a = hd_switch_count(draw, "ProcessClosedDoors();");
+	glass_body(draw, "void DrawRooms(short current_room)", body,
+		sizeof(body));
+	b = hd_switch_count(body, "ProcessClosedDoors();");
+	glass_body(draw, "void RenderIt(short current_room)", body,
+		sizeof(body));
+	c = hd_switch_count(body, "ProcessClosedDoors();");
+	ok(a == 2 && b == 1 && c == 1 &&
+		hd_switch_count(door, "ProcessClosedDoors(") == 1,
+		"leftovers: both walks reach the doors through the gate",
+		a * 100 + b * 10 + c, 211);
+
+	ok(hd_switch_count(door, "\"DOORLOG moves=%ld frames=%ld "
+		"skipped_tween=%ld\"") == 1,
+		"leftovers: one DOORLOG line", 0, 1);
+	glass_body(flow, "void DoTitle(uchar name, uchar audio)", body,
+		sizeof(body));
+	a = hd_switch_count(body, "LaraJointsLevelEnd();//JOINTLOG,with-log"
+		"ClosedDoorsLevelEnd();//DOORLOG,with-log");
+	glass_body(flow, "void DoLevel(uchar Name, uchar Audio)", body,
+		sizeof(body));
+	b = hd_switch_count(body, "LaraJointsLevelEnd();//JOINTLOG,with-log"
+		"ClosedDoorsLevelEnd();//DOORLOG,with-log");
+	ok(a == 1 && b == 1 && hd_switch_count(flow, "ClosedDoorsLevelEnd();")
+		== 2, "leftovers: DOORLOG follows RNGLOG at the title and a level",
+		a + b, 2);
+
+	free(draw);
+	free(interp);
+	free(stubs);
+	free(door);
+	free(flow);
+}
+
 int main()
 {
 	printf("ModernTest - the arithmetic of the modern control\n");
@@ -36390,6 +36744,9 @@ int main()
 	hd_switch_wiring();
 	registry_old_water();
 	hd_feet();
+	sound_stop();
+	camera_fixed_none();
+	inventory_start_empty();
 	glass_split();
 	shell_rule();
 	card_rule();
@@ -36587,6 +36944,8 @@ int main()
 	x64_layout();
 	replay_rule();
 	collide_lists();
+	lara_joints();
+	logic_leftovers();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

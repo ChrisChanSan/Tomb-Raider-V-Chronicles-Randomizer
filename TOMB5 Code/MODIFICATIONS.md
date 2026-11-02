@@ -16,7 +16,7 @@ small local fixes that predate this repository and are documented in the files t
 (`dxsound.cpp` LOCSOFTWARE, `function_stubs.cpp` DO_LOG).
 
 Measured on **2026-11-02** by comparing every file under `TOMB5/` against that first
-commit: **135 files changed, 199 entirely new - 334 in all**, **284** of them carrying
+commit: **136 files changed, 199 entirely new - 335 in all**, **285** of them carrying
 the modification notice at the top, which `grep -rl "Modified 2026 by ChrisChanSan"
 TOMB5/` lists. The project file `tomb5.vcxproj` and its filters file carry the same
 notice as an XML comment, and `resource.h` and `tomb5.rc` beside them as comment lines.
@@ -24,7 +24,7 @@ notice as an XML comment, and `resource.h` and `tomb5.rc` beside them as comment
 234 are deleted: upstream's zlib, `tomb5/libs/zlib/`, since the engine reads deflate
 with the project's own reader (#308).
 
-50 of the 334 do not carry the notice, and none of them should:
+50 of the 335 do not carry the notice, and none of them should:
 
 - the 40 `specific/hd/hd_shader/*.inc` (9 vertex and 31 pixel shaders) are compiler
   output (`fxc` bytecode as a C array), regenerated from the eleven `.hlsl` files beside
@@ -17999,6 +17999,197 @@ and names the bytes below 4 GB it found held.
 
 **Commits.** `d6f10914` (the sanitizer build and `-high`), `ad6579b3` (`FreeLevel`'s
 clears), `198fea8b` (the checks), `05492814` (the comments).
+### The logic reads Lara's joints from the live state, not a blend (#310)
+2026-11-02
+
+**What.** In the 60 fps modes the game logic takes Lara's joints - what `GetLaraJointPos`
+gives the drones' aim, the ledge test, the weapons, the fixed and look cameras, the
+cutscenes' hands, the bubbles and the drips - and her wet nodes from her pose at the
+logic tick, as the 30 fps mode does, and never from a frame drawn between two ticks.
+The logic's random numbers, `GetHeight`'s leftovers and the corpse fade's count no longer
+depend on how many frames the display shows between two ticks either.
+
+**Why.** A frame drawn between two ticks built `lara_joint_matrices` and the wet nodes
+from the blended pose. `InterpEndFrame` put the items, the camera and the aim back, not
+these, and the next tick read them, so which blend the logic saw depended on when the
+display presented. A recording of ANDREA2 replayed with other frame timing parted at tick
+193: the drone's shot hit Lara in the recording and the wall in the replay, every input
+equal. The frame also set `lara.wet` from the blended nodes, and `TriggerLaraDrips` draws
+a random number for every wet node.
+
+**How.** `game/draw.cpp`: `LaraJointsBuild(draw)` is `DrawPhaseGame`'s old block in its
+old order - `CalcLaraMatrices(0)`, the ARMLOG frame, `CalcLaraMatrices(1)` under a unit
+matrix, `frigup_lara` in a cutscene, `SetLaraUnderwaterNodes` - and the frame calls it
+with 1. `LaraJointsLive`, right after `InterpEndFrame`, calls it with 0 when the frame was
+blended: the joint set, a cutscene's joint set and the wet nodes again, from the state of
+the last tick, with no view set, no ARMLOG line, no caption and no braid step. There is
+no second copy of the joint chain. The pass runs there and not at the top of the next
+tick because `DoLevel` calls `handle_cutseq_triggering` between the frame and the tick,
+and a cutscene's start there writes Lara's gun state, which the arms of the chain read.
+`game/interpolate.cpp`: `InterpFrameBlended`, the snapshot applied - not the tween
+latch, since at the display's rate the frame that carries the tick is drawn blended.
+`game/deltapak.cpp`: `frigup_lara(draw)` stops after the joint set without `draw`.
+`specific/drawlara.cpp`: `SetLaraUnderwaterNodes` writes `lara.wet` only on a frame that
+is not blended. With `-log`, `JOINTLOG passes= ticks= tween_frames= blended_frames=`
+once at the end of each level and of the title (`LaraJointsLevelEnd`,
+`game/gameflow.cpp`). At fps_mode 0 no frame is blended: the pass never runs, `lara.wet`
+is written as before, and the frame's calls are the old ones in the old order.
+`game/deltapak.h` carries the modification notice now. ModernTest's group `lara_joints`
+(13 checks) holds the order and the wiring in the engine's text.
+
+What the frames leave behind besides the joints, four more:
+- The generator's state. `game/interpolate.cpp`: `InterpBeginFrame` saves the state of
+  `GetRandomControl` at every frame, and `InterpEndFrame` gives it back after a tween
+  frame, after a blended frame and after every frame of the display's cadence. At
+  *Display* the frame that carries the tick is blended, and its draws (star twinkle,
+  floor lasers, muzzle flash, lens flare, speech head) stayed in the stream; how many
+  depended on what the blended camera saw. It is drawn live there only on a camera cut,
+  without a previous state, or when the clock holds its blend at 1 - the last is the
+  clock's doing, hence every frame of that cadence. At 60 the frame that keeps its draws
+  is the live one, drawn at the tick's state as at 30, so 60 plays the stream of 30 in
+  steady frames; *Display* keeps none and plays a stream of its own, the same at every
+  display rate. A late frame at 60 can put a tick behind a tween frame alone; that tick
+  misses one picture's draws, as a hitch at 30 does elsewhere.
+- GetHeight's five globals (`trigger_index`, `tiltxoff`, `tiltyoff`, `OnObject`,
+  `height_type`) go back with it, saved and given back by the same rule. The three
+  shadows, the footprints' draw, the rain's splash and a cutscene's braid call
+  `GetHeight` at the frame's positions. `AddFootprint` and `GetProperFootPos` read
+  `OnObject` with no `GetHeight` of their own, and every `trigger_index` reader whose
+  own `GetHeight` returns `NO_HEIGHT` reads the previous caller's value (`GetHeight` sets
+  it only past that return) - the frame's, when nothing in the tick called it first.
+  The classic mode has the same readers, so the shadows do not restore on their own: an
+  unconditional restore there would change it.
+- The corpse fade's marks. `game/draw.cpp`: `PrintObjects` marks a dead body only on a
+  frame that is no tween frame, one per tick: every frame at 30, the live one at 60, the
+  frame that carries the tick at *Display*. The tick had counted the union of every
+  picture since the last tick, two at 60 and two or three at 144 Hz. At *Display* that
+  frame is blended at an alpha the clock sets, so a room at the picture's edge can still
+  count differently between display rates; a room walk at the live state would close
+  that and was not built (it writes the rooms' bounds, which `ProcessClosedDoors` reads).
+- The closed doors' room lists. `game/door.cpp`: `ProcessClosedDoors` puts a closed door
+  into the item list of the room across (`draw_room`) when the frame's walk reached that
+  room, else back into its own room's list, at the head of the list it enters. Lara's
+  object collision, `GetCollidedObjects` (the ledge grab, the block tests, the flare,
+  the torch) and `ObjectOnLOS2` (Lara's and the drones' shots) walk those lists, and a
+  door in the other room's list escapes them where only one side is walked. It ran on
+  every frame, so the tick read the last frame's choice. It now returns at once on a
+  tween frame, which gates both callers (`DrawRooms`; `RenderIt` has none): every frame
+  at 30, the live one at 60 - the lists of 30 -, the frame that carries the tick at
+  *Display*. A tween frame draws the door from the list the carrying frame chose,
+  clipped to that room's window, and not at all where its own walk left that room out -
+  for the rest of the tick at most, with the door's portal at the edge of the view. At
+  *Display* the residual is the corpse marks': the lists follow that blended frame's
+  camera, once per tick.
+
+With `-log`, `RNGLOG frames= given_back= undone= kept_frames= kept_draws= heights= over=`
+follows each `JOINTLOG` line (`InterpRngLevelEnd`): the draws counted as steps of the
+generator from the saved state, up to 65,536 (`over=` past it). `DOORLOG moves= frames=
+skipped_tween=` follows it (`ClosedDoorsLevelEnd`, `game/gameflow.cpp`): the doors'
+moves, the frames that walked them and the tween frames that did not. ModernTest's group
+`logic_leftovers` (14 checks) holds the save, the give-back, the rule, the mark and the
+doors' gate, its two callers and the line.
+
+**Measured.** 76 places in the tick read the joint set (the item controls run first, from
+`ControlPhase`'s item loop, before `LaraControl` and the camera); the frame's own readers
+are the lighting, the three shadows, the sparks and the HD soft body. Read by nothing in
+the logic and left as they are: the view set `lara_matrices`, the nodes' ambient and
+`GLaraShadowframe`. A pass costs the joint half of what every frame builds: one per tick
+at 60, nearly one per frame at the display's rate. Of the rooms' item-list walkers in
+`game/` and `specific/`, three in the logic can find a closed door or miss it by its
+list (above); the others filter by slot, by state or by exact place, or run at the load.
+The save writes `items[]` by index and no list, so it is not one of them.
+
+**Commits.** `d377aa82`, `a4ccf29a`, `b5c16db6`.
+
+### A sound the level lacks is not stopped through info -1 (#311)
+2026-11-02
+
+**What.** `StopSoundEffect` returns when the level carries no sample for the sound it is
+asked to stop, as `SoundEffect` does, and stops nothing.
+
+**Why.** It read `lut = sample_lut[sfx]` and indexed `sample_infos[lut]` without asking
+whether `lut` was -1 ("not in this level") or -2 (the same, once `SoundEffect` has logged
+it). `sample_infos[-1].flags` is the last entry of `sample_lut` in the bump allocator,
+-1 in every vanilla level, so the variation count came out as 15 and the loop stopped
+every running sound whose info index lay in -1..13: the free slots' idle channels and
+the level's first fourteen sounds. `lara_as_stop` asks to stop `SFX_LARA_SLIPPING` every
+tick, and RICHCUT2 has no sample for it (four infos in all, none of the stopped sounds).
+The sanitizer build showed it there as `use-after-poison` at `game/sound.cpp` in
+`StopSoundEffect` under `lara_as_stop`: 30 bytes into the red zone before `sample_infos`.
+An original fault of the engine.
+
+**How.** `game/sound.cpp`: `if (lut < 0) return;` after the read, without a log line,
+since it runs every tick. Nothing else in the function changes. ModernTest's group
+`sound_stop` (2 checks) holds the test before the index and `SoundEffect`'s own -1/-2.
+
+**Measured.** The eleven calls stop six sounds: `SFX_LARA_SLIPPING` (3, three calls),
+`SFX_LARA_FALL` (30, three), `SFX_HK_FIRE` (68, two), `SFX_J_GRAB_MOTOR_B_LP` (257),
+`SFX_J_GRAB_WINCH_UP_LP` (260), `SFX_GOD_HEAD_CHARGE` (278). Of the vanilla levels the
+thirteen playable ones carry 3 and 30; RICHCUT2 and the title carry neither. 68 is in the
+three RICH levels only, 257 and 260 in JOBY2 only, 278 in ANDREA2 only; their calls run
+only where their item or weapon is (the randomizer's HK and drone transfers bring 68).
+`S_SoundStopSample` on a free slot stops that slot's channel, which no running sound uses:
+every start goes through `SoundEffect` and fills the slot of the channel it got.
+The other readers index only after a test: `GetPanVolume` and `SoundEffects` (slot >= 0),
+`SoundEffect`, the HQ bridge (`hqsfx.cpp`, `sfxbank.cpp`) and the footstep sets
+(`hd_feet.cpp`).
+
+**Commits.** `b4d2ccd6`.
+
+### No fixed camera, no camera.fixed[-1]; empty ring slots skipped (#312)
+2026-11-03
+
+**What.** Two reads at index -1. `CalculateCamera` reads a fixed camera's flags only when
+there is a camera number; without one - the forced fixed camera - it aims at Lara's torso
+in every level, as most level files had it by accident. `setup_objectlist_startposition2`
+skips the inventory ring's empty slots before it indexes the object table with them.
+
+**Why.** The forced fixed camera - the floor trapdoor lift, the ceiling trapdoor pull, the
+turn switch - makes `camera.type` FIXED at the top of `CalculateCamera` and never names a
+camera, so `camera.number` is the -1 the reset at the end of the previous pass left, on
+every tick it runs. The target block then read `camera.fixed[-1].flags` into
+`SniperCamActive` and, with bit 1 set, aimed at Lara's torso. `camera.fixed` is allocated
+right after `spriteinfo`, so the 16 bytes before it are the last sprite's texture
+corners and "flags" is the high half of its `y2`: 3 in ten level files, 2 in four, 0 in
+two. The sanitizer build showed it as `use-after-poison` in `CalculateCamera` (lines 1583
+and 1585) in ANDREA2 at the tick the lift began.
+The inventory, opened on an item (a keyhole, a puzzle hole, the crowbar door), looks for
+the item's slot over all `NUM_INVOBJ` ring slots and indexed `inventry_objects_list` with
+each slot's `invitem`; the slots past `numobjectsinlist` hold `NO_ITEM`. The sanitizer
+showed `global-buffer-overflow` 20 bytes before `inventry_objects_list`. Both original
+faults of the engine.
+
+**How.** `game/camera.cpp`: inside the target block, `camera.fixed` is read only for
+`camera.number >= 0`, as the sniper test at the top of the function already reads; a
+named camera sets `SniperCamActive` and the torso target from its flags as before.
+Without a number the torso path (`GetLaraJointPos(&v, LMX_TORSO)`, `gotit = 1`) is taken
+explicitly and `SniperCamActive` stays at the 0 it is cleared to at the start of every
+pass. The torso is the decision because fourteen of the sixteen level files read bit 1
+set there and so ran that way; now it holds everywhere and no longer depends on a
+sprite's coordinates. ANDY3 and DEL, whose bytes were 0, change from the chase camera's
+point to the torso. The lock is not kept: it only clears the look key (`control.cpp`)
+and keeps the binoculars shut (`newinv2.cpp`), both of which the animation already
+rules out, and it was 2 or 3 by chance. `game/newinv2.cpp`: the walk keeps the sibling's
+`NUM_INVOBJ` bound (the ring's clears and searches use it too) and skips `invitem < 0`;
+the sibling compares `invitem` itself and stays as it is. ModernTest's groups
+`camera_fixed_none` (2 checks) and `inventory_start_empty` (2) sit beside `sound_stop`.
+
+**Measured.** The pair comes from the forced camera alone: the log runs Lara in AS_BACK
+into place, then anim 317 (`ANIM_LIFTTRAP`, state 93) from the tick of the report, the
+only lift, pull or turn of that run. Every other FIXED or HEAVY write comes with a number
+(`control.cpp` TO_CAMERA and `RefreshCamera`), and the type is reset each pass. The other
+`camera.fixed[camera.number]` reads ask first or follow the assignment: the sniper test,
+TO_CAMERA, `RefreshCamera` and the Target command's `NO_ITEM` test. `FixedCamera` reads it
+only outside the forced camera; a FIXED or HEAVY type without a number could reach it
+only through the binoculars' restore of `camera.old_type`, which no log has shown, so it
+is left as it was (the target block takes the torso on that way as well). Against the
+build before #312: in the fourteen files the target stays the torso and only the lock
+goes; in ANDY3 and DEL the target moves from the chase camera's point to the torso.
+The x86 build read `dels_handy_combine_table`'s last-but-one `combined_item` (80) as the
+empty slot's object number; the ring is opened on puzzle items, keys, the crowbar and the
+wet cloth only (172 to 240), so the start slot was never wrong there.
+
+**Commits.** `c7df99bb`, `010a1b06`.
 
 ## 3. Randomizer changes since Beta 1.0
 
@@ -18418,3 +18609,6 @@ entries above.
 | #307 | section 3 (the randomizer); no engine entry: no file under `TOMB5 Code/TOMB5` changed |
 | #308 | The engine reads its texture blocks with the project's own inflater; zlib goes |
 | #309 | The 64-bit engine under AddressSanitizer, -high, and stale pool pointers |
+| #310 | The logic reads Lara's joints from the live state, not a blend |
+| #311 | A sound the level lacks is not stopped through info -1 |
+| #312 | No fixed camera, no camera.fixed[-1]; empty ring slots skipped |

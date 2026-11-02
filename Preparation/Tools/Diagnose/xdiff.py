@@ -30,6 +30,13 @@
 #   session the build stamp, the replay's own open/end lines, addresses of
 #           released interfaces. Dropped.
 #
+# A log of a recorded or a replayed run is compared only where the replay
+# holds the game: logic and audio lines from the first "REPLAYLOG level="
+# line, load lines from the start, both up to the first "REPLAYLOG end"
+# line - after it the devices drive the game again (the title a run returns
+# to, a menu). Each family is then compared up to the shorter of the two
+# runs' counts; the lines left out are counted in the summary.
+#
 # A family that is not in the table and looks like one (a word in capitals
 # of three letters or more) is compared as "unclassified" and named in the
 # summary; a line of free text (a word with small letters first) is dropped
@@ -82,7 +89,7 @@ TABLE = {
     'FLYLOG': (LOGIC, 'a flyby'),
     'FLYEND': (LOGIC, "a flyby's end"),
     'SLOTLOG': (LOGIC, 'EnableBaddieAI'),
-    'HAIRLOG': (LOGIC, 'HairControl in the tick'),
+    'HAIRLOG': (RENDER, 'the braid: from the drawn frame; no logic reads it'),
     'FPHEAD': (LOGIC, 'the first-person camera, from CalculateCamera'),
     'SAVELOG': (LOGIC, 'the save and the load'),
     'SKIPLATCH': (LOGIC, 'the skip latch in S_UpdateInput'),
@@ -101,6 +108,7 @@ TABLE = {
     'REPLAYLOG refused': (SESSION, 'the file could not be read'),
     'REPLAYLOG warn': (SESSION, 'another frame-rate mode'),
     'REPLAYLOG desync': (SESSION, 'printed apart, first'),
+    'REPLAYLOG drift': (SESSION, 'printed apart, first'),
     'HDLOG debris': (LOGIC, 'a debris break in the logic'),
     'SFXLOG': (AUDIO, 'a sound asked; the audio clock decides "once"'),
     'SFXLOG footsteps:': (LOAD, "the level's footstep sets"),
@@ -195,6 +203,7 @@ MASKS = [
 ]
 
 LOAD_MASKS = {
+    'LIFELOG': [(re.compile(r'\bbytes=\d+'), 'bytes=<layout>')],
     'LOADLOG': [(re.compile(r'\b(frames|shown)=\d+'), r'\1=<t>')],
 }
 
@@ -260,6 +269,8 @@ def mask(text, fam, keep_layout):
     for rx, to in MASKS:
         text = rx.sub(to, text)
     for rx, to in LOAD_MASKS.get(fam, []):
+        if fam == 'LIFELOG' and keep_layout:
+            continue
         text = rx.sub(to, text)
     if fam == 'SAVELOG' and not keep_layout:
         for rx, to in LAYOUT_MASKS:
@@ -302,14 +313,31 @@ class Log:
         self.tick_at = []    # (number, at)
         self.counter = []    # (number, value)
         self.items = []      # (number, item)
+        self.start = 0       # the first REPLAYLOG level= line, or 0
+        self.end = 0         # the first REPLAYLOG end line, or 0
+        self.end_text = ''
+        self.outside = 0     # lines left out by the window
         with open(path, 'r', encoding='latin-1', newline=None) as f:
-            for n, line in enumerate(f, 1):
-                raw = PREFIX.sub('', line.rstrip('\r\n'))
+            rows = [PREFIX.sub('', line.rstrip('\r\n')) for line in f]
+        for n, raw in enumerate(rows, 1):
+            if not self.start and raw.startswith('REPLAYLOG level='):
+                self.start = n
+            if not self.end and raw.startswith('REPLAYLOG end'):
+                self.end = n
+                self.end_text = raw
+        for n, raw in enumerate(rows, 1):
+            if True:
                 key, fam = family_of(raw)
                 c = class_of(key, fam)
                 self.cls[key] = c
-                if raw.startswith('REPLAYLOG desync'):
+                if raw.startswith('REPLAYLOG desync') or \
+                        raw.startswith('REPLAYLOG drift'):
                     self.desync.append((n, raw))
+                if c in (LOGIC, AUDIO, LOAD, 'unclassified') and (
+                        (self.end and n > self.end) or
+                        (c != LOAD and self.start and n < self.start)):
+                    self.outside += 1
+                    continue
                 if fam == 'TICKLOG':
                     m = re.search(r'\bat=(\d+)s', raw)
                     if m:
@@ -343,6 +371,8 @@ def run(a_path, b_path, eps, keep_render, keep_layout, show):
         for n, raw in L.desync:
             print('%s line %d: %s' % (name, n, raw))
 
+    windowed = bool(A.end or B.end)
+
     keys = sorted(set(A.streams) | set(B.streams))
     compared = {}
     dropped = {}
@@ -360,6 +390,13 @@ def run(a_path, b_path, eps, keep_render, keep_layout, show):
         if c not in COMPARED:
             dropped[key] = (c, len(sa), len(sb))
             continue
+
+        if windowed and len(sa) != len(sb):
+            cut = min(len(sa), len(sb))
+            A.outside += len(sa) - cut
+            B.outside += len(sb) - cut
+            sa = sa[:cut]
+            sb = sb[:cut]
 
         compared[key] = (c, max(len(sa), len(sb)))
         d = [0, 0, 0]
@@ -464,9 +501,16 @@ def run(a_path, b_path, eps, keep_render, keep_layout, show):
     print('\n%d logic/load lines differ, %d audio, %d float-only; '
           '%d compared families, %d dropped' % (hard, audio, floats,
                                                  len(compared), len(dropped)))
+    for name, L in (('A', A), ('B', B)):
+        if L.start or L.end:
+            print('%s: compared from line %d to %s; %d lines outside%s' % (
+                name, L.start or 1, ('line %d (%s)' % (L.end, L.end_text))
+                if L.end else 'its end', L.outside,
+                ' - after the end the devices drive the game'
+                if L.end else ''))
     if A.desync or B.desync:
         print('a replay left the recorded run: see the REPLAYLOG desync '
-              'line(s) above')
+              'or drift line(s) above')
     return 1 if hard else 0
 
 
@@ -533,6 +577,14 @@ def self_test():
     check(class_of(*family_of('HDLOG debris break level=A')) == LOGIC,
           'hdlog debris')
     check(class_of(*family_of('HDLOG frame lara')) == RENDER, 'hdlog')
+    check(class_of(*family_of('HAIRLOG braid rootz -33')) == RENDER,
+          'the braid is render')
+    check(m('LIFELOG level=A bodies=1 bytes=2480 models=x', 'LIFELOG') ==
+          'LIFELOG level=A bodies=1 bytes=<layout> models=x', 'lifelog bytes')
+    check(m('LIFELOG level=A bytes=2480', 'LIFELOG', True) ==
+          'LIFELOG level=A bytes=2480', 'lifelog bytes kept')
+    check(class_of(*family_of('REPLAYLOG drift tick=5 record=9')) == SESSION,
+          'replaylog drift')
 
     check(compare_pair('A x=1 y=2.50', 'A x=1 y=2.50', 0) == 'equal', 'eq')
     check(compare_pair('A x=1 y=2.50', 'A x=1 y=2.51', 0) == 'float',

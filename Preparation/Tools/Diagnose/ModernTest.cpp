@@ -118,6 +118,10 @@
 // A savegame's two pointers into the pool, whatever pool loads them
 // (save_pointer).
 #include "../../../TOMB5 Code/TOMB5/game/save_pointer_rule.h"
+// The pool's guards: -high's walk and switch, the Asan build's red zones
+// (pool_guard_rule). high_pool.cpp is compiled beside this file.
+#include "../../../TOMB5 Code/TOMB5/specific/high_pool.h"
+#include "../../../TOMB5 Code/TOMB5/specific/pool_guard.h"
 // The button that skipped a scene, kept out of the input until it is let
 // go, and the pad roles it is held against (skip_latch, skip_latch_rope).
 #include "../../../TOMB5 Code/TOMB5/game/skip_latch.h"
@@ -27936,6 +27940,166 @@ static void save_pointer()
 	free(stubs);
 }
 
+/* The pool's guards (specific\high_pool.h, specific\pool_guard.h): what
+ * -high reserves of a free region below 4 GB and when the switch is given,
+ * that a 32-bit build refuses the walk, that the red zones are 0 outside
+ * the Asan build; and in the engine's text, game_malloc's red zones and
+ * poison, FreeLevel's clears, the switch and the report read in WinMain,
+ * the pool given back by its own function, and the Asan configuration. */
+static void pool_guard_rule()
+{
+	printf("the pool's guards: -high, the red zones, FreeLevel's clears\n");
+
+	const uint64_t gran = 0x10000, page = 0x1000;
+	uint64_t b, s;
+	bool r;
+
+	r = HighReserveSpan(0, 0x7FFE0000, HIGH_LINE, gran, page, &b, &s);
+	ok(r && b == 0x10000 && s == 0x7FFD0000,
+		"pool guard: the first region starts one granule up", (long)b,
+		0x10000);
+	r = HighReserveSpan(0x7FFE1000, 0x1F000, HIGH_LINE, gran, page, &b, &s);
+	ok(r && b == 0x7FFF0000 && s == 0x10000,
+		"pool guard: a base off the granule rounds up", (long)s, 0x10000);
+	r = HighReserveSpan(0x7FFE1000, 0x2000, HIGH_LINE, gran, page, &b, &s);
+	ok(!r && !b && !s, "pool guard: a fragment inside one granule is left",
+		r, 0);
+	r = HighReserveSpan(0xFFFF0000ULL, 0x30000, HIGH_LINE, gran, page, &b,
+		&s);
+	ok(r && b == 0xFFFF0000ULL && s == 0x10000,
+		"pool guard: a region across 4 GB ends at the line", (long)s,
+		0x10000);
+	r = HighReserveSpan(0x100000000ULL, 0x10000, HIGH_LINE, gran, page, &b,
+		&s);
+	ok(!r, "pool guard: a region above the line is not touched", r, 0);
+	r = HighReserveSpan(0x20000, 0x10800, HIGH_LINE, gran, page, &b, &s);
+	ok(r && b == 0x20000 && s == 0x10000,
+		"pool guard: an end off the page rounds down", (long)s, 0x10000);
+	r = HighReserveSpan(0xFFFFFFFFFFFF0000ULL, 0x20000, HIGH_LINE, gran,
+		page, &b, &s);
+	ok(!r, "pool guard: a region that wraps is not touched", r, 0);
+
+	const char* yes[4] = { "-high", "-log -high", "/HIGH -log",
+		"-nofmv  -High" };
+	const char* no[7] = { "", "high", "-highway", "-log", "x-high",
+		"-record \"C:\\a b\\-high\"", "-replay C:\\-high\\run.rec" };
+	int right = 0;
+
+	for (int i = 0; i < 4; i++)
+		right += HighSwitchGiven(yes[i]);
+
+	for (int i = 0; i < 7; i++)
+		right += !HighSwitchGiven(no[i]);
+
+	right += !HighSwitchGiven(0);
+	ok(right == 12, "pool guard: -high as a whole word, not in a path",
+		right, 12);
+
+	HighReserve walk;
+
+	ok(!HighReserveBelow4G(&walk) && !walk.regions && !HighReserveDone(),
+		"pool guard: a 32-bit build refuses the walk", walk.regions, 0);
+	ok(POOL_REDZONE == 0 && POOL_SPARE == 0,
+		"pool guard: no red zones outside the Asan build", POOL_REDZONE, 0);
+
+	char* stubs = hd_switch_text("../function_stubs.cpp");
+	char* file = hd_switch_text("../file.cpp");
+	char* winmain = hd_switch_text("../winmain.cpp");
+	char* gamemain = hd_switch_text("../gamemain.cpp");
+	char* save = hd_switch_text("../../game/savegame.cpp");
+	char* guard = hd_switch_text("../pool_guard.h");
+	char* proj = hd_switch_text("../../../tomb5.vcxproj");
+	char* bat = hd_switch_text(
+		"../../../../Preparation/Tools/Diagnose/basan.bat");
+	static char body[16384];
+
+	ok(stubs && file && winmain && gamemain && save && guard && proj && bat,
+		"pool guard: the eight texts are read", !!stubs + !!file + !!winmain
+		+ !!gamemain + !!save + !!guard + !!proj + !!bat, 8);
+
+	glass_body(stubs, "void* game_malloc(long size)", body, sizeof(body));
+	ok(strstr(body, "if(size>MALLOC_SIZE-malloc_used||size+POOL_REDZONE>"
+		"malloc_free)") && strstr(body, "malloc_ptr+=size+POOL_REDZONE;"
+		"PoolUnpoison(ptr,(size_t)size);") && strstr(body,
+		"memset(ptr,0,size);returnptr;"),
+		"pool guard: a block unpoisoned, its red zone left behind it", 0, 1);
+	glass_body(stubs, "void reset_game_malloc()", body, sizeof(body));
+	ok(strstr(body, "malloc_ptr=malloc_buffer;malloc_free=malloc_size;"
+		"malloc_used=0;malloc_blocks=0;PoolPoison(malloc_buffer,(size_t)"
+		"malloc_size);") != 0, "pool guard: the reset poisons the pool", 0,
+		1);
+	glass_body(stubs, "void init_game_malloc()", body, sizeof(body));
+	ok(strstr(body, "malloc_size=MALLOC_SIZE+POOL_SPARE;") &&
+		strstr(body, "HighPoolTake((size_t)malloc_size)") &&
+		strstr(body, "PoolPoison(malloc_buffer,(size_t)malloc_size);") &&
+		strstr(body, "\"HIGHLOGreserved=%ldregionsbelow4GB,poolbase=0x%016"
+		"llX%s\""), "pool guard: the pool made, poisoned, named", 0, 1);
+
+	glass_body(file, "void FreeLevel()", body, sizeof(body));
+	const char* clears[8] = { "reset_game_malloc();", "baddie_slots=0;",
+		"AIObjects=0;", "nAIObjects=0;", "Rats=0;Bats=0;Spiders=0;",
+		"memset(cutseq_resident_addresses,0,sizeof(cutseq_resident_"
+		"addresses));", "SmashedMeshCount=0;", "HDFeetLevelEnd();" };
+	right = 0;
+
+	for (int i = 0; i < 8; i++)
+		right += strstr(body, clears[i]) != 0;
+
+	ok(right == 8 && !strstr(body, "malloc_ptr=malloc_buffer"),
+		"pool guard: FreeLevel clears the pointers read before the load",
+		right, 8);
+
+	const char* high = winmain ? strstr(winmain,
+		"if (HighSwitchGiven(lpCmdLine))") : 0;
+	const char* seam = winmain ? strstr(winmain, "CrashSeamInstall(") : 0;
+	const char* asan = winmain ? strstr(winmain,
+		"AsanSeamInstall(CrashLogLine);") : 0;
+	const char* cmd = winmain ? strstr(winmain,
+		"WinProcessCommandLine(lpCmdLine);") : 0;
+
+	ok(high && seam && asan && cmd && seam < asan && asan < high &&
+		high < cmd, "pool guard: -high and the report read before the "
+		"command line", 0, 1);
+	ok(hd_switch_count(gamemain, "free_game_malloc();") == 1 &&
+		hd_switch_count(gamemain, "free(malloc_buffer)") == 0 &&
+		hd_switch_count(save, "pool.size = (unsigned long)malloc_size;") ==
+		1, "pool guard: the pool given back by its function, its span in "
+		"the save's rule", 0, 1);
+	ok(hd_switch_count(guard, "#define POOL_REDZONE\t32") == 1 &&
+		hd_switch_count(guard, "#ifdef __SANITIZE_ADDRESS__") == 1,
+		"pool guard: 32 bytes of red zone, in the Asan build only", 0, 1);
+
+	const long rel = hd_switch_count(proj,
+		"'$(Configuration)|$(Platform)'=='Release|x64'");
+	const long san = hd_switch_count(proj,
+		"'$(Configuration)|$(Platform)'=='Asan|x64'");
+
+	ok(rel > 4 && san == rel, "pool guard: Asan|x64 has every setting "
+		"Release|x64 has", san, rel);
+	ok(hd_switch_count(proj, "<EnableASAN>true</EnableASAN>") == 1 &&
+		hd_switch_count(proj, "<PlatformToolset>v145</PlatformToolset>") ==
+		1 && hd_switch_count(proj, "<TargetName>PCtomb5_asan</TargetName>")
+		== 1 && hd_switch_count(proj,
+		"<OutDir>$(ProjectDir)..\\releaseasan\\</OutDir>") == 1,
+		"pool guard: the sanitizer, its toolset, its EXE", 0, 1);
+	ok(hd_switch_count(proj,
+		"<ClCompile Include=\"TOMB5\\specific\\high_pool.cpp\">") == 1 &&
+		hd_switch_count(proj,
+		"<ClCompile Include=\"TOMB5\\specific\\pool_guard.cpp\">") == 1 &&
+		hd_switch_count(bat, "clang_rt.asan_dynamic-x86_64.dll") >= 1 &&
+		hd_switch_count(bat, "/p:Configuration=Asan /p:Platform=x64") == 1,
+		"pool guard: the sources built, basan.bat copies the runtime", 0, 1);
+
+	free(stubs);
+	free(file);
+	free(winmain);
+	free(gamemain);
+	free(save);
+	free(guard);
+	free(proj);
+	free(bat);
+}
+
 // ModernLayout.cpp: the checks that need the engine's own structs.
 void layout_checks(void (*check)(bool, const char*, long, long));
 
@@ -36419,6 +36583,7 @@ int main()
 	brawler_rule();
 	brawler_reach();
 	save_pointer();
+	pool_guard_rule();
 	x64_layout();
 	replay_rule();
 	collide_lists();

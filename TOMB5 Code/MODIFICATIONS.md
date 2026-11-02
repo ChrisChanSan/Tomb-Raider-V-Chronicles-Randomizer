@@ -17907,6 +17907,99 @@ original level about 9 ms.
 **Commits.** `7b5dcf50` (the call and the project), `7ec34954` (the release script and
 `.gitattributes`), `43975556`, `b51012c9` (the checks).
 
+### The 64-bit engine under AddressSanitizer, -high, and stale pool pointers (#309)
+2026-11-02
+
+**What.** Three safeguards for the 64-bit engine against pointers that fail only in
+edge cases. The configuration `Asan|x64` builds the engine under AddressSanitizer
+(`Preparation/Tools/Diagnose/basan.bat`, `releaseasan/PCtomb5_asan.exe`), and in it the
+game_malloc pool is poisoned outside the blocks it has handed out and behind every
+block. The switch `-high` reserves every free region below 4 GB at the start and takes
+the pool from the top of the address space. And `FreeLevel` clears four more kinds of
+pointer into the pool that a level with no use for them never set again.
+
+**Why.** `FreeLevel` hands the pool back at every level change, and a pointer kept into
+it then names the next level's data: the load crash of 2026-08-25 was `baddie_slots`,
+written through by `ShutThatDoor` while the next level loaded. A 64-bit build lays the
+pool out differently, so such a write lands elsewhere than on a 32-bit build. And a
+pointer cut to 32 bits stays right while the memory it names lies below 4 GB, which
+depends on where the address randomisation put the heap and the pool in that run.
+
+**How.**
+
+- `tomb5.vcxproj`, `.filters`: `Asan|x64` with the v145 toolset (the v142 sanitizer
+  runtime stops at its own start on Windows 11, "ASan init calls itself!"),
+  `EnableASAN`, /O1, no whole-program optimisation, no incremental link, no run-time
+  checks; Control Flow Guard and the gate warnings as in `Release|x64`. The runtime is
+  `clang_rt.asan_dynamic-x86_64.dll`, which `basan.bat` copies from the toolset beside
+  the EXE.
+- `specific/pool_guard.h` (new): in the Asan build `POOL_REDZONE` (32 bytes),
+  `POOL_SPARE` (8 MB), `PoolPoison`, `PoolUnpoison`; on every other build 0 and empty.
+  `specific/function_stubs.cpp`, `.h`: `init_game_malloc` makes the pool `MALLOC_SIZE`
+  plus `POOL_SPARE` and poisons it; `game_malloc` unpoisons the block it hands out and
+  leaves the red zone behind it, and refuses a block where a release build refuses it,
+  when the blocks alone would pass `MALLOC_SIZE`; `reset_game_malloc` (`FreeLevel`)
+  poisons the pool again; `free_game_malloc` (`GameClose`, `specific/gamemain.cpp`)
+  gives it back the way it was taken. With `-log` the Asan build writes `ASANLOG pool
+  base= span= redzone=` and at every reset `ASANLOG pool freed used= blocks= span=`.
+  `game/savegame.cpp` (`SavePointerPool`) takes the pool's span from `malloc_size`.
+- `specific/pool_guard.cpp` (new, Asan build only): the sanitizer handles an access
+  violation or a division by zero itself, so the crash seam's filter never sees one in
+  this build. At a report the runtime calls back here: every line of the report as
+  `ASANLOG`, then `CRASH code=asan at=0x<pc> module=<file>+0x<offset> thread=<name>
+  kind=<the report's kind> addr=0x<address> access=<read|write|-> size=<n>
+  report=<file|none>` and the dump, through `CrashSeamReport` (`specific/crashseam.h`).
+  The report's file is the one `ASAN_OPTIONS=log_path` names, else `asan_report.<pid>`
+  in the working directory. `specific/winmain.cpp` installs it after the crash seam.
+- `specific/high_pool.cpp`, `.h` (new, engine-free): `HighSwitchGiven`,
+  `HighReserveSpan`, `HighReserveBelow4G` - the walk of `hd/hd_memory.cpp` up to 4 GB,
+  `VirtualAlloc(MEM_RESERVE, PAGE_NOACCESS)` over every free region from the first
+  64 KB granule up - `HighPoolTake` (`MEM_TOP_DOWN`) and `HighPoolRelease`.
+  `winmain.cpp` reads `-high` after the crash seam, before the command line is worked
+  off: `HIGHLOG walk reserved= bytes= held= left= failed=`, on a 32-bit build `HIGHLOG
+  refused: a 32-bit build has nothing above 4 GB`. `init_game_malloc` then takes the
+  pool top-down: `HIGHLOG reserved=<n> regions below 4 GB, pool base=0x<16 digits>
+  top-down`.
+- `specific/file.cpp` (`FreeLevel`), cleared beside `baddie_slots`: `AIObjects` and
+  `nAIObjects` - `LoadAIInfo` returns before setting either when a level holds no AI
+  objects (ANDREA3, ANDY1, the title, the two cut levels), and `GetAIPickups`,
+  `FindAITargetObject`, Pierre and the gas clouds' initialiser walked the old count
+  through the old address, `GetAIPickups` writing `NO_ROOM` where an entry seemed to
+  match; `Rats`, `Bats`, `Spiders` - allocated only for a level that loads the slot,
+  while the interpolation's `GatherMovers` took any set that is not null as live and
+  blended and restored positions through it; `cutseq_resident_addresses` - cleared by
+  `aMakeCutsceneResident` only for a level that names a resident cut, while
+  `aFetchCutData` takes any entry set as the cut's data and for cuts 1 to 4 writes its
+  origin through it; `SmashedMeshCount` - a mesh smashed in the tick a level ended
+  stayed in the list for the next level's first tick, which read its position and
+  tested the triggers there.
+
+ModernTest's group `pool_guard_rule` holds the span arithmetic, the switch's word match,
+the walk refused on a 32-bit build, the red zones at 0 outside the Asan build and the
+wiring in the engine's text.
+
+**Measured.** Every other global or field that keeps a pointer into a block of the 55
+`game_malloc` calls is written before its first read after a level change, or only
+compared. In a test process on Windows 11 the walk reserved two regions, 4,294,836,224
+bytes, and left 122,880 bytes in pieces smaller than a granule; the only pages below
+4 GB others held were the system's two shared pages at `0x7FFE0000`. A Direct3D 9
+device with a managed texture, XAudio2, the heap and a new thread's stack all came up
+above 4 GB afterwards. The Asan build links at /O1 (8.5 MB) and at /Od (16.3 MB).
+
+**Decisions.** The Asan build is for test runs only: neither it nor the sanitizer's DLL
+goes into a package, and the red zones exist only there, so the 32-bit and 64-bit
+release pools stay block for block what they were. A stale pointer whose address the
+next level has already been handed again is not caught by the poison - the block there
+is the new level's - which is what `FreeLevel`'s clears hold. A level without AI
+objects now runs without AI objects on every build, the 32-bit one included; before,
+its enemies took as AI objects whatever lay at the old address. `-high` cannot move
+what was allocated before `WinMain` read it - the executable, its DLLs, the first
+thread's stack, the heap as far as it was committed, the sanitizer's own regions -
+and names the bytes below 4 GB it found held.
+
+**Commits.** `d6f10914` (the sanitizer build and `-high`), `ad6579b3` (`FreeLevel`'s
+clears), `198fea8b` (the checks), `05492814` (the comments).
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -18324,3 +18417,4 @@ entries above.
 | #306 | section 3 (the randomizer); no engine entry: no file under `TOMB5 Code/TOMB5` changed |
 | #307 | section 3 (the randomizer); no engine entry: no file under `TOMB5 Code/TOMB5` changed |
 | #308 | The engine reads its texture blocks with the project's own inflater; zlib goes |
+| #309 | The 64-bit engine under AddressSanitizer, -high, and stale pool pointers |

@@ -38,6 +38,8 @@
 #include "zrange_math.h"		// ZFAR_UNITS - the far plane
 #include "../game/spotcam.h"	// CurrentFov - kept over a new window size
 #include "replay.h"		// -record and -replay
+#include "high_pool.h"		// -high
+#include "pool_guard.h"		// the Asan build's report
 
 WINAPP App;
 long resChangeCounter;
@@ -1586,6 +1588,21 @@ int __stdcall WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 	 * (without) and a minidump beside it - crashseam.h. This thread is the
 	 * window's, "main"; the game thread is named where it starts. */
 	CrashSeamInstall(CrashLogLine, !gLogEnabled, "PCtomb5");
+	AsanSeamInstall(CrashLogLine);	// the Asan build only (pool_guard.h)
+
+	/* -high (high_pool.h): every free region below 4 GB reserved before the
+	 * pool and the first level are allocated. */
+	if (HighSwitchGiven(lpCmdLine))
+	{
+		HighReserve high;
+
+		if (HighReserveBelow4G(&high))
+			Log("HIGHLOG walk reserved=%ld bytes=%llu held=%llu left=%llu "
+				"failed=%ld", high.regions, high.bytes, high.held, high.left,
+				high.failed);
+		else
+			Log("HIGHLOG refused: a 32-bit build has nothing above 4 GB");
+	}
 
 	/* Where the mods folder's notes go: hd_mods.cpp is engine-free - the
 	 * diagnostic tools link the very same file - so it does not know Log()

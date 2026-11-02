@@ -78,7 +78,7 @@ static SavePtrPool SavePointerPool()
 	SavePtrPool pool;
 
 	pool.base = SaveAddress(malloc_buffer);
-	pool.size = MALLOC_SIZE;
+	pool.size = (unsigned long)malloc_size;	// + the Asan build's red zones
 	pool.items = (unsigned long)(SaveAddress(items) - pool.base);
 	pool.itemSize = sizeof(ITEM_INFO);
 	pool.maxItems = MAX_ITEMS;

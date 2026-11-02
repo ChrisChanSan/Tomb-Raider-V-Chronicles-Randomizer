@@ -361,6 +361,12 @@
     <ClCompile Include="TOMB5\specific\winmain.cpp">
       <Filter>TOMB5\specific</Filter>
     </ClCompile>
+    <ClCompile Include="TOMB5\specific\high_pool.cpp">
+      <Filter>TOMB5\specific</Filter>
+    </ClCompile>
+    <ClCompile Include="TOMB5\specific\pool_guard.cpp">
+      <Filter>TOMB5\specific</Filter>
+    </ClCompile>
     <ClCompile Include="TOMB5\specific\replay.cpp">
       <Filter>TOMB5\specific</Filter>
     </ClCompile>
@@ -1077,6 +1083,12 @@
       <Filter>TOMB5\specific</Filter>
     </ClInclude>
     <ClInclude Include="TOMB5\specific\crashseam.h">
+      <Filter>TOMB5\specific</Filter>
+    </ClInclude>
+    <ClInclude Include="TOMB5\specific\high_pool.h">
+      <Filter>TOMB5\specific</Filter>
+    </ClInclude>
+    <ClInclude Include="TOMB5\specific\pool_guard.h">
       <Filter>TOMB5\specific</Filter>
     </ClInclude>
     <ClInclude Include="TOMB5\specific\devicemove.h">

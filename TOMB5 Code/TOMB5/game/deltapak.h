@@ -1,3 +1,15 @@
+/*
+ * Modified 2026 by ChrisChanSan.
+ *
+ * Part of the TOMB5 native Windows 11 port (Direct3D 9 / XAudio2) and of the
+ * TR5 Randomizer project. The individual changes are recorded in the git
+ * history of this source tree.
+ *
+ * TOMB5 is free software: you can redistribute it and/or modify it under the
+ * terms of the GNU General Public License as published by the Free Software
+ * Foundation, either version 3 of the License, or (at your option) any later
+ * version. See the LICENSE file at the root of this source tree.
+ */
 #pragma once
 #include "../global/types.h"
 
@@ -162,7 +174,7 @@ void updateAnimFrame(PACKNODE* nodes, long nNodes, short* frame);
 void DrawCutSeqActors();
 void CalcActorLighting(ITEM_INFO* item, OBJECT_INFO* obj, short* rot);
 void GetJointAbsPositionCutSeq(ITEM_INFO* item, OBJECT_INFO* obj, short* rot, PHD_VECTOR* pos);
-void frigup_lara();
+void frigup_lara(long draw);
 void CalculateObjectLightingLaraCutSeq();
 void GrabActorMatrix(long actornum, ulong nodenum, long* matrixstash);
 long Load_and_Init_Cutseq(long num);

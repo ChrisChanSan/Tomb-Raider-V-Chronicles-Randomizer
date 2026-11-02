@@ -29,6 +29,7 @@
 #include "../game/savegame.h"
 #include "../game/lara2gun.h"
 #include "hd/hd_laradraw.h"
+#include "../game/interpolate.h"	// InterpFrameBlended - whose state wets her
 #include "../tomb5/tomb5.h"
 
 static long lara_mesh_sweetness_table[15] =	//LM_ in LMX_ order for drawing
@@ -1178,7 +1179,14 @@ void SetLaraUnderwaterNodes()
 
 		if (room[room_num].flags & ROOM_UNDERWATER)
 		{
-			lara.wet[i] = 252;
+			/* The drips are the tick's (TriggerLaraDrips, game\tomb4fx.cpp,
+			 * draws a random number for every wet node), so a node is
+			 * wetted by the tick's own pose only. A frame drawn between
+			 * two ticks leaves it; the pass after that frame runs this
+			 * function again on the live state (game\draw.cpp,
+			 * LaraJointsBuild), and sets LaraNodeUnderwater again too. */
+			if (!InterpFrameBlended())
+				lara.wet[i] = 252;
 
 			if (!(bit & 1))
 			{

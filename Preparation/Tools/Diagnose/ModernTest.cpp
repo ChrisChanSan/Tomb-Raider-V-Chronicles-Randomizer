@@ -27393,10 +27393,10 @@ static void save_pointer()
 	c.slots += 4096;
 
 	const long lara = 37, own = 20;
-	const unsigned long laraAt = a.base + a.items + 37 * a.itemSize;
-	const unsigned long ownAiSave = a.base + a.slots + 3 * a.slotSize + 22;
-	const unsigned long ownAiLoad = b.base + b.slots + 22;
-	const unsigned long ownAiOther = c.base + c.slots + 22;
+	const SavePtrAddr laraAt = a.base + a.items + 37 * a.itemSize;
+	const SavePtrAddr ownAiSave = a.base + a.slots + 3 * a.slotSize + 22;
+	const SavePtrAddr ownAiLoad = b.base + b.slots + 22;
+	const SavePtrAddr ownAiOther = c.base + c.slots + 22;
 	SavePtrDecoded d;
 	long field;
 	int kind;
@@ -27575,7 +27575,7 @@ static void save_pointer()
 		"save pointer: numbers up to the last item, no further",
 		SavePtrGeneralField(&a, 512), -1);
 
-	const unsigned long pulley = a.base + a.items + 9 * a.itemSize;
+	const SavePtrAddr pulley = a.base + a.items + 9 * a.itemSize;
 	unsigned long side;
 
 	field = SavePtrGeneralField(&a, pulley);
@@ -27600,7 +27600,7 @@ static void save_pointer()
 	d = SavePtrDecodeGeneral(&c, field, side ^ 1);
 	ok(d.value == 0 && d.how == SAVE_PTR_HOW_LEGACY_NULL,
 		"save pointer: ...then another layout gives 0", (long)d.value, 0);
-	d = SavePtrDecodeGeneral(&b, field, a.base + a.items);
+	d = SavePtrDecodeGeneral(&b, field, (unsigned long)(a.base + a.items));
 	ok(d.how == SAVE_PTR_HOW_LEGACY_OK,
 		"save pointer: a live target pointer in the copy counts not", d.how,
 		SAVE_PTR_HOW_LEGACY_OK);
@@ -27687,13 +27687,13 @@ static void save_pointer()
 		"save pointer: no pool start added or taken in savegame.cpp",
 		hd_switch_count(save, "malloc_buffer"), 1);
 	ok(hd_switch_count(save, "static_assert(offsetof(CREATURE_INFO, enemy) "
-		"+ sizeof(ITEM_INFO*) == 22,") == 1,
+		"+ sizeof(long) == 22,") == 1,
 		"save pointer: the 22 bytes end with the enemy, asserted", 0, 1);
 
 	glass_body(save, "void SaveLaraData()", body, sizeof(body));
-	ok(strstr(body, "memcpy(&savegame.Lara,&lara,sizeof(savegame.Lara));") &&
-		strstr(body, "savegame.Lara.GeneralPtr=(void*)(intptr_t)field;if("
-		"side)savegame.Lara.target=(ITEM_INFO*)(uintptr_t)side;") &&
+	ok(strstr(body, "LaraCopyRuns(&lara,&savegame.Lara,1);") &&
+		strstr(body, "savegame.Lara.GeneralPtr=(uint32_t)field;if("
+		"side)savegame.Lara.target=(uint32_t)side;") &&
 		!strstr(body, "lara.GeneralPtr="),
 		"save pointer: GeneralPtr goes into the copy, Lara's own untouched",
 		0, 1);
@@ -27702,8 +27702,8 @@ static void save_pointer()
 	{
 		const char* zero = strstr(body, "lara.target=0;");
 		const char* call = strstr(body, "general=SavePtrDecodeGeneral(&pool,"
-			"(long)(intptr_t)savegame.Lara.GeneralPtr,SaveAddress(savegame."
-			"Lara.target));lara.GeneralPtr=(void*)(uintptr_t)general.value;");
+			"(long)savegame.Lara.GeneralPtr,savegame.Lara.target);lara."
+			"GeneralPtr=(void*)(uintptr_t)general.value;");
 
 		ok(zero && call && zero < call && strstr(body, "SavePtrGeneralLine("
 			"line,"), "save pointer: the load reads the save's copy of the "

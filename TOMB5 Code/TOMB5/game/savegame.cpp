@@ -33,6 +33,8 @@
 #include "spider.h"
 #include "lara2gun.h"
 #include "save_pointer_rule.h"	// the save's two pointers into the pool
+#include "../specific/drawroom.h"	// mesh_vtxbuf - Lara's meshes by number
+#include "../global/disk_layout.h"	// Lara in the save's 32-bit layout
 
 SAVEGAME_INFO savegame;
 static char* SGpoint = 0;
@@ -43,15 +45,16 @@ ulong tomb5_save_size;
 ulong savegame_bytes_read;
 bool  savegame_checksum_ok;	// built in S_LoadGame, see there
 
-// The 22 bytes a save writes of a creature end with its enemy, the field
-// save_pointer_rule.h fills.
-static_assert(offsetof(CREATURE_INFO, enemy) + sizeof(ITEM_INFO*) == 22,
-	"the savegame's 22 bytes of CREATURE_INFO end with enemy");
+// The 22 bytes a save writes of a creature end with the four of its enemy's
+// field, which save_pointer_rule.h fills - a long, whatever the width of the
+// pointer behind it.
+static_assert(offsetof(CREATURE_INFO, enemy) + sizeof(long) == 22,
+	"the savegame's 22 bytes of CREATURE_INFO end with enemy's field");
 
-/* An address as save_pointer_rule.h reads it. */
-static unsigned long SaveAddress(const void* p)
+/* An address as save_pointer_rule.h reads it: whole. */
+static SavePtrAddr SaveAddress(const void* p)
 {
-	return (unsigned long)(uintptr_t)p;
+	return (SavePtrAddr)(uintptr_t)p;
 }
 
 /* The game_malloc pool as save_pointer_rule.h reads it: this level's
@@ -62,10 +65,10 @@ static SavePtrPool SavePointerPool()
 
 	pool.base = SaveAddress(malloc_buffer);
 	pool.size = MALLOC_SIZE;
-	pool.items = SaveAddress(items) - pool.base;
+	pool.items = (unsigned long)(SaveAddress(items) - pool.base);
 	pool.itemSize = sizeof(ITEM_INFO);
 	pool.maxItems = MAX_ITEMS;
-	pool.slots = SaveAddress(baddie_slots) - pool.base;
+	pool.slots = (unsigned long)(SaveAddress(baddie_slots) - pool.base);
 	pool.slotSize = sizeof(CREATURE_INFO);
 	pool.maxSlots = MAX_LOT;
 	pool.aiOffset = offsetof(CREATURE_INFO, ai_target);
@@ -159,19 +162,71 @@ static void load_tomb5_data()
 		tomb5_save.ledge_heading, tomb5_save_size > offsetof(tomb5_save_info, ledge_heading));
 }
 
+/* One of Lara's mesh pointers as the save holds it: its number in
+ * mesh_vtxbuf under the mesh tag (save_pointer_rule.h), or - in no table -
+ * its distance from mesh_base, as every save held it before. */
+static uint32_t SaveLaraMesh(short* mesh)
+{
+	for (long k = 0; k < num_level_meshes; k++)
+	{
+		if ((short*)mesh_vtxbuf[k] == mesh)
+			return SavePtrMeshField(k, 0);
+	}
+
+	return SavePtrMeshField(-1, (unsigned long)((uintptr_t)mesh - (uintptr_t)mesh_base));
+}
+
+/* The mesh of Lara's joint `joint` a load gives her: by number out of this
+ * level's table; a distance as before; a number the level does not have,
+ * her own mesh of that joint. */
+static short* LoadLaraMesh(uint32_t field, int joint)
+{
+	const long k = SavePtrMeshNumber(field, num_level_meshes);
+
+	if (k >= 0)
+		return (short*)mesh_vtxbuf[k];
+
+	if (k == -1)
+		return (short*)((char*)mesh_base + (int32_t)field);
+
+	return meshes[objects[LARA].mesh_index + 2 * joint];
+}
+
+/* An arm's frame_base as the save holds it: its byte distance from the
+ * pistols' frames, in the frames block on either build; and back. */
+static uint32_t SaveArmFrames(short* frame_base)
+{
+	return (uint32_t)((uintptr_t)frame_base - (uintptr_t)objects[PISTOLS_ANIM].frame_base);
+}
+
+static short* LoadArmFrames(uint32_t field)
+{
+	return (short*)((char*)objects[PISTOLS_ANIM].frame_base + (int32_t)field);
+}
+
 void SaveLaraData()
 {
 	ITEM_INFO* item;
 	SavePtrPool pool;
-	unsigned long general, side;
+	SavePtrAddr general;
+	unsigned long side;
 	long field;
 
-	for (int i = 0; i < 15; i++)
-		lara.mesh_ptrs[i] = (short*)((long)lara.mesh_ptrs[i] - (long)mesh_base);
+	/* Lara goes into the save in the 32-bit layout (LARA_INFO_SAVE,
+	 * types.h): every byte that is no pointer as it is, each pointer as a
+	 * four-byte value no address goes into - the meshes by number, the
+	 * arms' frames by distance, spaz_effect, target and creature, which
+	 * every load sets to null, as 0. lara's own values are never touched. */
+	LaraCopyRuns(&lara, &savegame.Lara, 1);
+	savegame.Lara.spaz_effect = 0;
+	savegame.Lara.target = 0;
+	savegame.Lara.creature = 0;
 
-	lara.left_arm.frame_base = (short*)((long)lara.left_arm.frame_base - (long)objects[PISTOLS_ANIM].frame_base);
-	lara.right_arm.frame_base = (short*)((long)lara.right_arm.frame_base - (long)objects[PISTOLS_ANIM].frame_base);
-	memcpy(&savegame.Lara, &lara, sizeof(savegame.Lara));
+	for (int i = 0; i < 15; i++)
+		savegame.Lara.mesh_ptrs[i] = SaveLaraMesh(lara.mesh_ptrs[i]);
+
+	savegame.Lara.left_arm.frame_base = SaveArmFrames(lara.left_arm.frame_base);
+	savegame.Lara.right_arm.frame_base = SaveArmFrames(lara.right_arm.frame_base);
 
 	/* GeneralPtr goes into the copy by save_pointer_rule.h, and its item's
 	 * number beside it into the copy's target, which every load sets to 0;
@@ -180,19 +235,13 @@ void SaveLaraData()
 	general = SaveAddress(lara.GeneralPtr);
 	field = SavePtrGeneralField(&pool, general);
 	side = SavePtrGeneralSide(&pool, general, field);
-	savegame.Lara.GeneralPtr = (void*)(intptr_t)field;
+	savegame.Lara.GeneralPtr = (uint32_t)field;
 
 	if (side)
-		savegame.Lara.target = (ITEM_INFO*)(uintptr_t)side;
+		savegame.Lara.target = (uint32_t)side;
 
 	if (gLogEnabled)
 		Log("SAVELOG save general stored=0x%08lX side=0x%08lX", (unsigned long)field, side);
-
-	for (int i = 0; i < 15; i++)
-		lara.mesh_ptrs[i] = (short*)((long)lara.mesh_ptrs[i] + (long)mesh_base);
-
-	lara.left_arm.frame_base = (short*)((long)lara.left_arm.frame_base + (long)objects[PISTOLS_ANIM].frame_base);
-	lara.right_arm.frame_base = (short*)((long)lara.right_arm.frame_base + (long)objects[PISTOLS_ANIM].frame_base);
 
 	if (lara.weapon_item != NO_ITEM)
 	{
@@ -228,21 +277,25 @@ void RestoreLaraData(long FullSave)
 		}
 	}
 
-	memcpy(&lara, &savegame.Lara, sizeof(lara));
+	/* Lara out of the save's 32-bit layout: the bytes that are no pointer
+	 * as they are, each pointer built here; target, spaz_effect and
+	 * creature are null after a load. */
+	LaraCopyRuns(&lara, &savegame.Lara, 0);
 	lara.target = 0;
 	lara.spaz_effect = 0;
-	lara.left_arm.frame_base = (short*)((long)lara.left_arm.frame_base + (long)objects[PISTOLS_ANIM].frame_base);
-	lara.right_arm.frame_base = (short*)((long)lara.right_arm.frame_base + (long)objects[PISTOLS_ANIM].frame_base);
+	lara.creature = 0;
+	lara.left_arm.frame_base = LoadArmFrames(savegame.Lara.left_arm.frame_base);
+	lara.right_arm.frame_base = LoadArmFrames(savegame.Lara.right_arm.frame_base);
 
 	/* GeneralPtr out of the field and the item number beside it in the save's
 	 * target (save_pointer_rule.h): built from this run's items[], or 0. */
 	pool = SavePointerPool();
-	general = SavePtrDecodeGeneral(&pool, (long)(intptr_t)savegame.Lara.GeneralPtr, SaveAddress(savegame.Lara.target));
+	general = SavePtrDecodeGeneral(&pool, (long)savegame.Lara.GeneralPtr, savegame.Lara.target);
 	lara.GeneralPtr = (void*)(uintptr_t)general.value;
 
 	if (gLogEnabled)
 	{
-		SavePtrGeneralLine(line, sizeof(line), (long)(intptr_t)savegame.Lara.GeneralPtr, SaveAddress(savegame.Lara.target), &general);
+		SavePtrGeneralLine(line, sizeof(line), (long)savegame.Lara.GeneralPtr, savegame.Lara.target, &general);
 		Log("%s", line);
 	}
 
@@ -277,7 +330,7 @@ void RestoreLaraData(long FullSave)
 	}
 
 	for (int i = 0; i < 15; i++)
-		lara.mesh_ptrs[i] = (short*)((long)lara.mesh_ptrs[i] + (long)mesh_base);
+		lara.mesh_ptrs[i] = LoadLaraMesh(savegame.Lara.mesh_ptrs[i], i);
 
 	_CutSceneTriggered1 = savegame.CutSceneTriggered1;
 	_CutSceneTriggered2 = savegame.CutSceneTriggered2;
@@ -295,7 +348,7 @@ void SaveLevelData(long FullSave)
 	CREATURE_INFO* creature;
 	SavePtrPool pool;
 	ulong flags;
-	unsigned long enemy, ownAi;
+	SavePtrAddr enemy, ownAi;
 	long k, flare_age, field;
 	int kind;
 	ushort packed;
@@ -1272,6 +1325,23 @@ void sgRestoreGame()
 	// savegames.
 	if (boValid)
 		boValid = savegame_checksum_ok;
+
+#ifdef _WIN64
+	// A save written before Lara's meshes went in by number holds them as
+	// distances into a 32-bit build's MESH_DATA (save_pointer_rule.h), which
+	// name other places here: such a save is refused like a damaged one.
+	if (boValid)
+	{
+		for (int i = 0; i < 15; i++)
+		{
+			if (SavePtrMeshNumber(savegame.Lara.mesh_ptrs[i], num_level_meshes) == -1)
+				boValid = 0;
+		}
+
+		if (!boValid)
+			Log("SAVELOG load refused: Lara's meshes as distances of a 32-bit build");
+	}
+#endif
 
 	if (!boValid)
 	{

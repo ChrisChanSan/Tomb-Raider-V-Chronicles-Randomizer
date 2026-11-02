@@ -1468,11 +1468,155 @@ struct LARA_INFO
 	uchar ChaffTimer;
 };
 
+/* Lara's arm and Lara as the save holds them: LARA_ARM and LARA_INFO as a
+ * 32-bit build lays them out, every pointer a 4-byte value. The save file
+ * is the same bytes on both builds; game\savegame.cpp converts, and
+ * global\disk_layout.h asserts that every run of bytes between two
+ * pointers matches LARA_INFO's. A field added to LARA_INFO goes here too. */
+struct LARA_ARM_SAVE
+{
+	uint32_t frame_base;	// its distance from PISTOLS_ANIM's frame_base
+	short frame_number;
+	short anim_number;
+	short lock;
+	short y_rot;
+	short x_rot;
+	short z_rot;
+	short flash_gun;
+};
+
+struct LARA_INFO_SAVE
+{
+	short item_number;
+	short gun_status;
+	short gun_type;
+	short request_gun_type;
+	short last_gun_type;
+	short calc_fallspeed;
+	short water_status;
+	short climb_status;
+	short pose_count;
+	short hit_frame;
+	short hit_direction;
+	short air;
+	short dive_count;
+	short death_count;
+	short current_active;
+	short current_xvel;
+	short current_yvel;
+	short current_zvel;
+	short spaz_effect_count;
+	short flare_age;
+	short BurnCount;
+	short weapon_item;
+	short back_gun;
+	short flare_frame;
+	short poisoned;
+	short dpoisoned;
+	uchar Anxiety;
+	uchar wet[15];
+	ushort flare_control_left : 1;
+	ushort Unused1 : 1;
+	ushort look : 1;
+	ushort burn : 1;
+	ushort keep_ducked : 1;
+	ushort IsMoving : 1;
+	ushort CanMonkeySwing : 1;
+	ushort BurnBlue : 2;
+	ushort Gassed : 1;
+	ushort BurnSmoke : 1;
+	ushort IsDucked : 1;
+	ushort has_fired : 1;
+	ushort Busy : 1;
+	ushort LitTorch : 1;
+	ushort IsClimbing : 1;
+	ushort Fired : 1;
+	long water_surface_dist;
+	PHD_VECTOR last_pos;
+	uint32_t spaz_effect;
+	long mesh_effects;
+	uint32_t mesh_ptrs[15];
+	uint32_t target;
+	short target_angles[2];
+	short turn_rate;
+	short move_angle;
+	short head_y_rot;
+	short head_x_rot;
+	short head_z_rot;
+	short torso_y_rot;
+	short torso_x_rot;
+	short torso_z_rot;
+	LARA_ARM_SAVE left_arm;
+	LARA_ARM_SAVE right_arm;
+	ushort holster;
+	uint32_t creature;
+	long CornerX;
+	long CornerZ;
+	char RopeSegment;
+	char RopeDirection;
+	short RopeArcFront;
+	short RopeArcBack;
+	short RopeLastX;
+	short RopeMaxXForward;
+	short RopeMaxXBackward;
+	long RopeDFrame;
+	long RopeFrame;
+	ushort RopeFrameRate;
+	ushort RopeY;
+	long RopePtr;
+	uint32_t GeneralPtr;
+	long RopeOffset;
+	ulong RopeDownVel;
+	char RopeFlag;
+	char MoveCount;
+	long RopeCount;
+	char skelebob;
+	char pistols_type_carried;
+	char uzis_type_carried;
+	char shotgun_type_carried;
+	char crossbow_type_carried;
+	char hk_type_carried;
+	char sixshooter_type_carried;
+	char lasersight;
+	char silencer;
+	char binoculars;
+	char crowbar;
+	char examine1;
+	char examine2;
+	char examine3;
+	char wetcloth;
+	char bottle;
+	char puzzleitems[12];
+	ushort puzzleitemscombo;
+	uchar keyitems[8];
+	ushort keyitemscombo;
+	ushort pickupitems;
+	ushort pickupitemscombo;
+	short num_small_medipack;
+	short num_large_medipack;
+	short num_flares;
+	short num_pistols_ammo;
+	short num_uzi_ammo;
+	short num_revolver_ammo;
+	short num_shotgun_ammo1;
+	short num_shotgun_ammo2;
+	short num_hk_ammo1;
+	short num_crossbow_ammo1;
+	short num_crossbow_ammo2;
+	char location;
+	char highest_location;
+	char locationPad;
+	uchar TightRopeOnCount;
+	uchar TightRopeOff;
+	uchar TightRopeFall;
+	uchar ChaffTimer;
+};
+
 struct SAVEGAME_INFO
 {
 	short Checksum;
 	uchar AutoTarget;
-	LARA_INFO Lara;
+	LARA_INFO_SAVE Lara;	// LARA_INFO in the 32-bit layout (above)
 	STATS Level;
 	STATS Game;
 	short WeaponObject;
@@ -1847,6 +1991,17 @@ struct PENDULUM
 	PHD_VECTOR Velocity;
 	long node;
 	ROPE_STRUCT* Rope;
+};
+
+/* The pendulum as the save holds it: Rope as its byte distance from
+ * RopeList, 4 bytes, so the stream after it lies where it lies on a 32-bit
+ * build (game\rope.cpp). */
+struct PENDULUM_SAVE
+{
+	PHD_VECTOR Position;
+	PHD_VECTOR Velocity;
+	long node;
+	uint32_t Rope;
 };
 
 struct ROOMLET_VERTEX

@@ -20,6 +20,7 @@
 #include "lara.h"
 #include "../specific/specificfx.h"
 #include "../specific/input.h"
+#include "../global/disk_layout.h"	// the pendulum as the save holds it
 #include "savegame.h"
 #include "camera.h"
 #include "../specific/function_stubs.h"
@@ -737,19 +738,25 @@ void init_all_ropes()
 	nRope = 0;
 }
 
+/* The pendulum goes into the save as PENDULUM_SAVE (types.h), 32 bytes on
+ * both builds: written raw, a PENDULUM is 36 bytes on a 64-bit build and
+ * would shift everything the save holds behind it. */
 void SaveRope()
 {
+	PENDULUM_SAVE save;
+
 	WriteSG(&RopeList[lara.RopePtr], sizeof(ROPE_STRUCT));
-	CurrentPendulum.Rope = (ROPE_STRUCT*)((char*)CurrentPendulum.Rope - (char*)RopeList);
-	WriteSG(&CurrentPendulum, sizeof(PENDULUM));
-	CurrentPendulum.Rope = (ROPE_STRUCT*)((char*)RopeList + (intptr_t)CurrentPendulum.Rope);
+	PendulumToSave(&save, &CurrentPendulum, RopeList);
+	WriteSG(&save, sizeof(PENDULUM_SAVE));
 }
 
 void LoadRope()
 {
+	PENDULUM_SAVE save;
+
 	ReadSG(&RopeList[lara.RopePtr], sizeof(ROPE_STRUCT));
-	ReadSG(&CurrentPendulum, sizeof(PENDULUM));
-	CurrentPendulum.Rope = (ROPE_STRUCT*)((char*)RopeList + (intptr_t)CurrentPendulum.Rope);
+	ReadSG(&save, sizeof(PENDULUM_SAVE));
+	PendulumFromSave(&CurrentPendulum, &save, RopeList);
 }
 
 void StraightenRope(ITEM_INFO* item)

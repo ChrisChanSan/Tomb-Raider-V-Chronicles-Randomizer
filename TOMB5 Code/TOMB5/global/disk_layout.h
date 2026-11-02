@@ -137,6 +137,82 @@ inline ROOMLET RoomletFromDisk(const ROOMLET_DISK* d, short* fac, long* pre,
 	return r;
 }
 
+/* The save's Lara (LARA_INFO_SAVE, types.h) is LARA_INFO in the 32-bit
+ * layout. Between her 21 pointers lie seven runs of bytes - numbers,
+ * flags, bit fields - that are the same bytes in both; each run is copied
+ * whole, and these say that it is the same length in both structs, so a
+ * field added to one and not the other stops the build. The pointers are
+ * game\savegame.cpp's (SaveLaraData, RestoreLaraData). */
+#define LARA_RUN(a, b) \
+	(offsetof(LARA_INFO, b) - offsetof(LARA_INFO, a))
+#define LARA_RUN_SAVE(a, b) \
+	(offsetof(LARA_INFO_SAVE, b) - offsetof(LARA_INFO_SAVE, a))
+#define LARA_RUN_CHECK(a, b) \
+	static_assert(LARA_RUN(a, b) == LARA_RUN_SAVE(a, b), \
+		"Lara's save: the bytes from " #a " to " #b)
+
+LARA_RUN_CHECK(item_number, spaz_effect);
+LARA_RUN_CHECK(mesh_effects, mesh_ptrs);
+LARA_RUN_CHECK(target_angles, left_arm);
+LARA_RUN_CHECK(left_arm.frame_number, right_arm);
+LARA_RUN_CHECK(right_arm.frame_number, creature);
+LARA_RUN_CHECK(CornerX, GeneralPtr);
+static_assert(sizeof(LARA_INFO) - offsetof(LARA_INFO, RopeOffset) ==
+	sizeof(LARA_INFO_SAVE) - offsetof(LARA_INFO_SAVE, RopeOffset),
+	"Lara's save: the bytes from RopeOffset to the end");
+
+/* Copies Lara's bytes that are no pointer from `l` into the save's `s`
+ * (`toSave`) or back; the pointers are left as they are. */
+inline void LaraCopyRuns(LARA_INFO* l, LARA_INFO_SAVE* s, int toSave)
+{
+	static const size_t rt[7] = { offsetof(LARA_INFO, item_number),
+		offsetof(LARA_INFO, mesh_effects), offsetof(LARA_INFO, target_angles),
+		offsetof(LARA_INFO, left_arm.frame_number),
+		offsetof(LARA_INFO, right_arm.frame_number),
+		offsetof(LARA_INFO, CornerX), offsetof(LARA_INFO, RopeOffset) };
+	static const size_t sv[7] = { offsetof(LARA_INFO_SAVE, item_number),
+		offsetof(LARA_INFO_SAVE, mesh_effects),
+		offsetof(LARA_INFO_SAVE, target_angles),
+		offsetof(LARA_INFO_SAVE, left_arm.frame_number),
+		offsetof(LARA_INFO_SAVE, right_arm.frame_number),
+		offsetof(LARA_INFO_SAVE, CornerX),
+		offsetof(LARA_INFO_SAVE, RopeOffset) };
+	static const size_t len[7] = { LARA_RUN(item_number, spaz_effect),
+		LARA_RUN(mesh_effects, mesh_ptrs), LARA_RUN(target_angles, left_arm),
+		LARA_RUN(left_arm.frame_number, right_arm),
+		LARA_RUN(right_arm.frame_number, creature),
+		LARA_RUN(CornerX, GeneralPtr),
+		sizeof(LARA_INFO) - offsetof(LARA_INFO, RopeOffset) };
+
+	for (int i = 0; i < 7; i++)
+	{
+		if (toSave)
+			memcpy((char*)s + sv[i], (const char*)l + rt[i], len[i]);
+		else
+			memcpy((char*)l + rt[i], (const char*)s + sv[i], len[i]);
+	}
+}
+
+/* The pendulum into the save's form and back: Rope as its byte distance
+ * from `ropes` (RopeList), added back as an int32_t. */
+inline void PendulumToSave(PENDULUM_SAVE* s, const PENDULUM* p,
+	const ROPE_STRUCT* ropes)
+{
+	s->Position = p->Position;
+	s->Velocity = p->Velocity;
+	s->node = p->node;
+	s->Rope = (uint32_t)((uintptr_t)p->Rope - (uintptr_t)ropes);
+}
+
+inline void PendulumFromSave(PENDULUM* p, const PENDULUM_SAVE* s,
+	ROPE_STRUCT* ropes)
+{
+	p->Position = s->Position;
+	p->Velocity = s->Velocity;
+	p->node = s->node;
+	p->Rope = DiskOffset<ROPE_STRUCT>((char*)ropes, s->Rope);
+}
+
 /* The runtime ANIM_STRUCT of the file's `d`, its frames in `frames`. */
 inline void AnimFromDisk(ANIM_STRUCT* a, const ANIM_STRUCT_DISK* d,
 	short* frames)

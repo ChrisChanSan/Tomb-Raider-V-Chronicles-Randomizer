@@ -12,6 +12,7 @@
  */
 #pragma once
 
+#include <stdint.h>
 #include <stdio.h>
 
 /* A savegame's two pool pointers, kept so that a pool that lies elsewhere
@@ -56,7 +57,12 @@
  * anew at a load, so an ai_target found that way is the creature's own.
  *
  * No engine header: plain numbers in, plain numbers out, so ModernTest holds
- * the rule; game\savegame.cpp fills in the numbers. */
+ * the rule; game\savegame.cpp fills in the numbers.
+ *
+ * An address is a SavePtrAddr, 64 bits on every build: a 64-bit build's
+ * pool may lie above 4 GB or across a 4 GB line, and cut to 32 bits the
+ * pool's own items would lie below its start. Only the fields the save
+ * writes stay 32 bits - distances into the pool, numbers and tags. */
 
 #define SAVE_PTR_NULL		(-1L)		// null, or nothing the rule can name
 #define SAVE_PTR_TAG_MASK	0xFF000000UL	// the top byte (a distance's: 0, 1)
@@ -68,6 +74,8 @@
 #define SAVE_PTR_CHECK		0xFFFUL		// the field's bits the copy repeats
 #define SAVE_PTR_KIND_SHIFT	5		// the LOT flags byte, bits 5 and 6
 #define SAVE_PTR_KIND_MASK	0x60
+
+typedef uint64_t SavePtrAddr;	// an address, whole on either build
 
 // Who a creature's enemy was, in the LOT flags byte. 0 is what every older
 // save holds there: no kind, read by distance.
@@ -102,7 +110,7 @@ enum SavePtrWhat
 // The pool as the rule reads it; every distance is from `base`.
 struct SavePtrPool
 {
-	unsigned long base;		// malloc_buffer
+	SavePtrAddr base;		// malloc_buffer
 	unsigned long size;		// MALLOC_SIZE
 	unsigned long items;		// items[]
 	unsigned long itemSize;		// sizeof(ITEM_INFO)
@@ -121,7 +129,7 @@ struct SavePtrDecoded
 	int how;
 	int what;
 	long number;
-	unsigned long value;
+	SavePtrAddr value;
 };
 
 /* The item lying exactly at the distance `off`, or -1. */
@@ -158,19 +166,19 @@ inline long SavePtrSlotAiAt(const SavePtrPool* p, unsigned long off)
 }
 
 /* Whether the address `a` lies in the pool; its distance into `off`. */
-inline bool SavePtrInPool(const SavePtrPool* p, unsigned long a,
+inline bool SavePtrInPool(const SavePtrPool* p, SavePtrAddr a,
 	unsigned long* off)
 {
 	if (a < p->base || a - p->base >= p->size)
 		return false;
 
-	*off = a - p->base;
+	*off = (unsigned long)(a - p->base);
 	return true;
 }
 
 /* The four bytes a save writes for the enemy at the address `enemy`: an
  * item's or a creature slot's ai_target its distance, anything else -1. */
-inline long SavePtrEnemyField(const SavePtrPool* p, unsigned long enemy)
+inline long SavePtrEnemyField(const SavePtrPool* p, SavePtrAddr enemy)
 {
 	unsigned long off;
 
@@ -185,8 +193,8 @@ inline long SavePtrEnemyField(const SavePtrPool* p, unsigned long enemy)
 
 /* Who the enemy is, for the LOT flags byte: `lara` the address of Lara's
  * item, `ownAi` that of the creature's own ai_target. */
-inline int SavePtrEnemyKind(unsigned long enemy, unsigned long lara,
-	unsigned long ownAi)
+inline int SavePtrEnemyKind(SavePtrAddr enemy, SavePtrAddr lara,
+	SavePtrAddr ownAi)
 {
 	if (!enemy)
 		return SAVE_PTR_KIND_NULL;
@@ -210,7 +218,7 @@ inline int SavePtrKindOf(int lflags)
  * its two bits, `lara` Lara's item number, `own` the creature's item number,
  * `ownAi` the address of its ai_target in this run. */
 inline SavePtrDecoded SavePtrDecodeEnemy(const SavePtrPool* p, long field,
-	int kind, long lara, long own, unsigned long ownAi)
+	int kind, long lara, long own, SavePtrAddr ownAi)
 {
 	SavePtrDecoded d = { SAVE_PTR_HOW_NULL, SAVE_PTR_IS_NULL, -1, 0 };
 	const unsigned long off = (unsigned long)field;
@@ -272,15 +280,15 @@ inline SavePtrDecoded SavePtrDecodeEnemy(const SavePtrPool* p, long field,
 /* The four bytes a save writes for GeneralPtr's `value`: 0 is -1, an item
  * number 0x7E000000 with the number, an item of items[] its distance,
  * anything else -1. */
-inline long SavePtrGeneralField(const SavePtrPool* p, unsigned long value)
+inline long SavePtrGeneralField(const SavePtrPool* p, SavePtrAddr value)
 {
 	unsigned long off;
 
 	if (!value)
 		return SAVE_PTR_NULL;
 
-	if (value < (unsigned long)p->maxItems)
-		return (long)(SAVE_PTR_TAG_NUM | value);
+	if (value < (SavePtrAddr)p->maxItems)
+		return (long)(SAVE_PTR_TAG_NUM | (unsigned long)value);
 
 	if (SavePtrInPool(p, value, &off) && SavePtrItemAt(p, off) >= 0)
 		return (long)off;
@@ -292,7 +300,7 @@ inline long SavePtrGeneralField(const SavePtrPool* p, unsigned long value)
  * item's number from bit 12 and the field's low twelve bits - or 0 when
  * GeneralPtr names no item of items[] (the copy then stays as it is). */
 inline unsigned long SavePtrGeneralSide(const SavePtrPool* p,
-	unsigned long value, long field)
+	SavePtrAddr value, long field)
 {
 	unsigned long off;
 	long k;
@@ -420,5 +428,41 @@ inline void SavePtrPoolLine(char* out, size_t size, const char* when,
 {
 	snprintf(out, size,
 		"SAVELOG %s pool base=0x%08lX items=+0x%lX slots=+0x%lX", when,
-		p->base, p->items, p->slots);
+		(unsigned long)p->base, p->items, p->slots);
+}
+
+/* Lara's mesh pointers. A save wrote each as its distance from mesh_base,
+ * where ProcessMeshData (drawroom.cpp) starts turning the level's meshes
+ * into MESH_DATA. That distance holds only where MESH_DATA is laid out as
+ * the saving build laid it - 70 bytes on a 32-bit build, 94 on a 64-bit
+ * one - and names another place in the other build. A save now writes the
+ * mesh's number in mesh_vtxbuf, the table ProcessMeshData fills once per
+ * level and nothing changes after, under a tag of its own; a distance's
+ * top byte is 0 or 1, as above. A load takes the mesh of that number in
+ * its own table. A field without the tag is a distance, read as before:
+ * exact on the build that wrote it, and a 64-bit build refuses a save
+ * file that holds one (sgRestoreGame). */
+#define SAVE_PTR_TAG_MESH	0x7C000000UL	// a mesh's number in mesh_vtxbuf
+
+/* The four bytes for one mesh pointer: `k` its number in mesh_vtxbuf, or
+ * -1 when it is in none - then `dist`, its distance from mesh_base. */
+inline unsigned long SavePtrMeshField(long k, unsigned long dist)
+{
+	if (k >= 0 && (unsigned long)k <= SAVE_PTR_NUM_MASK)
+		return SAVE_PTR_TAG_MESH | (unsigned long)k;
+
+	return dist;
+}
+
+/* The mesh number in `field`, `count` meshes in the level: -1 for a
+ * distance, -2 for a tagged number the level does not have. */
+inline long SavePtrMeshNumber(unsigned long field, long count)
+{
+	if ((field & SAVE_PTR_TAG_MASK) != SAVE_PTR_TAG_MESH)
+		return -1;
+
+	if ((long)(field & SAVE_PTR_NUM_MASK) >= count)
+		return -2;
+
+	return (long)(field & SAVE_PTR_NUM_MASK);
 }

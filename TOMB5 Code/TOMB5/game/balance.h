@@ -48,6 +48,7 @@ struct BALANCE_INFO
 	long hpSwatPlus;
 	long hpMafia;
 	long hpScientist;
+	long hpScientistArmed;	/* RICH1's scientist on SWAT's control */
 	long hpCraneGuy;
 	long hpGuardJoby;		/* BLUE_GUARD2, the second guard from joby3 */
 	long hpMiniSub;

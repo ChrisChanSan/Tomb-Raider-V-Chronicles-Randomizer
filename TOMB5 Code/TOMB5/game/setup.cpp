@@ -1393,6 +1393,45 @@ void BaddyObjects()
 		meshes[obj->mesh_index + (13 * 2) + 1] = MeshSwapSource(MESHSWAP_CROSS_GUARD2, 13);
 	}
 
+	// The armed scientist (objects.h): SWAT's block on a slot of his own.
+	// His record carries RICH1's scientist, SWAT's two hands (the rifle in
+	// mesh 13) and SWAT's whole animation set beside them, so anim_index
+	// stays his own like SWAT's - no anchor. Gun, flash, collision, radius
+	// and the swap halves are SWAT's; the halves come out of SWAT's own
+	// fallback slot, which the randomizer imports with him.
+	//
+	// hit_points is the literal 24, Core's number for SWAT and for the
+	// scientist alike; BalanceSetEnemies overwrites it from
+	// HP_ScientistArmed and compares this against the table's vanilla
+	// column.
+	if (objects[SCIENTIST_ARMED].loaded)
+	{
+		obj = &objects[SCIENTIST_ARMED];
+		obj->initialise = InitialiseSas;
+		obj->control = SasControl;
+		obj->collision = CreatureCollision;
+		obj->draw_routine_extra = DrawBaddieGunFlash;
+		obj->shadow_size = 128;
+		obj->hit_points = 24;
+		obj->pivot_length = 50;
+		obj->radius = 102;
+		obj->bite_offset = 0;
+		obj->explodable_meshbits = 0x4000;
+		obj->object_mip = 5120;
+		obj->intelligent = 1;
+		obj->HitEffect = 1;
+		obj->save_position = 1;
+		obj->save_hitpoints = 1;
+		obj->save_flags = 1;
+		obj->save_anim = 1;
+		bones[obj->bone_index + 24] |= 8;
+		bones[obj->bone_index + 24] |= 4;
+		bones[obj->bone_index + 52] |= 8;
+		bones[obj->bone_index + 52] |= 4;
+		meshes[obj->mesh_index + (10 * 2) + 1] = MeshSwapSource(MESHSWAP_CROSS_SWAT, 10);
+		meshes[obj->mesh_index + (13 * 2) + 1] = MeshSwapSource(MESHSWAP_CROSS_SWAT, 13);
+	}
+
 	obj = &objects[CRANE_GUY_MIP];
 	obj->control = ControlAnimatingSlots;
 	obj->save_flags = 1;

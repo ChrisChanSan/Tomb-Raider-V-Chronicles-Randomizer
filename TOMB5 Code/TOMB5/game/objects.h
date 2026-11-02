@@ -396,6 +396,17 @@ enum object_types
 	// the randomizer writes 472 into the level files.
 	DRONE = 472,
 
+	// SCIENTIST_ARMED: RICH1's scientist in the orange suit as a pool enemy
+	// that fights. Slot 69 stays Core's scientist, who never shoots, flees
+	// when hurt and raises his hands when aimed at (sas.cpp). His bone tree
+	// is SWAT's, so the randomizer puts his meshes, SWAT's two hands with
+	// the rifle and SWAT's animations together on this slot, and he runs
+	// SWAT's block: SasControl takes no branch of its own for him.
+	//
+	// Written out like the drone's: the randomizer writes 473 into the level
+	// files.
+	SCIENTIST_ARMED = 473,
+
 	NUMBER_OBJECTS
 };
 

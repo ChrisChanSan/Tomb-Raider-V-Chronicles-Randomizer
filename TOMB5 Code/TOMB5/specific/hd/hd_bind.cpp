@@ -143,7 +143,7 @@ namespace
 	"MISC_SPRITES", "BLUE_GUARD2", "ROMAN_GOD2", "MESHSWAP_CROSS_SWAT", "MESHSWAP_CROSS_SWATPLUS",
 	"MESHSWAP_CROSS_TWOGUN", "MESHSWAP_CROSS_GUARD", "MESHSWAP_CROSS_MAFIA",
 	"MESHSWAP_CROSS_GUARD2", "MESHSWAP_CROSS_HITMAN", "CYBORG", "MESHSWAP_CROSS_CRANEGUY",
-	"BRAWLER", "DRONE"
+	"BRAWLER", "DRONE", "SCIENTIST_ARMED"
 	};
 
 	static_assert(sizeof(slot_names) / sizeof(slot_names[0]) == HD_SLOT_COUNT,
@@ -222,7 +222,9 @@ namespace
 		/* BRAWLER (471) has no line here, on purpose: his meshes come out
 		 * of JOBY2's slot 439, and the sidecar's donor line says so, so
 		 * JOBY2's .MAP answers for him (ANIMATING12_MIP_JOBY2) like it
-		 * does for any model the randomizer carried out of a level. */
+		 * does for any model the randomizer carried out of a level.
+		 * SCIENTIST_ARMED (473) has none either: his donor line names
+		 * RICH1's slot 69, and RICH1's .MAP answers SCIENTIST. */
 
 		{ "ROMAN_GOD",               "ROMAN_GOD_ANDREA_SWORD",  0 },
 

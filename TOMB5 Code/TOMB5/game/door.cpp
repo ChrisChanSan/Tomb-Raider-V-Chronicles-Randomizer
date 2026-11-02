@@ -28,6 +28,8 @@
 #include "lara.h"
 #include "box.h"
 #include "lot.h"
+#include "interpolate.h"			// InterpIsTweenFrame - one walk per tick
+#include "../specific/function_stubs.h"	// Log, gLogEnabled - DOORLOG
 
 long ClosedDoors[32] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 static char LiftDoor = 0;
@@ -675,13 +677,49 @@ void SequenceDoorControl(short item_number)
 	AnimateItem(item);
 }
 
+/* DOORLOG's counts for one level (ClosedDoorsLevelEnd): the moves between
+ * the two rooms' item lists, the frames that walked the doors and the tween
+ * frames that did not. */
+static long g_doorMoves = 0;
+static long g_doorFrames = 0;
+static long g_doorTweens = 0;
+
+/* A closed door stands in the portal between its own room and draw_room,
+ * the room across (InitialiseDoor). The drawn frame puts it into the item
+ * list of draw_room when that room is in the frame's set, else back into
+ * its own room's list, so it is drawn from a room the walk reached;
+ * room_number stays its own room all the while, and InDrawRoom says which
+ * list holds it. Those lists are the logic's too: Lara's object collision,
+ * GetCollidedObjects and ObjectOnLOS2 walk a set of rooms' lists, and
+ * ItemNewRoom puts the door at the head of the one it enters.
+ *
+ * So the move belongs to the frame that carries the tick. At fps_mode 0
+ * every frame does, at the tick's camera, and nothing changes. At a higher
+ * rate a tween frame would decide, at a blended camera, which list the next
+ * tick finds the door in, and the last frame before the tick depends on the
+ * display's rate: a tween frame leaves the lists as the carrying frame put
+ * them. It draws the door from that list, clipped to that room's window
+ * (calc_animating_item_clip_window), and not at all where its own walk did
+ * not reach that room - for the rest of the tick at most, and only while
+ * the door's portal crosses the edge of the view. At fps_mode 2 the
+ * carrying frame is drawn blended, so the lists follow a camera between two
+ * ticks there, once per tick, like the corpse marks of PrintObjects
+ * (game\draw.cpp). */
 void ProcessClosedDoors()
 {
 	ITEM_INFO* item;
 	short room_number;
 
+	if (InterpIsTweenFrame())
+	{
+		g_doorTweens++;
+		return;
+	}
+
+	g_doorFrames++;
+
 	for (int i = 0; i < 32; i++)
-	{		
+	{
 		item = (ITEM_INFO*)ClosedDoors[i];
 
 		if (!item)
@@ -699,6 +737,7 @@ void ProcessClosedDoors()
 				ItemNewRoom(item - items, item->draw_room);
 				item->room_number = room_number;
 				item->InDrawRoom = 1;
+				g_doorMoves++;
 			}
 		}
 		else if (item->InDrawRoom)
@@ -706,6 +745,22 @@ void ProcessClosedDoors()
 			item->room_number = item->draw_room;
 			ItemNewRoom(item - items, room_number);
 			item->InDrawRoom = 0;
+			g_doorMoves++;
 		}
 	}
+}
+
+/* DOORLOG, one line at the end of each level and of the title, with -log,
+ * right after RNGLOG (game\gameflow.cpp, after LaraJointsLevelEnd). At
+ * fps_mode 0 no frame is a tween frame: skipped_tween is 0 and frames
+ * counts every frame DrawRooms walked. */
+void ClosedDoorsLevelEnd()
+{
+	if (gLogEnabled)
+		Log("DOORLOG moves=%ld frames=%ld skipped_tween=%ld", g_doorMoves,
+			g_doorFrames, g_doorTweens);
+
+	g_doorMoves = 0;
+	g_doorFrames = 0;
+	g_doorTweens = 0;
 }

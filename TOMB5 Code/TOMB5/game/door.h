@@ -11,5 +11,6 @@ void DoubleDoorCollision(short item_num, ITEM_INFO* l, COLL_INFO* coll);
 void UnderwaterDoorCollision(short item_num, ITEM_INFO* l, COLL_INFO* coll);
 void SequenceDoorControl(short item_number);
 void ProcessClosedDoors();
+void ClosedDoorsLevelEnd();
 
 extern long ClosedDoors[32];

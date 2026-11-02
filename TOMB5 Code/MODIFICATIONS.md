@@ -17689,6 +17689,41 @@ last tick (`StepAfterDeathFade`).
 
 **Commits.** `d377aa82`.
 
+### A sound the level lacks is not stopped through info -1 (#311)
+2026-11-02
+
+**What.** `StopSoundEffect` returns when the level carries no sample for the sound it is
+asked to stop, as `SoundEffect` does, and stops nothing.
+
+**Why.** It read `lut = sample_lut[sfx]` and indexed `sample_infos[lut]` without asking
+whether `lut` was -1 ("not in this level") or -2 (the same, once `SoundEffect` has logged
+it). `sample_infos[-1].flags` is the last entry of `sample_lut` in the bump allocator,
+-1 in every vanilla level, so the variation count came out as 15 and the loop stopped
+every running sound whose info index lay in -1..13: the free slots' idle channels and
+the level's first fourteen sounds. `lara_as_stop` asks to stop `SFX_LARA_SLIPPING` every
+tick, and RICHCUT2 has no sample for it (four infos in all, none of the stopped sounds).
+The sanitizer build showed it there as `use-after-poison` at `game/sound.cpp` in
+`StopSoundEffect` under `lara_as_stop`: 30 bytes into the red zone before `sample_infos`.
+An original fault of the engine.
+
+**How.** `game/sound.cpp`: `if (lut < 0) return;` after the read, without a log line,
+since it runs every tick. Nothing else in the function changes. ModernTest's group
+`sound_stop` (2 checks) holds the test before the index and `SoundEffect`'s own -1/-2.
+
+**Measured.** The eleven calls stop six sounds: `SFX_LARA_SLIPPING` (3, three calls),
+`SFX_LARA_FALL` (30, three), `SFX_HK_FIRE` (68, two), `SFX_J_GRAB_MOTOR_B_LP` (257),
+`SFX_J_GRAB_WINCH_UP_LP` (260), `SFX_GOD_HEAD_CHARGE` (278). Of the vanilla levels the
+thirteen playable ones carry 3 and 30; RICHCUT2 and the title carry neither. 68 is in the
+three RICH levels only, 257 and 260 in JOBY2 only, 278 in ANDREA2 only; their calls run
+only where their item or weapon is (the randomizer's HK and drone transfers bring 68).
+`S_SoundStopSample` on a free slot stops that slot's channel, which no running sound uses:
+every start goes through `SoundEffect` and fills the slot of the channel it got.
+The other readers index only after a test: `GetPanVolume` and `SoundEffects` (slot >= 0),
+`SoundEffect`, the HQ bridge (`hqsfx.cpp`, `sfxbank.cpp`) and the footstep sets
+(`hd_feet.cpp`).
+
+**Commits.** `b4d2ccd6`.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -18105,3 +18140,4 @@ entries above.
 | #307 | section 3 (the randomizer); no engine entry: no file under `TOMB5 Code/TOMB5` changed |
 | #308 | The engine reads its texture blocks with the project's own inflater; zlib goes |
 | #310 | The logic reads Lara's joints from the live state, not a blend |
+| #311 | A sound the level lacks is not stopped through info -1 |

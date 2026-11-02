@@ -17760,6 +17760,53 @@ The other readers index only after a test: `GetPanVolume` and `SoundEffects` (sl
 
 **Commits.** `b4d2ccd6`.
 
+### No fixed camera, no camera.fixed[-1]; empty ring slots skipped (#312)
+2026-11-03
+
+**What.** Two reads at index -1. `CalculateCamera` reads a fixed camera's flags only when
+there is a camera number; `setup_objectlist_startposition2` skips the inventory ring's
+empty slots before it indexes the object table with them.
+
+**Why.** The forced fixed camera - the floor trapdoor lift, the ceiling trapdoor pull, the
+turn switch - makes `camera.type` FIXED at the top of `CalculateCamera` and never names a
+camera, so `camera.number` is the -1 the reset at the end of the previous pass left, on
+every tick it runs. The target block then read `camera.fixed[-1].flags` into
+`SniperCamActive` and, with bit 1 set, aimed at Lara's torso. `camera.fixed` is allocated
+right after `spriteinfo`, so the 16 bytes before it are the last sprite's texture
+corners and "flags" is the high half of its `y2`: 3 in ten level files, 2 in four, 0 in
+two. The sanitizer build showed it as `use-after-poison` in `CalculateCamera` (lines 1583
+and 1585) in ANDREA2 at the tick the lift began.
+The inventory, opened on an item (a keyhole, a puzzle hole, the crowbar door), looks for
+the item's slot over all `NUM_INVOBJ` ring slots and indexed `inventry_objects_list` with
+each slot's `invitem`; the slots past `numobjectsinlist` hold `NO_ITEM`. The sanitizer
+showed `global-buffer-overflow` 20 bytes before `inventry_objects_list`. Both original
+faults of the engine.
+
+**How.** `game/camera.cpp`: the target block's test gains `camera.number >= 0`, as the
+sniper test at the top of the function already reads. Without a number
+`SniperCamActive` stays at the 0 it is cleared to at the start of every pass and the
+target is the ordinary one. `game/newinv2.cpp`: the walk keeps the sibling's
+`NUM_INVOBJ` bound (the ring's clears and searches use it too) and skips `invitem < 0`;
+the sibling compares `invitem` itself and stays as it is. ModernTest's groups
+`camera_fixed_none` (2 checks) and `inventory_start_empty` (2) sit beside `sound_stop`.
+
+**Measured.** The pair comes from the forced camera alone: the log runs Lara in AS_BACK
+into place, then anim 317 (`ANIM_LIFTTRAP`, state 93) from the tick of the report, the
+only lift, pull or turn of that run. Every other FIXED or HEAVY write comes with a number
+(`control.cpp` TO_CAMERA and `RefreshCamera`), and the type is reset each pass. The other
+`camera.fixed[camera.number]` reads ask first or follow the assignment: the sniper test,
+TO_CAMERA, `RefreshCamera` and the Target command's `NO_ITEM` test. `FixedCamera` reads it
+only outside the forced camera; a FIXED or HEAVY type without a number could reach it
+only through the binoculars' restore of `camera.old_type`, which no log has shown, so it
+is left as it was. With the guard, the release changes in the fourteen files whose bytes
+were not 0: during the three forced cameras the target is no longer Lara's torso but the
+point the chase camera uses, and the look key is no longer cleared; ANDY3 already ran so.
+The x86 build read `dels_handy_combine_table`'s last-but-one `combined_item` (80) as the
+empty slot's object number; the ring is opened on puzzle items, keys, the crowbar and the
+wet cloth only (172 to 240), so the start slot was never wrong there.
+
+**Commits.** `cfd09dad`.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -18177,3 +18224,4 @@ entries above.
 | #308 | The engine reads its texture blocks with the project's own inflater; zlib goes |
 | #310 | The logic reads Lara's joints from the live state, not a blend |
 | #311 | A sound the level lacks is not stopped through info -1 |
+| #312 | No fixed camera, no camera.fixed[-1]; empty ring slots skipped |

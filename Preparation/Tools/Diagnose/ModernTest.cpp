@@ -11480,6 +11480,83 @@ static void sound_stop()
 	free(sound);
 }
 
+/* The fixed camera that is not there (game\camera.cpp, CalculateCamera):
+ * the forced fixed camera makes the type FIXED and leaves camera.number at
+ * -1, and the target block indexed camera.fixed with it. It now asks for
+ * a number first, as the sniper test at the top of the function does.
+ * Without one it takes the torso target, as most level files' bytes before
+ * the table had it, and the look-key lock stays at the 0 it was cleared
+ * to; a named camera reads its flags as before. Every
+ * camera.fixed[camera.number] in the function sits behind a
+ * camera.number >= 0. */
+static void camera_fixed_none()
+{
+	char* camera = hd_switch_text("../../game/camera.cpp");
+	static char body[131072];
+
+	glass_body(camera, "void CalculateCamera()", body, sizeof(body));
+
+	const char* clear = strstr(body, "SniperCamActive=0;");
+	const char* forced = strstr(body, "if(UseForcedFixedCamera&&"
+		"!FirstPersonEnabled())camera.type=FIXED_CAMERA;");
+	const char* sniper = strstr(body, "camera.number>=0&&"
+		"(camera.fixed[camera.number].flags&2);");
+	const char* block = strstr(body, "if(camera.type!=CHASE_CAMERA&&"
+		"camera.flags!=3)//");
+	const char* target = strstr(body, "longtorso=1;if(camera.number>=0)"
+		"fixed=&camera.fixed[camera.number];SniperCamActive=fixed->flags&3;"
+		"torso=fixed->flags&2;}if(torso)v.x=0;v.y=0;v.z=0;"
+		"GetLaraJointPos(&v,LMX_TORSO);camera.target.x=v.x;"
+		"camera.target.y=v.y;camera.target.z=v.z;gotit=1;}");
+
+	ok(clear && forced && sniper && block && target && clear < forced &&
+		forced < sniper && sniper < block && block < target,
+		"camera fixed none: the target block asks camera.number >= 0 "
+		"before camera.fixed and takes the torso without one",
+		!!clear + !!forced + !!sniper + !!block + !!target, 5);
+
+	long n = 0;
+
+	for (const char* p = body; (p = strstr(p, "camera.fixed[camera.number]"));
+		p++)
+		n++;
+
+	ok(n == 2, "camera fixed none: two reads of camera.fixed[camera.number] "
+		"in CalculateCamera, both guarded", n, 2);
+
+	free(camera);
+}
+
+/* The inventory's empty slots (game\newinv2.cpp,
+ * setup_objectlist_startposition2): the ring is cleared to NO_ITEM and
+ * filled up to numobjectsinlist, and the walk over all NUM_INVOBJ slots
+ * indexed inventry_objects_list with an empty slot's -1. It skips them
+ * now and keeps the sibling's bound; the sibling compares invitem itself
+ * and stays as it was. */
+static void inventory_start_empty()
+{
+	char* inv = hd_switch_text("../../game/newinv2.cpp");
+	static char body[4096];
+
+	glass_body(inv, "void setup_objectlist_startposition2(short newobj)",
+		body, sizeof(body));
+	ok(strstr(body, "for(inti=0;i<NUM_INVOBJ;i++)invitem=rings["
+		"RING_INVENTORY]->current_object_list[i].invitem;if(invitem>=0&&"
+		"inventry_objects_list[invitem].object_number==newobj)rings["
+		"RING_INVENTORY]->curobjinlist=i;}") != 0 &&
+		strstr(body, "inventry_objects_list[rings[") == 0,
+		"inventory start: empty slots are skipped before the table", 0, 0);
+
+	glass_body(inv, "void setup_objectlist_startposition(short newobj)",
+		body, sizeof(body));
+	ok(strstr(body, "for(inti=0;i<NUM_INVOBJ;i++)if(rings[RING_INVENTORY]"
+		"->current_object_list[i].invitem==newobj)rings[RING_INVENTORY]->"
+		"curobjinlist=i;}") != 0,
+		"inventory start: the sibling compares invitem itself", 0, 0);
+
+	free(inv);
+}
+
 /* The split of a see-through draw call (hd_render.cpp, GlassSplits) and the
  * additive run's glass (AddGlass): their numbers and their bodies read out
  * of the engine's text, and their rules run over the census of the fifteen
@@ -35594,6 +35671,8 @@ int main()
 	registry_old_water();
 	hd_feet();
 	sound_stop();
+	camera_fixed_none();
+	inventory_start_empty();
 	glass_split();
 	shell_rule();
 	card_rule();

@@ -2770,9 +2770,17 @@ void setup_objectlist_startposition(short newobj)
 
 void setup_objectlist_startposition2(short newobj)
 {
+	short invitem;
+
+	// The ring's slots past numobjectsinlist hold NO_ITEM, and that -1
+	// indexed the table 20 bytes before its start. The walk keeps the
+	// sibling's bound above and skips them: an empty slot is never the
+	// object asked for, as it never matches the sibling's test either.
 	for (int i = 0; i < NUM_INVOBJ; i++)
 	{
-		if (inventry_objects_list[rings[RING_INVENTORY]->current_object_list[i].invitem].object_number == newobj)
+		invitem = rings[RING_INVENTORY]->current_object_list[i].invitem;
+
+		if (invitem >= 0 && inventry_objects_list[invitem].object_number == newobj)
 			rings[RING_INVENTORY]->curobjinlist = i;
 	}
 }

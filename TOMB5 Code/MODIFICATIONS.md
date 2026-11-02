@@ -17982,7 +17982,7 @@ thread's stack, the heap as far as it was committed, the sanitizer's own regions
 and names the bytes below 4 GB it found held.
 
 **Commits.** `d6f10914` (the sanitizer build and `-high`), `ad6579b3` (`FreeLevel`'s
-clears), `198fea8b` (the checks).
+clears), `198fea8b` (the checks), `05492814` (the comments).
 
 ## 3. Randomizer changes since Beta 1.0
 

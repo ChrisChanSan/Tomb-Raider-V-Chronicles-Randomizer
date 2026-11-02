@@ -35256,6 +35256,125 @@ static void brawler_reach()
 	free(lara);
 }
 
+/* Where a body's text stands in an engine text, or -1. */
+static long joints_at(const char* text, const char* what)
+{
+	const char* p = text && what ? strstr(text, what) : 0;
+
+	return p ? (long)(p - text) : -1L;
+}
+
+/* Lara's joints for the logic (game\draw.cpp, LaraJointsBuild and
+ * LaraJointsLive). One function builds her matrices and wet nodes, called by
+ * the frame with `draw` 1 and by the pass after a blended frame with 0; its
+ * `draw` body is DrawPhaseGame's old block in the old order; the pass runs
+ * right after InterpEndFrame; at fps_mode 0 no frame is blended, so the pass
+ * never runs and the wet nodes are written as before. Read from the tree. No
+ * arithmetic check beside it: the joint chain (CalcLaraMatrices) runs on the
+ * matrix stack of specific\3dmath.cpp with the level's bones, animations and
+ * lara_item, none of which builds beside this suite - and both calls go
+ * through that one function. */
+static void lara_joints()
+{
+	char* draw = hd_switch_text("../../game/draw.cpp");
+	char* cut = hd_switch_text("../../game/deltapak.cpp");
+	char* lara = hd_switch_text("../drawlara.cpp");
+	char* interp = hd_switch_text("../../game/interpolate.cpp");
+	char* flow = hd_switch_text("../../game/gameflow.cpp");
+	static char body[65536];
+	long a, b, c, d, e;
+
+	printf("Lara's joints for the logic: one build, the pass after a blend\n");
+
+	ok(draw && cut && lara && interp && flow, "lara joints: the five files",
+		!!draw + !!cut + !!lara + !!interp + !!flow, 5);
+
+	glass_body(draw, "void LaraJointsBuild(long draw)", body, sizeof(body));
+	a = joints_at(body, "if(draw)CalcLaraMatrices(0);InterpArmLogFrame();");
+	b = joints_at(body, "}phd_PushUnitMatrix();CalcLaraMatrices(1);"
+		"phd_PopMatrix();if(GLOBAL_playing_cutseq)frigup_lara(draw);"
+		"SetLaraUnderwaterNodes();g_joints.blended=draw&&"
+		"InterpFrameBlended();");
+	ok(a >= 0 && b > a, "lara joints: the build keeps the frame's old order",
+		b, a + 1);
+	ok(hd_switch_count(draw, "CalcLaraMatrices(0);") == 1 &&
+		hd_switch_count(draw, "CalcLaraMatrices(1);") == 1 &&
+		hd_switch_count(draw, "frigup_lara(") == 1 &&
+		hd_switch_count(draw, "SetLaraUnderwaterNodes();") == 1,
+		"lara joints: one build in draw.cpp, no second chain",
+		hd_switch_count(draw, "CalcLaraMatrices(1);"), 1);
+
+	glass_body(draw, "long DrawPhaseGame()", body, sizeof(body));
+	a = joints_at(body, "InterpBeginFrame(alpha);");
+	b = joints_at(body, "LaraJointsBuild(1);");
+	c = joints_at(body, "S_DumpScreen()");
+	d = joints_at(body, "InterpEndFrame();LaraJointsLive();");
+	e = joints_at(body, "ProfileFrameEnd();");
+	ok(a >= 0 && b > a && c > b && d > c && e > d,
+		"lara joints: the frame builds, presents, lets go, then the pass",
+		d, c + 1);
+	ok(hd_switch_count(body, "LaraJointsBuild(1);") == 1 &&
+		hd_switch_count(body, "CalcLaraMatrices(") == 0 &&
+		hd_switch_count(body, "LaraJointsLive();") == 1,
+		"lara joints: the frame calls the build once and the pass once",
+		hd_switch_count(body, "LaraJointsBuild(1);"), 1);
+
+	glass_body(draw, "void LaraJointsLive()", body, sizeof(body));
+	ok(!strcmp(body, "if(!g_joints.blended)return;LaraJointsBuild(0);"
+		"g_joints.passes++;"),
+		"lara joints: the pass runs only after a blended frame", 0, 1);
+
+	/* fps_mode 0: InterpAlphaNow gives 1, InterpBeginFrame returns before
+	 * the snapshot is applied, so InterpFrameBlended stays false. */
+	glass_body(interp, "bool InterpFrameBlended()", body, sizeof(body));
+	ok(!strcmp(body, "returng_applied;"),
+		"lara joints: blended is the applied snapshot", 0, 1);
+	glass_body(interp, "void InterpBeginFrame(float alpha)", body,
+		sizeof(body));
+	a = joints_at(body, "if(alpha>=1.0F||!items||!g_prevCam.valid)");
+	b = joints_at(body, "g_applied=true;");
+	ok(a >= 0 && b > a && hd_switch_count(interp, "g_applied = true;") == 1,
+		"lara joints: a frame at alpha 1 is never blended", b, a + 1);
+	glass_body(interp, "float InterpAlphaNow()", body, sizeof(body));
+	ok(strstr(body, "if(mode!=1)return1.0F;") != 0,
+		"lara joints: fps_mode 0 draws at alpha 1", 0, 1);
+
+	glass_body(cut, "void frigup_lara(long draw)", body, sizeof(body));
+	a = joints_at(body, "if(draw&&cutseq_num==18&&GLOBAL_cutseq_frame<=130)");
+	b = joints_at(body, "if(draw)Rich_CalcLaraMatrices_Normal(frame,bone,0);"
+		"phd_PushUnitMatrix();Rich_CalcLaraMatrices_Normal(frame,bone,1);"
+		"phd_PopMatrix();if(!draw)return;");
+	c = joints_at(body, "HairControl(0,0,frame);");
+	d = joints_at(body, "GLaraShadowframe=frig_shadow_bbox;");
+	ok(a >= 0 && b > a && c > b && d > c,
+		"lara joints: the cutscene's build, the pass stops at the joints",
+		c, b + 1);
+
+	glass_body(lara, "void SetLaraUnderwaterNodes()", body, sizeof(body));
+	ok(hd_switch_count(body, "if(!InterpFrameBlended())lara.wet[i]=252;")
+		== 1 && hd_switch_count(body, "lara.wet[i]=252;") == 1,
+		"lara joints: a blended frame wets no node", 0, 1);
+
+	glass_body(cut, "void handle_cutseq_triggering(long name)", body,
+		sizeof(body));
+	ok(body[0] && !strstr(body, "GetLaraJointPos(") &&
+		!strstr(body, "lara_joint_matrices"),
+		"lara joints: nothing between the frame and the tick reads them",
+		0, 1);
+
+	ok(hd_switch_count(flow, "LaraJointsLevelEnd();") == 2 &&
+		hd_switch_count(draw, "\"JOINTLOG passes=%ld ticks=%lu "
+		"tween_frames=%ld blended_frames=%ld\"") == 1,
+		"lara joints: JOINTLOG at the end of a level and of the title",
+		hd_switch_count(flow, "LaraJointsLevelEnd();"), 2);
+
+	free(draw);
+	free(cut);
+	free(lara);
+	free(interp);
+	free(flow);
+}
+
 int main()
 {
 	printf("ModernTest - the arithmetic of the modern control\n");
@@ -35509,6 +35628,7 @@ int main()
 	brawler_rule();
 	brawler_reach();
 	save_pointer();
+	lara_joints();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

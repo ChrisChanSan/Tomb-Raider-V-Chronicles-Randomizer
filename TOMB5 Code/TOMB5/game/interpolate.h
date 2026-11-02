@@ -154,6 +154,16 @@ bool InterpIsTweenFrame();
  * false at fps_mode 0. */
 bool InterpDrawnFrameWasTween();
 
+/* The frame being drawn wrote the blended state into the live one (the
+ * snapshot was applied): items, the camera, Lara's aim and the cutscene's
+ * actors stand between two ticks until InterpEndFrame puts them back. Not
+ * the tween latch: at fps_mode 2 the frame that carries the tick is drawn
+ * blended too, and at 60 Hz there the other frame is drawn live. What the
+ * draw builds from this state and the logic reads - Lara's joint set and
+ * her wet nodes (game\draw.cpp, LaraJointsBuild) - is built again from the
+ * live state when it is true. Always false at fps_mode 0. */
+bool InterpFrameBlended();
+
 /* A present that is not a 60 Hz game frame's own. Called from S_DumpScreen
  * and S_DumpScreenFrame; clears the tween latch. */
 void InterpNoteClassicPresent();

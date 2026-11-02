@@ -1066,7 +1066,10 @@ That is not a claim, it is how the engine was already built. Its clock counts
 in sixtieths of a second, and the loop that runs the game spends **two** of
 them on one step. Presenting once per sixtieth therefore runs the game on
 every second frame, all by itself — thirty steps, sixty pictures, and not one
-line of the simulation touched.
+line of the simulation touched. Nor does the game read anything back from a
+picture drawn between two steps: where it needs Lara's bones — an enemy's aim,
+the ledge test, her weapons, the cameras, the water dripping off her — it
+takes them from her pose at the game step, at every setting.
 
 Two ways to check it yourself:
 

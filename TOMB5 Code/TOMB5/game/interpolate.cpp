@@ -1225,13 +1225,14 @@ float InterpAlphaNow()
 	 *   framecount -1, frame at 0.5, +1 -> 0, no tick
 	 *   framecount 0, frame at 1.0, +1 -> 1, TICK, ...
 	 *
-	 * So no logic tick reads what a tween frame left in lara_matrices and
-	 * lara_joint_matrices (delstuff.cpp), from which the first person and
-	 * look cameras take the head bone. Only a late frame (two ticks or more)
-	 * can put a tick behind a tween frame, leaving the camera's head bone half
-	 * a step stale for one frame; nothing in the simulation or the savegame
-	 * depends on those matrices, and HairControl builds its own stack from
-	 * lara_item->pos (hair.cpp), already restored by InterpEndFrame. */
+	 * So a tick mostly follows a live frame. A late frame (two ticks or
+	 * more) can put a tick behind a tween frame, whose joint set
+	 * (lara_joint_matrices, delstuff.cpp) the drone's aim, the ledge test,
+	 * the cameras and the weapons read; the pass after every blended frame
+	 * builds it again from the live state (draw.cpp, LaraJointsLive), at
+	 * fps_mode 2 as well, where nearly every frame is blended. HairControl
+	 * builds its own stack from lara_item->pos (hair.cpp), already restored
+	 * by InterpEndFrame. */
 	return framecount < 0 ? 0.5F : 1.0F;
 }
 
@@ -1358,6 +1359,11 @@ bool InterpIsTweenFrame()
 bool InterpDrawnFrameWasTween()
 {
 	return g_drawnTween;
+}
+
+bool InterpFrameBlended()
+{
+	return g_applied;
 }
 
 void InterpNoteClassicPresent()

@@ -957,6 +957,7 @@ void DoTitle(uchar name, uchar audio)
 		DoSpecialFeaturesServer();
 	}
 
+	LaraJointsLevelEnd();	// JOINTLOG, with -log
 	S_SoundStopAllSamples();
 	S_CDStop();
 	sound_cut_flag = 0;
@@ -1232,6 +1233,7 @@ void DoLevel(uchar Name, uchar Audio)
 		}
 	}
 
+	LaraJointsLevelEnd();	// JOINTLOG, with -log
 	S_SoundStopAllSamples();
 	S_CDStop();
 

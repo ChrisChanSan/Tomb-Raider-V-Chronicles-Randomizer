@@ -16,7 +16,7 @@ small local fixes that predate this repository and are documented in the files t
 (`dxsound.cpp` LOCSOFTWARE, `function_stubs.cpp` DO_LOG).
 
 Measured on **2026-11-02** by comparing every file under `TOMB5/` against that first
-commit: **135 files changed, 199 entirely new - 334 in all**, **284** of them carrying
+commit: **136 files changed, 199 entirely new - 335 in all**, **285** of them carrying
 the modification notice at the top, which `grep -rl "Modified 2026 by ChrisChanSan"
 TOMB5/` lists. The project file `tomb5.vcxproj` and its filters file carry the same
 notice as an XML comment, and `resource.h` and `tomb5.rc` beside them as comment lines.
@@ -24,7 +24,7 @@ notice as an XML comment, and `resource.h` and `tomb5.rc` beside them as comment
 234 are deleted: upstream's zlib, `tomb5/libs/zlib/`, since the engine reads deflate
 with the project's own reader (#308).
 
-50 of the 334 do not carry the notice, and none of them should:
+50 of the 335 do not carry the notice, and none of them should:
 
 - the 40 `specific/hd/hd_shader/*.inc` (9 vertex and 31 pixel shaders) are compiler
   output (`fxc` bytecode as a C array), regenerated from the eleven `.hlsl` files beside
@@ -17641,6 +17641,54 @@ original level about 9 ms.
 **Commits.** `7b5dcf50` (the call and the project), `7ec34954` (the release script and
 `.gitattributes`), `43975556`, `b51012c9` (the checks).
 
+### The logic reads Lara's joints from the live state, not a blend (#310)
+2026-11-02
+
+**What.** In the 60 fps modes the game logic takes Lara's joints - what `GetLaraJointPos`
+gives the drones' aim, the ledge test, the weapons, the fixed and look cameras, the
+cutscenes' hands, the bubbles and the drips - and her wet nodes from her pose at the
+logic tick, as the 30 fps mode does, and never from a frame drawn between two ticks.
+
+**Why.** A frame drawn between two ticks built `lara_joint_matrices` and the wet nodes
+from the blended pose. `InterpEndFrame` put the items, the camera and the aim back, not
+these, and the next tick read them, so which blend the logic saw depended on when the
+display presented. A recording of ANDREA2 replayed with other frame timing parted at tick
+193: the drone's shot hit Lara in the recording and the wall in the replay, every input
+equal. The frame also set `lara.wet` from the blended nodes, and `TriggerLaraDrips` draws
+a random number for every wet node.
+
+**How.** `game/draw.cpp`: `LaraJointsBuild(draw)` is `DrawPhaseGame`'s old block in its
+old order - `CalcLaraMatrices(0)`, the ARMLOG frame, `CalcLaraMatrices(1)` under a unit
+matrix, `frigup_lara` in a cutscene, `SetLaraUnderwaterNodes` - and the frame calls it
+with 1. `LaraJointsLive`, right after `InterpEndFrame`, calls it with 0 when the frame was
+blended: the joint set, a cutscene's joint set and the wet nodes again, from the state of
+the last tick, with no view set, no ARMLOG line, no caption and no braid step. There is
+no second copy of the joint chain. The pass runs there and not at the top of the next
+tick because `DoLevel` calls `handle_cutseq_triggering` between the frame and the tick,
+and a cutscene's start there writes Lara's gun state, which the arms of the chain read.
+`game/interpolate.cpp`: `InterpFrameBlended`, the snapshot applied - not the tween
+latch, since at the display's rate the frame that carries the tick is drawn blended.
+`game/deltapak.cpp`: `frigup_lara(draw)` stops after the joint set without `draw`.
+`specific/drawlara.cpp`: `SetLaraUnderwaterNodes` writes `lara.wet` only on a frame that
+is not blended. With `-log`, `JOINTLOG passes= ticks= tween_frames= blended_frames=`
+once at the end of each level and of the title (`LaraJointsLevelEnd`,
+`game/gameflow.cpp`). At fps_mode 0 no frame is blended: the pass never runs, `lara.wet`
+is written as before, and the frame's calls are the old ones in the old order.
+`game/deltapak.h` carries the modification notice now. ModernTest's group `lara_joints`
+(13 checks) holds the order and the wiring in the engine's text.
+
+**Measured.** 76 places in the tick read the joint set (the item controls run first, from
+`ControlPhase`'s item loop, before `LaraControl` and the camera); the frame's own readers
+are the lighting, the three shadows, the sparks and the HD soft body. Read by nothing in
+the logic and left as they are: the view set `lara_matrices`, the nodes' ambient and
+`GLaraShadowframe`. A pass costs the joint half of what every frame builds: one per tick
+at 60, nearly one per frame at the display's rate. Measured and not changed here: at the
+display's rate the frame that carries a tick is blended and keeps its draws from the
+logic's random numbers, and the corpse fade counts a body seen in any frame since the
+last tick (`StepAfterDeathFade`).
+
+**Commits.** `d377aa82`.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -18056,3 +18104,4 @@ entries above.
 | #306 | section 3 (the randomizer); no engine entry: no file under `TOMB5 Code/TOMB5` changed |
 | #307 | section 3 (the randomizer); no engine entry: no file under `TOMB5 Code/TOMB5` changed |
 | #308 | The engine reads its texture blocks with the project's own inflater; zlib goes |
+| #310 | The logic reads Lara's joints from the live state, not a blend |

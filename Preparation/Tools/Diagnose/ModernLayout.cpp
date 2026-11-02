@@ -35,6 +35,7 @@
 #include <dinput.h>
 #include <dsound.h>
 #include "../../../TOMB5 Code/TOMB5/global/disk_layout.h"
+#include "../../../TOMB5 Code/TOMB5/specific/atan_math.h"
 
 typedef void (*LayoutOk)(bool cond, const char* what, long got, long want);
 
@@ -340,6 +341,114 @@ static void pendulum(LayoutOk ok)
 		(long)s.Rope, 3 * 1460);
 }
 
+/* phd_atan as it read before its arithmetic moved to atan_math.h, word for
+ * word: the reference AtanMath must equal for every input but LONG_MIN. */
+static long OldAtan(long x, long y)
+{
+	long octant, n, result;
+
+	result = 0;
+	octant = 0;
+
+	if (x || y)
+	{
+		if (x < 0)
+		{
+			octant += 4;
+			x = -x;
+		}
+
+		if (y < 0)
+		{
+			octant += 2;
+			y = -y;
+		}
+
+		if (y > x)
+		{
+			octant++;
+			n = x;
+			x = y;
+			y = n;
+		}
+
+		while ((short)y != y)
+		{
+			x >>= 1;
+			y >>= 1;
+		}
+
+		result = phdtan2[octant] + phdtantab[(y << 11) / x];
+
+		if (result < 0)
+			result = -result;
+	}
+
+	return result;
+}
+
+/* phd_atan: the same angle for every input it could take, and LONG_MIN -
+ * the one that divided by zero - clamped to the angle of -LONG_MAX. */
+static void atan_clamp(LayoutOk ok)
+{
+	static const long edge[] = { 0, 1, -1, 2, -2, 7, -7, 255, -255, 32767,
+		-32767, 32768, -32768, 65535, -65535, 1000000, -1000000, 1 << 30,
+		-(1 << 30), LONG_MAX, -LONG_MAX };
+	const int n = (int)(sizeof(edge) / sizeof(edge[0]));
+	unsigned long seed = 0x303B;
+	long bad = 0, tried = 0;
+
+	for (int i = 0; i < n; i++)
+	{
+		for (int j = 0; j < n; j++, tried++)
+			bad += AtanMath(edge[i], edge[j]) != OldAtan(edge[i], edge[j]);
+	}
+
+	for (int k = 0; k < 200000; k++, tried++)
+	{
+		seed = seed * 1103515245UL + 12345UL;
+		long x = (long)(seed >> 1) >> (seed & 15);
+		seed = seed * 1103515245UL + 12345UL;
+		long y = (long)(seed >> 1) >> (seed & 15);
+
+		if (seed & 0x10000)
+			x = -x;
+
+		if (seed & 0x20000)
+			y = -y;
+
+		bad += AtanMath(x, y) != OldAtan(x, y);
+	}
+
+	ok(bad == 0, "x64 layout: phd_atan's arithmetic as before, 200441 pairs",
+		bad, 0);
+
+	long x = LONG_MIN, y = 4096;
+	const bool c1 = AtanClamp(&x, &y);
+	const long a1 = AtanMath(x, y);
+
+	ok(c1 && x == -LONG_MAX && y == 4096 && a1 == OldAtan(-LONG_MAX, 4096),
+		"x64 layout: phd_atan clamps an x of LONG_MIN, one unit in",
+		a1, OldAtan(-LONG_MAX, 4096));
+	x = 12;
+	y = LONG_MIN;
+
+	const bool c2 = AtanClamp(&x, &y);
+	const long a2 = AtanMath(x, y);
+
+	ok(c2 && y == -LONG_MAX && x == 12 && a2 >= 0 && a2 < 65536,
+		"x64 layout: ...and a y of LONG_MIN, an angle in the turn", a2, 0);
+	x = LONG_MIN;
+	y = LONG_MIN;
+	ok(AtanClamp(&x, &y) && AtanMath(x, y) == OldAtan(-LONG_MAX, -LONG_MAX),
+		"x64 layout: ...and both", AtanMath(x, y),
+		OldAtan(-LONG_MAX, -LONG_MAX));
+	x = -LONG_MAX;
+	y = 0;
+	ok(!AtanClamp(&x, &y) && x == -LONG_MAX && y == 0,
+		"x64 layout: every other input passes unclamped", 0, 0);
+}
+
 void layout_checks(LayoutOk ok)
 {
 	ok(sizeof(SAVEGAME_INFO) == 29397 && sizeof(LARA_INFO_SAVE) == 349 &&
@@ -355,4 +464,5 @@ void layout_checks(LayoutOk ok)
 	anims(ok);
 	lara_runs(ok);
 	pendulum(ok);
+	atan_clamp(ok);
 }

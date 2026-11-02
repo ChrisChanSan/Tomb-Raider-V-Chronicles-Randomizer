@@ -788,6 +788,9 @@
     <ClInclude Include="TOMB5\game\andrea.h">
       <Filter>TOMB5\game</Filter>
     </ClInclude>
+    <ClInclude Include="TOMB5\specific\atan_math.h">
+      <Filter>TOMB5\specific</Filter>
+    </ClInclude>
     <ClInclude Include="TOMB5\specific\alexstuff.h">
       <Filter>TOMB5\specific</Filter>
     </ClInclude>

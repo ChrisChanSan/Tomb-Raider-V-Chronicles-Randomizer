@@ -21,6 +21,8 @@
 #include "../game/lara.h"
 #include "../game/interpolate.h"	// InterpIsTweenFrame - the poison ramp guard
 #include "zrange_math.h"		// ZDepthCurve - the depth curve
+#include "atan_math.h"			// phd_atan's arithmetic and clamp
+#include <intrin.h>			// _ReturnAddress - ATANLOG's caller
 
 PHD_VECTOR CamPos;
 SVECTOR CamRot;
@@ -952,48 +954,41 @@ void InitWindow(long x, long y, long w, long h, long znear, long zfar, long fov,
 	aInitMatrix();
 }
 
-long phd_atan(long x, long y)
+/* ATANLOG: a call of phd_atan with LONG_MIN in it, the one input that
+ * divides by zero (atan_math.h). One line per caller and run - its return
+ * address as an offset into the executable, which the build's .pdb
+ * resolves - for the first 16 callers; the -log seam only. */
+static void AtanSeam(long x, long y, void* caller)
 {
-	long octant, n, result;
+	static void* seen[16];
+	static long nSeen;
 
-	result = 0;
-	octant = 0;
+	if (!gLogEnabled)
+		return;
 
-	if (x || y)
+	for (long i = 0; i < nSeen; i++)
 	{
-		if (x < 0)
-		{
-			octant += 4;
-			x = -x;
-		}
-
-		if (y < 0)
-		{
-			octant += 2;
-			y = -y;
-		}
-
-		if (y > x)
-		{
-			octant++;
-			n = x;
-			x = y;
-			y = n;
-		}
-
-		while ((short)y != y)
-		{
-			x >>= 1;
-			y >>= 1;
-		}
-
-		result = phdtan2[octant] + phdtantab[(y << 11) / x];
-
-		if (result < 0)
-			result = -result;
+		if (seen[i] == caller)
+			return;
 	}
 
-	return result;
+	if (nSeen >= 16)
+		return;
+
+	seen[nSeen++] = caller;
+	Log("ATANLOG x=%ld y=%ld caller=PCtomb5+0x%X", x, y,
+		(unsigned int)((uintptr_t)caller - (uintptr_t)GetModuleHandle(0)));
+}
+
+// Never inlined, so that _ReturnAddress names the caller.
+__declspec(noinline) long phd_atan(long x, long y)
+{
+	const long x0 = x, y0 = y;
+
+	if (AtanClamp(&x, &y))
+		AtanSeam(x0, y0, _ReturnAddress());
+
+	return AtanMath(x, y);
 }
 
 ulong phd_sqrt(ulong num)

@@ -27897,6 +27897,8 @@ static void x64_layout()
 	char* save = hd_switch_text("../../game/savegame.cpp");
 	char* rope = hd_switch_text("../../game/rope.cpp");
 	char* game = hd_switch_text("../gamemain.cpp");
+	char* math = hd_switch_text("../3dmath.cpp");
+	char* seam = hd_switch_text("../crashseam.h");
 	static char body[65536];
 
 	ok(alex && file && draw && save && rope && game,
@@ -27964,8 +27966,35 @@ static void x64_layout()
 	free(file);
 	free(draw);
 	free(save);
+
+	// phd_atan: the clamp before the arithmetic, the caller logged once.
+	glass_body(math, "long phd_atan(long x, long y)", body, sizeof(body));
+	ok(strstr(body, "constlongx0=x,y0=y;if(AtanClamp(&x,&y))AtanSeam(x0,y0,"
+		"_ReturnAddress());returnAtanMath(x,y);") &&
+		hd_switch_count(math, "__declspec(noinline) long phd_atan(") == 1,
+		"x64 layout: phd_atan clamps LONG_MIN, logs its caller, not inlined",
+		0, 1);
+	glass_body(math, "static void AtanSeam(long x, long y, void* caller)",
+		body, sizeof(body));
+	ok(strstr(body, "if(!gLogEnabled)return;") && strstr(body, "if(nSeen>="
+		"16)return;seen[nSeen++]=caller;Log(\"ATANLOGx=%ldy=%ldcaller="
+		"PCtomb5+0x%X\",x,y,"),
+		"x64 layout: ATANLOG once per caller, sixteen callers, -log only", 0,
+		1);
+
+	// The crash seam: MINIDUMP_EXCEPTION_INFORMATION's pack(4) shape, and
+	// the step and error on the line.
+	ok(seam && hd_switch_count(seam, "#pragma pack(push, 4)\r\nstruct "
+		"CrashSeamDumpInfo") + hd_switch_count(seam, "#pragma pack(push, 4)"
+		"\nstruct CrashSeamDumpInfo") == 1 &&
+		hd_switch_count(seam, "\"%s dump=%s err=%lu step=%s\\n\"") == 1,
+		"x64 layout: the crash seam's dump info in dbghelp's pack, err= step=",
+		0, 1);
+
 	free(rope);
 	free(game);
+	free(math);
+	free(seam);
 }
 
 /* One part of `rings` rings round the axis, at heights `ys` and radii

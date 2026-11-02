@@ -35375,6 +35375,87 @@ static void lara_joints()
 	free(flow);
 }
 
+/* What a frame leaves the logic besides Lara's joints (game\interpolate.cpp,
+ * InterpBeginFrame / InterpEndFrame; game\draw.cpp, PrintObjects). The
+ * generator's state and GetHeight's five globals are saved at every frame
+ * and given back after a tween frame, a blended frame and every frame of
+ * fps_mode 2's display cadence; at fps_mode 0 none of the three holds, so
+ * nothing is given back and the draws feed the stream as before. A corpse is
+ * marked only by the frame that is no tween frame, one per tick. RNGLOG
+ * counts both kinds of frame per level. Read from the tree. */
+static void logic_leftovers()
+{
+	char* draw = hd_switch_text("../../game/draw.cpp");
+	char* interp = hd_switch_text("../../game/interpolate.cpp");
+	char* stubs = hd_switch_text("../function_stubs.cpp");
+	static char body[65536];
+	long a, b, c, d;
+
+	printf("What a frame leaves the logic: the generator, GetHeight, the "
+		"corpses\n");
+
+	ok(draw && interp && stubs, "leftovers: the three files",
+		!!draw + !!interp + !!stubs, 3);
+
+	glass_body(interp, "void InterpBeginFrame(float alpha)", body,
+		sizeof(body));
+	a = joints_at(body, "constbooldisplayBound=ActiveFpsMode()==2&&"
+		"GameFrameMinTicks()==0;if(displayBound)");
+	b = joints_at(body, "elseg_tween=(alpha<1.0F);");
+	c = joints_at(body, "g_seed=GetRandomControlSeed();"
+		"g_hTrigger=trigger_index;g_hTiltX=tiltxoff;g_hTiltY=tiltyoff;"
+		"g_hOnObject=OnObject;g_hType=height_type;"
+		"g_seedSaved=g_tween||displayBound;");
+	d = joints_at(body, "if(alpha>=1.0F||!items||!g_prevCam.valid)");
+	ok(a >= 0 && b > a && c > b && d > c,
+		"leftovers: saved at every frame before the first exit, kept back "
+		"on a tween frame and at fps_mode 2's cadence", c, b + 1);
+
+	a = joints_at(body, "g_applied=true;g_alpha=alpha;");
+	b = joints_at(body, "g_seedSaved=true;");
+	ok(a > d && b > a && hd_switch_count(body, "g_seedSaved=true;") == 1,
+		"leftovers: a blended frame gives back, and only it besides the two",
+		b, a + 1);
+
+	/* At fps_mode 0 the alpha is 1 (lara joints checks InterpAlphaNow) and
+	 * no display cadence runs, so the tween latch, the blend and the
+	 * cadence are all false: g_seedSaved is written only five times, its
+	 * declaration, the two above, the give-back and InterpInvalidate. */
+	ok(hd_switch_count(interp, "g_seedSaved = ") == 5,
+		"leftovers: no other path gives back",
+		hd_switch_count(interp, "g_seedSaved = "), 5);
+
+	glass_body(interp, "void InterpEndFrame()", body, sizeof(body));
+	ok(hd_switch_count(body, "if(gLogEnabled)NoteGiveBack();"
+		"if(g_seedSaved)SeedRandomControl(g_seed);"
+		"trigger_index=g_hTrigger;tiltxoff=g_hTiltX;tiltyoff=g_hTiltY;"
+		"OnObject=g_hOnObject;height_type=g_hType;g_seedSaved=false;}") == 1,
+		"leftovers: the frame's end counts, then gives back all six", 0, 1);
+
+	ok(hd_switch_count(stubs, "rand_1 = 0x41C64E6D * rand_1 + 12345;") == 1 &&
+		hd_switch_count(interp, "x = 0x41C64E6DUL * x + 12345UL;") == 1,
+		"leftovers: RNGLOG steps the generator as GetRandomControl does",
+		0, 1);
+	ok(hd_switch_count(interp, "\"RNGLOG frames=%ld given_back=%ld "
+		"undone=%ld kept_frames=%ld \"") == 1,
+		"leftovers: one RNGLOG line", 0, 1);
+	glass_body(draw, "void LaraJointsLevelEnd()", body, sizeof(body));
+	a = (long)strlen(body) - (long)strlen("InterpRngLevelEnd();");
+	ok(a > 0 && joints_at(body, "InterpRngLevelEnd();") == a,
+		"leftovers: RNGLOG follows JOINTLOG", 0, 1);
+
+	glass_body(draw, "void PrintObjects(short room_number)", body,
+		sizeof(body));
+	ok(hd_switch_count(body, "if(item->after_death>0&&!InterpIsTweenFrame())"
+		"g_afterDeathSeen[i]=1;") == 1 &&
+		hd_switch_count(draw, "g_afterDeathSeen[i] = 1;") == 1,
+		"leftovers: a corpse is marked by the tick's frame only", 0, 1);
+
+	free(draw);
+	free(interp);
+	free(stubs);
+}
+
 int main()
 {
 	printf("ModernTest - the arithmetic of the modern control\n");
@@ -35629,6 +35710,7 @@ int main()
 	brawler_reach();
 	save_pointer();
 	lara_joints();
+	logic_leftovers();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

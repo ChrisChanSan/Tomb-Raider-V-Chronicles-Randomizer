@@ -46,9 +46,9 @@
 // and a distance reads back inside it.
 //
 // WRITES stored blocks only (the "no compression" block type of RFC 1951)
-// inside the same zlib wrapper. Every deflate reader takes them, the
-// engine's zlib included; the bytes are the raw bytes plus five per 65535
-// and six for the wrapper.
+// inside the same zlib wrapper. Every deflate reader takes them, this
+// reader in the engine included; the bytes are the raw bytes plus five
+// per 65535 and six for the wrapper.
 //----------------------------------------------------------------------------
 namespace Inflate
 {

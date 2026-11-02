@@ -164,8 +164,8 @@ static void testJson()
 //----------------------------------------------------------------------------
 // The deflate reader and the stored writer (core/Inflate.h).
 //
-// The three streams below were written once by the engine's zlib
-// (TOMB5 Code/TOMB5/tomb5/libs/zlib, compress2) and pasted here, so the
+// The three streams below were written once by zlib 1.2.12 (compress2,
+// the copy the engine carried until #308) and pasted here, so the
 // reader is checked against another implementation's output, not against
 // its own writer: level 0 gives a stored block, level 9 on the short text a
 // fixed-Huffman block, level 9 on the longer text a dynamic-Huffman block.

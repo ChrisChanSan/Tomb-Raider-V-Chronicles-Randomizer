@@ -25,10 +25,6 @@
 **/tomb5/libs/discordRPC/**  linguist-vendored
 **/external/imgui/**         linguist-vendored
 
-# Generated, not written: 780 KB of zlib-packed level zones and checksum
-# lists as hex, produced by Preparation/Tools/EmbedData.ps1. Counted
-# as C++ it would swamp the language bar the same way zlib's contrib did.
-**/src/core/EmbeddedData.cpp linguist-generated
 
 # The HD shaders check out with LINE FEEDS on every machine. The engine has
 # no runtime shader compiler: the bytecode travels as

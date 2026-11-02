@@ -165,8 +165,8 @@ namespace
         return true;
     }
 
-    // Packed as stored blocks (Inflate.h): the engine's zlib reads them like
-    // any other stream, the randomizer needs no compressor, and the bytes
+    // Packed as stored blocks (Inflate.h): the engine reads them like any
+    // other stream, the randomizer needs no compressor, and the bytes
     // depend on nothing but the raw block. The level file grows by what
     // compression used to save there, and packing costs a copy.
     void deflateBlock(const std::vector<uint8_t>& raw, std::vector<uint8_t>& out)

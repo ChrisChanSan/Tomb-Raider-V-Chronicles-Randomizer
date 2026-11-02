@@ -309,7 +309,7 @@ void WinProcessCommandLine(LPSTR cmd)
 			if (command->needs_parameter)
 			{
 				p = 0;
-				l = strlen(pCommand);
+				l = (ulong)strlen(pCommand);
 
 				for (int j = 0; (ulong)j < l; j++, pCommand++)
 				{
@@ -317,7 +317,7 @@ void WinProcessCommandLine(LPSTR cmd)
 						continue;
 
 					p = pCommand + 1;
-					l = strlen(p);
+					l = (ulong)strlen(p);
 
 					for (j = 0; (ulong)j < l; j++, p++)
 					{
@@ -326,7 +326,7 @@ void WinProcessCommandLine(LPSTR cmd)
 					}
 
 					last = p;
-					l = strlen(last);
+					l = (ulong)strlen(last);
 
 					for (j = 0; (ulong)j < l; j++, last++)
 					{

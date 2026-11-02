@@ -171,7 +171,7 @@ long DoLoadSave(long LoadSave)
 			color = 1;
 
 		memset(name, ' ', 40);
-		l = strlen(pSave->name);
+		l = (long)strlen(pSave->name);
 
 		if (l > 40)
 			l = 40;

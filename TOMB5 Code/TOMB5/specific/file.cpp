@@ -170,7 +170,7 @@ long LoadFile(const char* name, char** dest)
 	if (!*dest)
 		*dest = (char*)malloc(size);
 
-	count = fread(*dest, 1, size, file);
+	count = (long)fread(*dest, 1, size, file);
 	Log("Read - %d FileSize - %d", count, size);
 
 	if (count != size)

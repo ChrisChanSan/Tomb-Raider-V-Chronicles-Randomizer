@@ -35411,17 +35411,22 @@ static void lara_joints()
  * fps_mode 2's display cadence; at fps_mode 0 none of the three holds, so
  * nothing is given back and the draws feed the stream as before. A corpse is
  * marked only by the frame that is no tween frame, one per tick. RNGLOG
- * counts both kinds of frame per level. Read from the tree. */
+ * counts both kinds of frame per level. A closed door changes rooms' item
+ * lists only on that frame too (game\door.cpp, ProcessClosedDoors, called
+ * by DrawRooms and RenderIt), and DOORLOG follows RNGLOG with its counts.
+ * Read from the tree. */
 static void logic_leftovers()
 {
 	char* draw = hd_switch_text("../../game/draw.cpp");
 	char* interp = hd_switch_text("../../game/interpolate.cpp");
 	char* stubs = hd_switch_text("../function_stubs.cpp");
+	char* door = hd_switch_text("../../game/door.cpp");
+	char* flow = hd_switch_text("../../game/gameflow.cpp");
 	static char body[65536];
 	long a, b, c, d;
 
 	printf("What a frame leaves the logic: the generator, GetHeight, the "
-		"corpses\n");
+		"corpses, the doors\n");
 
 	ok(draw && interp && stubs, "leftovers: the three files",
 		!!draw + !!interp + !!stubs, 3);
@@ -35480,9 +35485,52 @@ static void logic_leftovers()
 		hd_switch_count(draw, "g_afterDeathSeen[i] = 1;") == 1,
 		"leftovers: a corpse is marked by the tick's frame only", 0, 1);
 
+	ok(door && flow, "leftovers: the door and the flow", !!door + !!flow, 2);
+
+	glass_body(door, "void ProcessClosedDoors()", body, sizeof(body));
+	a = joints_at(body, "if(InterpIsTweenFrame())g_doorTweens++;return;}"
+		"g_doorFrames++;");
+	b = joints_at(body, "for(inti=0;i<32;i++)");
+	c = joints_at(body, "ItemNewRoom(");
+	ok(a >= 0 && b > a && c > b && hd_switch_count(body, "ItemNewRoom(") == 2
+		&& hd_switch_count(body, "g_doorMoves++;") == 2,
+		"leftovers: a closed door changes lists on the tick's frame only",
+		b, a + 1);
+
+	/* The gate stands in the function, so it covers every caller: the two
+	 * walks that call it, and no other file of the two. */
+	a = hd_switch_count(draw, "ProcessClosedDoors();");
+	glass_body(draw, "void DrawRooms(short current_room)", body,
+		sizeof(body));
+	b = hd_switch_count(body, "ProcessClosedDoors();");
+	glass_body(draw, "void RenderIt(short current_room)", body,
+		sizeof(body));
+	c = hd_switch_count(body, "ProcessClosedDoors();");
+	ok(a == 2 && b == 1 && c == 1 &&
+		hd_switch_count(door, "ProcessClosedDoors(") == 1,
+		"leftovers: both walks reach the doors through the gate",
+		a * 100 + b * 10 + c, 211);
+
+	ok(hd_switch_count(door, "\"DOORLOG moves=%ld frames=%ld "
+		"skipped_tween=%ld\"") == 1,
+		"leftovers: one DOORLOG line", 0, 1);
+	glass_body(flow, "void DoTitle(uchar name, uchar audio)", body,
+		sizeof(body));
+	a = hd_switch_count(body, "LaraJointsLevelEnd();//JOINTLOG,with-log"
+		"ClosedDoorsLevelEnd();//DOORLOG,with-log");
+	glass_body(flow, "void DoLevel(uchar Name, uchar Audio)", body,
+		sizeof(body));
+	b = hd_switch_count(body, "LaraJointsLevelEnd();//JOINTLOG,with-log"
+		"ClosedDoorsLevelEnd();//DOORLOG,with-log");
+	ok(a == 1 && b == 1 && hd_switch_count(flow, "ClosedDoorsLevelEnd();")
+		== 2, "leftovers: DOORLOG follows RNGLOG at the title and a level",
+		a + b, 2);
+
 	free(draw);
 	free(interp);
 	free(stubs);
+	free(door);
+	free(flow);
 }
 
 int main()

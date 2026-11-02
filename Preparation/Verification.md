@@ -399,11 +399,18 @@ recorder, which the 64-bit build carries:
    Compare the recording's
    and the replay's: at *Display* `kept_draws` is 0 in both, whatever the
    two displays' rates; `over` is 0.
+   `DOORLOG moves=<m> frames=<f> skipped_tween=<s>` right after each
+   `RNGLOG`: the closed doors' moves between two rooms' item lists, the
+   pictures that walked the doors and the tween pictures that did not. At
+   30 `skipped_tween` is 0; at 60 `frames` is about `ticks` and
+   `skipped_tween` about as many; at *Display* `frames` is about `ticks`
+   too, whatever the display's rate.
 
 The corpse fade (`StepAfterDeathFade`) counts a body seen by one picture
 per step, the one that is no tween picture. At *Display* that picture is
 blended at a fraction the clock sets, so a drift on the tick a body
 vanishes, with the body's room at the picture's edge, is the one leftover
-#310 measured and left. `ProcessClosedDoors`, called from the room walk of
-every picture, is another: it moves a closed door between its two rooms'
-item lists by what the picture's walk saw.
+#310 measured and left. `ProcessClosedDoors`, which moves a closed door
+between its two rooms' item lists by what the picture's walk saw, follows
+the same rule and leaves the same residual: at *Display* the lists follow
+that blended picture, once per step.

@@ -989,7 +989,7 @@ void ProcessMeshData(long num_meshes)
 
 	Log(__FUNCTION__ " %d", num_meshes);
 	num_level_meshes = num_meshes;
-	mesh_vtxbuf = (MESH_DATA**)game_malloc(4 * num_meshes);
+	mesh_vtxbuf = (MESH_DATA**)game_malloc(num_meshes * (long)sizeof(MESH_DATA*));
 	mesh_base = (short*)malloc_ptr;
 	last_mesh_ptr = 0;
 	data = 0;

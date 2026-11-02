@@ -566,6 +566,26 @@ struct ROOMLET
 	long* pPrelight;
 };
 
+/* A roomlet as the level file holds it: the .TRC was written by a 32-bit
+ * program, and where ROOMLET has its four pointers the file has 4-byte
+ * values. 56 bytes on both builds; global\disk_layout.h converts. */
+struct ROOMLET_DISK
+{
+	short nVtx;
+	short nWVtx;
+	short nSVtx;
+	short nQuad;
+	short nTri;
+	short nWQuad;
+	short nWTri;
+	short padd;
+	float bBox[6];
+	uint32_t pVtx;
+	uint32_t pSVtx;
+	uint32_t pFac;
+	uint32_t pPrelight;
+};
+
 struct SPHERE
 {
 	long x;
@@ -695,6 +715,27 @@ struct FLOOR_INFO
 struct ANIM_STRUCT
 {
 	short* frame_ptr;
+	short interpolation;
+	short current_anim_state;
+	long velocity;
+	long acceleration;
+	long Xvelocity;
+	long Xacceleration;
+	short frame_base;
+	short frame_end;
+	short jump_anim_num;
+	short jump_frame_num;
+	short number_changes;
+	short change_index;
+	short number_commands;
+	short command_index;
+};
+
+/* An anim as the level file holds it: frame_ptr is the 4-byte offset of its
+ * first frame in the frames block. 40 bytes on both builds. */
+struct ANIM_STRUCT_DISK
+{
+	uint32_t frame_ptr;
 	short interpolation;
 	short current_anim_state;
 	long velocity;
@@ -1169,6 +1210,77 @@ struct ROOM_INFO
 	float* pRmVtx;
 	short* pRmFace;
 	long* pRmPrelight;
+	long vDumpSz;
+	float fLeft;
+	float fRight;
+	float fTop;
+	float fBottom;
+};
+
+/* A room's header as the level file holds it at the start of the room's
+ * block: ROOM_INFO as a 32-bit program lays it out, 208 bytes, every
+ * pointer a 4-byte value - the offset of its data from the header's end
+ * where the loader uses it, nothing anyone reads where it does not. */
+struct ROOM_INFO_DISK
+{
+	uint32_t data;
+	uint32_t door;
+	uint32_t floor;
+	uint32_t light;
+	uint32_t mesh;
+	long x;
+	long y;
+	long z;
+	long minfloor;
+	long maxceiling;
+	short x_size;
+	short y_size;
+	long ambient;
+	short num_lights;
+	short num_meshes;
+	uchar ReverbType;
+	uchar FlipNumber;
+	char MeshEffect;
+	char bound_active;
+	short left;
+	short right;
+	short top;
+	short bottom;
+	short test_left;
+	short test_right;
+	short test_top;
+	short test_bottom;
+	short item_number;
+	short fx_number;
+	short flipped_room;
+	ushort flags;
+	long nVerts;
+	long nWaterVerts;
+	long nShoreVerts;
+	uint32_t SourceVB;
+	uint32_t FaceData;
+	float posx;
+	float posy;
+	float posz;
+	uint32_t vnormals;
+	uint32_t fnormals;
+	uint32_t prelight;
+	uint32_t prelightwater;
+	long watercalc;
+	uint32_t verts;
+	long gt3cnt;
+	long gt4cnt;
+	uint32_t pclight;
+	uint32_t fogbulb;
+	long nPCLight;
+	long nFogBulbs;
+	float cy0;
+	float cy1;
+	long nRoomlets;
+	uint32_t pRoomlets;
+	uint32_t pRmVtx;
+	uint32_t pRmFace;
+	uint32_t pRmPrelight;
 	long vDumpSz;
 	float fLeft;
 	float fRight;

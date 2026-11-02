@@ -29,6 +29,7 @@
 #include "3dmath.h"
 #include "gamemain.h"
 #include "../game/interpolate.h"		// the tween latch
+#include "../global/disk_layout.h"	// the file's room header, converted
 
 const char* CreditNames[] =
 {
@@ -136,56 +137,52 @@ long aWibble;
 
 void aFixUpRoom(ROOM_INFO* r, char* s)
 {
-	ROOM_INFO* pR;
+	ROOM_INFO_DISK disk;
+	ROOMLET_DISK* pDisk;
 	ROOMLET* pRm;
 	float* pVtx;
 	long* pPre;
 	short* pFac;
-	long offset;
 
-	pR = (ROOM_INFO*)s;
-	offset = long(s + sizeof(ROOM_INFO));
-
-	pR->fogbulb = (FOGBULB_INFO*)((char*)pR->fogbulb + offset);
-	pR->pclight = (PCLIGHT_INFO*)((char*)pR->pclight + offset);
-	pR->floor = (FLOOR_INFO*)((char*)pR->floor + offset);
-	pR->door = (short*)((char*)pR->door + offset);
-	pR->mesh = (MESH_INFO*)((char*)pR->mesh + offset);
-	pR->pRoomlets = (ROOMLET*)((char*)pR->pRoomlets + offset);
-	pR->pRmFace = (short*)((char*)pR->pRmFace + offset);
-	pR->pRmPrelight = (long*)((char*)pR->pRmPrelight + offset);
-	pR->pRmVtx = (float*)((char*)pR->pRmVtx + offset);
+	// The block starts with the file's room header, ROOM_INFO as a 32-bit
+	// program laid it out; its offsets count from the header's end. It is
+	// converted into r rather than copied (global\disk_layout.h).
+	memcpy(&disk, s, sizeof(disk));
+	RoomFromDisk(r, &disk, s + sizeof(ROOM_INFO_DISK));
 
 	// An odd address in a short* is impossible, so this catches a door list
-	// that came out of the file wrong. Safe under /LARGEADDRESSAWARE: `& 1`
-	// reads bit 0 of the address and nothing else, and on Win32 a long is
-	// exactly as wide as a pointer, so nothing is truncated either. Measured
-	// for an address above 2 GB: `(long)p & 1` still gives bit 0. Left as it
-	// is on purpose - it is the one place a pointer is cast to a signed long
-	// and used, and it does not care about the sign.
-	if ((long)pR->door & 1)
+	// that came out of the file wrong: bit 0 of the address, whatever its
+	// width.
+	if ((uintptr_t)r->door & 1)
 	{
-		Log("%X", pR->door);
-		pR->door = 0;
+		Log("%X", r->door);
+		r->door = 0;
 	}
 
-	pFac = pR->pRmFace;
-	pPre = pR->pRmPrelight;
-	pVtx = pR->pRmVtx;
-	pRm = pR->pRoomlets;
+	pFac = r->pRmFace;
+	pPre = r->pRmPrelight;
+	pVtx = r->pRmVtx;
+	pDisk = (ROOMLET_DISK*)r->pRoomlets;
+	pRm = (ROOMLET*)pDisk;
 
-	for (int i = 0; i < pR->nRoomlets; i++)
+	// Where a ROOMLET is wider than the file's (72 bytes to 56 on a 64-bit
+	// build) the roomlets get an array of their own in the pool; where the
+	// two are one, they are converted where they lie, as before, and the
+	// pool stays as it was.
+	if (sizeof(ROOMLET) != sizeof(ROOMLET_DISK) && r->nRoomlets > 0)
+		pRm = (ROOMLET*)game_malloc(r->nRoomlets * (long)sizeof(ROOMLET));
+
+	for (int i = 0; i < r->nRoomlets; i++)
 	{
-		pRm[i].pFac = (short*)pFac;
-		pRm[i].pPrelight = pPre;
-		pRm[i].pSVtx = (float*)pVtx;
+		const ROOMLET_DISK one = pDisk[i];	// whole, before pRm[i] is written
 
-		pFac += (5 * pRm[i].nTri) + (6 * pRm[i].nQuad);
-		pPre += pRm[i].nVtx;
-		pVtx += 7 * pRm[i].nVtx;
+		pRm[i] = RoomletFromDisk(&one, pFac, pPre, pVtx);
+		pFac += (5 * one.nTri) + (6 * one.nQuad);
+		pPre += one.nVtx;
+		pVtx += 7 * one.nVtx;
 	}
 
-	memcpy(r, s, sizeof(ROOM_INFO));
+	r->pRoomlets = pRm;
 }
 
 void aUpdate()

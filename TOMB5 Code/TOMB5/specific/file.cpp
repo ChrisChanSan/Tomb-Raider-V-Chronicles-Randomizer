@@ -61,6 +61,7 @@
 #include "drawbars.h"
 #include "../game/lot.h"
 #include "../tomb5/tomb5.h"
+#include "../global/disk_layout.h"	// the file's anims, converted
 
 TEXTURESTRUCT* textinfo;
 SPRITESTRUCT* spriteinfo;
@@ -969,6 +970,7 @@ bool LoadObjects()
 {
 	OBJECT_INFO* obj;
 	STATIC_INFO* stat;
+	ANIM_STRUCT_DISK* animDisk;
 	short** mesh;
 	short** mesh_size;
 	long num, num_anims, num_meshes, slot, lp;
@@ -984,20 +986,28 @@ bool LoadObjects()
 
 	Log("OBJLOG mesh data %d words", num);
 
+	// The file's mesh pointers are 4-byte byte offsets into mesh_base, one
+	// per mesh; they are read one by one rather than into the pointer array,
+	// whose entries are 8 bytes wide on a 64-bit build.
 	num = ReadLong();
-	meshes = (short**)game_malloc(num * sizeof(long) * 2);	//*2 for meshswaps
-	ReadBlock(meshes, num * sizeof(long));
+	meshes = (short**)game_malloc(num * (long)sizeof(short*) * 2);	//*2 for meshswaps
 
 	for (lp = 0; lp < num; lp++)
-		meshes[lp] = &mesh_base[(long)meshes[lp] / 2];
+		meshes[lp] = &mesh_base[ReadLong() / 2];
 
 	num_meshes = num;
 	Log("OBJLOG %d mesh pointers", num_meshes);
 
 	//anims
+	// The file's anims are its 40-byte form (ANIM_STRUCT_DISK), converted once
+	// the frames are read. They wait at the end of the anims' own block: the
+	// conversion runs forwards and each anim lands no further on than the
+	// file's next one begins (44 bytes to 40 on a 64-bit build; on 32-bit
+	// they are one and convert where they lie).
 	num_anims = ReadLong();
-	anims = (ANIM_STRUCT*)game_malloc(num_anims * sizeof(ANIM_STRUCT));
-	ReadBlock(anims, num_anims * sizeof(ANIM_STRUCT));
+	anims = (ANIM_STRUCT*)game_malloc(num_anims * (long)sizeof(ANIM_STRUCT));
+	animDisk = (ANIM_STRUCT_DISK*)((char*)anims + num_anims * (long)(sizeof(ANIM_STRUCT) - sizeof(ANIM_STRUCT_DISK)));
+	ReadBlock(animDisk, num_anims * (long)sizeof(ANIM_STRUCT_DISK));
 
 	Log("OBJLOG %d anims", num_anims);
 
@@ -1027,7 +1037,11 @@ bool LoadObjects()
 	ReadBlock(frames, num * sizeof(short));
 
 	for (lp = 0; lp < num_anims; lp++)
-		anims[lp].frame_ptr = (short*)((long)anims[lp].frame_ptr + (long)frames);
+	{
+		const ANIM_STRUCT_DISK one = animDisk[lp];	// whole, before anims[lp]
+
+		AnimFromDisk(&anims[lp], &one, frames);
+	}
 
 	num = ReadLong();
 
@@ -1101,7 +1115,7 @@ bool LoadObjects()
 
 	mesh = meshes;
 	mesh_size = &meshes[num_meshes];
-	memcpy(mesh_size, mesh, num_meshes * 4);
+	memcpy(mesh_size, mesh, num_meshes * sizeof(short*));
 
 	for (int i = 0; i < num_meshes; i++)
 	{

@@ -11451,6 +11451,35 @@ static void shell_rule()
 	free(level);
 }
 
+/* Stopping a sound the level does not carry (game\sound.cpp,
+ * StopSoundEffect): its soundmap entry is -1, or -2 once SoundEffect has
+ * logged it, and the function returns before it indexes sample_infos with
+ * it - the contract SoundEffect keeps. Without the test the read landed
+ * before the table and the loop cut running sounds. */
+static void sound_stop()
+{
+	char* sound = hd_switch_text("../../game/sound.cpp");
+	static char body[4096];
+
+	glass_body(sound, "void StopSoundEffect(long sfx)", body, sizeof(body));
+
+	const char* read = strstr(body, "lut=sample_lut[sfx];");
+	const char* test = strstr(body, "if(lut<0)return;");
+	const char* index = strstr(body, "sample_infos[lut]");
+
+	ok(read && test && index && read < test && test < index,
+		"sound stop: StopSoundEffect tests lut before sample_infos[lut]",
+		!!read + !!test + !!index, 3);
+
+	glass_body(sound, "long SoundEffect(long sfx, PHD_3DPOS* pos, long flags)",
+		body, sizeof(body));
+	ok(strstr(body, "if(lut==-1)Log(\"Nonpresentsample:%d\",sfx);"
+		"sample_lut[sfx]=-2;return0;}if(lut==-2)return0;") != 0,
+		"sound stop: SoundEffect keeps its -1 and -2", 0, 0);
+
+	free(sound);
+}
+
 /* The split of a see-through draw call (hd_render.cpp, GlassSplits) and the
  * additive run's glass (AddGlass): their numbers and their bodies read out
  * of the engine's text, and their rules run over the census of the fifteen
@@ -35435,6 +35464,7 @@ int main()
 	hd_switch_wiring();
 	registry_old_water();
 	hd_feet();
+	sound_stop();
 	glass_split();
 	shell_rule();
 	card_rule();

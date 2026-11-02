@@ -278,7 +278,8 @@ namespace Patch
     //     picture; a donor's name table has nothing better to offer.
     //     The brawler's 471 lies past that range on purpose: his meshes
     //     are JOBY2's slot 439, and JOBY2's .MAP names that model, so his
-    //     donor line is written like any other.
+    //     donor line is written like any other. The armed scientist's
+    //     473 the same way: RICH1's .MAP names his slot 69 SCIENTIST.
     //
     // The file is written next to the finished level, so it is the CALLER
     // that calls this - after a successful save, with the same target path.

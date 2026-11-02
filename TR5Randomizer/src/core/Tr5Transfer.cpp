@@ -974,58 +974,118 @@ bool Tr5Level::copyMoveableFrom(const Tr5Level& src, int slotId, std::string& er
     // Several pointers can point at the same mesh (the engine deduplicates
     // at load, drawroom.cpp). The mapping source offset -> new mesh is
     // therefore kept, instead of copying every occurrence individually.
-    const size_t srcMeshBytes = static_cast<size_t>(ms.m_meshData.count) * 2;
-    std::vector<uint32_t> srcPtrs;
+    //
+    // A composite may take a few meshes out of its ANIM donor instead of
+    // its mesh donor: the same node of the anim donor's own slot, which
+    // the bone check above has already proved sits where the frames turn
+    // it. The occasion is the armed scientist (473): RICH1's scientist
+    // (69) holds nothing in his black gloves, and SWAT's rifle is part of
+    // SWAT's hand mesh 13 (rich3, slot 33: 36 vertices, the hand's 8 and
+    // the rifle's 28), so both hands come from SWAT - the rifle hand and
+    // its glove's twin. Each mesh brings its own texinfos and pages, out
+    // of its own level. Keyed by the target slot and the anim donor's
+    // slot, so the table cannot reach any other copy.
+    struct MeshFromAnims { int dstSlot; int animSlot; int mesh; };
+    static const MeshFromAnims kMeshesFromAnims[] = {
+        { 473, 33, 10 },
+        { 473, 33, 13 },
+    };
+
+    // Mesh source 0 is the mesh donor, 1 the anim donor. Without a mesh
+    // taken from the anim donor only source 0 is used, and every step
+    // below is byte for byte the one it always was.
+    const Tr5Level* meshLevel[2] = { &ms, &src };
+    const int meshBase[2] = { mmv.meshIndex, mv.meshIndex };
+    std::vector<int> meshFrom(static_cast<size_t>(mmv.nmeshes), 0);
+    if (meshSrc)
+        for (const MeshFromAnims& o : kMeshesFromAnims)
+        {
+            if (o.dstSlot != targetSlot || o.animSlot != slotId) continue;
+            if (o.mesh < 0 || o.mesh >= mv.nmeshes)
+            {
+                std::snprintf(buf, sizeof(buf), "composite: mesh %d from the anim donor is not one of its %d",
+                              o.mesh, mv.nmeshes);
+                error = buf;
+                return false;
+            }
+            meshFrom[static_cast<size_t>(o.mesh)] = 1;
+        }
+
+    // A mesh is its source and its offset there.
+    using MeshKey = std::pair<int, uint32_t>;
+    std::vector<MeshKey> srcPtrs;
     for (int i = 0; i < mmv.nmeshes; ++i)
-        srcPtrs.push_back(rd32(ms.m_bytes, ms.m_meshPtrs.dataAt + (static_cast<size_t>(mmv.meshIndex) + i) * 4));
-
-    std::map<uint32_t, std::pair<size_t, size_t>> meshRegion;   // source offset -> (start in meshPack, length)
-    std::vector<uint8_t> meshPack;
-    std::set<int> srcTexinfoIdx;
-
-    for (uint32_t ofs : srcPtrs)
     {
-        if (meshRegion.count(ofs)) continue;
+        const int s = meshFrom[static_cast<size_t>(i)];
+        const Tr5Level& L = *meshLevel[s];
+        srcPtrs.push_back({ s, rd32(L.m_bytes, L.m_meshPtrs.dataAt + (static_cast<size_t>(meshBase[s]) + i) * 4) });
+    }
+
+    // source mesh -> (start in meshPack, length)
+    std::map<MeshKey, std::pair<size_t, size_t>> meshRegion;
+    std::vector<uint8_t> meshPack;
+    std::set<int> srcTexinfoIdx[2];
+
+    for (const MeshKey& key : srcPtrs)
+    {
+        if (meshRegion.count(key)) continue;
+        const Tr5Level& L = *meshLevel[key.first];
+        const uint32_t ofs = key.second;
+        const size_t srcMeshBytes = static_cast<size_t>(L.m_meshData.count) * 2;
         if (ofs >= srcMeshBytes) { error = "mesh pointer outside the mesh block"; return false; }
 
         size_t sz = 0;
-        if (!meshSize(ms.m_bytes, ms.m_meshData.dataAt + ofs, ms.m_meshData.dataAt + srcMeshBytes, sz, error))
+        if (!meshSize(L.m_bytes, L.m_meshData.dataAt + ofs, L.m_meshData.dataAt + srcMeshBytes, sz, error))
             return false;
 
+        std::set<int>& texIdx = srcTexinfoIdx[key.first];
         std::string faceErr;
-        if (!forEachFaceTex(ms.m_bytes, ms.m_meshData.dataAt + ofs, ms.m_meshData.dataAt + ofs + sz,
-                            [&](size_t texAt) { srcTexinfoIdx.insert(rd16(ms.m_bytes, texAt) & 0x7FFF); },
+        if (!forEachFaceTex(L.m_bytes, L.m_meshData.dataAt + ofs, L.m_meshData.dataAt + ofs + sz,
+                            [&](size_t texAt) { texIdx.insert(rd16(L.m_bytes, texAt) & 0x7FFF); },
                             faceErr))
         { error = faceErr; return false; }
 
         // 4-byte alignment as in the original - mesh pointers there are
         // consistently multiples of 4, and it costs nothing.
         while (meshPack.size() % 4) meshPack.push_back(0);
-        meshRegion[ofs] = { meshPack.size(), sz };
+        meshRegion[key] = { meshPack.size(), sz };
         meshPack.insert(meshPack.end(),
-                        ms.m_bytes.begin() + ms.m_meshData.dataAt + ofs,
-                        ms.m_bytes.begin() + ms.m_meshData.dataAt + ofs + sz);
+                        L.m_bytes.begin() + L.m_meshData.dataAt + ofs,
+                        L.m_bytes.begin() + L.m_meshData.dataAt + ofs + sz);
     }
 
-    for (int t : srcTexinfoIdx)
-        if (t >= ms.m_texinfos.count) { error = "mesh refers to a texinfo that does not exist"; return false; }
+    for (int s = 0; s < 2; ++s)
+        for (int t : srcTexinfoIdx[s])
+            if (t >= meshLevel[s]->m_texinfos.count) { error = "mesh refers to a texinfo that does not exist"; return false; }
 
     // --- Tiles of the used texinfos -----------------------------------------
-    std::set<int> srcTiles;
-    for (int t : srcTexinfoIdx)
-        srcTiles.insert(rd16(ms.m_bytes, ms.m_texinfos.dataAt + static_cast<size_t>(t) * SZ_TEXINFO + 2) & 0x7FFF);
+    // Per mesh source, each out of its own level's texture blocks. A source
+    // no mesh came from reads nothing.
+    std::set<int> srcTiles[2];
+    for (int s = 0; s < 2; ++s)
+        for (int t : srcTexinfoIdx[s])
+            srcTiles[s].insert(rd16(meshLevel[s]->m_bytes, meshLevel[s]->m_texinfos.dataAt + static_cast<size_t>(t) * SZ_TEXINFO + 2) & 0x7FFF);
 
-    TexHeader srcTex, dstTex;
-    if (!parseTexHeader(ms.m_bytes, srcTex, error)) { error = "source: " + error; return false; }
+    TexHeader srcTex[2], dstTex;
+    if (!parseTexHeader(ms.m_bytes, srcTex[0], error)) { error = "source: " + error; return false; }
     if (!parseTexHeader(m_bytes, dstTex, error)) { error = "target: " + error; return false; }
+    if (!srcTiles[1].empty() && !parseTexHeader(src.m_bytes, srcTex[1], error))
+    { error = "anim donor: " + error; return false; }
 
-    const int srcPages = srcTex.rt + srcTex.ot + srcTex.bt;
-    for (int t : srcTiles)
-        if (t >= srcPages) { error = "texinfo refers to a page that does not exist"; return false; }
+    for (int s = 0; s < 2; ++s)
+    {
+        const int srcPages = srcTex[s].rt + srcTex[s].ot + srcTex[s].bt;
+        for (int t : srcTiles[s])
+            if (t >= srcPages) { error = "texinfo refers to a page that does not exist"; return false; }
+    }
 
-    std::vector<uint8_t> src32, src16;
-    if (!inflateBlock(ms.m_bytes, srcTex.block32At, src32, error)) { error = "source: " + error; return false; }
-    if (!inflateBlock(ms.m_bytes, srcTex.block16At, src16, error)) { error = "source: " + error; return false; }
+    std::vector<uint8_t> src32[2], src16[2];
+    if (!inflateBlock(ms.m_bytes, srcTex[0].block32At, src32[0], error)) { error = "source: " + error; return false; }
+    if (!inflateBlock(ms.m_bytes, srcTex[0].block16At, src16[0], error)) { error = "source: " + error; return false; }
+    if (!srcTiles[1].empty() &&
+        (!inflateBlock(src.m_bytes, srcTex[1].block32At, src32[1], error) ||
+         !inflateBlock(src.m_bytes, srcTex[1].block16At, src16[1], error)))
+    { error = "anim donor: " + error; return false; }
 
     // Target via the texture workshop: unpacked once, every import works
     // on the open blocks, packing happens at closing.
@@ -1041,12 +1101,13 @@ bool Tr5Level::copyMoveableFrom(const Tr5Level& src, int slotId, std::string& er
     // check each of them would sit in the file several times.
     //========================================================================
     const int insertFrom = dstTex.rt + dstTex.ot;      // 0-based tile number
-    std::map<int, int> tileRemap;                      // source tile -> target tile
+    std::map<int, int> tileRemap[2];                   // source tile -> target tile
     int newPages = 0;
 
-    for (int t : srcTiles)
+    for (int s = 0; s < 2; ++s)
+    for (int t : srcTiles[s])
     {
-        const uint8_t* page32 = src32.data() + static_cast<size_t>(t) * PAGE32;
+        const uint8_t* page32 = src32[s].data() + static_cast<size_t>(t) * PAGE32;
 
         // Only check against the pages BEFORE the insertion point (and the
         // freshly inserted ones): their numbers are stable. A hit in the
@@ -1058,13 +1119,13 @@ bool Tr5Level::copyMoveableFrom(const Tr5Level& src, int slotId, std::string& er
             if (std::memcmp(dst32.data() + static_cast<size_t>(d) * PAGE32, page32, PAGE32) == 0)
             { found = d; break; }
 
-        if (found >= 0) { tileRemap[t] = found; continue; }
+        if (found >= 0) { tileRemap[s][t] = found; continue; }
 
         const int fresh = insertFrom + newPages;
         dst32.insert(dst32.begin() + static_cast<size_t>(fresh) * PAGE32, page32, page32 + PAGE32);
-        const uint8_t* page16 = src16.data() + static_cast<size_t>(t) * PAGE16;
+        const uint8_t* page16 = src16[s].data() + static_cast<size_t>(t) * PAGE16;
         dst16.insert(dst16.begin() + static_cast<size_t>(fresh) * PAGE16, page16, page16 + PAGE16);
-        tileRemap[t] = fresh;
+        tileRemap[s][t] = fresh;
         ++newPages;
     }
 
@@ -1110,16 +1171,18 @@ bool Tr5Level::copyMoveableFrom(const Tr5Level& src, int slotId, std::string& er
     // Phase C: create texinfos (with reuse), remap the faces, append all
     // blocks in one stroke.
     //========================================================================
-    std::map<int, int> texinfoRemap;
+    std::map<int, int> texinfoRemap[2];                // per mesh source
     std::vector<uint8_t> newTexinfos;
     int texinfoNew = 0;
 
-    for (int t : srcTexinfoIdx)
+    for (int s = 0; s < 2; ++s)
+    for (int t : srcTexinfoIdx[s])
     {
+        const Tr5Level& L = *meshLevel[s];
         uint8_t rec[SZ_TEXINFO];
-        std::memcpy(rec, ms.m_bytes.data() + ms.m_texinfos.dataAt + static_cast<size_t>(t) * SZ_TEXINFO, SZ_TEXINFO);
+        std::memcpy(rec, L.m_bytes.data() + L.m_texinfos.dataAt + static_cast<size_t>(t) * SZ_TEXINFO, SZ_TEXINFO);
         uint16_t w; std::memcpy(&w, rec + 2, 2);
-        const uint16_t newW = static_cast<uint16_t>((w & 0x8000) | tileRemap[w & 0x7FFF]);
+        const uint16_t newW = static_cast<uint16_t>((w & 0x8000) | tileRemap[s][w & 0x7FFF]);
         std::memcpy(rec + 2, &newW, 2);
 
         // Does the entry already exist? With a second slot of the same
@@ -1132,8 +1195,8 @@ bool Tr5Level::copyMoveableFrom(const Tr5Level& src, int slotId, std::string& er
             if (std::memcmp(newTexinfos.data() + static_cast<size_t>(k) * SZ_TEXINFO, rec, SZ_TEXINFO) == 0)
                 found = m_texinfos.count + k;
 
-        if (found >= 0) { texinfoRemap[t] = found; continue; }
-        texinfoRemap[t] = m_texinfos.count + texinfoNew;
+        if (found >= 0) { texinfoRemap[s][t] = found; continue; }
+        texinfoRemap[s][t] = m_texinfos.count + texinfoNew;
         newTexinfos.insert(newTexinfos.end(), rec, rec + SZ_TEXINFO);
         ++texinfoNew;
     }
@@ -1144,10 +1207,11 @@ bool Tr5Level::copyMoveableFrom(const Tr5Level& src, int slotId, std::string& er
         std::string faceErr;
         // Lift meshPack into a vector wrapper so forEachFaceTex fits.
         const size_t start = kv.second.first, len = kv.second.second;
+        std::map<int, int>& remap = texinfoRemap[kv.first.first];
         if (!forEachFaceTex(meshPack, start, start + len,
                             [&](size_t texAt) {
                                 uint16_t w; std::memcpy(&w, meshPack.data() + texAt, 2);
-                                const uint16_t newW = static_cast<uint16_t>((w & 0x8000) | texinfoRemap[w & 0x7FFF]);
+                                const uint16_t newW = static_cast<uint16_t>((w & 0x8000) | remap[w & 0x7FFF]);
                                 std::memcpy(meshPack.data() + texAt, &newW, 2);
                             }, faceErr))
         { error = faceErr; return false; }
@@ -1303,8 +1367,8 @@ bool Tr5Level::copyMoveableFrom(const Tr5Level& src, int slotId, std::string& er
     }
 
     std::vector<uint8_t> newPtrs;
-    for (uint32_t ofs : srcPtrs)
-        push32(newPtrs, static_cast<uint32_t>(dstMeshBytesOld + meshRegion[ofs].first));
+    for (const MeshKey& key : srcPtrs)
+        push32(newPtrs, static_cast<uint32_t>(dstMeshBytesOld + meshRegion[key].first));
 
     // The object entry. Replaced or appended - both via the same bytes.
     // In the meshesOnly case, bone/frame/anim deliberately point at nothing

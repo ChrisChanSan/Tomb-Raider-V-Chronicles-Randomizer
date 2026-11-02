@@ -1636,8 +1636,10 @@ bool Rando::run(const RandoInput& in,
     // pages), and the animations, frames, bones and the sounds of their
     // commands come out of animFrom's slot animSlot - two donors on one
     // slot, the import refuses unless their bone trees are the same.
-    // animCount then counts the anim donor's slice. The brawler is the one
-    // so far: JOBY2's cutscene soldier on the chef's animations.
+    // animCount then counts the anim donor's slice. Two so far: the
+    // brawler, JOBY2's cutscene soldier on the chef's animations, and the
+    // armed scientist, RICH1's scientist on SWAT's - who also takes his two
+    // hand meshes from the anim donor (kMeshesFromAnims, Tr5Transfer.cpp).
     struct CrossEnemy { int typeId; const char* from; CrossSound sounds[2];
                          int companions[2]; const char* swapFrom; int swapDst;
                          int animCount; int baseSlot; const char* tr3;
@@ -1943,6 +1945,34 @@ bool Rando::run(const RandoInput& in,
         // animation of ten frames that turns its rotors. Price: seven
         // object texture pages and 195 texinfos per target level.
         { 472, "rich3",  { {65,"rich3",65}, {68,"rich3",68} },   {-1,-1},  nullptr,   -1, 0, 0, nullptr, 91 }, // Drone
+        // The armed scientist (engine slot 473, SCIENTIST_ARMED): RICH1's
+        // scientist in the orange suit on SWAT's control. Slot 69 stays
+        // Core's scientist, who never shoots, flees when hurt and raises
+        // his hands (sas.cpp) - not an enemy worth a pool row. His bone
+        // tree is SWAT's to the last word (BoneCheck rich1 69 against
+        // rich3 33: 0 of 14 bones deviating), so he is a COMPOSITE like the
+        // brawler: his meshes, texinfos and pages out of rich1's 69, SWAT's
+        // whole animation set, frames, state changes and anim commands out
+        // of rich3's 33, and SWAT's hand meshes 10 and 13 with them - the
+        // rifle is part of SWAT's hand 13, the scientist's gloves hold
+        // nothing (kMeshesFromAnims in Tr5Transfer.cpp). He runs SWAT's
+        // block in setup.cpp, and SasControl tests him nowhere: he shoots,
+        // bursts, turns and alerts like SWAT.
+        //
+        // Measured: 176 texinfos on 8 of rich1's pages, and the hands' 23
+        // on 5 of rich3's. His rest pose - SWAT's anim +0 frame 0 on his
+        // own meshes - stands 797 high, inside SWAT's frame box of 809, so
+        // the headroom rule measures him by SWAT's box (heightOf). Zone:
+        // SWAT's, which is none of lot.cpp's cases - BASIC_ZONE.
+        //
+        // The columns as at SWAT's row: swap halves from rich3's MESHSWAP1
+        // into SWAT's fallback slot 462 (his block reads them there; the
+        // content is SWAT's whoever imports it first), no base type and no
+        // animCount - SWAT's set is whole, with both of his deaths (+11,
+        // +16) and his own cry. Sounds: every one of SWAT's is on an anim
+        // command and comes with phase D from rich3; the shot is
+        // SasControl's. No spawn OCB: 0 is SWAT's plain stand.
+        { 473, "rich1",  {},                                    {-1,-1},  "rich3",   462, 0, 0, nullptr, 69, "rich3", 33 }, // Scientist
         // Imp: donor andy3, not andy1. andy1's Imp anim set is gutted: the
         // death animation +45 (ImpControl sets it fixed at hit_points<=0)
         // is a one-frame dummy there without a KillItem command - the Imp
@@ -3896,6 +3926,10 @@ std::vector<EnemyKind> Rando::enemyKinds()
         // Engine slot 472 (DRONE): RICH3's gunship at the vulture's size,
         // flying after Lara and firing. Slot 91 stays RICH3's helicopter.
         { 472, "Drone",            nullptr },
+        // Engine slot 473 (SCIENTIST_ARMED): RICH1's scientist on SWAT's
+        // animations and control - the second composite, with SWAT's rifle
+        // hand. Slot 69 stays the unarmed scientist and is no pool row.
+        { 473, "Scientist",        nullptr },
         { 89, "Imp",               nullptr },
 
         // The guests from Tomb Raider 3. They sit on slots that carry a

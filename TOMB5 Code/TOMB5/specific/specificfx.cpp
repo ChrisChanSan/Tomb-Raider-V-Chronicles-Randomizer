@@ -3950,6 +3950,7 @@ void DrawLightning()
 
 		pPos = pos;
 		pVtx = vtx;
+		r = 0;
 
 		for (lp = 0; lp < 32; lp++)
 		{
@@ -3957,8 +3958,13 @@ void DrawLightning()
 			// The 32nd has no next one and keeps the last segment's angle
 			// (points 30 to 31): upstream read a 33rd vertex there, one past
 			// vtx, and on a 64-bit build that was a NaN, which made phd_atan
-			// divide by zero.
-			if (lp < 31)
+			// divide by zero. A segment with an end at or behind the near
+			// plane (its clip flag negative: -128 and the window bits) keeps
+			// the angle before it, 0 at the first point: f_mpersp / mz is
+			// infinite or huge there, and the difference of two such
+			// projections came to phd_atan as LONG_MIN. No segment with such
+			// an end is drawn.
+			if (lp < 31 && clip[lp] >= 0 && clip[lp + 1] >= 0)
 				r = phd_atan(long(pVtx[6] - pVtx[0]), long(pVtx[7] - pVtx[1]));
 
 			s = fSin(-r);

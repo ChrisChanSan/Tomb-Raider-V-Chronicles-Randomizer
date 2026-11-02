@@ -28154,11 +28154,14 @@ static void x64_layout()
 	// DrawLightning: the angle of the 32nd point is the last segment's, no
 	// vertex read past vtx (the caller the first ATANLOG named).
 	glass_body(sfx, "void DrawLightning()", body, sizeof(body));
-	ok(strstr(body, "floatvtx[32*6];") && strstr(body, "if(lp<31)r=phd_atan("
-		"long(pVtx[6]-pVtx[0]),long(pVtx[7]-pVtx[1]));s=fSin(-r);") &&
+	ok(strstr(body, "floatvtx[32*6];") && strstr(body, "if(lp<31&&clip[lp]>="
+		"0&&clip[lp+1]>=0)r=phd_atan(long(pVtx[6]-pVtx[0]),long(pVtx[7]-pVtx"
+		"[1]));s=fSin(-r);") && strstr(body, "clipFlag=-128;") &&
+		strstr(body, "pPos=pos;pVtx=vtx;r=0;for(lp=0;lp<32;lp++)") &&
 		hd_switch_count(body, "phd_atan(") == 1 &&
 		hd_switch_count(body, "for(lp=0;lp<31;lp++)") == 1,
-		"x64 layout: DrawLightning reads no vertex past its 32", 0, 1);
+		"x64 layout: DrawLightning reads no vertex past its 32 and takes no "
+		"angle of a point at the near plane", 0, 1);
 
 	free(math);
 	free(seam);

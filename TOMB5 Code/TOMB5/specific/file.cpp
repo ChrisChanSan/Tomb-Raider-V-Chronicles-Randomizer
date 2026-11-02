@@ -1006,7 +1006,7 @@ bool LoadObjects()
 	// they are one and convert where they lie).
 	num_anims = ReadLong();
 	anims = (ANIM_STRUCT*)game_malloc(num_anims * (long)sizeof(ANIM_STRUCT));
-	animDisk = (ANIM_STRUCT_DISK*)((char*)anims + num_anims * (long)(sizeof(ANIM_STRUCT) - sizeof(ANIM_STRUCT_DISK)));
+	animDisk = AnimDiskSlot(anims, num_anims);
 	ReadBlock(animDisk, num_anims * (long)sizeof(ANIM_STRUCT_DISK));
 
 	Log("OBJLOG %d anims", num_anims);
@@ -1036,12 +1036,7 @@ bool LoadObjects()
 	frames = (short*)game_malloc(num * sizeof(short));
 	ReadBlock(frames, num * sizeof(short));
 
-	for (lp = 0; lp < num_anims; lp++)
-	{
-		const ANIM_STRUCT_DISK one = animDisk[lp];	// whole, before anims[lp]
-
-		AnimFromDisk(&anims[lp], &one, frames);
-	}
+	AnimsFromDisk(anims, animDisk, num_anims, frames);
 
 	num = ReadLong();
 

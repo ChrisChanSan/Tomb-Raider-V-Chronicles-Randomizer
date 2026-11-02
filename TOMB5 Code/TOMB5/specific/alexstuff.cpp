@@ -172,16 +172,7 @@ void aFixUpRoom(ROOM_INFO* r, char* s)
 	if (sizeof(ROOMLET) != sizeof(ROOMLET_DISK) && r->nRoomlets > 0)
 		pRm = (ROOMLET*)game_malloc(r->nRoomlets * (long)sizeof(ROOMLET));
 
-	for (int i = 0; i < r->nRoomlets; i++)
-	{
-		const ROOMLET_DISK one = pDisk[i];	// whole, before pRm[i] is written
-
-		pRm[i] = RoomletFromDisk(&one, pFac, pPre, pVtx);
-		pFac += (5 * one.nTri) + (6 * one.nQuad);
-		pPre += one.nVtx;
-		pVtx += 7 * one.nVtx;
-	}
-
+	RoomletsFromDisk(pRm, pDisk, r->nRoomlets, pFac, pPre, pVtx);
 	r->pRoomlets = pRm;
 }
 

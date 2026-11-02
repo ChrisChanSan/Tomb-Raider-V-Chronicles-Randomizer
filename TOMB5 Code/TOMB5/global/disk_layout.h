@@ -266,6 +266,24 @@ inline void PendulumFromSave(PENDULUM* p, const PENDULUM_SAVE* s,
 	p->Rope = DiskOffset<ROPE_STRUCT>((char*)ropes, s->Rope);
 }
 
+/* A room's `n` roomlets out of the file's `in` into `out` - which may be the
+ * same place where the two forms are one size: each is read whole before
+ * its own is written. Their faces, prelight and vertices follow one another
+ * in the room's streams from `fac`, `pre` and `vtx`. */
+inline void RoomletsFromDisk(ROOMLET* out, const ROOMLET_DISK* in, long n,
+	short* fac, long* pre, float* vtx)
+{
+	for (long i = 0; i < n; i++)
+	{
+		const ROOMLET_DISK one = in[i];
+
+		out[i] = RoomletFromDisk(&one, fac, pre, vtx);
+		fac += (5 * one.nTri) + (6 * one.nQuad);
+		pre += one.nVtx;
+		vtx += 7 * one.nVtx;
+	}
+}
+
 /* The runtime ANIM_STRUCT of the file's `d`, its frames in `frames`. */
 inline void AnimFromDisk(ANIM_STRUCT* a, const ANIM_STRUCT_DISK* d,
 	short* frames)
@@ -285,4 +303,26 @@ inline void AnimFromDisk(ANIM_STRUCT* a, const ANIM_STRUCT_DISK* d,
 	a->change_index = d->change_index;
 	a->number_commands = d->number_commands;
 	a->command_index = d->command_index;
+}
+
+/* Where the file's `n` anims wait in the anims' own block until the frames
+ * are read: at its end, behind what the runtime form adds (4 bytes each on
+ * a 64-bit build, nothing on 32-bit). */
+inline ANIM_STRUCT_DISK* AnimDiskSlot(ANIM_STRUCT* anims, long n)
+{
+	return (ANIM_STRUCT_DISK*)((char*)anims +
+		n * (long)(sizeof(ANIM_STRUCT) - sizeof(ANIM_STRUCT_DISK)));
+}
+
+/* The `n` anims out of their slot, forwards: anim i is written no further
+ * on than the file's anim i + 1 begins, and is read whole before. */
+inline void AnimsFromDisk(ANIM_STRUCT* anims, const ANIM_STRUCT_DISK* disk,
+	long n, short* frames)
+{
+	for (long i = 0; i < n; i++)
+	{
+		const ANIM_STRUCT_DISK one = disk[i];
+
+		AnimFromDisk(&anims[i], &one, frames);
+	}
 }

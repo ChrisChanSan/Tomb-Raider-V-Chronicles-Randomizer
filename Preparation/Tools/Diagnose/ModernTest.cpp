@@ -27750,6 +27750,224 @@ static void save_pointer()
 	free(stubs);
 }
 
+// ModernLayout.cpp: the checks that need the engine's own structs.
+void layout_checks(void (*check)(bool, const char*, long, long));
+
+/* The engine as a 64-bit program: what a pointer 8 bytes wide breaks, held
+ * in this 32-bit suite. The save's pointer rule with a 64-bit run's pools
+ * above 4 GB and one across a 4 GB line - null, an item and the own
+ * ai_target there and back, GeneralPtr's item and number; Lara's meshes by
+ * number; the level file's records converted and the save's layout
+ * (ModernLayout.cpp, with global\disk_layout.h's asserts compiled in); and
+ * in the engine's text, the converters called where the level file and the
+ * save are read and written, and no pointer cut to a long left there. */
+static void x64_layout()
+{
+	printf("the engine as a 64-bit program: pointers above 4 GB\n");
+
+	// Two runs of a 64-bit build, their pools far above 4 GB; a third whose
+	// pool starts below the 4 GB line at 0x200000000 and holds its items
+	// above it. Lara is item 37, the creature item 20 in slot 3, then 0.
+	SavePtrPool a = SavePtrPool(), b, w;
+
+	a.base = 0x00007FF6A0B40000ULL;
+	a.size = 20000000;
+	a.items = 0x00412A40UL;
+	a.itemSize = 5634;
+	a.maxItems = 512;
+	a.slots = 0x00760000UL;
+	a.slotSize = 5722;
+	a.maxSlots = 16;
+	a.aiOffset = 22;
+	b = a;
+	b.base = 0x000001D3C0010000ULL;
+	w = a;
+	w.base = 0x00000001FFE00000ULL;
+
+	const SavePtrAddr laraA = a.base + a.items + 37 * a.itemSize;
+	const SavePtrAddr laraB = b.base + b.items + 37 * b.itemSize;
+	const SavePtrAddr laraW = w.base + w.items + 37 * w.itemSize;
+	const SavePtrAddr aiA = a.base + a.slots + 3 * a.slotSize + 22;
+	const SavePtrAddr aiB = b.base + b.slots + 22;
+	const SavePtrAddr aiW = w.base + w.slots + 22;
+	SavePtrDecoded d;
+	unsigned long off = 0;
+	long field;
+	int kind;
+
+	field = SavePtrEnemyField(&a, laraA);
+	kind = SavePtrEnemyKind(laraA, laraA, aiA);
+	d = SavePtrDecodeEnemy(&b, field, kind, 37, 20, aiB);
+	ok(field == (long)(a.items + 37 * a.itemSize) && d.value == laraB &&
+		d.how == SAVE_PTR_HOW_TAG_ITEM,
+		"x64 layout: Lara above 4 GB saved as a distance, back whole",
+		(long)(d.value >> 32), (long)(laraB >> 32));
+	d = SavePtrDecodeEnemy(&b, SavePtrEnemyField(&a, 0), SavePtrEnemyKind(0,
+		laraA, aiA), 37, 20, aiB);
+	ok(SavePtrEnemyField(&a, 0) == SAVE_PTR_NULL && d.value == 0,
+		"x64 layout: a null enemy above 4 GB stays null", (long)d.value, 0);
+	field = SavePtrEnemyField(&a, aiA);
+	kind = SavePtrEnemyKind(aiA, laraA, aiA);
+	d = SavePtrDecodeEnemy(&b, field, kind, 37, 20, aiB);
+	ok(field == (long)(a.slots + 3 * a.slotSize + 22) && d.value == aiB &&
+		d.how == SAVE_PTR_HOW_TAG_AI,
+		"x64 layout: the own ai_target above 4 GB, back in its new slot",
+		(long)(d.value - b.base), (long)(b.slots + 22));
+	d = SavePtrDecodeEnemy(&b, (long)(a.items + 7 * a.itemSize),
+		SAVE_PTR_KIND_NONE, 37, 20, aiB);
+	ok(d.how == SAVE_PTR_HOW_LEGACY_OK && d.value == b.base + b.items + 7 *
+		b.itemSize, "x64 layout: an old distance read whole above 4 GB",
+		d.number, 7);
+	ok(SavePtrEnemyField(&a, (unsigned long)laraA) == SAVE_PTR_NULL &&
+		SavePtrGeneralField(&a, (unsigned long)laraA) == SAVE_PTR_NULL,
+		"x64 layout: Lara's address cut to 32 bits lies in no pool", 0, 0);
+
+	// Across the 4 GB line: the item above it, the pool's start below.
+	ok(w.base < 0x200000000ULL && laraW > 0x200000000ULL &&
+		(unsigned long)laraW < (unsigned long)w.base,
+		"x64 layout: cut to 32 bits, an item lay below its pool's start",
+		(long)(laraW >> 32), 2);
+	ok(SavePtrInPool(&w, laraW, &off) && off == w.items + 37 * w.itemSize,
+		"x64 layout: whole, it lies in the pool at its distance", (long)off,
+		(long)(w.items + 37 * w.itemSize));
+	field = SavePtrEnemyField(&w, laraW);
+	d = SavePtrDecodeEnemy(&w, field, SavePtrEnemyKind(laraW, laraW, aiW), 37,
+		20, aiW);
+	ok(field == (long)(w.items + 37 * w.itemSize) && d.value == laraW,
+		"x64 layout: Lara across the line, there and back", field,
+		(long)(w.items + 37 * w.itemSize));
+	field = SavePtrEnemyField(&w, aiW);
+	d = SavePtrDecodeEnemy(&b, field, SavePtrEnemyKind(aiW, laraW, aiW), 37,
+		20, aiB);
+	ok(field == (long)(w.slots + 22) && d.value == aiB,
+		"x64 layout: the own ai_target across the line, there and back",
+		field, (long)(w.slots + 22));
+	d = SavePtrDecodeEnemy(&w, SavePtrEnemyField(&w, 0), SAVE_PTR_KIND_NULL,
+		37, 20, aiW);
+	ok(d.value == 0 && d.how == SAVE_PTR_HOW_NULL,
+		"x64 layout: null across the line stays null", (long)d.value, 0);
+
+	// GeneralPtr: a pulley's item and an item number.
+	const SavePtrAddr pulley = w.base + w.items + 9 * w.itemSize;
+	unsigned long side;
+
+	field = SavePtrGeneralField(&w, pulley);
+	side = SavePtrGeneralSide(&w, pulley, field);
+	d = SavePtrDecodeGeneral(&b, field, side);
+	ok(d.value == b.base + b.items + 9 * b.itemSize && d.how ==
+		SAVE_PTR_HOW_TAG_ITEM && d.number == 9,
+		"x64 layout: GeneralPtr's item across the line, back above 4 GB",
+		d.number, 9);
+	d = SavePtrDecodeGeneral(&b, SavePtrGeneralField(&a, 37), 0);
+	ok(d.value == 37 && d.how == SAVE_PTR_HOW_TAG_NUM,
+		"x64 layout: GeneralPtr's item number in a pool above 4 GB",
+		(long)d.value, 37);
+
+	char line[160];
+
+	SavePtrPoolLine(line, sizeof(line), "load", &a);
+	ok(!strcmp(line, "SAVELOG load pool base=0xA0B40000 items=+0x412A40 "
+		"slots=+0x760000"), "x64 layout: the pool's line keeps its width",
+		(long)strlen(line), 0);
+
+	// Lara's meshes by number.
+	ok(SavePtrMeshField(5, 0x1234) == 0x7C000005UL &&
+		SavePtrMeshNumber(0x7C000005UL, 2000) == 5,
+		"x64 layout: a mesh by its number, under the tag 0x7C", (long)
+		SavePtrMeshNumber(SavePtrMeshField(5, 0x1234), 2000), 5);
+	ok(SavePtrMeshField(-1, 0x00123456UL) == 0x00123456UL &&
+		SavePtrMeshNumber(0x00123456UL, 2000) == -1 &&
+		SavePtrMeshNumber(19999999UL, 2000) == -1,
+		"x64 layout: a mesh in no table keeps its distance, read as one", 0,
+		0);
+	ok(SavePtrMeshNumber(0x7C0007D0UL, 2000) == -2 &&
+		SavePtrMeshNumber(0x7D000005UL, 2000) == -1,
+		"x64 layout: a number the level lacks, another tag, are no mesh",
+		SavePtrMeshNumber(0x7C0007D0UL, 2000), -2);
+
+	// The level file's records and the save's layout, with the engine's
+	// structs.
+	layout_checks(ok);
+
+	// The engine's text: the converters where the file and the save are
+	// read and written, the asserts included, no pointer cut to a long.
+	char* alex = hd_switch_text("../alexstuff.cpp");
+	char* file = hd_switch_text("../file.cpp");
+	char* draw = hd_switch_text("../drawroom.cpp");
+	char* save = hd_switch_text("../../game/savegame.cpp");
+	char* rope = hd_switch_text("../../game/rope.cpp");
+	char* game = hd_switch_text("../gamemain.cpp");
+	static char body[65536];
+
+	ok(alex && file && draw && save && rope && game,
+		"x64 layout: the six files", 0, 1);
+	ok(hd_switch_count(alex, "#include \"../global/disk_layout.h\"") == 1 &&
+		hd_switch_count(file, "#include \"../global/disk_layout.h\"") == 1 &&
+		hd_switch_count(save, "#include \"../global/disk_layout.h\"") == 1 &&
+		hd_switch_count(rope, "#include \"../global/disk_layout.h\"") == 1 &&
+		hd_switch_count(game, "#include \"../global/disk_layout.h\"") == 1,
+		"x64 layout: the five readers and writers include the asserts", 0, 1);
+	glass_body(alex, "void aFixUpRoom(ROOM_INFO* r, char* s)", body,
+		sizeof(body));
+	ok(strstr(body, "memcpy(&disk,s,sizeof(disk));RoomFromDisk(r,&disk,s+"
+		"sizeof(ROOM_INFO_DISK));") && strstr(body, "RoomletsFromDisk(pRm,"
+		"pDisk,r->nRoomlets,pFac,pPre,pVtx);r->pRoomlets=pRm;") &&
+		!strstr(body, "memcpy(r,s,") && !strstr(body, "long(s+") &&
+		!strstr(body, "(long)pR"),
+		"x64 layout: aFixUpRoom converts the header and the roomlets", 0, 1);
+	glass_body(file, "bool LoadObjects()", body, sizeof(body));
+	ok(strstr(body, "meshes[lp]=&mesh_base[ReadLong()/2];") &&
+		strstr(body, "memcpy(mesh_size,mesh,num_meshes*sizeof(short*));") &&
+		strstr(body, "animDisk=AnimDiskSlot(anims,num_anims);ReadBlock("
+		"animDisk,num_anims*(long)sizeof(ANIM_STRUCT_DISK));") &&
+		strstr(body, "AnimsFromDisk(anims,animDisk,num_anims,frames);") &&
+		!strstr(body, "sizeof(long)*2") && !strstr(body, "(long)frames"),
+		"x64 layout: LoadObjects reads meshes and anims in the file's form",
+		0, 1);
+	glass_body(draw, "void ProcessMeshData(long num_meshes)", body,
+		sizeof(body));
+	ok(strstr(body, "mesh_vtxbuf=(MESH_DATA**)game_malloc(num_meshes*(long)"
+		"sizeof(MESH_DATA*));") != 0,
+		"x64 layout: the mesh table sized by its pointers", 0, 1);
+	glass_body(save, "void SaveLaraData()", body, sizeof(body));
+	ok(strstr(body, "LaraCopyRuns(&lara,&savegame.Lara,1);") &&
+		strstr(body, "savegame.Lara.mesh_ptrs[i]=SaveLaraMesh(lara.mesh_ptrs"
+		"[i]);") && strstr(body, "SaveArmFrames(lara.left_arm.frame_base)") &&
+		!strstr(body, "mesh_base") && !strstr(body, "lara.mesh_ptrs[i]="),
+		"x64 layout: SaveLaraData writes the 32-bit layout, Lara untouched",
+		0, 1);
+	glass_body(save, "void RestoreLaraData(long FullSave)", body,
+		sizeof(body));
+	ok(strstr(body, "LaraCopyRuns(&lara,&savegame.Lara,0);") &&
+		strstr(body, "lara.mesh_ptrs[i]=LoadLaraMesh(savegame.Lara.mesh_ptrs"
+		"[i],i);") && strstr(body, "LoadArmFrames(savegame.Lara.right_arm."
+		"frame_base)") && !strstr(body, "memcpy(&lara"),
+		"x64 layout: RestoreLaraData reads it, pointer by pointer", 0, 1);
+	glass_body(save, "void sgRestoreGame()", body, sizeof(body));
+	ok(strstr(body, "#ifdef_WIN64") && strstr(body, "SavePtrMeshNumber("
+		"savegame.Lara.mesh_ptrs[i],num_level_meshes)==-1)boValid=0;"),
+		"x64 layout: a 64-bit build refuses Lara's meshes as distances", 0, 1);
+	ok(hd_switch_count(rope, "PendulumToSave(&save, &CurrentPendulum, "
+		"RopeList);") + hd_switch_count(rope, "WriteSG(&save, sizeof("
+		"PENDULUM_SAVE));") + hd_switch_count(rope, "PendulumFromSave(&"
+		"CurrentPendulum, &save, RopeList);") == 3 &&
+		hd_switch_count(rope, "(long)RopeList") == 0 &&
+		hd_switch_count(rope, "sizeof(PENDULUM)") == 0,
+		"x64 layout: the rope's pendulum in its save form", 0, 1);
+	ok(hd_switch_count(save, "(long)mesh_base") == 0 &&
+		hd_switch_count(save, "(long)objects[") == 0 &&
+		hd_switch_count(save, "(unsigned long)(uintptr_t)") == 0,
+		"x64 layout: no address cut to a long left in savegame.cpp",
+		hd_switch_count(save, "(long)mesh_base"), 0);
+
+	free(alex);
+	free(file);
+	free(draw);
+	free(save);
+	free(rope);
+	free(game);
+}
+
 /* One part of `rings` rings round the axis, at heights `ys` and radii
  * `radius`, appended to `trg` and `g` as one run of `pass`. */
 static void sky_cap_band(trf::remaster::Trg& trg, trf::remaster::TrgGroup& g,
@@ -35472,6 +35690,7 @@ int main()
 	brawler_rule();
 	brawler_reach();
 	save_pointer();
+	x64_layout();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

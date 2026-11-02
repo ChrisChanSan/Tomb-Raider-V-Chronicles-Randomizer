@@ -13,6 +13,12 @@ rem The whole engine is compiled every time, for the reason be.bat gives:
 rem a build by file dates can join object files of two states of one
 rem header. It also gives the 64-bit EXE its own build time, the first line
 rem of a -log run ("PCtomb5 built <date time>").
+rem
+rem The compiler is the gate of the pointer conversions: a pointer cut to
+rem 32 bits or a 32-bit value made a pointer (C4311, C4302, C4312), a size_t
+rem cut (C4267) and a printf format that does not fit its argument (C4477)
+rem are errors in tomb5.vcxproj, not warnings - in the 32-bit
+rem configurations as well, which have none of them.
 call "%~dp0be.bat" guard
 if errorlevel 1 exit /b 1
 

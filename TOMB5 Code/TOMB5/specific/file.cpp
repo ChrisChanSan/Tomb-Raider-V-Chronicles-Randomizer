@@ -11,7 +11,7 @@
  * version. See the LICENSE file at the root of this source tree.
  */
 #include "../tomb5/pch.h"
-#include "../tomb5/libs/zlib/zlib.h"
+#include "../../../TR5Randomizer/src/core/Inflate.h"	// the deflate reader
 #include "hqsfx.h"
 #include "hdscreen.h"
 #include "hd/hd_level.h"
@@ -184,26 +184,30 @@ long LoadFile(const char* name, char** dest)
 	return size;
 }
 
+/* The texture blocks of a level and the title's logo come zlib-packed
+ * (RFC 1950/1951). The project's own reader unpacks them - the file the
+ * randomizer compiles too, TR5Randomizer/src/core/Inflate.cpp. It checks the
+ * Adler-32 and refuses a stream that would read or write out of bounds. A
+ * failure is logged and returned, and the callers go on as they did. */
 bool Decompress(char* pDest, char* pCompressed, long compressedSize, long size)
 {
-	z_stream stream;
+	const char* error;
+	size_t got;
 
 	Log(__FUNCTION__);
-	memset(&stream, 0, sizeof(z_stream));
-	stream.avail_in = compressedSize;
-	stream.avail_out = size;
-	stream.next_out = (Bytef*)pDest;
-	stream.next_in = (Bytef*)pCompressed;
-	inflateInit(&stream);
-	inflate(&stream, Z_FINISH);
+	got = 0;
+	error = Inflate::zlib((const uint8_t*)pCompressed, (size_t)compressedSize,
+		(uint8_t*)pDest, (size_t)size, got);
 
-	if (stream.total_out != size)
+	if (!error && got != (size_t)size)
+		error = "fewer bytes than the header says";
+
+	if (error)
 	{
-		Log("Error Decompressing Data");
+		Log("Error Decompressing Data - %s", error);
 		return 0;
 	}
 
-	inflateEnd(&stream);
 	Log("Decompression OK");
 	return 1;
 }

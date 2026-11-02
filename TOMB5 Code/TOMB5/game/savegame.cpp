@@ -57,6 +57,20 @@ static SavePtrAddr SaveAddress(const void* p)
 	return (SavePtrAddr)(uintptr_t)p;
 }
 
+static_assert(MAX_LOT <= SAVE_PTR_SLOTS_MAX,
+	"save_pointer_rule.h holds an item number for every creature slot");
+
+/* Which item each creature slot holds now, as save_pointer_rule.h reads
+ * it: a save names an ai_target by its creature's item, and a load finds
+ * the slot that item holds in this run - asked again before each enemy
+ * is decoded, since a load deals the slots one creature at a time. */
+static void SavePointerSlots(SavePtrPool* pool)
+{
+	for (int i = 0; i < SAVE_PTR_SLOTS_MAX; i++)
+		pool->slotItem[i] = (baddie_slots && i < MAX_LOT) ?
+			baddie_slots[i].item_num : (short)-1;
+}
+
 /* The game_malloc pool as save_pointer_rule.h reads it: this level's
  * items[] and baddie_slots, their distances from the pool's start. */
 static SavePtrPool SavePointerPool()
@@ -72,6 +86,7 @@ static SavePtrPool SavePointerPool()
 	pool.slotSize = sizeof(CREATURE_INFO);
 	pool.maxSlots = MAX_LOT;
 	pool.aiOffset = offsetof(CREATURE_INFO, ai_target);
+	SavePointerSlots(&pool);
 	return pool;
 }
 
@@ -241,7 +256,8 @@ void SaveLaraData()
 		savegame.Lara.target = (uint32_t)side;
 
 	if (gLogEnabled)
-		Log("SAVELOG save general stored=0x%08lX side=0x%08lX", (unsigned long)field, side);
+		Log("SAVELOG save general stored=0x%08lX side=0x%08lX%s", (unsigned long)field, side,
+			SavePtrOutside(general, field) ? " kind=outside" : "");
 
 	if (lara.weapon_item != NO_ITEM)
 	{
@@ -351,6 +367,7 @@ void SaveLevelData(long FullSave)
 	SavePtrAddr enemy, ownAi;
 	long k, flare_age, field;
 	int kind;
+	bool outside;
 	ushort packed;
 	short pos, word, objnum, maxval;
 	uchar byte;
@@ -589,6 +606,12 @@ void SaveLevelData(long FullSave)
 						ownAi = SaveAddress(&creature->ai_target);
 						field = SavePtrEnemyField(&pool, enemy);
 						kind = SavePtrEnemyKind(enemy, SaveAddress(lara_item), ownAi);
+						outside = SavePtrOutside(enemy, field);
+
+						// What the rule cannot name leaves as null.
+						if (outside)
+							kind = SAVE_PTR_KIND_NULL;
+
 						memcpy(head, creature, sizeof(head));
 						memcpy(head + offsetof(CREATURE_INFO, enemy), &field, sizeof(field));
 						WriteSG(head, sizeof(head));
@@ -607,7 +630,8 @@ void SaveLevelData(long FullSave)
 						WriteSG(&lflags, sizeof(char));
 
 						if (gLogEnabled)
-							Log("SAVELOG save item=%d stored=0x%08lX kind=%s", i, (unsigned long)field, SavePtrKindName(kind));
+							Log("SAVELOG save item=%d stored=0x%08lX kind=%s", i, (unsigned long)field,
+								outside ? "outside" : SavePtrKindName(kind));
 					}
 				}
 
@@ -1066,6 +1090,7 @@ void RestoreLevelData(long FullSave)
 						creature->LOT.is_amphibious = (lflags & 4) == 4;
 						creature->LOT.is_jumping = (lflags & 8) == 8;
 						creature->LOT.is_monkeying = (lflags & 16) == 16;
+						SavePointerSlots(&pool);
 						decoded = SavePtrDecodeEnemy(&pool, field, SavePtrKindOf(lflags), lara.item_number, i, SaveAddress(&creature->ai_target));
 						creature->enemy = (ITEM_INFO*)(uintptr_t)decoded.value;
 

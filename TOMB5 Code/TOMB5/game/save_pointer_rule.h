@@ -36,25 +36,34 @@
  *               read through by lara_as_pulley, lara_as_pbleapoff and
  *               CogSwitchControl.
  *
- * The rule. An address in the pool stays its distance from the pool's start
- * in the field, as before: a build without this rule adds its own start and
- * still finds the item - a tag there would hand it a wild pointer for every
- * enemy. What is no address in the pool gets a value no distance can be: -1
- * for null, and 0x7E in the top byte over the number for an item number (a
- * distance is below MALLOC_SIZE, 20,000,000 or 0x01312D00: its top byte is
- * 0 or 1). Beside the field, where no build reads anything, the rule keeps
- * who it was, by number:
+ * The rule. No distance into the pool goes into a save: it names another
+ * place in another layout - a 64-bit build's ITEM_INFO is wider - and a
+ * save of one game state would differ between the builds. Every field gets
+ * a value no distance can be (a distance is below MALLOC_SIZE, 20,000,000
+ * or 0x01312D00: its top byte is 0 or 1):
+ *   -1          null, and anything that is no item and no ai_target - an
+ *               address outside the pool or between its records; SAVELOG
+ *               says kind=outside for such a pointer;
+ *   0x7D...     an item of items[], any item, by its number;
+ *   0x7B...     a creature's ai_target, by the number of the creature's
+ *               item - a load takes the slot that item holds in its run;
+ *   0x7E...     GeneralPtr's item number (a number, not an address).
+ * Beside the field, where no build reads anything, the rule keeps who it
+ * was for the builds before this closure, which read the field as a
+ * distance:
  *   enemy       bits 5 and 6 of the LOT flags byte after the ai_target (the
  *               LOT takes bits 0 to 4): null, Lara or the own ai_target;
  *   GeneralPtr  the save's copy of lara.target, which every load sets to 0:
  *               0x7D, the item's number and the field's low twelve bits, so
  *               that a copy another save left there never counts.
- * A load builds the pointer from that number and THIS run's items[] or the
- * creature, wherever the pool lies and however it is laid out. A save
- * without it - every save before this rule - is read by distance: an item
- * exactly there, or a creature slot's ai_target exactly there, else null.
- * A creature's enemy is only ever its own ai_target, and the slots are dealt
- * anew at a load, so an ai_target found that way is the creature's own.
+ * A load builds the pointer from the number and THIS run's items[] or
+ * slots, wherever the pool lies and however it is laid out. A field that
+ * is a distance comes from a build before this closure and is read the old
+ * way (how=legacy_*): by its kind, or by the copy, or at the distance - an
+ * item exactly there, or a creature slot's ai_target exactly there, else
+ * null. Every assignment in game\ gives a creature as its enemy null, Lara
+ * or its own ai_target, so an ai_target found that way is the creature's
+ * own.
  *
  * No engine header: plain numbers in, plain numbers out, so ModernTest holds
  * the rule; game\savegame.cpp fills in the numbers.
@@ -67,7 +76,9 @@
 #define SAVE_PTR_NULL		(-1L)		// null, or nothing the rule can name
 #define SAVE_PTR_TAG_MASK	0xFF000000UL	// the top byte (a distance's: 0, 1)
 #define SAVE_PTR_TAG_NUM	0x7E000000UL	// GeneralPtr holds an item number
-#define SAVE_PTR_TAG_ITEM	0x7D000000UL	// the target copy names an item
+#define SAVE_PTR_TAG_ITEM	0x7D000000UL	// an item by number; the copy's tag
+#define SAVE_PTR_TAG_AI		0x7B000000UL	// an ai_target by its owner's item
+#define SAVE_PTR_SLOTS_MAX	32		// slotItem[]'s room, MAX_LOT or more
 #define SAVE_PTR_NUM_MASK	0x00FFFFFFUL	// the number under the tag
 #define SAVE_PTR_ITEM_SHIFT	12		// the item's number in the copy
 #define SAVE_PTR_ITEM_MAX	0xFFFUL		// twelve bits of it
@@ -78,7 +89,8 @@
 typedef uint64_t SavePtrAddr;	// an address, whole on either build
 
 // Who a creature's enemy was, in the LOT flags byte. 0 is what every older
-// save holds there: no kind, read by distance.
+// save holds there: no kind, read by distance; a newer one for an enemy
+// that is neither null, Lara nor the own ai_target - its field says who.
 enum SavePtrKind
 {
 	SAVE_PTR_KIND_NONE,
@@ -91,11 +103,11 @@ enum SavePtrKind
 enum SavePtrHow
 {
 	SAVE_PTR_HOW_NULL,		// -1, or the kind said null
-	SAVE_PTR_HOW_TAG_ITEM,		// by number: Lara, or GeneralPtr's item
-	SAVE_PTR_HOW_TAG_AI,		// by number: the creature's own ai_target
+	SAVE_PTR_HOW_TAG_ITEM,		// by number: an item of items[]
+	SAVE_PTR_HOW_TAG_AI,		// by number: a creature's ai_target
 	SAVE_PTR_HOW_TAG_NUM,		// GeneralPtr's item number
-	SAVE_PTR_HOW_LEGACY_OK,		// by distance, on an item or an ai_target
-	SAVE_PTR_HOW_LEGACY_NULL	// by distance, on nothing: null
+	SAVE_PTR_HOW_LEGACY_OK,		// an older save's distance, read
+	SAVE_PTR_HOW_LEGACY_NULL	// an older save's distance, on nothing
 };
 
 // What the pointer is after the load.
@@ -119,6 +131,7 @@ struct SavePtrPool
 	unsigned long slotSize;		// sizeof(CREATURE_INFO)
 	long maxSlots;			// MAX_LOT
 	unsigned long aiOffset;		// offsetof(CREATURE_INFO, ai_target)
+	short slotItem[SAVE_PTR_SLOTS_MAX];	// each slot's item_num, or -1
 };
 
 // A load's answer: `value` is what the pointer is set to - an address, or
@@ -176,19 +189,72 @@ inline bool SavePtrInPool(const SavePtrPool* p, SavePtrAddr a,
 	return true;
 }
 
-/* The four bytes a save writes for the enemy at the address `enemy`: an
- * item's or a creature slot's ai_target its distance, anything else -1. */
-inline long SavePtrEnemyField(const SavePtrPool* p, SavePtrAddr enemy)
+/* The item lying exactly at the address `a`, or -1. */
+inline long SavePtrItemOf(const SavePtrPool* p, SavePtrAddr a)
 {
 	unsigned long off;
 
-	if (!enemy || !SavePtrInPool(p, enemy, &off))
-		return SAVE_PTR_NULL;
+	if (!a || !SavePtrInPool(p, a, &off))
+		return -1;
 
-	if (SavePtrItemAt(p, off) >= 0 || SavePtrSlotAiAt(p, off) >= 0)
-		return (long)off;
+	return SavePtrItemAt(p, off);
+}
+
+/* The item of the creature whose ai_target lies exactly at the address `a`
+ * - its slot's item_num - or -1, a free slot's NO_ITEM included. */
+inline long SavePtrAiOwnerOf(const SavePtrPool* p, SavePtrAddr a)
+{
+	unsigned long off;
+	long s;
+
+	if (!a || !SavePtrInPool(p, a, &off))
+		return -1;
+
+	s = SavePtrSlotAiAt(p, off);
+
+	if (s < 0 || s >= SAVE_PTR_SLOTS_MAX || p->slotItem[s] < 0)
+		return -1;
+
+	return p->slotItem[s];
+}
+
+/* The address of the ai_target of the slot that item `n` holds in this run,
+ * or 0 when no slot holds it. */
+inline SavePtrAddr SavePtrAiOfItem(const SavePtrPool* p, long n)
+{
+	for (long s = 0; s < p->maxSlots && s < SAVE_PTR_SLOTS_MAX; s++)
+	{
+		if (n >= 0 && p->slotItem[s] == n)
+			return p->base + p->slots + (unsigned long)s * p->slotSize +
+				p->aiOffset;
+	}
+
+	return 0;
+}
+
+/* The four bytes a save writes for the enemy at the address `enemy`: an
+ * item 0x7D over its number, a creature's ai_target 0x7B over the number
+ * of the creature's item, anything else -1. */
+inline long SavePtrEnemyField(const SavePtrPool* p, SavePtrAddr enemy)
+{
+	long k = SavePtrItemOf(p, enemy);
+
+	if (k >= 0)
+		return (long)(SAVE_PTR_TAG_ITEM | (unsigned long)k);
+
+	k = SavePtrAiOwnerOf(p, enemy);
+
+	if (k >= 0 && k < p->maxItems)
+		return (long)(SAVE_PTR_TAG_AI | (unsigned long)k);
 
 	return SAVE_PTR_NULL;
+}
+
+/* Whether a pointer that is not null left the save as -1: an address the
+ * rule cannot name, SAVELOG's kind=outside. */
+inline bool SavePtrOutside(SavePtrAddr a, long field)
+{
+	return a && field == SAVE_PTR_NULL;
 }
 
 /* Who the enemy is, for the LOT flags byte: `lara` the address of Lara's
@@ -216,22 +282,56 @@ inline int SavePtrKindOf(int lflags)
 
 /* The enemy a load gives a creature: `field` the save's four bytes, `kind`
  * its two bits, `lara` Lara's item number, `own` the creature's item number,
- * `ownAi` the address of its ai_target in this run. */
+ * `ownAi` the address of its ai_target in this run. A tagged field is read
+ * by its number; a distance, from a build before this closure, by its kind
+ * or at the distance. */
 inline SavePtrDecoded SavePtrDecodeEnemy(const SavePtrPool* p, long field,
 	int kind, long lara, long own, SavePtrAddr ownAi)
 {
 	SavePtrDecoded d = { SAVE_PTR_HOW_NULL, SAVE_PTR_IS_NULL, -1, 0 };
 	const unsigned long off = (unsigned long)field;
+	const unsigned long n = off & SAVE_PTR_NUM_MASK;
 	long k;
 
-	if (kind == SAVE_PTR_KIND_NULL)
+	if ((off & SAVE_PTR_TAG_MASK) == SAVE_PTR_TAG_ITEM)
+	{
+		if (n < (unsigned long)p->maxItems)
+		{
+			d.how = SAVE_PTR_HOW_TAG_ITEM;
+			d.what = SAVE_PTR_IS_ITEM;
+			d.number = (long)n;
+			d.value = p->base + p->items + n * p->itemSize;
+		}
+
 		return d;
+	}
+
+	if ((off & SAVE_PTR_TAG_MASK) == SAVE_PTR_TAG_AI)
+	{
+		const SavePtrAddr ai = (long)n == own ? ownAi :
+			SavePtrAiOfItem(p, (long)n);
+
+		if (ai)
+		{
+			d.how = SAVE_PTR_HOW_TAG_AI;
+			d.what = SAVE_PTR_IS_AI;
+			d.number = (long)n;
+			d.value = ai;
+		}
+
+		return d;
+	}
+
+	if (kind == SAVE_PTR_KIND_NULL || field == SAVE_PTR_NULL)
+		return d;
+
+	d.how = SAVE_PTR_HOW_LEGACY_NULL;
 
 	if (kind == SAVE_PTR_KIND_LARA)
 	{
 		if (lara >= 0 && lara < p->maxItems)
 		{
-			d.how = SAVE_PTR_HOW_TAG_ITEM;
+			d.how = SAVE_PTR_HOW_LEGACY_OK;
 			d.what = SAVE_PTR_IS_ITEM;
 			d.number = lara;
 			d.value = p->base + p->items + (unsigned long)lara * p->itemSize;
@@ -242,17 +342,12 @@ inline SavePtrDecoded SavePtrDecodeEnemy(const SavePtrPool* p, long field,
 
 	if (kind == SAVE_PTR_KIND_AI)
 	{
-		d.how = SAVE_PTR_HOW_TAG_AI;
+		d.how = SAVE_PTR_HOW_LEGACY_OK;
 		d.what = SAVE_PTR_IS_AI;
 		d.number = own;
 		d.value = ownAi;
 		return d;
 	}
-
-	if (field == SAVE_PTR_NULL)
-		return d;
-
-	d.how = SAVE_PTR_HOW_LEGACY_NULL;
 
 	if (off >= p->size)
 		return d;
@@ -278,11 +373,11 @@ inline SavePtrDecoded SavePtrDecodeEnemy(const SavePtrPool* p, long field,
 }
 
 /* The four bytes a save writes for GeneralPtr's `value`: 0 is -1, an item
- * number 0x7E000000 with the number, an item of items[] its distance,
+ * number 0x7E over the number, an item of items[] 0x7D over its number,
  * anything else -1. */
 inline long SavePtrGeneralField(const SavePtrPool* p, SavePtrAddr value)
 {
-	unsigned long off;
+	long k;
 
 	if (!value)
 		return SAVE_PTR_NULL;
@@ -290,8 +385,10 @@ inline long SavePtrGeneralField(const SavePtrPool* p, SavePtrAddr value)
 	if (value < (SavePtrAddr)p->maxItems)
 		return (long)(SAVE_PTR_TAG_NUM | (unsigned long)value);
 
-	if (SavePtrInPool(p, value, &off) && SavePtrItemAt(p, off) >= 0)
-		return (long)off;
+	k = SavePtrItemOf(p, value);
+
+	if (k >= 0)
+		return (long)(SAVE_PTR_TAG_ITEM | (unsigned long)k);
 
 	return SAVE_PTR_NULL;
 }
@@ -318,7 +415,9 @@ inline unsigned long SavePtrGeneralSide(const SavePtrPool* p,
 }
 
 /* The GeneralPtr a load gives Lara: `field` the save's four bytes, `side`
- * the save's copy of lara.target. */
+ * the save's copy of lara.target. A tagged field is read by its number; a
+ * distance, from a build before this closure, by the item number in the
+ * copy, or at the distance. */
 inline SavePtrDecoded SavePtrDecodeGeneral(const SavePtrPool* p, long field,
 	unsigned long side)
 {
@@ -339,13 +438,28 @@ inline SavePtrDecoded SavePtrDecodeGeneral(const SavePtrPool* p, long field,
 		return d;
 	}
 
+	if ((u & SAVE_PTR_TAG_MASK) == SAVE_PTR_TAG_ITEM)
+	{
+		k = u & SAVE_PTR_NUM_MASK;
+
+		if (k < (unsigned long)p->maxItems)
+		{
+			d.how = SAVE_PTR_HOW_TAG_ITEM;
+			d.what = SAVE_PTR_IS_ITEM;
+			d.number = (long)k;
+			d.value = p->base + p->items + k * p->itemSize;
+		}
+
+		return d;
+	}
+
 	k = (side >> SAVE_PTR_ITEM_SHIFT) & SAVE_PTR_ITEM_MAX;
 
 	if ((side & SAVE_PTR_TAG_MASK) == SAVE_PTR_TAG_ITEM &&
 		(side & SAVE_PTR_CHECK) == (u & SAVE_PTR_CHECK) &&
 		k < (unsigned long)p->maxItems)
 	{
-		d.how = SAVE_PTR_HOW_TAG_ITEM;
+		d.how = SAVE_PTR_HOW_LEGACY_OK;
 		d.what = SAVE_PTR_IS_ITEM;
 		d.number = (long)k;
 		d.value = p->base + p->items + k * p->itemSize;

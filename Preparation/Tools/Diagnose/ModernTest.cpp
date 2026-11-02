@@ -27363,12 +27363,14 @@ static void lift_door_rule()
 }
 
 /* A savegame's two pointers into the pool (game\save_pointer_rule.h): null,
- * Lara, an item, the own ai_target and GeneralPtr's number and item, saved
- * in one run and loaded in another whose pool lies elsewhere and in one laid
- * out otherwise; the dump's -40960; older saves read by distance; what a
- * build without the rule makes of a new save; and out of the engine's text
- * the six calls, the head copied before it is written and no pool
- * arithmetic left. */
+ * Lara, another item, the own and another creature's ai_target, an address
+ * outside, GeneralPtr's number and item - every one a tag or -1, never a
+ * distance - saved in one run and loaded in another whose pool lies
+ * elsewhere and in one laid out otherwise, and the same four bytes from a
+ * 64-bit layout; the dump's -40960; older saves read by distance
+ * (how=legacy_*); and out of the engine's text the six calls, the head
+ * copied before it is written, kind=outside, and no pool arithmetic left
+ * but the layout's own. */
 static void save_pointer()
 {
 	printf("a savegame's pointers into the pool: null stays null\n");
@@ -27396,6 +27398,16 @@ static void save_pointer()
 	c = b;
 	c.items += 1000;
 	c.slots += 4096;
+
+	// The slots' items: the creature, item 20, in slot 3 at the save and in
+	// slot 0 at the load; item 44, another creature, in slot 5 and in slot 2.
+	for (int s = 0; s < SAVE_PTR_SLOTS_MAX; s++)
+		a.slotItem[s] = b.slotItem[s] = c.slotItem[s] = -1;
+
+	a.slotItem[3] = 20;
+	a.slotItem[5] = 44;
+	b.slotItem[0] = c.slotItem[0] = 20;
+	b.slotItem[2] = c.slotItem[2] = 44;
 
 	const long lara = 37, own = 20;
 	const SavePtrAddr laraAt = a.base + a.items + 37 * a.itemSize;
@@ -27437,10 +27449,9 @@ static void save_pointer()
 		(long)d.value, 0);
 	field = SavePtrEnemyField(&a, laraAt);
 	kind = SavePtrEnemyKind(laraAt, laraAt, ownAiSave);
-	ok(field == (long)(a.items + 37 * a.itemSize) && kind ==
-		SAVE_PTR_KIND_LARA,
-		"save pointer: Lara is saved as her distance, kind Lara", field,
-		(long)(a.items + 37 * a.itemSize));
+	ok(field == (long)(SAVE_PTR_TAG_ITEM | 37) && kind == SAVE_PTR_KIND_LARA,
+		"save pointer: Lara is saved as item 37 by number, kind Lara", field,
+		(long)(SAVE_PTR_TAG_ITEM | 37));
 	d = SavePtrDecodeEnemy(&b, field, kind, lara, own, ownAiLoad);
 	ok(d.value == b.base + b.items + 37 * b.itemSize && d.how ==
 		SAVE_PTR_HOW_TAG_ITEM && d.number == 37,
@@ -27448,10 +27459,9 @@ static void save_pointer()
 		(long)(d.value - loadBase), (long)(b.items + 37 * b.itemSize));
 	field = SavePtrEnemyField(&a, ownAiSave);
 	kind = SavePtrEnemyKind(ownAiSave, laraAt, ownAiSave);
-	ok(field == (long)(a.slots + 3 * a.slotSize + 22) && kind ==
-		SAVE_PTR_KIND_AI,
-		"save pointer: the own ai_target is saved as its distance, kind ai",
-		field, (long)(a.slots + 3 * a.slotSize + 22));
+	ok(field == (long)(SAVE_PTR_TAG_AI | 20) && kind == SAVE_PTR_KIND_AI,
+		"save pointer: the own ai_target is saved by its creature's item, "
+		"kind ai", field, (long)(SAVE_PTR_TAG_AI | 20));
 	d = SavePtrDecodeEnemy(&b, field, kind, lara, own, ownAiLoad);
 	ok(d.value == ownAiLoad && d.how == SAVE_PTR_HOW_TAG_AI && d.what ==
 		SAVE_PTR_IS_AI && d.number == own,
@@ -27461,9 +27471,76 @@ static void save_pointer()
 	kind = SavePtrEnemyKind(a.base + a.items + 7 * a.itemSize, laraAt,
 		ownAiSave);
 	d = SavePtrDecodeEnemy(&b, field, kind, lara, own, ownAiLoad);
-	ok(kind == SAVE_PTR_KIND_NONE && d.how == SAVE_PTR_HOW_LEGACY_OK &&
-		d.number == 7 && d.value == b.base + b.items + 7 * b.itemSize,
-		"save pointer: another item is read by its distance", d.number, 7);
+	ok(kind == SAVE_PTR_KIND_NONE && field == (long)(SAVE_PTR_TAG_ITEM | 7) &&
+		d.how == SAVE_PTR_HOW_TAG_ITEM && d.number == 7 && d.value == b.base +
+		b.items + 7 * b.itemSize,
+		"save pointer: another item is saved by number, comes back as it",
+		d.number, 7);
+
+	// Another creature's ai_target: by that creature's item, into the slot
+	// it holds in the loading run; no slot holds it, null.
+	{
+		const SavePtrAddr otherAi = a.base + a.slots + 5 * a.slotSize + 22;
+
+		field = SavePtrEnemyField(&a, otherAi);
+		kind = SavePtrEnemyKind(otherAi, laraAt, ownAiSave);
+		d = SavePtrDecodeEnemy(&b, field, kind, lara, own, ownAiLoad);
+		ok(field == (long)(SAVE_PTR_TAG_AI | 44) && kind ==
+			SAVE_PTR_KIND_NONE && d.how == SAVE_PTR_HOW_TAG_AI && d.what ==
+			SAVE_PTR_IS_AI && d.number == 44 && d.value == b.base + b.slots +
+			2 * b.slotSize + 22,
+			"save pointer: another creature's ai_target, by its item, back "
+			"in that item's slot", d.number, 44);
+		b.slotItem[2] = -1;
+		d = SavePtrDecodeEnemy(&b, field, kind, lara, own, ownAiLoad);
+		ok(d.value == 0 && d.what == SAVE_PTR_IS_NULL,
+			"save pointer: ...and null when no slot holds that item",
+			(long)d.value, 0);
+		b.slotItem[2] = 44;
+		a.slotItem[5] = -1;
+		ok(SavePtrEnemyField(&a, otherAi) == SAVE_PTR_NULL &&
+			SavePtrOutside(otherAi, SAVE_PTR_NULL),
+			"save pointer: a free slot's ai_target is outside, -1", 0, 0);
+		a.slotItem[5] = 44;
+	}
+
+	// Outside: the sentinel, never a distance, and null at the load.
+	field = SavePtrEnemyField(&a, a.base + a.items + 100);
+	d = SavePtrDecodeEnemy(&b, field, SAVE_PTR_KIND_NULL, lara, own,
+		ownAiLoad);
+	ok(field == SAVE_PTR_NULL && SavePtrOutside(a.base + a.items + 100,
+		field) && !SavePtrOutside(0, SAVE_PTR_NULL) && !SavePtrOutside(
+		laraAt, SavePtrEnemyField(&a, laraAt)) && d.value == 0,
+		"save pointer: an address the rule cannot name is outside, -1, null",
+		field, -1);
+
+	// The same game state in a 64-bit build's layout: the same four bytes.
+	{
+		SavePtrPool w = a;
+
+		w.base = 0x00007FF6A0B40000ULL;
+		w.items = 0x00412A40UL + 4096;
+		w.itemSize = 5634;
+		w.slots = 0x00760000UL + 8192;
+		w.slotSize = 5722;
+
+		const SavePtrAddr lw = w.base + w.items + 37 * w.itemSize;
+		const SavePtrAddr iw = w.base + w.items + 7 * w.itemSize;
+		const SavePtrAddr aw = w.base + w.slots + 3 * w.slotSize + 22;
+		const SavePtrAddr pw = w.base + w.items + 9 * w.itemSize;
+		const SavePtrAddr pa = a.base + a.items + 9 * a.itemSize;
+
+		ok(SavePtrEnemyField(&w, lw) == SavePtrEnemyField(&a, laraAt) &&
+			SavePtrEnemyField(&w, iw) == SavePtrEnemyField(&a, a.base +
+			a.items + 7 * a.itemSize) && SavePtrEnemyField(&w, aw) ==
+			SavePtrEnemyField(&a, ownAiSave) && SavePtrGeneralField(&w, pw) ==
+			SavePtrGeneralField(&a, pa) && SavePtrGeneralSide(&w, pw,
+			SavePtrGeneralField(&w, pw)) == SavePtrGeneralSide(&a, pa,
+			SavePtrGeneralField(&a, pa)),
+			"save pointer: a 32-bit and a 64-bit layout write the same fields",
+			SavePtrEnemyField(&w, iw), SavePtrEnemyField(&a, a.base + a.items
+			+ 7 * a.itemSize));
+	}
 	ok(SavePtrEnemyField(&a, 0x7FFE0000UL) == SAVE_PTR_NULL &&
 		SavePtrEnemyField(&a, saveBase - 4) == SAVE_PTR_NULL,
 		"save pointer: an address outside the pool is saved as -1",
@@ -27487,9 +27564,21 @@ static void save_pointer()
 		(long)(d.value - loadBase), (long)(c.slots + 22));
 	d = SavePtrDecodeEnemy(&c, SavePtrEnemyField(&a, a.base + a.items + 7 *
 		a.itemSize), SAVE_PTR_KIND_NONE, lara, own, ownAiOther);
+	ok(d.value == c.base + c.items + 7 * c.itemSize && d.how ==
+		SAVE_PTR_HOW_TAG_ITEM,
+		"save pointer: another item by number survives another layout",
+		(long)(d.value - loadBase), (long)(c.items + 7 * c.itemSize));
+	d = SavePtrDecodeEnemy(&c, (long)(a.items + 7 * a.itemSize),
+		SAVE_PTR_KIND_NONE, lara, own, ownAiOther);
 	ok(d.value == 0 && d.how == SAVE_PTR_HOW_LEGACY_NULL,
-		"save pointer: an item by distance in another layout becomes null",
+		"save pointer: an older save's distance in another layout is null",
 		(long)d.value, 0);
+	d = SavePtrDecodeEnemy(&c, (long)(a.items + 37 * a.itemSize),
+		SAVE_PTR_KIND_LARA, lara, own, ownAiOther);
+	ok(d.value == c.base + c.items + 37 * c.itemSize && d.how ==
+		SAVE_PTR_HOW_LEGACY_OK,
+		"save pointer: an older save's Lara by her kind, how=legacy_ok",
+		d.how, SAVE_PTR_HOW_LEGACY_OK);
 
 	// Older saves: kind 0, the field the old engine wrote.
 	field = (long)(0UL - saveBase);
@@ -27539,15 +27628,15 @@ static void save_pointer()
 	ok(d.value == 0, "save pointer: the pool's end is null", (long)d.value,
 		0);
 
-	// A build without the rule, given a new save: what it adds its base to.
-	ok(SavePtrOldDecode(SavePtrEnemyField(&a, laraAt), loadBase) ==
-		loadBase + a.items + 37 * a.itemSize,
-		"save pointer: an old build finds Lara in a new save, as before",
-		(long)(SavePtrOldDecode(SavePtrEnemyField(&a, laraAt), loadBase) -
-		loadBase), (long)(a.items + 37 * a.itemSize));
-	ok(SavePtrOldDecode(SavePtrEnemyField(&a, ownAiSave), loadBase) ==
-		loadBase + a.slots + 3 * a.slotSize + 22,
-		"save pointer: ...and slot 3's ai_target, as before", 0, 0);
+	// A build of the rule before this closure reads the kind bits: Lara and
+	// the own ai_target by them, a tag it cannot read as null. A build
+	// without any rule adds its base to the field.
+	ok(SavePtrEnemyKind(laraAt, laraAt, ownAiSave) == SAVE_PTR_KIND_LARA &&
+		SavePtrEnemyKind(ownAiSave, laraAt, ownAiSave) == SAVE_PTR_KIND_AI &&
+		(unsigned long)SavePtrEnemyField(&a, a.base + a.items + 7 *
+		a.itemSize) >= 20000000UL,
+		"save pointer: the kind bits stay, a tag lies past every distance",
+		0, 0);
 	ok(SavePtrOldDecode(SAVE_PTR_NULL, loadBase) == loadBase - 1,
 		"save pointer: ...and for null its base less one, inside the heap "
 		"block's header", (long)(loadBase - SavePtrOldDecode(SAVE_PTR_NULL,
@@ -27585,9 +27674,9 @@ static void save_pointer()
 
 	field = SavePtrGeneralField(&a, pulley);
 	side = SavePtrGeneralSide(&a, pulley, field);
-	ok(field == (long)(a.items + 9 * a.itemSize) && side ==
-		(SAVE_PTR_TAG_ITEM | (9UL << 12) | ((unsigned long)field & 0xFFF)),
-		"save pointer: a pulley is saved as its distance, item 9 in the "
+	ok(field == (long)(SAVE_PTR_TAG_ITEM | 9) && side ==
+		(SAVE_PTR_TAG_ITEM | (9UL << 12) | 9UL),
+		"save pointer: a pulley is saved as item 9 by number, and in the "
 		"copy", (long)((side >> 12) & 0xFFF), 9);
 	d = SavePtrDecodeGeneral(&b, field, side);
 	ok(d.value == b.base + b.items + 9 * b.itemSize && d.how ==
@@ -27597,15 +27686,30 @@ static void save_pointer()
 	ok(d.value == c.base + c.items + 9 * c.itemSize,
 		"save pointer: ...in another layout too", (long)(d.value - loadBase),
 		(long)(c.items + 9 * c.itemSize));
-	d = SavePtrDecodeGeneral(&b, field, side ^ 1);
+	d = SavePtrDecodeGeneral(&c, field, 0);
+	ok(d.value == c.base + c.items + 9 * c.itemSize && d.how ==
+		SAVE_PTR_HOW_TAG_ITEM,
+		"save pointer: ...by the field alone, without the copy", d.number, 9);
+
+	// An older save: the field a distance, the item's number in the copy.
+	const long oldField = (long)(a.items + 9 * a.itemSize);
+	const unsigned long oldSide = SAVE_PTR_TAG_ITEM | (9UL << 12) |
+		((unsigned long)oldField & 0xFFF);
+
+	d = SavePtrDecodeGeneral(&c, oldField, oldSide);
+	ok(d.value == c.base + c.items + 9 * c.itemSize && d.how ==
+		SAVE_PTR_HOW_LEGACY_OK && d.number == 9,
+		"save pointer: an older save's pulley by its copy, how=legacy_ok",
+		d.number, 9);
+	d = SavePtrDecodeGeneral(&b, oldField, oldSide ^ 1);
 	ok(d.value == b.base + b.items + 9 * b.itemSize && d.how ==
 		SAVE_PTR_HOW_LEGACY_OK,
 		"save pointer: a copy that does not repeat the field counts not",
 		d.how, SAVE_PTR_HOW_LEGACY_OK);
-	d = SavePtrDecodeGeneral(&c, field, side ^ 1);
+	d = SavePtrDecodeGeneral(&c, oldField, oldSide ^ 1);
 	ok(d.value == 0 && d.how == SAVE_PTR_HOW_LEGACY_NULL,
 		"save pointer: ...then another layout gives 0", (long)d.value, 0);
-	d = SavePtrDecodeGeneral(&b, field, (unsigned long)(a.base + a.items));
+	d = SavePtrDecodeGeneral(&b, oldField, (unsigned long)(a.base + a.items));
 	ok(d.how == SAVE_PTR_HOW_LEGACY_OK,
 		"save pointer: a live target pointer in the copy counts not", d.how,
 		SAVE_PTR_HOW_LEGACY_OK);
@@ -27630,12 +27734,19 @@ static void save_pointer()
 	d = SavePtrDecodeEnemy(&b, field, SAVE_PTR_KIND_LARA, lara, own,
 		ownAiLoad);
 	SavePtrEnemyLine(line, sizeof(line), own, field, &d);
-	ok(!strcmp(line, "SAVELOG item=20 stored=0x004456CE how=tag_item "
+	ok(!strcmp(line, "SAVELOG item=20 stored=0x7D000025 how=tag_item "
 		"enemy=item 37"), "save pointer: Lara's line", (long)strlen(line), 0);
+	field = SavePtrEnemyField(&a, ownAiSave);
+	d = SavePtrDecodeEnemy(&b, field, SAVE_PTR_KIND_AI, lara, own,
+		ownAiLoad);
+	SavePtrEnemyLine(line, sizeof(line), own, field, &d);
+	ok(!strcmp(line, "SAVELOG item=20 stored=0x7B000014 how=tag_ai "
+		"enemy=ai 20"), "save pointer: the ai_target's line",
+		(long)strlen(line), 0);
 	d = SavePtrDecodeEnemy(&b, 0, SAVE_PTR_KIND_AI, lara, own, ownAiLoad);
 	SavePtrEnemyLine(line, sizeof(line), own, 0, &d);
-	ok(!strcmp(line, "SAVELOG item=20 stored=0x00000000 how=tag_ai "
-		"enemy=ai 20"), "save pointer: the ai_target's line",
+	ok(!strcmp(line, "SAVELOG item=20 stored=0x00000000 how=legacy_ok "
+		"enemy=ai 20"), "save pointer: an older save's ai_target's line",
 		(long)strlen(line), 0);
 	d = SavePtrDecodeGeneral(&b, (long)(SAVE_PTR_TAG_NUM | 37), 0);
 	SavePtrGeneralLine(line, sizeof(line), (long)(SAVE_PTR_TAG_NUM | 37), 0,
@@ -27691,6 +27802,35 @@ static void save_pointer()
 		hd_switch_count(save, "(long)malloc_buffer") == 0,
 		"save pointer: no pool start added or taken in savegame.cpp",
 		hd_switch_count(save, "malloc_buffer"), 1);
+	ok(hd_switch_count(save, "pool.base") == 3 &&
+		hd_switch_count(save, "- pool.base);") == 2 &&
+		hd_switch_count(save, "pool->base") == 0,
+		"save pointer: the pool's start only where its layout is measured",
+		hd_switch_count(save, "pool.base"), 3);
+	ok(hd_switch_count(save, "SavePointerSlots(&pool);") == 2 &&
+		hd_switch_count(save, "static_assert(MAX_LOT <= SAVE_PTR_SLOTS_MAX,")
+		== 1,
+		"save pointer: the slots' items read for the pool and before each "
+		"enemy's decode", hd_switch_count(save, "SavePointerSlots(&pool);"),
+		2);
+
+	// The rule's encoders: a tag or -1, no distance returned.
+	{
+		char* rule = hd_switch_text("../../game/save_pointer_rule.h");
+		static char enc[8192];
+
+		glass_body(rule, "inline long SavePtrEnemyField(", enc, sizeof(enc));
+		ok(strstr(enc, "return(long)(SAVE_PTR_TAG_ITEM|(unsignedlong)k);") &&
+			strstr(enc, "return(long)(SAVE_PTR_TAG_AI|(unsignedlong)k);") &&
+			!strstr(enc, "off"),
+			"save pointer: the enemy's field is a tag or -1", 0, 1);
+		glass_body(rule, "inline long SavePtrGeneralField(", enc,
+			sizeof(enc));
+		ok(strstr(enc, "return(long)(SAVE_PTR_TAG_ITEM|(unsignedlong)k);") &&
+			!strstr(enc, "off"),
+			"save pointer: GeneralPtr's field is a tag or -1", 0, 1);
+		free(rule);
+	}
 	ok(hd_switch_count(save, "static_assert(offsetof(CREATURE_INFO, enemy) "
 		"+ sizeof(long) == 22,") == 1,
 		"save pointer: the 22 bytes end with the enemy, asserted", 0, 1);
@@ -27724,6 +27864,11 @@ static void save_pointer()
 	ok(strstr(body, "lflags|=creature->LOT.is_monkeying<<4;lflags|=kind<<"
 		"SAVE_PTR_KIND_SHIFT;WriteSG(&lflags,sizeof(char));") != 0,
 		"save pointer: the kind goes into the LOT byte before it is written",
+		0, 1);
+	ok(strstr(body, "outside=SavePtrOutside(enemy,field);//Whattherule"
+		"cannotnameleavesasnull.if(outside)kind=SAVE_PTR_KIND_NULL;") &&
+		strstr(body, "outside?\"outside\":SavePtrKindName(kind)"),
+		"save pointer: what the rule cannot name leaves null, kind=outside",
 		0, 1);
 	glass_body(save, "void RestoreLevelData(long FullSave)", body,
 		sizeof(body));
@@ -27784,9 +27929,15 @@ static void x64_layout()
 	a.slotSize = 5722;
 	a.maxSlots = 16;
 	a.aiOffset = 22;
+	for (int s = 0; s < SAVE_PTR_SLOTS_MAX; s++)
+		a.slotItem[s] = -1;
+
+	a.slotItem[3] = 20;
 	b = a;
 	b.base = 0x000001D3C0010000ULL;
-	w = a;
+	b.slotItem[3] = -1;
+	b.slotItem[0] = 20;
+	w = b;
 	w.base = 0x00000001FFE00000ULL;
 
 	const SavePtrAddr laraA = a.base + a.items + 37 * a.itemSize;
@@ -27803,9 +27954,9 @@ static void x64_layout()
 	field = SavePtrEnemyField(&a, laraA);
 	kind = SavePtrEnemyKind(laraA, laraA, aiA);
 	d = SavePtrDecodeEnemy(&b, field, kind, 37, 20, aiB);
-	ok(field == (long)(a.items + 37 * a.itemSize) && d.value == laraB &&
+	ok(field == (long)(SAVE_PTR_TAG_ITEM | 37) && d.value == laraB &&
 		d.how == SAVE_PTR_HOW_TAG_ITEM,
-		"x64 layout: Lara above 4 GB saved as a distance, back whole",
+		"x64 layout: Lara above 4 GB saved by number, back whole",
 		(long)(d.value >> 32), (long)(laraB >> 32));
 	d = SavePtrDecodeEnemy(&b, SavePtrEnemyField(&a, 0), SavePtrEnemyKind(0,
 		laraA, aiA), 37, 20, aiB);
@@ -27814,7 +27965,7 @@ static void x64_layout()
 	field = SavePtrEnemyField(&a, aiA);
 	kind = SavePtrEnemyKind(aiA, laraA, aiA);
 	d = SavePtrDecodeEnemy(&b, field, kind, 37, 20, aiB);
-	ok(field == (long)(a.slots + 3 * a.slotSize + 22) && d.value == aiB &&
+	ok(field == (long)(SAVE_PTR_TAG_AI | 20) && d.value == aiB &&
 		d.how == SAVE_PTR_HOW_TAG_AI,
 		"x64 layout: the own ai_target above 4 GB, back in its new slot",
 		(long)(d.value - b.base), (long)(b.slots + 22));
@@ -27838,15 +27989,15 @@ static void x64_layout()
 	field = SavePtrEnemyField(&w, laraW);
 	d = SavePtrDecodeEnemy(&w, field, SavePtrEnemyKind(laraW, laraW, aiW), 37,
 		20, aiW);
-	ok(field == (long)(w.items + 37 * w.itemSize) && d.value == laraW,
+	ok(field == (long)(SAVE_PTR_TAG_ITEM | 37) && d.value == laraW,
 		"x64 layout: Lara across the line, there and back", field,
-		(long)(w.items + 37 * w.itemSize));
+		(long)(SAVE_PTR_TAG_ITEM | 37));
 	field = SavePtrEnemyField(&w, aiW);
 	d = SavePtrDecodeEnemy(&b, field, SavePtrEnemyKind(aiW, laraW, aiW), 37,
 		20, aiB);
-	ok(field == (long)(w.slots + 22) && d.value == aiB,
+	ok(field == (long)(SAVE_PTR_TAG_AI | 20) && d.value == aiB,
 		"x64 layout: the own ai_target across the line, there and back",
-		field, (long)(w.slots + 22));
+		field, (long)(SAVE_PTR_TAG_AI | 20));
 	d = SavePtrDecodeEnemy(&w, SavePtrEnemyField(&w, 0), SAVE_PTR_KIND_NULL,
 		37, 20, aiW);
 	ok(d.value == 0 && d.how == SAVE_PTR_HOW_NULL,

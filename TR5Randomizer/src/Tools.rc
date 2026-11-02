@@ -14,7 +14,7 @@
 #include <winres.h>
 
 #if defined(RANDOMIZE)
-#define TOOL_DESCRIPTION "Randomizer for Tomb Raider Chronicles, command line"
+#define TOOL_DESCRIPTION "Tomb5 Port Randomizer, command line"
 #define TOOL_FILE        "Randomize.exe"
 #elif defined(FIXCHECK)
 #define TOOL_DESCRIPTION "Level fix checker for the TR5 Randomizer"

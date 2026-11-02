@@ -55,7 +55,7 @@ BEGIN
         BLOCK "040904b0"
         BEGIN
             VALUE "CompanyName", "ChrisChanSan"
-            VALUE "FileDescription", "Randomizer for Tomb Raider Chronicles"
+            VALUE "FileDescription", "Tomb5 Port Randomizer"
             VALUE "FileVersion", "Beta_5.0"
             VALUE "InternalName", "TR5Randomizer.exe"
             VALUE "LegalCopyright", "GPLv3. Copyright 2026 ChrisChanSan."

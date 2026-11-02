@@ -17,6 +17,20 @@ the C++ workload; the path to `vcvars` is the one absolute thing in them.
 `bmap.bat` and `btrg.bat` are no exception: every path in them is the
 `%~dp0` form as well.
 
+**No tool links zlib.** Only the engine does, for the level files it loads.
+A tool that unpacks a level's texture blocks or writes a PNG compiles the
+randomizer's own reader and writer, `TR5Randomizer\src\core\Inflate.cpp`
+(see its header): `bbw`, `bld`, `bs` and `btx` through `Tr5Transfer.cpp`,
+and `bdp`, `bfont`, `bmodel` and `broom` for their own reads and pictures.
+The other scripts that named zlib (`bak`, `bam`, `bap`, `bb`, `bbone`,
+`bcc`, `bfc`, `bhc`, `bhdm`, `bic`, `bip`, `bla`, `bmap`, `bmm`, `bmp`,
+`broot`, `brp`, `bsa`, `bsek`, `bsfx`, `bsk`, `bsl`, `btp`, `btrg`) compiled
+its ten files without calling them and now compile the rest alone. A PNG
+of DdsProbe, FontProbe, ModelProbe or RoomProbe carries its scanlines as
+stored deflate blocks: the same pixels as before, a larger file, and other
+bytes - an md5 list of pictures made by a build before this change does not
+match one made after it, though every pixel does.
+
 **The one prerequisite, said once here:** the `vcvars` line names a specific
 Visual Studio installation. If yours sits elsewhere - a different edition, a
 different major version - that single line in each script is what to change;
@@ -32,7 +46,7 @@ tracked `.inc` match their stamps.
 Eight tools have no script: CornerCheck, DinoCheck, FaceCheck, GeomTest,
 TR3FetchCheck, TR3SoundCheck, TriggerCommands, WinCheck. Their headers
 carry no build line. They build with the command line of CameraCheck's script
-(`bcc.bat`: the tool, `Tr5Level.cpp` and zlib) with their own name substituted;
+(`bcc.bat`: the tool and `Tr5Level.cpp`) with their own name substituted;
 TriggerCommands adds `DataFolder.cpp`, and DinoCheck, TR3FetchCheck
 and TR3SoundCheck take `Tr3Source.cpp` and `DataFolder.cpp` in place of
 `Tr5Level.cpp`.
@@ -58,8 +72,8 @@ CornerCheck, GeomTest and WinCheck were written in a scratch folder outside
 the clone, and their build scripts stayed behind on purpose: those carried
 absolute paths, and two of them were even named `bcc.bat` and `bwc.bat`,
 which belong to CameraCheck and BalanceWriteCheck here. All three take the
-same command line as CameraCheck's script - `Tr5Level.cpp` plus zlib, nothing
-else - with their own name substituted.
+same command line as CameraCheck's script - `Tr5Level.cpp`, nothing else -
+with their own name substituted.
 
 ## By subject
 
@@ -75,7 +89,7 @@ else - with their own name substituted.
 | `CornerCheck` | - | proof for `cornerFloor` / `cornerCeiling`: every horizontal vanilla face that covers one sector must sit corner for corner on the height the floordata computes. Run it after any change to the floordata reading - it is the only independent witness there is. |
 | `WinCheck` | - | holds `wallWindow` against the 32-byte view windows Core shipped. A window only ever clips, so when the two differ the direction is what matters: too large costs nothing, too small blacks out part of the neighbouring room. |
 | `GeomTest` | - | tries `buildRoomGeometry` on one room and reports what came out - face count, triangles, bounding box, degenerate faces. The tool for a room that has no drawn surface at all. |
-| `LevelDiff` | bld | two levels compared block by block. If everything but the images is byte-equal, only textures were exchanged. |
+| `LevelDiff` | bld | two levels compared block by block. If everything but the images is byte-equal, only textures were exchanged. **`-content a.trc b.trc`** asks whether two files are the same level however their texture blocks are packed: the three blocks unpacked and compared, every other byte compared as it stands; `SAME CONTENT` (exit 0) or `DIFFERENT` (exit 1). The regression recipe's comparison across the change to stored blocks (Verification.md section 1). |
 | `LevelBuild` | bbw | applies a patch JSON to a level - how the hand-built test levels are made. `-hdm` writes the run's `.hdm` sidecar beside the result as the randomizer does: a copied slot's `donor` line and a shrunk copy's `scale` line, so `ModelProbe -hdm` and the engine read the test level as a run's. |
 | `FixCheck` | bfc | applies LevelFix and saves the result, so the repairs can be looked at in trview - and a repaired view window drawn by RoomProbe, with `-roombox` on the folder the result was saved to. For a one-shot entry (`TriggerOneShot`) it checks the result itself: `FOUND` lists the triggers it reaches with sector, item and setup word before and after, `SET` reads the saved file back and walks the room on its own, `BYTES` compares source and result byte by byte (only the setup words' high bytes may differ). Ends with `HOLDS`, or `FAILS` and exit code 2 on any warning or failed check. |
 | `TriggerCommands` | - | counts which trigger commands occur in a level. |

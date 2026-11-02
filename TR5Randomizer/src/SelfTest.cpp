@@ -21,15 +21,20 @@
 //
 // Usage:  TR5RandoSelfTest.exe [<path to a zone JSON>]
 //
-// Purpose: secure the two properties everything else builds on - that a seed
-// is reproducible and that our own exports are read without errors. Both
-// would otherwise only show once a user reports a broken level.
+// Purpose: secure the properties everything else builds on - that a seed
+// is reproducible, that our own exports are read without errors, and that
+// the level's texture blocks are unpacked and packed right. Each would
+// otherwise only show once a player reports a broken level.
 //----------------------------------------------------------------------------
+#include "core/DataFile.h"
 #include "core/DataFolder.h"
+#include "core/Inflate.h"
 #include "core/Json.h"
 #include "core/Rng.h"
 
+#include <cstdint>
 #include <cstdio>
+#include <cstring>
 #include <map>
 #include <string>
 #include <vector>
@@ -154,6 +159,154 @@ static void testJson()
     check(Json::parseString(text, back, err), "self-written JSON is readable again");
     check(back["itemAdds"][0]["room"].asInt() == 166, "value equal after round trip");
     check(o.dump() == back.dump(), "output is stable (byte-identical)");
+}
+
+//----------------------------------------------------------------------------
+// The deflate reader and the stored writer (core/Inflate.h).
+//
+// The three streams below were written once by the engine's zlib
+// (TOMB5 Code/TOMB5/tomb5/libs/zlib, compress2) and pasted here, so the
+// reader is checked against another implementation's output, not against
+// its own writer: level 0 gives a stored block, level 9 on the short text a
+// fixed-Huffman block, level 9 on the longer text a dynamic-Huffman block.
+//----------------------------------------------------------------------------
+namespace
+{
+    const char kShortText[] = "TR5 TR5 TR5 Randomizer TR5 Randomizer TR5 TR5 Randomizer";
+
+    const uint8_t kStoredZ[] = {
+        0x78, 0x01, 0x01, 0x38, 0x00, 0xC7, 0xFF, 0x54, 0x52, 0x35, 0x20, 0x54,
+        0x52, 0x35, 0x20, 0x54, 0x52, 0x35, 0x20, 0x52, 0x61, 0x6E, 0x64, 0x6F,
+        0x6D, 0x69, 0x7A, 0x65, 0x72, 0x20, 0x54, 0x52, 0x35, 0x20, 0x52, 0x61,
+        0x6E, 0x64, 0x6F, 0x6D, 0x69, 0x7A, 0x65, 0x72, 0x20, 0x54, 0x52, 0x35,
+        0x20, 0x54, 0x52, 0x35, 0x20, 0x52, 0x61, 0x6E, 0x64, 0x6F, 0x6D, 0x69,
+        0x7A, 0x65, 0x72, 0xF3, 0xFB, 0x12, 0x74,
+    };
+    const uint8_t kFixedZ[] = {
+        0x78, 0xDA, 0x0B, 0x09, 0x32, 0x55, 0x08, 0x81, 0xE2, 0xA0, 0xC4, 0xBC,
+        0x94, 0xFC, 0xDC, 0xCC, 0xAA, 0xD4, 0x22, 0x6C, 0x5C, 0x54, 0x21, 0x00,
+        0xF3, 0xFB, 0x12, 0x74,
+    };
+    // 120 words, 645 bytes: see longText().
+    const uint8_t kDynamicZ[] = {
+        0x78, 0xDA, 0x6D, 0x52, 0xC9, 0x0A, 0xC2, 0x30, 0x10, 0xFD, 0x95, 0xFC,
+        0x8B, 0xA7, 0x42, 0x4F, 0x12, 0xBC, 0x0F, 0x34, 0xA0, 0x12, 0x2B, 0x44,
+        0xF1, 0xFB, 0x65, 0xB6, 0xCC, 0x4B, 0x9B, 0xC3, 0x4C, 0x97, 0xB7, 0xCC,
+        0x92, 0xE4, 0x46, 0x4F, 0xDA, 0xD3, 0xED, 0xB2, 0xA4, 0xAC, 0xAF, 0x2B,
+        0x35, 0x4A, 0xD7, 0xF7, 0xAB, 0xA4, 0xA5, 0x3D, 0x3E, 0xFA, 0xC9, 0x70,
+        0x2D, 0xBF, 0x52, 0x2D, 0x0B, 0x22, 0x1C, 0x46, 0x84, 0x12, 0x64, 0xA5,
+        0x30, 0x00, 0xAE, 0xF6, 0x30, 0xDF, 0x52, 0x69, 0xDF, 0x40, 0xF7, 0xBD,
+        0xC7, 0x5F, 0x95, 0xF7, 0xB2, 0x82, 0xF7, 0x2A, 0x92, 0xD0, 0x4B, 0x12,
+        0xCB, 0x39, 0x0C, 0x70, 0x27, 0x28, 0xDF, 0x5D, 0x3C, 0x98, 0x0E, 0xDD,
+        0xFA, 0x58, 0x2A, 0x8C, 0xF1, 0x62, 0x96, 0x58, 0x4B, 0x8E, 0x95, 0x75,
+        0xDB, 0x3E, 0x85, 0x81, 0xAA, 0xF3, 0xBE, 0x4E, 0xDA, 0x23, 0x7D, 0x50,
+        0x09, 0x7B, 0x18, 0x67, 0xEC, 0xE6, 0x3C, 0xF7, 0xBC, 0xBA, 0xF6, 0x85,
+        0x4B, 0x85, 0xC3, 0x9B, 0x01, 0xBE, 0x17, 0x0F, 0x34, 0x80, 0x5D, 0x0D,
+        0x7A, 0xBC, 0x34, 0x02, 0xCC, 0x0E, 0xFA, 0x78, 0x08, 0xB1, 0x0F, 0x75,
+        0xFC, 0x03, 0xD8, 0xAA, 0xDA, 0xCA,
+    };
+
+    // The dynamic stream's text: 120 words drawn from eight by the
+    // generator x = x * 1103515245 + 12345 (32 bit, from 7), word
+    // (x >> 16) % 8, each followed by its space.
+    std::vector<uint8_t> longText()
+    {
+        static const char* const words[] = { "the ", "level ", "Lara ", "Rome ",
+                                             "Trajan ", "Iris ", "VCI ", "Ireland " };
+        std::vector<uint8_t> t;
+        uint32_t x = 7;
+        for (int i = 0; i < 120; ++i)
+        {
+            x = x * 1103515245u + 12345u;
+            const char* w = words[(x >> 16) % 8];
+            t.insert(t.end(), w, w + std::strlen(w));
+        }
+        return t;
+    }
+
+    bool reads(const uint8_t* s, size_t n, const std::vector<uint8_t>& want)
+    {
+        std::vector<uint8_t> out;
+        std::string err;
+        return Inflate::zlibExact(s, n, want.size(), out, err) && out == want;
+    }
+
+    bool refused(std::vector<uint8_t> s, size_t room)
+    {
+        std::vector<uint8_t> out(room + 1);
+        size_t got = 0;
+        return Inflate::zlib(s.data(), s.size(), out.data(), room, got) != nullptr;
+    }
+}
+
+static void testInflate()
+{
+    std::printf("Deflate reader and stored writer\n");
+
+    const uint8_t wiki[] = { 'W', 'i', 'k', 'i', 'p', 'e', 'd', 'i', 'a' };
+    check(Inflate::adler32(wiki, 9) == 0x11E60398u, "Adler-32 of \"Wikipedia\" is 11E60398");
+    check(Inflate::adler32(nullptr, 0) == 1u, "Adler-32 of nothing is 1");
+    const uint8_t digits[] = { '1', '2', '3', '4', '5', '6', '7', '8', '9' };
+    check(Inflate::crc32(digits, 9) == 0xCBF43926u, "CRC-32 of \"123456789\" is CBF43926");
+
+    const std::vector<uint8_t> shortText(kShortText, kShortText + std::strlen(kShortText));
+    const std::vector<uint8_t> text = longText();
+    check(text.size() == 645, "dynamic vector's text rebuilt (645 bytes)");
+    check(reads(kStoredZ, sizeof(kStoredZ), shortText), "zlib's stored stream read");
+    check(reads(kFixedZ, sizeof(kFixedZ), shortText), "zlib's fixed-Huffman stream read");
+    check(reads(kDynamicZ, sizeof(kDynamicZ), text), "zlib's dynamic-Huffman stream read");
+
+    std::vector<uint8_t> mine;
+    Inflate::stored(shortText.data(), shortText.size(), mine);
+    check(mine == std::vector<uint8_t>(kStoredZ, kStoredZ + sizeof(kStoredZ)),
+          "stored writer gives zlib's own stored bytes");
+
+    // Three blocks and a short last one: 65535 + 65535 + 1.
+    std::vector<uint8_t> raw(131071);
+    uint32_t x = 1;
+    for (uint8_t& b : raw) { x = x * 1103515245u + 12345u; b = static_cast<uint8_t>(x >> 24); }
+    std::vector<uint8_t> packed;
+    Inflate::stored(raw.data(), raw.size(), packed);
+    check(packed.size() == Inflate::storedSize(raw.size()) && packed.size() == 131092,
+          "stored stream of 131071 bytes is 131092 bytes (3 blocks)");
+    check(reads(packed.data(), packed.size(), raw), "stored round trip, 131071 bytes");
+
+    std::vector<uint8_t> dyn(kDynamicZ, kDynamicZ + sizeof(kDynamicZ));
+    std::vector<uint8_t> bad = dyn;
+    bad.back() ^= 1;
+    check(refused(bad, text.size()), "a wrong Adler-32 is refused");
+    check(refused(std::vector<uint8_t>(dyn.begin(), dyn.end() - 5), text.size()),
+          "a truncated stream is refused");
+    bad = dyn;
+    bad[1] ^= 1;
+    check(refused(bad, text.size()), "a header failing its check bits is refused");
+    check(refused(dyn, text.size() - 1), "more output than the room is refused");
+}
+
+//----------------------------------------------------------------------------
+// The data files are files only (core/DataFile.h): nothing comes from inside
+// the EXE, and a missing one is named with its folder.
+//----------------------------------------------------------------------------
+static void testDataRule(const char* zonePath)
+{
+    std::printf("Data files\n");
+
+    const std::wstring dir = L"C:\\doesnotexist_randompath_12345";
+    std::string text, err;
+    const bool got = DataFile::read(dir, "zones_rich2.json", text, err);
+    check(!got && text.empty(), "zones_rich2.json in a missing folder is not found");
+    check(err.find("zones_rich2.json") != std::string::npos &&
+          err.find("doesnotexist_randompath_12345") != std::string::npos,
+          "the message names the file and the folder");
+    check(!DataFile::read(dir, "VanillaLevelChecksums.csv", text, err),
+          "VanillaLevelChecksums.csv in a missing folder is not found");
+
+    if (zonePath)
+    {
+        std::wstring w;
+        for (const char* p = zonePath; *p; ++p) w.push_back(static_cast<wchar_t>(static_cast<unsigned char>(*p)));
+        check(DataFile::read(w, text, err) && !text.empty(), "a zone export on disk is read");
+    }
 }
 
 static void testAgainstRealExport(const char* path)
@@ -305,6 +458,10 @@ int main(int argc, char** argv)
     testRng();
     std::printf("\n");
     testJson();
+    std::printf("\n");
+    testInflate();
+    std::printf("\n");
+    testDataRule(argc > 1 ? argv[1] : nullptr);
     if (argc > 1)
     {
         std::printf("\n");

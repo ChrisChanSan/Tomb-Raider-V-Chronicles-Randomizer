@@ -73,7 +73,7 @@
 
 #include "bc7.h"
 #include "hd/hd_fontmatch.h"
-#include "zlib.h"
+#include "core/Inflate.h"
 
 //----------------------------------------------------------------------------
 // The glyph table, straight out of the engine.
@@ -162,7 +162,7 @@ static unsigned long* LevelFontPage(const char* path, const char** why)
 	unsigned long at = 10;
 	unsigned char* raw;
 	unsigned long un = 0, comp = 0;
-	uLongf got;
+	size_t got;
 	unsigned long* out;
 
 	*why = "";
@@ -209,7 +209,7 @@ static unsigned long* LevelFontPage(const char* path, const char** why)
 
 	got = un;
 
-	if (uncompress(raw, &got, file + at + 8, comp) != Z_OK || got != un)
+	if (Inflate::zlib(file + at + 8, comp, raw, un, got) || got != un)
 	{
 		free(raw);
 		free(file);
@@ -272,10 +272,10 @@ static void PngChunk(FILE* f, const char* tag, const unsigned char* data, unsign
 	if (len)
 		fwrite(data, 1, len, f);
 
-	crc = crc32(0, (const Bytef*)tag, 4);
+	crc = Inflate::crc32((const uint8_t*)tag, 4);
 
 	if (len)
-		crc = crc32(crc, (const Bytef*)data, len);
+		crc = Inflate::crc32((const uint8_t*)data, len, crc);
 
 	PutBE(tail, crc);
 	fwrite(tail, 1, 4, f);
@@ -312,10 +312,12 @@ static bool WritePng(const char* path, const unsigned long* px, long w, long h)
 		}
 	}
 
-	zLen = compressBound(rawLen);
+	// Stored deflate blocks (Inflate.h): every PNG reader takes them, and
+	// the file is the raw scanlines plus a few bytes per 64 KB.
+	zLen = (unsigned long)Inflate::storedSize(rawLen);
 	zbuf = (unsigned char*)malloc(zLen);
 
-	if (!zbuf || compress2(zbuf, &zLen, raw, rawLen, 6) != Z_OK)
+	if (!zbuf || Inflate::storedTo(raw, rawLen, zbuf) != zLen)
 	{
 		free(raw);
 		free(zbuf);

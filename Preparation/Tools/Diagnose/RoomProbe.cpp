@@ -1082,7 +1082,7 @@
 #include <map>
 #include <array>
 
-#include "zlib.h"
+#include "core/Inflate.h"
 
 /* By path, not through a /I of specific\: that folder holds the engine's own
  * time.h, and putting it on the include path makes <chrono> pick it up
@@ -1139,7 +1139,7 @@ char tomb5_hd_install_tr3[260];
 
 /* ------------------------------------------------------------------ PNG -- */
 /* The same writer DdsProbe uses: 24 bit truecolour, filter 0 on every
- * scanline, deflate through the zlib the engine already links. Small and
+ * scanline, the data as stored deflate blocks (core/Inflate.h). Small and
  * obviously correct beats small. */
 
 static void PutBE(unsigned char* p, unsigned long v)
@@ -1163,10 +1163,10 @@ static void PngChunk(FILE* f, const char* tag, const unsigned char* data, unsign
 	if (len)
 		fwrite(data, 1, len, f);
 
-	crc = crc32(0, (const Bytef*)tag, 4);
+	crc = Inflate::crc32((const uint8_t*)tag, 4);
 
 	if (len)
-		crc = crc32(crc, (const Bytef*)data, len);
+		crc = Inflate::crc32((const uint8_t*)data, len, crc);
 
 	PutBE(tail, crc);
 	fwrite(tail, 1, 4, f);
@@ -1204,10 +1204,10 @@ static bool WritePng(const char* path, const unsigned long* px, long w, long h)
 		}
 	}
 
-	zLen = compressBound(rawLen);
+	zLen = (unsigned long)Inflate::storedSize(rawLen);
 	zbuf = (unsigned char*)malloc(zLen);
 
-	if (!zbuf || compress2(zbuf, &zLen, raw, rawLen, 6) != Z_OK)
+	if (!zbuf || Inflate::storedTo(raw, rawLen, zbuf) != zLen)
 	{
 		free(raw);
 		free(zbuf);
@@ -15398,10 +15398,10 @@ namespace probestatics
 			memcpy(&packed, raw.data() + 14, 4);
 			g_glass_tex32.resize((size_t)(size > 0 ? size : 0));
 
-			uLongf got = (uLongf)size;
+			size_t got = 0;
 
-			if (size <= 0 || uncompress(g_glass_tex32.data(), &got,
-				raw.data() + 18, (uLong)packed) != Z_OK)
+			if (size <= 0 || Inflate::zlib(raw.data() + 18, (size_t)packed,
+				g_glass_tex32.data(), g_glass_tex32.size(), got))
 				g_glass_tex32.assign(1, 0);
 		}
 
@@ -16095,10 +16095,10 @@ namespace probestatics
 			memcpy(&packed, raw.data() + 14, 4);
 
 			std::vector<uint8_t> pages((size_t)size);
-			uLongf got = (uLongf)size;
+			size_t got = 0;
 
-			if (uncompress(pages.data(), &got, raw.data() + 18,
-				(uLong)packed) != Z_OK)
+			if (Inflate::zlib(raw.data() + 18, (size_t)packed, pages.data(),
+				pages.size(), got))
 				return 0;
 
 			for (int i = 0; i < 256 && (size_t)(i + 1) * 262144 <= got; i++)
@@ -20082,11 +20082,11 @@ static IDirect3DTexture9* SkyClassicPage(const char* stem)
 		}
 
 		std::vector<unsigned char> packed(sizes[1]), plain(sizes[0]);
-		uLongf length = sizes[0];
+		size_t length = 0;
 
 		if (sizes[0] >= 0x40000 && fread(&packed[0], 1, sizes[1], f) ==
-			sizes[1] && uncompress(&plain[0], &length, &packed[0],
-			sizes[1]) == Z_OK && length == sizes[0])
+			sizes[1] && !Inflate::zlib(&packed[0], sizes[1], &plain[0],
+			plain.size(), length) && length == sizes[0])
 			sky.assign(plain.end() - 0x40000, plain.end());
 	}
 
@@ -20146,10 +20146,10 @@ static IDirect3DTexture9* SkyPsxPage(const char* stem, float* windows)
 	memcpy(sizes, &file[10], 8);
 
 	std::vector<unsigned char> tex32(sizes[0]);
-	uLongf length = sizes[0];
+	size_t length = 0;
 
-	if (18 + (size_t)sizes[1] > file.size() || uncompress(&tex32[0], &length,
-		&file[18], sizes[1]) != Z_OK || length != sizes[0])
+	if (18 + (size_t)sizes[1] > file.size() || Inflate::zlib(&file[18],
+		sizes[1], &tex32[0], tex32.size(), length) || length != sizes[0])
 		return 0;
 
 	// The marker followed by a sane sprite count, as LoadSprites finds it.
@@ -26336,10 +26336,10 @@ static bool ReadOwnPng(const std::string& path, std::vector<unsigned char>& rgb,
 		return false;
 
 	std::vector<unsigned char> raw((size_t)*h * (1 + (size_t)*w * 3));
-	uLongf length = (uLongf)raw.size();
+	size_t length = 0;
 
-	if (uncompress(&raw[0], &length, &packed[0], (uLong)packed.size()) !=
-		Z_OK || length != raw.size())
+	if (Inflate::zlib(&packed[0], packed.size(), &raw[0], raw.size(),
+		length) || length != raw.size())
 		return false;
 
 	rgb.resize((size_t)*w * *h * 3);

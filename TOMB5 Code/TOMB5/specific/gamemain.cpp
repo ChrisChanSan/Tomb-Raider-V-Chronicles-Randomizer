@@ -160,9 +160,10 @@ long S_SaveGame(long slot_num)
 
 	if (file != INVALID_HANDLE_VALUE)
 	{
-		for (int i = 0; i < 20; i++)
-			buffer[i] = '\0';
-
+		/* The 75 bytes of the name are written whole: zeroed whole, or the
+		 * bytes behind the path and the name are the stack's, and two saves
+		 * of the same game differ there. */
+		memset(buffer, 0, sizeof(buffer));
 		wsprintf(buffer, "%s", SCRIPT_TEXT(gfLevelNames[gfCurrentLevel]));
 		WriteFile(file, buffer, 75, &bytes, 0);
 		WriteFile(file, &SaveCounter, sizeof(long), &bytes, 0);

@@ -3,6 +3,7 @@ TOMB5 Code/Build/
 TOMB5 Code/Win32/
 TOMB5 Code/x64/
 release/
+release64/
 *.obj
 *.pdb
 *.ilk

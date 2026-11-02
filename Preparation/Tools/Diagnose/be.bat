@@ -24,8 +24,12 @@ rem
 rem A shader that is out of step is rebuilt on the spot rather than reported:
 rem a build that quietly draws the wrong thing is the failure this exists to
 rem stop.
+rem
+rem "be guard" runs the guard alone and stops there: be64.bat, the 64-bit
+rem build, calls it so both builds keep one list of shaders.
 call :shaderguard
 if errorlevel 1 exit /b 1
+if /i "%~1"=="guard" exit /b 0
 
 call "C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvars32.bat" >nul
 cd /d "%~dp0..\..\.."

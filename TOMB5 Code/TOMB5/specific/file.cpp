@@ -2438,7 +2438,7 @@ long S_LoadLevelFile(long num)
 	LoadLogStep(&loadlog_at, "screen");
 	LevelLoadingThread.active = 1;
 	LevelLoadingThread.ended = 0;
-	LevelLoadingThread.handle = _beginthreadex(0, 0, LoadLevel, name, 0, (unsigned int*)&LevelLoadingThread.address);
+	LevelLoadingThread.handle = (HANDLE)_beginthreadex(0, 0, LoadLevel, name, 0, (unsigned int*)&LevelLoadingThread.address);
 
 	while (LevelLoadingThread.active)
 	{

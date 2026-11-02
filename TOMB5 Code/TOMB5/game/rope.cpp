@@ -742,14 +742,14 @@ void SaveRope()
 	WriteSG(&RopeList[lara.RopePtr], sizeof(ROPE_STRUCT));
 	CurrentPendulum.Rope = (ROPE_STRUCT*)((char*)CurrentPendulum.Rope - (char*)RopeList);
 	WriteSG(&CurrentPendulum, sizeof(PENDULUM));
-	CurrentPendulum.Rope = (ROPE_STRUCT*)((char*)CurrentPendulum.Rope + (long)RopeList);
+	CurrentPendulum.Rope = (ROPE_STRUCT*)((char*)RopeList + (intptr_t)CurrentPendulum.Rope);
 }
 
 void LoadRope()
 {
 	ReadSG(&RopeList[lara.RopePtr], sizeof(ROPE_STRUCT));
 	ReadSG(&CurrentPendulum, sizeof(PENDULUM));
-	CurrentPendulum.Rope = (ROPE_STRUCT*)((char*)CurrentPendulum.Rope + (long)RopeList);
+	CurrentPendulum.Rope = (ROPE_STRUCT*)((char*)RopeList + (intptr_t)CurrentPendulum.Rope);
 }
 
 void StraightenRope(ITEM_INFO* item)

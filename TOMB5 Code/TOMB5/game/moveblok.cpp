@@ -297,7 +297,10 @@ void MovableBlockCollision(short item_number, ITEM_INFO* l, COLL_INFO* coll)
 					l->goal_anim_state = AS_PPREADY;
 					lara.IsMoving = 0;
 					lara.gun_status = LG_HANDS_BUSY;
-					lara.CornerX = (long)item;
+					// The block's number, not its address: CornerX is a
+					// long of the save, too narrow for a 64-bit pointer,
+					// and a number names the same block after a load.
+					lara.CornerX = item_number;
 				}
 				else
 					lara.GeneralPtr = (void*)item_number;
@@ -311,7 +314,7 @@ void MovableBlockCollision(short item_number, ITEM_INFO* l, COLL_INFO* coll)
 			item->pos.y_rot = yrot;
 		}
 	}
-	else if (l->current_anim_state == AS_PPREADY && l->frame_number == anims[ANIM_PPREADY].frame_base + 19 && (ITEM_INFO*)lara.CornerX == item)
+	else if (l->current_anim_state == AS_PPREADY && l->frame_number == anims[ANIM_PPREADY].frame_base + 19 && lara.CornerX == item_number)
 	{
 		pos.x = 0;
 		pos.y = 0;

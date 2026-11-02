@@ -526,7 +526,7 @@ void AddClosedDoor(ITEM_INFO* item)
 	{
 		if (!ClosedDoors[i])
 		{
-			ClosedDoors[i] = (long)item;
+			ClosedDoors[i] = item;
 			break;
 		}
 	}

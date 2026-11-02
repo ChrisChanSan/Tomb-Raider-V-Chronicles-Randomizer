@@ -2533,7 +2533,7 @@ struct THREAD
 {
 	volatile long active;
 	volatile long ended;
-	ulong handle;
+	HANDLE handle;	// a ulong upstream: as wide as a HANDLE on Win32 only
 	ulong address;
 };
 

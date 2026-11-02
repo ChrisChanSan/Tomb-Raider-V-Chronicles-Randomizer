@@ -29,7 +29,9 @@
 #include "box.h"
 #include "lot.h"
 
-long ClosedDoors[32] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+// The closed doors' items. A long[32] upstream, which held the pointers
+// only while a pointer was 32 bits wide.
+ITEM_INFO* ClosedDoors[32];
 static char LiftDoor = 0;
 
 static short PushPullKickDoorBounds[12] = { -384, 384, 0, 0, -1024, 512, -1820, 1820, -5460, 5460, -1820, 1820 };
@@ -682,7 +684,7 @@ void ProcessClosedDoors()
 
 	for (int i = 0; i < 32; i++)
 	{		
-		item = (ITEM_INFO*)ClosedDoors[i];
+		item = ClosedDoors[i];
 
 		if (!item)
 			return;

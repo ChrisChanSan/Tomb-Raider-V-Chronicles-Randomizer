@@ -205,12 +205,12 @@ void WinProcessCommands(long cmd)
 		while (App.dx.InScene) {};
 		App.dx.WaitAtBeginScene = 1;
 		while (!App.dx.InScene) {};
-		SuspendThread((HANDLE)MainThread.handle);
+		SuspendThread(MainThread.handle);
 		Log("Game Thread Suspended");
 
 		DXToggleFullScreen();
 		WinRenderSize();
-		ResumeThread((HANDLE)MainThread.handle);
+		ResumeThread(MainThread.handle);
 		App.dx.WaitAtBeginScene = 0;
 		Log("Game Thread Resumed");
 
@@ -619,7 +619,7 @@ static void WinHangCapture(const char* when)
 	if (InterlockedExchange(&hang_captured, 1))
 		return;
 
-	CrashSeamHang((HANDLE)MainThread.handle, (DWORD)MainThread.address, when);
+	CrashSeamHang(MainThread.handle, (DWORD)MainThread.address, when);
 }
 
 static unsigned int __stdcall WinHangWatch(void*)
@@ -694,14 +694,14 @@ static bool WinHoldGame()
 		}
 	}
 
-	SuspendThread((HANDLE)MainThread.handle);
+	SuspendThread(MainThread.handle);
 	Log("Game Thread Suspended");
 	return true;
 }
 
 static void WinFreeGame()
 {
-	ResumeThread((HANDLE)MainThread.handle);
+	ResumeThread(MainThread.handle);
 	App.dx.WaitAtBeginScene = 0;
 	Log("Game Thread Resumed");
 }
@@ -769,7 +769,7 @@ static bool WinWakeGame(const char* by)
 		return false;
 
 	KillTimer(App.hWnd, WIN_PARK_TIMER);
-	ResumeThread((HANDLE)MainThread.handle);
+	ResumeThread(MainThread.handle);
 	App.dx.WaitAtBeginScene = 0;
 	game_parked = 0;
 	Log("WINLOG wake by=%s parked_ms=%lu device=%s", by,
@@ -1325,7 +1325,7 @@ LRESULT CALLBACK WinMainWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 
 					if (safeToSuspend)
 					{
-						SuspendThread((HANDLE)MainThread.handle);
+						SuspendThread(MainThread.handle);
 						game_parked = 1;
 						park_since = GetTickCount();
 						park_front = -1;
@@ -1654,7 +1654,7 @@ int __stdcall WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 
 	MainThread.active = 1;
 	MainThread.ended = 0;
-	MainThread.handle = _beginthreadex(0, 0, GameMain, 0, 0, (unsigned int*)&MainThread.address);
+	MainThread.handle = (HANDLE)_beginthreadex(0, 0, GameMain, 0, 0, (unsigned int*)&MainThread.address);
 	CrashSeamGameThread((DWORD)MainThread.address);
 	WinProcMsg();
 	MainThread.ended = 1;

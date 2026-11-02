@@ -210,7 +210,7 @@ static void InitDialogBox(HWND hwnd)
 	}
 }
 
-static BOOL CALLBACK SetupDlgProc(HWND dlg, UINT message, WPARAM wParam, LPARAM lParam)
+static INT_PTR CALLBACK SetupDlgProc(HWND dlg, UINT message, WPARAM wParam, LPARAM lParam)
 {
 	if (message == WM_INITDIALOG)
 	{

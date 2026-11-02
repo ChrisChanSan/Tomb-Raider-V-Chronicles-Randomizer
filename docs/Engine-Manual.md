@@ -116,7 +116,10 @@ with `-log`, which then writes a `REPLAYLOG` line at every level start, save
 and load; a file name with a blank goes in quotes, and a file name must not
 contain the words `setup` or `nofmv`, which the command line takes as switches
 of their own. How the two are used to compare the 64-bit build with the
-32-bit one is in `Preparation\Verification.md`, section 8.
+32-bit one is in `Preparation\Verification.md`, section 8. The 64-bit build
+also takes `-high`, a test switch that keeps what the run allocates after its
+start above 4 GB, so that a pointer cut to 32 bits fails at once (section 9
+there).
 
 The setup dialog also opens by itself the very first time the game is run.
 

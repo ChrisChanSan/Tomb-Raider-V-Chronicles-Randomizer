@@ -508,3 +508,121 @@ window and the card. Two replays at the same frame-rate mode draw the same
 frames, so `--keep-render` compares them too, but the HD renderer's lines
 also differ with the card's memory. The loading screen's frames are not in
 the file; their number follows how long the load took.
+
+---
+
+## 9. Does a pointer survive a level change?
+
+At every level change `FreeLevel` hands the whole game_malloc pool back, and
+the next level is loaded into the same memory. A pointer kept from the level
+before then names the new level's data: a write through it lands in a room,
+an item or a mesh of the new level, and shows, if at all, as a crash in some
+later load. The load crash of 2026-08-25 was one (`baddie_slots`). And a
+pointer cut to 32 bits on the 64-bit build is still right whenever the memory
+it names happens to lie below 4 GB. Two test builds turn both into a stop at
+the first use: the 64-bit engine under AddressSanitizer (run 1) and the
+64-bit engine with `-high` (run 2). Neither goes into a package.
+
+**Run 1, the sanitizer build.** `basan.bat` builds
+`releaseasan\PCtomb5_asan.exe` and copies the sanitizer's runtime,
+`clang_rt.asan_dynamic-x86_64.dll`, beside it - out of the Visual Studio
+toolset that compiled it (`VC\Tools\MSVC\<version>\bin\Hostx64\x64`); without
+the DLL the EXE does not start. In this build the pool is poisoned wherever
+it has not handed out a block since the last `FreeLevel`, and 32 bytes behind
+every block. In a Command Prompt in the game folder, `<repo>` the clone:
+
+```
+copy <repo>\releaseasan\PCtomb5_asan.exe .
+copy <repo>\releaseasan\PCtomb5_asan.pdb .
+copy <repo>\releaseasan\clang_rt.asan_dynamic-x86_64.dll .
+PCtomb5_asan.exe -log -nofmv
+```
+
+The report goes to `asan_report.<pid>` in the game folder without any
+setting. To put it elsewhere, `set ASAN_OPTIONS=log_path=asan\run` before the
+start, a path without a drive letter (the option list is separated by
+colons). The build runs slower than the release one.
+
+**What to play.** Every way the pool is handed back, and the level pairs where
+a pointer of the level before was read until `FreeLevel` cleared it (#309):
+
+- From the title into a level, and through the end of a level into the next
+  one: ANDREA2 into ANDREA3 (the AI objects and the rats of the one, none in
+  the other), ANDY3 into RICH1 (the bats), RICH1 into RICH2 (the spiders); in
+  a shuffled order, any level after one of these.
+- Back to the title from a level, and a cut level: `CUTS` in the title picks a
+  cutscene, `FILTHY` and `1` to `4` in the title jumps to a chapter.
+- A savegame of another level loaded from inside a level, and one of the same
+  level.
+- A death, and the load from the death menu.
+- The level skip: the compass in the hand, `S` `K` `I` `P` held together.
+- In each level a fight, a door, a pickup and the inventory.
+
+**Where the report lands.** At a report the game closes at once, without a
+message (exit code 1):
+
+- `asan_report.<pid>`: the sanitizer's report.
+- `log.txt`: the same report line by line as `ASANLOG ...`, then the crash
+  seam's line `CRASH code=asan at=0x<pc> module=PCtomb5_asan.exe+0x<offset>
+  thread=game kind=<kind> addr=0x<address> access=write size=<n>
+  report=asan_report.<pid>` and `CRASH dump=PCtomb5_<date>_<time>.dmp`.
+  Without `-log` the `CRASH` line goes into `crash.txt`.
+- `PCtomb5_<date>_<time>.dmp`: the threads at the moment of the report.
+
+In this build the sanitizer reports an access violation or a division by
+zero itself (`kind=` names it), where the other builds' crash seam would.
+
+**How to read it.** The report's first frame is the line `#0 0x<address> in
+<function> <file>:<line>` under `ERROR: AddressSanitizer: <kind> on address
+...`, repeated in the `SUMMARY:` line at its end. With `PCtomb5_asan.pdb`
+beside the EXE it names the source line; without it the frame reads
+`(PCtomb5_asan.exe+0x<offset>)`, the `module=` of the `CRASH` line, and only
+the `.pdb` of the same build resolves it (open the dump in Visual Studio with
+that `.pdb`). The kinds:
+
+- `use-after-poison` at an address inside the pool (`is located N bytes
+  inside of 28388608-byte region`, the pool; `ASANLOG pool base=` at the top
+  of the log is its start): either pool memory no block of this level covers
+  - a pointer kept from the level before - or the red zone behind a block -
+  a block written past its end. The frames below `#0` say which function
+  held the pointer.
+- `heap-buffer-overflow`, `heap-use-after-free`, `stack-buffer-overflow`,
+  `global-buffer-overflow`: the same mistakes outside the pool.
+- `access-violation`: a wild pointer.
+
+The run cannot see a pointer of the level before whose address the new
+level has already been handed again: that block is the new level's and the
+access a valid one. That class is held by `FreeLevel`'s clears
+(MODIFICATIONS.md, #309). `ITEMWATCH`, on with `-log`, still names an item
+whose room was written over while the items were initialised.
+
+**What to send:** `asan_report.<pid>`, `log.txt`, the `.dmp`, and which build
+(the first line of the log).
+
+**Run 2, `-high`.** The same game as section 8's recording, played again by
+the 64-bit build with `-high`: at the start every free region below 4 GB is
+reserved and the pool is taken from the top of the address space, so a
+pointer cut to 32 bits names a reserved page and faults at its first use. In
+the game folder of section 8, with `run1.rec` and `rep_x64.log`:
+
+```
+rmdir /s /q savegame
+xcopy /e /i /y savegame_before savegame
+PCtomb5_x64.exe -log -nofmv -high -replay run1.rec
+ren log.txt rep_x64_high.log
+python <repo>\Preparation\Tools\Diagnose\xdiff.py rep_x64.log rep_x64_high.log > xdiff_high.txt
+```
+
+Near the top of `rep_x64_high.log`: `HIGHLOG walk reserved=<n> bytes=<n>
+held=<n> left=<n> failed=0` - `held=` the bytes below 4 GB taken before the
+switch was read (in a test process only the system's two shared pages, 8192
+bytes), `left=` the free pieces too small to reserve - and after the `POOL`
+line `HIGHLOG reserved=<n> regions below 4 GB, pool base=0x00007FF...
+top-down`. `xdiff_high.txt` must say what `xdiff_x64.txt` says: no logic
+difference, since where the pool lies does not enter the game. A cut pointer
+shows as a `CRASH code=0xC0000005` line with its dump, at the tick the
+`REPLAYLOG` lines before it name. A file name for the command line must not
+contain ` -high`.
+
+**What to send:** `rep_x64_high.log`, `xdiff_high.txt`, and a `.dmp` if one
+was written.

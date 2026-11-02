@@ -27,9 +27,10 @@
  * build, twice them on a 64-bit one, and the buffer is as many pointers
  * long on either: 4096. GetCollidedObjects keeps each list inside the
  * smallest room it is given - 255 items and 1023 statics, each with its 0 -
- * where it had no limit. The fifteen levels hold at most 33 other items in
- * reach of one and 60 statics in a room with its neighbours, so the 32-bit
- * build never came near either. */
+ * where it had no limit. The game's sixteen level files, the title's
+ * included, hold at most 33 other items within reach of one and 60 statics
+ * in a room with its neighbours, so the 32-bit build never came near
+ * either. */
 
 #define TSV_BUFFER_SLOTS	4096
 #define TSV_BUFFER_SIZE		(TSV_BUFFER_SLOTS * sizeof(void*))

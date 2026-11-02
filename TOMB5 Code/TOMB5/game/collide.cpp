@@ -721,7 +721,7 @@ long GetCollidedObjects(ITEM_INFO* item, long rad, long noInvisible, ITEM_INFO**
 				if (rooms[j] == *doors)
 					break;
 
-			// rooms[] holds 22; the fifteen levels need 17 at most.
+			// rooms[] holds 22; the game's level files need 17 at most.
 			if (j == room_count && room_count < 22)
 			{
 				rooms[room_count] = *doors;

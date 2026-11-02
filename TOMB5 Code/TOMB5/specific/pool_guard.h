@@ -25,8 +25,8 @@
  *   pool memory the new level has not been given yet (the joby3 load crash
  *   of 2026-08-25: ShutThatDoor writing through baddie_slots while the
  *   next level loaded), and
- * - a block's overrun into the next one (#303's mesh_vtxbuf, 4 bytes an
- *   entry for 8)
+ * - a block's overrun into the next one (mesh_vtxbuf did so on the first
+ *   64-bit builds, sized 4 bytes an entry for 8)
  *
  * stop the game with a report at the line. A stale pointer whose address
  * the new level has already been handed again is NOT caught: the block

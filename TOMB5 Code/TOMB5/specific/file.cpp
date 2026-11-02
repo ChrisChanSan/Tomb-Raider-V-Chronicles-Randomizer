@@ -521,7 +521,7 @@ void FreeLevel()
 	/* The others of that kind: pointers into the pool that a level which
 	 * has no use for them does not set again, while something reads them
 	 * on the strength of being set. Every other pointer into the pool gets
-	 * its new block before its first read (MODIFICATIONS.md, #309).
+	 * its new block before its first read, or is only compared.
 	 *
 	 * - The AI objects: LoadAIInfo returns before it sets either when the
 	 *   level has none (ANDREA3, ANDY1, the title, the two cut levels), and

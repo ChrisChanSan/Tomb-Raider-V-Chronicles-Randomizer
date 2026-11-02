@@ -24,7 +24,6 @@
 **/tomb5/libs/stb/**         linguist-vendored
 **/tomb5/libs/discordRPC/**  linguist-vendored
 **/external/imgui/**         linguist-vendored
-**/src/libs/stb/**           linguist-vendored
 
 # Generated, not written: 780 KB of zlib-packed level zones and checksum
 # lists as hex, produced by Preparation/Tools/EmbedData.ps1. Counted

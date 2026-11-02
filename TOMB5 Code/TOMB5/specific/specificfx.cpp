@@ -3953,7 +3953,14 @@ void DrawLightning()
 
 		for (lp = 0; lp < 32; lp++)
 		{
-			r = phd_atan(long(pVtx[6] - pVtx[0]), long(pVtx[7] - pVtx[1]));
+			// Each point's width runs across the segment to the next point.
+			// The 32nd has no next one and keeps the last segment's angle
+			// (points 30 to 31): upstream read a 33rd vertex there, one past
+			// vtx, and on a 64-bit build that was a NaN, which made phd_atan
+			// divide by zero.
+			if (lp < 31)
+				r = phd_atan(long(pVtx[6] - pVtx[0]), long(pVtx[7] - pVtx[1]));
+
 			s = fSin(-r);
 			c = fCos(-r);
 

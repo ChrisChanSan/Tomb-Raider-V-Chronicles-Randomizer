@@ -27899,6 +27899,7 @@ static void x64_layout()
 	char* game = hd_switch_text("../gamemain.cpp");
 	char* math = hd_switch_text("../3dmath.cpp");
 	char* seam = hd_switch_text("../crashseam.h");
+	char* sfx = hd_switch_text("../specificfx.cpp");
 	static char body[65536];
 
 	ok(alex && file && draw && save && rope && game,
@@ -27993,8 +27994,19 @@ static void x64_layout()
 
 	free(rope);
 	free(game);
+
+	// DrawLightning: the angle of the 32nd point is the last segment's, no
+	// vertex read past vtx (the caller the first ATANLOG named).
+	glass_body(sfx, "void DrawLightning()", body, sizeof(body));
+	ok(strstr(body, "floatvtx[32*6];") && strstr(body, "if(lp<31)r=phd_atan("
+		"long(pVtx[6]-pVtx[0]),long(pVtx[7]-pVtx[1]));s=fSin(-r);") &&
+		hd_switch_count(body, "phd_atan(") == 1 &&
+		hd_switch_count(body, "for(lp=0;lp<31;lp++)") == 1,
+		"x64 layout: DrawLightning reads no vertex past its 32", 0, 1);
+
 	free(math);
 	free(seam);
+	free(sfx);
 }
 
 /* One part of `rings` rings round the axis, at heights `ys` and radii

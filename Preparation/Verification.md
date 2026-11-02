@@ -618,6 +618,16 @@ whose room was written over while the items were initialised.
 **What to send:** `asan_report.<pid>`, `log.txt`, the `.dmp`, and which build
 (the first line of the log).
 
+**What the first runs found.** Two runs of this recipe, one with
+`continue_on_error=1`, through forty level changes, sixty deaths and the
+loads: three faults of the original, all reads at index -1 - a sound the
+level does not carry stopped through its soundmap entry (#311), the forced
+fixed camera reading the flags of camera -1 on every tick of a trapdoor or
+turn switch, and the inventory ring's start position indexed with an empty
+slot (#312). Each showed as `use-after-poison` or `global-buffer-overflow`
+with the source line in frame `#0`; the engine's own clears of #309 raised
+no report.
+
 **Run 2, `-high`.** The same game as section 8's recording, played again by
 the 64-bit build with `-high`: at the start every free region below 4 GB is
 reserved and the pool is taken from the top of the address space, so a

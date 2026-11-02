@@ -168,6 +168,11 @@
 #include <string.h>
 #include <algorithm>
 #include <chrono>
+// -record and -replay's file (replay_rule) and GetCollidedObjects'
+// lists in tsv_buffer (collide_lists).
+#include "../../../TOMB5 Code/TOMB5/specific/replay_format.h"
+#include "../../../TOMB5 Code/TOMB5/game/collide_lists.h"
+#include <io.h>
 #include <new>
 #include <vector>
 
@@ -28009,6 +28014,457 @@ static void x64_layout()
 	free(sfx);
 }
 
+/* -record and -replay's file (specific\replay_format.h), the engine's own
+ * lines: a record of each type written and read back with its values, the
+ * header's fields and version byte, the bytes of a record pinned so that a
+ * 32-bit and a 64-bit build write the same, and the refusals - a cut record,
+ * an unknown type, a key count past 256, another version. In the engine's
+ * text: the one input point calls the recorder after the devices are read
+ * and before anything is built from them, the three presents whose tick
+ * count the logic takes go through ReplayFrames, the level start, the save
+ * and the load write their records, and no file of game\ reads the clock
+ * but the three that only draw with it. */
+static long replay_same(const ReplayRecord* a, const ReplayRecord* b)
+{
+	return a->type == b->type && a->tick == b->tick && a->level == b->level &&
+		a->ctrl_seed == b->ctrl_seed && a->draw_seed == b->draw_seed &&
+		a->counter == b->counter && a->frame_counter == b->frame_counter &&
+		a->fps_mode == b->fps_mode && !memcmp(a->keys, b->keys,
+		sizeof(a->keys)) && a->mouse_dx == b->mouse_dx && a->mouse_dy ==
+		b->mouse_dy && a->mouse_buttons == b->mouse_buttons && a->flags ==
+		b->flags && a->pad_x == b->pad_x && a->pad_y == b->pad_y &&
+		a->pad_fire == b->pad_fire && a->raw_lx == b->raw_lx && a->raw_ly ==
+		b->raw_ly && a->raw_rx == b->raw_rx && a->raw_ry == b->raw_ry &&
+		a->frames == b->frames && a->slot_kind == b->slot_kind &&
+		a->slot == b->slot;
+}
+
+/* How often each clock read stands in the files of game\: `what` the call's
+ * text, the counts by file into `out` as "name=n " for every file with one. */
+static long replay_clock_scan(const char* what, char* out, size_t size)
+{
+	char* exe = 0;
+	char dir[1024], pattern[1100], path[1200];
+	long files = 0;
+
+	out[0] = 0;
+
+	if (_get_pgmptr(&exe) || !exe)
+		return 0;
+
+	const char* cut = strrchr(exe, '\\');
+	const size_t n = cut ? (size_t)(cut - exe) + 1 : 0;
+
+	memcpy(dir, exe, n);
+	strcpy_s(dir + n, sizeof(dir) - n, "..\\..\\..\\TOMB5 Code\\TOMB5\\game\\");
+	snprintf(pattern, sizeof(pattern), "%s*.cpp", dir);
+
+	struct _finddata_t fd;
+	const intptr_t h = _findfirst(pattern, &fd);
+
+	if (h == -1)
+		return 0;
+
+	do
+	{
+		snprintf(path, sizeof(path), "%s%s", dir, fd.name);
+
+		FILE* f = 0;
+
+		if (fopen_s(&f, path, "rb") || !f)
+			continue;
+
+		fseek(f, 0, SEEK_END);
+		const long size_f = ftell(f);
+		char* text = (char*)malloc((size_t)size_f + 1);
+
+		fseek(f, 0, SEEK_SET);
+
+		if (text)
+		{
+			text[fread(text, 1, (size_t)size_f, f)] = 0;
+
+			const int c = hd_switch_count(text, what);
+
+			if (c)
+			{
+				char one[96];
+
+				snprintf(one, sizeof(one), "%s=%d ", fd.name, c);
+				strcat_s(out, size, one);
+			}
+
+			free(text);
+		}
+
+		fclose(f);
+		files++;
+	} while (!_findnext(h, &fd));
+
+	_findclose(h);
+	return files;
+}
+
+static void replay_rule()
+{
+	printf("the input recorder: -record and -replay\n");
+
+	uint8_t buf[REPLAY_RECORD_MAX];
+	uint8_t head[REPLAY_HEADER_SIZE];
+	char stamp[REPLAY_STAMP_SIZE];
+	ReplayRecord a, b;
+	int version, bits;
+	size_t n;
+
+	// The header.
+	ok(ReplayHeaderWrite(head, 64, "PCtomb5 built Nov  2 2026 21:00:00") ==
+		REPLAY_HEADER_SIZE && !memcmp(head, "TR5R", 4) && head[4] == 1 &&
+		head[5] == 64 && head[6] == 0 && head[7] == 0,
+		"replay: the header's magic, version byte 1 and pointer width",
+		head[4], 1);
+	const int read = ReplayHeaderRead(head, sizeof(head), &version, &bits,
+		stamp);
+
+	ok(read == 1 && version == REPLAY_VERSION && bits == 64 &&
+		!strcmp(stamp, "PCtomb5 built Nov  2 2026 21:00:00"),
+		"replay: the header read back, the stamp whole", bits, 64);
+	ReplayHeaderWrite(head, 32, "0123456789012345678901234567890123456789"
+		"0123456789");
+	ok(ReplayHeaderRead(head, sizeof(head), &version, &bits, stamp) == 1 &&
+		strlen(stamp) == REPLAY_STAMP_SIZE - 1 && bits == 32,
+		"replay: a long stamp cut to 39 characters", (long)strlen(stamp),
+		REPLAY_STAMP_SIZE - 1);
+	head[4] = 2;
+	ok(ReplayHeaderRead(head, sizeof(head), &version, &bits, stamp) == -1 &&
+		version == 2, "replay: another version is refused, named", version,
+		2);
+	head[4] = 1;
+	ok(ReplayHeaderRead(head, sizeof(head) - 1, &version, &bits, stamp) ==
+		0 && ReplayHeaderRead((const uint8_t*)"TR5X0000000000000000000000000"
+		"0000000000000000000000", REPLAY_HEADER_SIZE, &version, &bits,
+		stamp) == 0, "replay: a short file and another magic are no header",
+		0, 0);
+
+	// A level start.
+	memset(&a, 0, sizeof(a));
+	a.type = REPLAY_LEVEL;
+	a.level = 3;
+	a.ctrl_seed = (int32_t)0xD371F947;
+	a.draw_seed = -123456789;
+	a.counter = 65535;
+	a.frame_counter = 77;
+	a.fps_mode = 2;
+	n = ReplayEncode(&a, buf);
+	ok(n == 25 && ReplayDecode(buf, n, &b) == n && replay_same(&a, &b),
+		"replay: a level start there and back, both seeds", (long)n, 25);
+
+	// One call of the input function: keys down, an odd key value, the
+	// mouse, the pad, the flags.
+	memset(&a, 0, sizeof(a));
+	a.type = REPLAY_INPUT;
+	a.tick = 0xBEEF;
+	a.keys[1] = 0x80;
+	a.keys[0xC8] = 0x80;
+	a.keys[255] = 0x01;
+	a.mouse_dx = -37;
+	a.mouse_dy = 2000000000;
+	a.mouse_buttons = 0x15;
+	a.flags = REPLAY_CAPTURED | REPLAY_PAD_READ | REPLAY_PAD_XINPUT;
+	a.pad_x = -128;
+	a.pad_y = 127;
+	a.pad_fire = (int32_t)0x80F0000F;
+	a.raw_lx = -1;
+	a.raw_ly = 1;
+	a.raw_rx = -32768 / 256;
+	a.raw_ry = 32767 / 256;
+	n = ReplayEncode(&a, buf);
+	ok(n == 5 + 3 * 2 + 41 && ReplayDecode(buf, n, &b) == n &&
+		replay_same(&a, &b),
+		"replay: an input call there and back, three keys and the pad",
+		(long)n, 5 + 3 * 2 + 41);
+	ok(buf[0] == 'I' && buf[1] == 0xEF && buf[2] == 0xBE && buf[3] == 3 &&
+		buf[4] == 0 && buf[5] == 1 && buf[6] == 0x80 && buf[7] == 0xC8 &&
+		buf[9] == 0xFF && buf[10] == 0x01 && buf[11] == 0xDB &&
+		buf[12] == 0xFF && buf[13] == 0xFF && buf[14] == 0xFF,
+		"replay: the input record's bytes, little-endian on every build",
+		buf[11], 0xDB);
+
+	for (int i = 0; i < REPLAY_KEYS; i++)
+		a.keys[i] = (uint8_t)(i | 0x80);
+
+	n = ReplayEncode(&a, buf);
+	ok(n == REPLAY_RECORD_MAX && ReplayDecode(buf, n, &b) == n &&
+		replay_same(&a, &b),
+		"replay: all 256 keys down, the longest record", (long)n,
+		REPLAY_RECORD_MAX);
+	ok(ReplayDecode(buf, n - 1, &b) == 0 && ReplayDecode(buf, 4, &b) == 0,
+		"replay: a cut input record is refused", 0, 0);
+	buf[3] = 1;
+	buf[4] = 1;
+	ok(ReplayDecode(buf, sizeof(buf), &b) == 0,
+		"replay: a key count past 256 is refused", 0, 0);
+
+	// A present's tick count, a save and a load.
+	memset(&a, 0, sizeof(a));
+	a.type = REPLAY_FRAMES;
+	a.tick = 0x1234;
+	a.frames = -2;
+	n = ReplayEncode(&a, buf);
+	ok(n == 7 && buf[0] == 'P' && buf[1] == 0x34 && buf[2] == 0x12 &&
+		buf[3] == 0xFE && buf[4] == 0xFF && buf[5] == 0xFF &&
+		buf[6] == 0xFF && ReplayDecode(buf, n, &b) == n &&
+		replay_same(&a, &b),
+		"replay: a present's ticks, its seven bytes", (long)n, 7);
+	memset(&a, 0, sizeof(a));
+	a.type = REPLAY_SLOT;
+	a.tick = 9;
+	a.slot_kind = 's';
+	a.slot = 13;
+	n = ReplayEncode(&a, buf);
+	ok(n == 8 && ReplayDecode(buf, n, &b) == n && replay_same(&a, &b),
+		"replay: a save's slot there and back", (long)n, 8);
+	a.slot_kind = 'l';
+	a.slot = 0;
+	n = ReplayEncode(&a, buf);
+	ok(n == 8 && ReplayDecode(buf, n, &b) == n && b.slot_kind == 'l' &&
+		ReplayDecode(buf, n - 1, &b) == 0,
+		"replay: a load's slot, and cut", b.slot, 0);
+
+	// The decoder zeroes what a record does not carry.
+	memset(&b, 0x5A, sizeof(b));
+	ReplayDecode(buf, n, &b);
+	ok(b.level == 0 && b.keys[7] == 0 && b.frames == 0 && b.pad_fire == 0,
+		"replay: the fields a record does not carry are zero", b.level, 0);
+
+	// What the file does not know.
+	memset(&a, 0, sizeof(a));
+	a.type = 'Z';
+	buf[0] = 'Z';
+	ok(ReplayEncode(&a, buf) == 0 && ReplayDecode(buf, 8, &b) == 0 &&
+		ReplayDecode(buf, 0, &b) == 0,
+		"replay: an unknown type and an empty rest are refused", 0, 0);
+
+	// The engine's text.
+	char* input = hd_switch_text("../input.cpp");
+	char* winmain = hd_switch_text("../winmain.cpp");
+	char* gamemain = hd_switch_text("../gamemain.cpp");
+	char* control = hd_switch_text("../../game/control.cpp");
+	char* draw = hd_switch_text("../../game/draw.cpp");
+	char* newinv = hd_switch_text("../../game/newinv2.cpp");
+	char* flow = hd_switch_text("../../game/gameflow.cpp");
+	char* replay = hd_switch_text("../replay.cpp");
+	char* output = hd_switch_text("../output.cpp");
+	static char body[262144];
+
+	ok(input && winmain && gamemain && control && draw && newinv && flow &&
+		replay && output, "replay: the nine files", 0, 1);
+
+	glass_body(input, "long S_UpdateInput()", body, sizeof(body));
+	{
+		const char* dev = strstr(body, "DXUpdateJoystick();DXReadKeyboard("
+			"keymap);");
+		const char* take = strstr(body, "WinMouseTake(&mouse_dx,&mouse_dy,"
+			"&mouse_buttons);");
+		const char* seam = strstr(body, "longmouse_captured=WinMouseCaptured"
+			"();ReplayInputSeam(keymap,&mouse_dx,&mouse_dy,&mouse_buttons,&"
+			"mouse_captured,App.fmv?1:0);");
+		const char* pad = strstr(body, "joy_fire=ReadJoystick(joy_x,joy_y);");
+
+		ok(dev && take && seam && pad && dev < take && take < seam &&
+			seam < pad,
+			"replay: the input point after the devices, before the pad word",
+			0, 1);
+	}
+	ok(hd_switch_count(input, "ReplayInputSeam(") == 1 &&
+		hd_switch_count(body, "WinMouseCaptured()") == 1 &&
+		hd_switch_count(body, "if(!mouse_captured)") == 1,
+		"replay: one input point, the capture taken once there",
+		hd_switch_count(body, "WinMouseCaptured()"), 1);
+
+	ok(hd_switch_count(control, "camera.number_frames = ReplayFrames("
+		"S_DumpScreen());") == 1 && hd_switch_count(draw,
+		"camera.number_frames = ReplayFrames(S_DumpScreen());") == 1 &&
+		hd_switch_count(newinv, "camera.number_frames = ReplayFrames("
+		"S_DumpScreen());") == 1 && hd_switch_count(control,
+		"= S_DumpScreen();") + hd_switch_count(draw, "= S_DumpScreen();") +
+		hd_switch_count(newinv, "= S_DumpScreen();") == 0,
+		"replay: the three presents the logic counts go through the file",
+		0, 1);
+	glass_body(output, "long S_DumpScreen()", body, sizeof(body));
+	ok(hd_switch_count(body, "n=Sync();") == 2 &&
+		hd_switch_count(body, "while(!Sync());") == 1 &&
+		hd_switch_count(body, "ReplayFrames") == 0,
+		"replay: S_DumpScreen still reads the clock itself",
+		hd_switch_count(body, "n=Sync();"), 2);
+
+	ok(hd_switch_count(flow, "ReplayLevelStart();") == 2,
+		"replay: the title and a level write their start", hd_switch_count(
+		flow, "ReplayLevelStart();"), 2);
+	glass_body(flow, "void DoTitle(", body, sizeof(body));
+	ok(strstr(body, "InterpInvalidate(\"titlestart\");ReplayLevelStart();//-"
+		"recordand-replay:theseeds,theframecountergfStatus=ControlPhase(2,"
+		"0);") != 0, "replay: the title's start before its first tick", 0, 1);
+	glass_body(flow, "void DoLevel(", body, sizeof(body));
+	ok(strstr(body, "InputModeLatchReset();ReplayLevelStart();//-recordand-"
+		"replay:theseeds,theframecountergfStatus=ControlPhase(2,0);") != 0,
+		"replay: a level's start after the restore, before its first tick",
+		0, 1);
+
+	glass_body(gamemain, "long S_SaveGame(long slot_num)", body,
+		sizeof(body));
+	ok(strstr(body, "ReplaySlot('s',slot_num);SaveGamePath(buffer,slot_num)"
+		";") && strstr(body, "memset(buffer,0,sizeof(buffer));wsprintf("
+		"buffer,\"%s\",SCRIPT_TEXT(gfLevelNames[gfCurrentLevel]));WriteFile("
+		"file,buffer,75,&bytes,0);"),
+		"replay: a save writes its slot and a name block with no stack in it",
+		0, 1);
+	glass_body(gamemain, "long S_LoadGame(long slot_num)", body,
+		sizeof(body));
+	ok(strstr(body, "ReplaySlot('l',slot_num);SaveGamePath(buffer,slot_num)"
+		";") != 0, "replay: a load writes its slot", 0, 1);
+
+	glass_body(winmain, "int __stdcall WinMain(", body, sizeof(body));
+	{
+		const char* open = strstr(body, "if(WinCheckPathFlag(lpCmdLine,\""
+			"record\",replayPath,sizeof(replayPath)))ReplayOpen("
+			"REPLAY_RECORD,replayPath,");
+		const char* play = strstr(body, "elseif(WinCheckPathFlag(lpCmdLine,"
+			"\"replay\",replayPath,sizeof(replayPath)))ReplayOpen("
+			"REPLAY_PLAY,replayPath,");
+		const char* cmd = strstr(body, "WinProcessCommandLine(lpCmdLine);");
+
+		ok(open && play && cmd && open < play && play < cmd,
+			"replay: the switches read before the command line is capitals",
+			0, 1);
+	}
+	glass_body(winmain, "void WinClose()", body, sizeof(body));
+	ok(strstr(body, "Log(__FUNCTION__);ReplayClose();") != 0,
+		"replay: the file closed at the window's close", 0, 1);
+
+	// The recorder's own lines: the seeds read, never drawn from.
+	ok(hd_switch_count(replay, "GetRandomControl()") == 0 &&
+		hd_switch_count(replay, "GetRandomDraw()") == 0 &&
+		hd_switch_count(replay, "SeedRandomControl(r.ctrl_seed);"
+		"\r\n\t\tSeedRandomDraw(r.draw_seed);\r\n\t\tGnFrameCounter = "
+		"r.frame_counter;") == 1,
+		"replay: the seeds set from the file, no number drawn", 0, 1);
+	glass_body(replay, "void ReplayLevelStart()", body, sizeof(body));
+	ok(strstr(body, "if(g_mode==REPLAY_OFF)return;constlongfps="
+		"ActiveFpsMode();") != 0,
+		"replay: without a switch the level start asks nothing", 0, 1);
+
+	// The clock in game\: the interpolation's blend and the ring's (drawn
+	// with, never counted), the VISLOG line's one-second gate, the word
+	// Sync() in a comment of the ring - nothing else.
+	{
+		char seen[4096];
+		long files = replay_clock_scan("QueryPerformanceCounter(", seen,
+			sizeof(seen));
+
+		ok(files > 50 && !seen[0],
+			"replay: no file of game\\ reads QueryPerformanceCounter", files,
+			51);
+		replay_clock_scan("GetTickCount()", seen, sizeof(seen));
+		ok(!strcmp(seen, "draw.cpp=1 "),
+			"replay: GetTickCount in game\\ only for VISLOG's gate", 0, 1);
+		replay_clock_scan("timeGetTime()", seen, sizeof(seen));
+		ok(!seen[0], "replay: no timeGetTime in game\\", 0, 0);
+		replay_clock_scan("clock()", seen, sizeof(seen));
+		ok(!seen[0], "replay: no clock() in game\\", 0, 0);
+		replay_clock_scan("TIME_SubTick()", seen, sizeof(seen));
+		ok(!strcmp(seen, "interpolate.cpp=1 inventory_interp.cpp=1 "),
+			"replay: the sub-tick only in the two blends", 0, 1);
+		replay_clock_scan("Sync()", seen, sizeof(seen));
+		ok(!strcmp(seen, "inventory_interp.cpp=1 "),
+			"replay: Sync() in game\\ only as a word of a comment", 0, 1);
+	}
+
+	free(input);
+	free(winmain);
+	free(gamemain);
+	free(control);
+	free(draw);
+	free(newinv);
+	free(flow);
+	free(replay);
+	free(output);
+}
+
+/* GetCollidedObjects' two lists in tsv_buffer (game\collide_lists.h): the
+ * places the callers gave in bytes, counted in pointers - the same bytes on
+ * this 32-bit build, room for the same number of pointers on a 64-bit one -
+ * and the limits that keep each list inside its room. In the engine's
+ * text: every caller takes its places from the header, the buffer is sized
+ * by it, and the two stores ask the limit. */
+static void collide_lists()
+{
+	printf("GetCollidedObjects' lists in tsv_buffer\n");
+
+	ok(TSV_BUFFER_SIZE == 16384 && CollideListByte(COLLIDE_ITEMS_AT) == 0 &&
+		CollideListByte(COLLIDE_STATICS_AT) == 1024 &&
+		CollideListByte(COLLIDE_ITEMS_AT_B) == 0x2000 &&
+		CollideListByte(COLLIDE_STATICS_AT_B) == 0x3000,
+		"collide lists: a 32-bit build keeps its four byte places",
+		(long)CollideListByte(COLLIDE_STATICS_AT), 1024);
+	ok(COLLIDE_STATICS_AT * 8 == 2048 && COLLIDE_STATICS_AT_B * 8 +
+		(COLLIDE_STATICS_MAX + 1) * 8 == TSV_BUFFER_SLOTS * 8,
+		"collide lists: on a 64-bit build the statics begin at 2048, end "
+		"at the end", COLLIDE_STATICS_AT * 8, 2048);
+	ok(COLLIDE_ITEMS_MAX == 255 && COLLIDE_STATICS_MAX == 1023 &&
+		COLLIDE_STATICS_AT - COLLIDE_ITEMS_AT >= COLLIDE_ITEMS_MAX + 1 &&
+		COLLIDE_STATICS_AT_B - COLLIDE_ITEMS_AT_B >= COLLIDE_ITEMS_MAX + 1 &&
+		TSV_BUFFER_SLOTS - COLLIDE_STATICS_AT >= COLLIDE_STATICS_MAX + 1 &&
+		TSV_BUFFER_SLOTS - COLLIDE_STATICS_AT_B >= COLLIDE_STATICS_MAX + 1,
+		"collide lists: each list with its 0 fits both of its rooms",
+		COLLIDE_ITEMS_MAX, 255);
+
+	const char* names[6] = { "flmtorch.cpp", "lara.cpp", "lara1gun.cpp",
+		"laraflar.cpp", "moveblok.cpp", "traps.cpp" };
+	const int places[6] = { 2, 4, 2, 2, 3, 2 };
+	int right = 0, raw = 0;
+
+	for (int i = 0; i < 6; i++)
+	{
+		char path[64];
+
+		snprintf(path, sizeof(path), "../../game/%s", names[i]);
+
+		char* text = hd_switch_text(path);
+
+		if (hd_switch_count(text, "&tsv_buffer[CollideListByte(COLLIDE_") ==
+			places[i])
+			right++;
+
+		raw += hd_switch_count(text, "**)&tsv_buffer[0") +
+			hd_switch_count(text, "**)&tsv_buffer[1024]");
+		free(text);
+	}
+
+	ok(right == 6 && raw == 0,
+		"collide lists: the six callers take their places from the header",
+		right, 6);
+
+	char* fx = hd_switch_text("../../game/tomb4fx.cpp");
+	char* fxh = hd_switch_text("../../game/tomb4fx.h");
+	char* col = hd_switch_text("../../game/collide.cpp");
+	static char body[65536];
+
+	ok(hd_switch_count(fx, "char tsv_buffer[TSV_BUFFER_SIZE];") == 1 &&
+		hd_switch_count(fxh, "extern char tsv_buffer[TSV_BUFFER_SIZE];") == 1
+		&& hd_switch_count(fx, "tsv_buffer[16384]") == 0,
+		"collide lists: tsv_buffer sized in pointers", 0, 1);
+	glass_body(col, "long GetCollidedObjects(", body, sizeof(body));
+	ok(strstr(body, "if(statics_count<COLLIDE_STATICS_MAX)StoredStatics["
+		"statics_count]=mesh;statics_count++;}") && strstr(body, "if("
+		"items_count<COLLIDE_ITEMS_MAX)StoredItems[items_count]=item2;"
+		"items_count++;}") && strstr(body, "if(j==room_count&&room_count<22)"),
+		"collide lists: the stores ask the limits, rooms[] its 22", 0, 1);
+
+	free(fx);
+	free(fxh);
+	free(col);
+}
+
 /* One part of `rings` rings round the axis, at heights `ys` and radii
  * `radius`, appended to `trg` and `g` as one run of `pass`. */
 static void sky_cap_band(trf::remaster::Trg& trg, trf::remaster::TrgGroup& g,
@@ -35732,6 +36188,8 @@ int main()
 	brawler_reach();
 	save_pointer();
 	x64_layout();
+	replay_rule();
+	collide_lists();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

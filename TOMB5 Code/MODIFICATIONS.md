@@ -17718,7 +17718,11 @@ next vertex lay one past `float vtx[32 * 6]`. On a 32-bit build the stack held a
 float there, so the last point's width ran in a direction no vertex of the bolt gave; on
 a 64-bit build a NaN or a huge value, which `long()` turns into `LONG_MIN`. The 32nd point
 now keeps the last segment's angle (points 30 to 31). The draw loop's reads (points `lp`
-and `lp + 1` for `lp < 31`) stay inside the arrays. The clamp and `ATANLOG` stay.
+and `lp + 1` for `lp < 31`) stay inside the arrays. The clamp and `ATANLOG` stay. A
+second line, on a 32-bit build, named the call inside the loop: a bolt point at or behind
+the camera plane projects to an infinite or huge position, so a segment takes its angle
+only when both ends have a clip flag of 0 or more (not -128, below `f_mznear + 2`), and
+otherwise keeps the angle before it, 0 at the first point; no such segment is drawn.
 
 **Decisions.** A save written before this build holds Lara's meshes as distances. The
 32-bit build reads them as before, exactly; the 64-bit build refuses such a save with the
@@ -17736,7 +17740,7 @@ same block after a load in another run.
 pointers), `33748594` (lengths), `1ff2962f` (the log lines), `d543767a` (alignment),
 `42cd22e1` (the asserts), `67592dfa` (the gate and the checks), `f644b5a1` (the
 crash seam's dump), `39ee6a20` (the clamp and ATANLOG), `64eed4ba` (the lightning's
-last point).
+last point), `cc202c1e` (its points at the near plane).
 
 ### -record and -replay; the collision lists kept inside tsv_buffer (#305)
 2026-11-02

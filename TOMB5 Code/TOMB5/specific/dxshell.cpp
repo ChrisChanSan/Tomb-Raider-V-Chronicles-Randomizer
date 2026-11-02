@@ -680,7 +680,7 @@ void DXClose()
 		FmvDeviceLost();
 		GammaRelease();	// the gamma pass's copy and shader
 
-		Log("Released %s @ %x - RefCnt = %d", "Direct3DDevice", G_dxptr->lpD3DDevice, G_dxptr->lpD3DDevice->Release());
+		Log("Released %s @ %x - RefCnt = %d", "Direct3DDevice", LogAddr(G_dxptr->lpD3DDevice), G_dxptr->lpD3DDevice->Release());
 		G_dxptr->lpD3DDevice = 0;
 	}
 	else
@@ -1695,7 +1695,7 @@ void DXInitInput(HWND hwnd, HINSTANCE hinstance)
 
 	if (dinput)
 	{
-		Log("Released %s @ %x - RefCnt = %d", "DirectInput", dinput, dinput->Release());
+		Log("Released %s @ %x - RefCnt = %d", "DirectInput", LogAddr(dinput), dinput->Release());
 		dinput = 0;
 	}
 	else
@@ -1710,7 +1710,7 @@ void DXInitInput(HWND hwnd, HINSTANCE hinstance)
 
 	if (Keyboard)
 	{
-		Log("Released %s @ %x - RefCnt = %d", "Keyboard", Keyboard, Keyboard->Release());
+		Log("Released %s @ %x - RefCnt = %d", "Keyboard", LogAddr(Keyboard), Keyboard->Release());
 		Keyboard = 0;
 	}
 	else

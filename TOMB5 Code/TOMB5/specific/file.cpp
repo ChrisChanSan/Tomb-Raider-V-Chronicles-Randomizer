@@ -962,7 +962,7 @@ bool LoadRooms()
 	floor_data = (short*)game_malloc(size * sizeof(short));
 	ReadBlock(floor_data, sizeof(short) * size);
 
-	Log("Floor Data Size %d @ %x", size, floor_data);
+	Log("Floor Data Size %d @ %x", size, LogAddr(floor_data));
 	return 1;
 }
 

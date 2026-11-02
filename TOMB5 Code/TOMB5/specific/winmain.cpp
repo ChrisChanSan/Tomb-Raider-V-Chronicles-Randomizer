@@ -1407,7 +1407,7 @@ void WinClose()
 
 	if (G_dxptr->Keyboard)
 	{
-		Log("Released %s @ %x - RefCnt = %d", "Keyboard", G_dxptr->Keyboard, G_dxptr->Keyboard->Release());
+		Log("Released %s @ %x - RefCnt = %d", "Keyboard", LogAddr(G_dxptr->Keyboard), G_dxptr->Keyboard->Release());
 		G_dxptr->Keyboard = 0;
 	}
 	else
@@ -1420,7 +1420,7 @@ void WinClose()
 
 	if (G_dxptr->lpDirectInput)
 	{
-		Log("Released %s @ %x - RefCnt = %d", "DirectInput", G_dxptr->lpDirectInput, G_dxptr->lpDirectInput->Release());
+		Log("Released %s @ %x - RefCnt = %d", "DirectInput", LogAddr(G_dxptr->lpDirectInput), G_dxptr->lpDirectInput->Release());
 		G_dxptr->lpDirectInput = 0;
 	}
 	else

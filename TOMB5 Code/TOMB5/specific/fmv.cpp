@@ -137,7 +137,7 @@ void FmvDeviceLost()
 	if (!BinkTexture)
 		return;
 
-	Log("Released %s @ %x - RefCnt = %d", "Bink Texture", BinkTexture,
+	Log("Released %s @ %x - RefCnt = %d", "Bink Texture", LogAddr(BinkTexture),
 		BinkTexture->Release());
 	BinkTexture = 0;
 }

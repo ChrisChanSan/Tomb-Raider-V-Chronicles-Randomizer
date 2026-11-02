@@ -155,7 +155,7 @@ void aFixUpRoom(ROOM_INFO* r, char* s)
 	// width.
 	if ((uintptr_t)r->door & 1)
 	{
-		Log("%X", r->door);
+		Log("%X", LogAddr(r->door));
 		r->door = 0;
 	}
 

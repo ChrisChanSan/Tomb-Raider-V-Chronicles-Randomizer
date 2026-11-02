@@ -31,6 +31,15 @@ long GetRandomDraw();
 void SeedRandomDraw(long seed);
 void Log(const char* s, ...);
 
+/* An address as a log line prints it with %x: its low 32 bits, so the line
+ * has the same width on a 32-bit and a 64-bit build. For the eye only - an
+ * address differs from run to run anyway, and no reader of a log takes it
+ * for more than a mark. */
+inline unsigned int LogAddr(const void* p)
+{
+	return (unsigned int)(uintptr_t)p;
+}
+
 // -log: Log() writes nothing until this is set. Diagnostic seams that have
 // to build something before they can log (walking a list, formatting a
 // name) must test it themselves at the call site - the gate inside Log()

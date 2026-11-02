@@ -190,7 +190,7 @@ void FreeTextures()
 
 		if (tex->tex)
 		{
-			Log("Released %s @ %x - RefCnt = %d", "Texture", tex->tex, tex->tex->Release());
+			Log("Released %s @ %x - RefCnt = %d", "Texture", LogAddr(tex->tex), tex->tex->Release());
 			tex->tex = 0;
 		}
 		else
@@ -219,7 +219,7 @@ void FreeTexturesFrom(long first)
 
 		if (tex->tex)
 		{
-			Log("Released %s @ %x - RefCnt = %d", "Texture", tex->tex,
+			Log("Released %s @ %x - RefCnt = %d", "Texture", LogAddr(tex->tex),
 				tex->tex->Release());
 			tex->tex = 0;
 		}

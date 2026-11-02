@@ -729,7 +729,7 @@ void FreeMonoScreen()
 	{
 		if (MonoScreen.tex)
 		{
-			Log("Released %s @ %x - RefCnt = %d", "Mono Screen Texture", MonoScreen.tex, MonoScreen.tex->Release());
+			Log("Released %s @ %x - RefCnt = %d", "Mono Screen Texture", LogAddr(MonoScreen.tex), MonoScreen.tex->Release());
 			MonoScreen.tex = 0;
 		}
 		else
@@ -1211,14 +1211,14 @@ void ReleaseScreen()
 
 		if (MonoScreen.tex)
 		{
-			Log("Released %s @ %x - RefCnt = %d", "HD Picture Texture", MonoScreen.tex, MonoScreen.tex->Release());
+			Log("Released %s @ %x - RefCnt = %d", "HD Picture Texture", LogAddr(MonoScreen.tex), MonoScreen.tex->Release());
 			MonoScreen.tex = 0;
 		}
 	}
 
 	if (screen_surface)
 	{
-		Log("Released %s @ %x - RefCnt = %d", "Picture Surface", screen_surface, screen_surface->Release());
+		Log("Released %s @ %x - RefCnt = %d", "Picture Surface", LogAddr(screen_surface), screen_surface->Release());
 		screen_surface = 0;
 	}
 	else

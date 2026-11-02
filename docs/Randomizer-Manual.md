@@ -551,10 +551,10 @@ After every run, `spoiler.txt` lands beside `TR5Randomizer.exe`. It holds the
 version and build, your seed, the effective seed, **every setting** (the
 deselected enemy kinds and outfits by name), what was done to `SCRIPT.DAT`, the
 Tomb Raider III sources (`TR3 SOURCES`: the edition of each, the guests and TR3
-outfits that were available), one line per level, and — under `DATA` — where the
-precomputed data came from: the program carries its own copy of every
-`zones_*.json` and of the checksum list, so a file of that name in `data\`
-is optional, but if it is there it is used instead of the built-in one.
+outfits that were available), one line per level, and — under `DATA` — the
+path of every precomputed file the run read: the `zones_*.json` and the
+checksum lists in `data\`. The program carries no copy of them; a missing one
+stops the run with its name and the folder it was looked for in.
 
 **Attach it to any bug report.** Handing over the seed alone is not enough —
 the effective seed depends on the settings, and the build number decides

@@ -17606,8 +17606,8 @@ The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
 `TR5Randomizer.exe` - is this project's own work from the first line, so it owes
 nobody a GPLv3 section 5(a) notice and has no record of the kind above. What
 changed in it since the public Beta 1.0 is listed here by task number.
-Forty-five files under `TR5Randomizer/src` changed in that span: five of them new,
-thirty-nine modified, one moved out into `package/`.
+Forty-seven files under `TR5Randomizer/src` changed in that span: six of them new,
+forty modified, one moved out into `package/`.
 
 - **#123 - the HD markers.** `Tr5Level.cpp` / `.h`, `ApplyPatch.cpp` / `.h`,
   `Randomize.cpp` and `gui/Main.cpp`: the randomizer writes the HD room markers
@@ -17796,6 +17796,25 @@ thirty-nine modified, one moved out into `package/`.
   `Background.jpg` moves into `package/docs/` and `loadBackground` reads it from there,
   and the release copies the two manuals with the nine pictures they show beside it, so
   the package reads like the repository's docs folder (`9ce96228`).
+- **#306 - deflate of its own, and the data as files only.** `core/Inflate.cpp` / `.h`
+  and `core/DataFile.h` new, `core/Tr5Transfer.cpp`, `core/DataFile.cpp`,
+  `core/DataFolder.h`, `Randomize.cpp`, `gui/Main.cpp`, `SelfTest.cpp`, `build/b1.bat`,
+  `build/b2.bat`; `core/EmbeddedData.cpp` / `.h` and `Preparation/Tools/EmbedData.ps1`
+  removed. The randomizer reads the levels' texture blocks with a deflate reader of its
+  own, written from RFC 1950 and RFC 1951 (stored, fixed and dynamic blocks, the window
+  from the header, the Adler-32 trailer; every read and write bounds-checked, a corrupt
+  stream refused with a message), and writes the two blocks a run grows as stored
+  deflate blocks, which the engine's zlib reads like any other stream. A level that
+  takes pages from another level therefore carries those two blocks unpacked, about
+  twice its packed size; their content and every other byte stay as before, and
+  `LevelDiff -content` (Verification.md section 1) is the comparison across the change.
+  The fifteen zone exports and the two checksum lists are no longer baked into the
+  EXEs (about 140 KB of each): `DataFile::read` takes the file in `data\` or fails with
+  its name and folder, and the CLI now stops without the checksum list rather than skip
+  the check against an already randomized level. zlib stays in the engine alone; no
+  build line of the randomizer or of a diagnostic tool compiles it.
+  The build id stays 23: a seed places the same things (`e7fa928e`, `05c0c423`,
+  `5a45193f`, `dd1c3c8e`, `ab00f0c1`, `9379893d`).
 
 ## 4. Building this yourself
 
@@ -17980,3 +17999,4 @@ entries above.
 | #299 | The engine builds with Control Flow Guard |
 | #300 | A loading screen shows no texture page of the level, not for a frame |
 | #301 | The missing-file message, the X-ray tone's comment and the engine icon's origin |
+| #306 | section 3 (the randomizer); no engine entry: no file under `TOMB5 Code/TOMB5` changed |

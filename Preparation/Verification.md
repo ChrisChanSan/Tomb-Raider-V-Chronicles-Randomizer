@@ -21,6 +21,8 @@ git worktree add --detach <tmp> <commit-before>
 # build the old randomizer there, build the new one as usual
 # run BOTH with the same seed, the same switches and the same inputs
 cmp old.trc new.trc
+# across the change of the texture packing (#306): the content
+LevelDiff -content old.trc new.trc
 ```
 
 **What this caught:** nothing, and that was the result - four levels came out
@@ -36,6 +38,28 @@ comments and names" would have been a belief.
 - **Your own shell holds the folder.** `git worktree remove` and folder
   renames fail with "in use by another process" when a shell sits inside.
   Leave the folder first.
+- **The data folder.** Since #306 the CLI reads its zone export only from
+  the path it is given and the checksum list only from `data\` beside the
+  EXE; neither EXE carries a copy. Copy each build in turn to the SAME
+  folder beside the same `data\` before its run: the log names the paths it
+  read, and two EXEs in two folders give logs that differ in that line.
+
+**The texture packing changed with #306.** A build before it packs the
+texture blocks a run grows (every level that takes a page from another
+level) with zlib's compressor; a build from #306 on writes them as stored
+deflate blocks. Every pixel is the same, the file carries about twice the
+bytes, and `cmp` reports the whole rest of the file. Across that change the
+recipe compares with `LevelDiff -content old.trc new.trc` (`bld.bat`): it
+unpacks the three texture blocks of both files with the randomizer's own
+reader and compares their content, and it compares every other byte - the
+ten header bytes in front and everything from `data[16]` to the end of the
+file - as it stands. `SAME CONTENT` (exit code 0) is the pass; anything
+else is a regression. Between two builds that both carry #306, `cmp` holds
+again: a stored block depends on nothing but its raw bytes. Measured over
+the thirteen campaign levels at seed 380 plain and with `mix cross
+allsanity 8 weapons items20 weather`, seed 1 with `mix cross 8 weapons` and
+seed 77 with `mix cross allsanity 8 items20`: every `.hdm` and log
+identical, every `.trc` identical or `SAME CONTENT`.
 
 **Exercise the risky path on purpose.** A run that never touches the changed
 code proves nothing. When the change was to the TR3 cache keys, the test had

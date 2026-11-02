@@ -32,8 +32,8 @@
 //----------------------------------------------------------------------------
 #include "core/ApplyPatch.h"
 #include "core/Json.h"
+#include "core/DataFile.h"
 #include "core/DataFolder.h"
-#include "core/EmbeddedData.h"
 #include "core/LevelInfo.h"
 #include "core/Randomizer.h"
 #include "core/Rng.h"
@@ -292,16 +292,12 @@ int main(int argc, char** argv)
 
     std::string err;
 
-    // The zone export. argv[1] is a path, and it still wins - but if nothing
-    // lies there, the FILE NAME out of that path decides and the baked copy
-    // is unpacked (EmbeddedData.h). So the usual command line keeps working
-    // untouched even with data\ gone, and a hand-exported zones_rich2.json
-    // put back in its place still outranks the baked one.
+    // The zone export, read from the path argv[1] names and nowhere else
+    // (DataFile.h): a missing file stops the run with its name and folder.
     JsonValue zone;
     {
         std::string text;
-        DataFile::Source src = DataFile::Source::External;
-        if (!DataFile::read(toW(argv[1]), text, src, err)) { std::printf("zone export: %s\n", err.c_str()); return 1; }
+        if (!DataFile::read(toW(argv[1]), text, err)) { std::printf("zone export: %s\n", err.c_str()); return 1; }
         if (!Json::parseString(text, zone, err)) { std::printf("zone export: %s\n", err.c_str()); return 1; }
         std::printf("  data        zones: %s\n", DataFile::log().back().c_str());
     }
@@ -330,16 +326,17 @@ int main(int argc, char** argv)
     {
         // data\ first, beside the EXE only as a fallback - matching where
         // BuildRelease puts the checksum list and where the GUI looks for it
-        // (payloadDir).
+        // (payloadDir). Missing in both, the message names data\.
         std::wstring csv = PathUtil::join(
             PathUtil::join(PathUtil::exeDir(), L"data"), L"VanillaLevelChecksums.csv");
-        if (!PathUtil::fileExists(csv))
-            csv = PathUtil::join(PathUtil::exeDir(), L"VanillaLevelChecksums.csv");
+        const std::wstring beside =
+            PathUtil::join(PathUtil::exeDir(), L"VanillaLevelChecksums.csv");
+        if (!PathUtil::fileExists(csv) && PathUtil::fileExists(beside))
+            csv = beside;
 
         DataFolder df;
         std::string cerr, csvText;
-        DataFile::Source csvSrc = DataFile::Source::External;
-        if (DataFile::read(csv, csvText, csvSrc, cerr))
+        if (DataFile::read(csv, csvText, cerr))
         {
             std::printf("  data        checksums: %s\n", DataFile::log().back().c_str());
             if (df.loadChecksumsText(csvText, cerr))
@@ -366,7 +363,10 @@ int main(int argc, char** argv)
         }
         else
         {
-            std::printf("  data        checksums: %s\n", cerr.c_str());
+            // Without the list the check above cannot run, and a level
+            // randomized before would pass unseen - so no run.
+            std::printf("checksum list: %s\n", cerr.c_str());
+            return 1;
         }
     }
 
@@ -449,10 +449,12 @@ int main(int argc, char** argv)
     // DataFolder.h): named, or warned about - never a reason to stop.
     if (!tr3Dir.empty() || !tr3GoldDir.empty())
     {
+        // Without the list every TR3 file reads as of no known edition;
+        // the line below says why.
         std::string csv, csvErr;
-        DataFile::Source csvSrc = DataFile::Source::Embedded;
-        DataFile::read(PathUtil::join(PathUtil::exeDir(), L"data"),
-                       "Tr3Checksums.csv", csv, csvSrc, csvErr);
+        if (!DataFile::read(PathUtil::join(PathUtil::exeDir(), L"data"),
+                            "Tr3Checksums.csv", csv, csvErr))
+            std::printf("  note: %s\n", csvErr.c_str());
 
         std::vector<std::wstring> t3, gd;
         if (!tr3Dir.empty())

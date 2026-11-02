@@ -15,37 +15,20 @@
  * You should have received a copy of the GNU General Public License along
  * with this program. If not, see <https://www.gnu.org/licenses/>.
  */
-#include "EmbeddedData.h"
+#include "DataFile.h"
 #include "DataFolder.h"     // PathUtil
-#include "Inflate.h"
 
 #include <cstdio>
 
-//----------------------------------------------------------------------------
-// The unpacking half. The byte tables live in the generated EmbeddedData.cpp;
-// this file holds everything that was written by hand, so a regeneration can
-// never overwrite logic.
-//
-// The streams are in zlib format on purpose, not raw deflate: the randomizer
-// reads that format for the .TRC files anyway (Inflate.h), header and
-// checksum included. One call, no framing of our own - and the Adler-32 at
-// the end of the stream means a truncated or mangled table is caught here
-// instead of surfacing as a JSON parse error three functions later.
-//----------------------------------------------------------------------------
 namespace
 {
-    std::string lower(std::string s)
-    {
-        for (char& c : s) if (c >= 'A' && c <= 'Z') c = static_cast<char>(c - 'A' + 'a');
-        return s;
-    }
-
-    // The file name out of a full path. The command line may hand over any
-    // path; the baked copies are keyed by name alone.
-    std::string fileNameOf(const std::wstring& path)
+    // The file name and the folder out of a full path, for the log line and
+    // the message.
+    void split(const std::wstring& path, std::string& name, std::string& dir)
     {
         const size_t pos = path.find_last_of(L"\\/");
-        return PathUtil::narrow(pos == std::wstring::npos ? path : path.substr(pos + 1));
+        name = PathUtil::narrow(pos == std::wstring::npos ? path : path.substr(pos + 1));
+        dir = pos == std::wstring::npos ? std::string(".") : PathUtil::narrow(path.substr(0, pos));
     }
 
     bool readWholeFile(const std::wstring& path, std::string& out, std::string& error)
@@ -65,55 +48,7 @@ namespace
         return true;
     }
 
-    const EmbeddedData::File* find(const std::string& name)
-    {
-        const std::string want = lower(name);
-        for (size_t i = 0; i < EmbeddedData::g_fileCount; ++i)
-            if (lower(EmbeddedData::g_files[i].name) == want) return &EmbeddedData::g_files[i];
-        return nullptr;
-    }
-
     std::vector<std::string> g_log;
-}
-
-bool EmbeddedData::has(const std::string& name)
-{
-    return find(name) != nullptr;
-}
-
-std::vector<std::string> EmbeddedData::names()
-{
-    std::vector<std::string> out;
-    out.reserve(g_fileCount);
-    for (size_t i = 0; i < g_fileCount; ++i) out.push_back(g_files[i].name);
-    return out;
-}
-
-bool EmbeddedData::read(const std::string& name, std::string& out, std::string& error)
-{
-    const File* f = find(name);
-    if (!f) { error = "no built-in copy of " + name; return false; }
-
-    out.resize(f->raw);
-    size_t n = 0;
-    const char* why = Inflate::zlib(f->data, f->packed,
-                                    reinterpret_cast<uint8_t*>(&out[0]), f->raw, n);
-    if (why || n != f->raw)
-    {
-        char buf[200];
-        std::snprintf(buf, sizeof(buf), "built-in copy of %s is damaged (%s, %llu of %llu bytes)",
-                      name.c_str(), why ? why : "short", static_cast<unsigned long long>(n),
-                      static_cast<unsigned long long>(f->raw));
-        error = buf;
-        out.clear();
-        return false;
-    }
-    return true;
-}
-
-const char* DataFile::sourceName(Source s)
-{
-    return s == Source::External ? "external" : "embedded";
 }
 
 const std::vector<std::string>& DataFile::log()
@@ -121,31 +56,33 @@ const std::vector<std::string>& DataFile::log()
     return g_log;
 }
 
-bool DataFile::read(const std::wstring& path, std::string& out, Source& src, std::string& error)
+bool DataFile::read(const std::wstring& path, std::string& out, std::string& error)
 {
-    const std::string name = fileNameOf(path);
+    std::string name, dir;
+    split(path, name, dir);
 
-    if (PathUtil::fileExists(path))
+    if (!PathUtil::fileExists(path))
     {
-        if (!readWholeFile(path, out, error))
-        {
-            error = name + ": " + error + " (" + PathUtil::narrow(path) + ")";
-            return false;
-        }
-        src = Source::External;
-        g_log.push_back(name + "  external  " + PathUtil::narrow(path));
-        return true;
+        error = name + " not found in " + dir + ". The randomizer reads it from "
+                "there and has no copy of its own: the data folder of the "
+                "package belongs beside the program.";
+        g_log.push_back(name + "  MISSING  " + dir);
+        out.clear();
+        return false;
     }
-
-    if (!EmbeddedData::read(name, out, error)) return false;
-
-    src = Source::Embedded;
-    g_log.push_back(name + "  embedded");
+    if (!readWholeFile(path, out, error))
+    {
+        error = name + ": " + error + " (" + PathUtil::narrow(path) + ")";
+        g_log.push_back(name + "  UNREADABLE  " + PathUtil::narrow(path));
+        out.clear();
+        return false;
+    }
+    g_log.push_back(name + "  external  " + PathUtil::narrow(path));
     return true;
 }
 
 bool DataFile::read(const std::wstring& dir, const std::string& name,
-                    std::string& out, Source& src, std::string& error)
+                    std::string& out, std::string& error)
 {
-    return read(PathUtil::join(dir, PathUtil::widen(name)), out, src, error);
+    return read(PathUtil::join(dir, PathUtil::widen(name)), out, error);
 }

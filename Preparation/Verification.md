@@ -390,8 +390,20 @@ recorder, which the 64-bit build carries:
    `blended_frames`; at 30 both are 0; at 60 they are about `ticks` (a
    late frame adds one); at *Display* nearly every frame is blended.
 
-A drift whose tick reads no joint points at the two leftovers #310 measured
-and left as they were: the random numbers the picture that carries a step
-draws at *Display*, which is blended there and keeps its draws, and the
-corpse fade's marks (`StepAfterDeathFade`), which count a body seen in any
-picture since the last step.
+5. `RNGLOG frames=<f> given_back=<g> undone=<u> kept_frames=<k>
+   kept_draws=<d> heights=<h> over=<o>` right after each `JOINTLOG`: the
+   pictures that gave the random numbers and `GetHeight`'s globals back
+   (`given_back`, `undone` draws) and those that kept them (`kept_frames`,
+   `kept_draws`). At 30 `given_back` is 0 and `kept_frames` equals
+   `frames`; at 60 each is about `ticks`; at *Display* `kept_frames` is 0.
+   Compare the recording's
+   and the replay's: at *Display* `kept_draws` is 0 in both, whatever the
+   two displays' rates; `over` is 0.
+
+The corpse fade (`StepAfterDeathFade`) counts a body seen by one picture
+per step, the one that is no tween picture. At *Display* that picture is
+blended at a fraction the clock sets, so a drift on the tick a body
+vanishes, with the body's room at the picture's edge, is the one leftover
+#310 measured and left. `ProcessClosedDoors`, called from the room walk of
+every picture, is another: it moves a closed door between its two rooms'
+item lists by what the picture's walk saw.

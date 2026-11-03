@@ -24,6 +24,15 @@
 **/tomb5/libs/stb/**         linguist-vendored
 **/tomb5/libs/discordRPC/**  linguist-vendored
 **/external/imgui/**         linguist-vendored
+vendor/ffmpeg-min/**         linguist-vendored
+
+# The minimal FFmpeg travels as its build wrote it: headers, licence and the
+# build script with line feeds, the DLLs and import libraries untouched.
+# -text stores and checks out every byte as it is - build-min.sh runs in
+# MSYS2's sh, which reads a carriage return as part of the command. Only
+# our own README.md there is ordinary text.
+vendor/ffmpeg-min/**           -text
+vendor/ffmpeg-min/README.md    text
 
 
 # The HD shaders check out with LINE FEEDS on every machine. The engine has

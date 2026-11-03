@@ -250,6 +250,27 @@ can never reach because it always runs as its own game number - and the
 measured table of which of the 471 slots resolves to which file on the
 installed bundle are new, in the same entry of `MODIFICATIONS.md`.
 
+### FFmpeg, minimal — three DLLs for the 64-bit engine's films
+
+| Library | Licence | Full text in this tree |
+|---|---|---|
+| **FFmpeg** — the FFmpeg developers, <https://ffmpeg.org> | LGPL v2.1 or later | `vendor/ffmpeg-min/COPYING.LGPLv2.1` |
+
+The game's films are Bink files, and the game's own Bink library is a 32-bit
+DLL the 64-bit engine cannot load. FFmpeg's Bink decoders stand in for it:
+`vendor/ffmpeg-min/bin` holds `avutil-61.dll`, `avcodec-63.dll` and
+`avformat-63.dll`, built here from the FFmpeg master snapshot of 2026-11-03
+(`8.0.git`) with nothing in them but the Bink demuxer, the Bink video
+decoder, the two Bink audio decoders and the file protocol - configure with
+`--disable-everything`, shared only, without `--enable-gpl` and
+`--enable-nonfree`, so the summary reads "LGPL version 2.1 or later". They
+are linked dynamically: loaded at run time, not compiled into any EXE. The
+exact configure line and the recipe are `vendor/ffmpeg-min/build-min.sh`,
+the headers and import libraries sit beside the DLLs, and
+`vendor/ffmpeg-min/README.md` names the snapshot's SHA-256. The source tree
+was not modified; that snapshot is offered with every release that ships the
+three DLLs.
+
 ### discord-rpc — shipped in the source tree, not in the binaries
 
 | Library | Licence | Full text in this tree |

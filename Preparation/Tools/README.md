@@ -121,6 +121,11 @@ with their own name substituted.
 | `MusicCheck` | bmp | which TO_CD tracks a level's triggers actually use. |
 | `TR3Sound` / `TR3SoundCheck` | bton / - | the same for Tomb Raider III, for the imported enemies. |
 
+**The films**
+| Tool | Script | What it answers |
+|---|---|---|
+| `BinkProbe` | bbp | **does the minimal FFmpeg of `vendor/ffmpeg-min` decode a film, and how fast**. x64 only, linked against no FFmpeg library: it loads `avutil`, `avcodec` and `avformat` at run time from the folder given first (`vendor\ffmpeg-min\bin`), in that order, resolves every function by name and decodes the `.bik` given second - streams, frame counts, the linesize, the MD5 of the first and last video frame over Y, U, V without padding (what `ffmpeg -f framemd5` hashes for yuv420p), the audio sample count and the multiple of real time. `-frames` adds one MD5 line per video and audio frame for a comparison of every frame; `-wrongorder` loads avformat first and shows the load fail. |
+
 **Script and balance**
 | Tool | Script | What it answers |
 |---|---|---|

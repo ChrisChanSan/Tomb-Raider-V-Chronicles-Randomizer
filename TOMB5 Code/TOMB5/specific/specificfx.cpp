@@ -2090,6 +2090,50 @@ void DrawBinoculars()
 	}
 }
 
+/* SPARKLOG (-log): one line where the draw ends a particle the logic still
+ * walks - a spark past the far plane, a drip or a bubble out of reach.
+ * What the frame's camera decides there, the logic reads on the next tick:
+ * a spark's chained explosion (UpdateSparks, game\effect2.cpp), a drip's
+ * splash (UpdateDrips, game\tomb4fx.cpp), a bubble's ripple (UpdateBubbles)
+ * - each with draws from the logic generator. `frame` counts the frames
+ * drawn since GlobalCounter last changed, 1 being the first; S_DrawSparks
+ * counts them and runs before the drips and the bubbles in DrawPhaseGame
+ * (game\draw.cpp). One line per particle ended, never one per frame. */
+static ushort spark_log_tick = 0xFFFF;
+static long spark_log_frame = 0;
+
+static void SparkLogFrame()
+{
+	if (GlobalCounter != spark_log_tick)
+	{
+		spark_log_tick = GlobalCounter;
+		spark_log_frame = 0;
+	}
+
+	spark_log_frame++;
+}
+
+static void SparkLog(const char* what, SPARKS* sptr, float z)
+{
+	Log("SPARKLOG %s tick=%u frame=%ld alpha=%.3f tween=%d z=%.0f zfar=%.0f "
+		"slot=%d life=%d slife=%d age=%d extras=%d chain=%d fires_at=%d "
+		"fx=%d dyn=%d", what, (unsigned)GlobalCounter, spark_log_frame,
+		InterpAlphaNow(), InterpIsTweenFrame() ? 1 : 0, z, f_mzfar,
+		(int)(sptr - spark), (int)sptr->Life, (int)sptr->sLife,
+		(int)sptr->sLife - (int)sptr->Life, (int)sptr->extras,
+		(int)(sptr->extras & 7), (int)(sptr->extras >> 3),
+		(sptr->Flags & SF_FX) ? 1 : 0, (int)sptr->Dynamic);
+}
+
+static void SparkLogOther(const char* what, const char* why, long slot,
+	long life, long z)
+{
+	Log("SPARKLOG %s kill tick=%u frame=%ld alpha=%.3f tween=%d why=%s "
+		"z=%ld slot=%ld life=%ld", what, (unsigned)GlobalCounter,
+		spark_log_frame, InterpAlphaNow(), InterpIsTweenFrame() ? 1 : 0, why,
+		z, slot, life);
+}
+
 void S_DrawSparks()
 {
 	SPARKS* sptr;
@@ -2117,6 +2161,9 @@ void S_DrawSparks()
 	const float pa = InterpParticleAlpha();
 	const bool trail = pa < 1.0F;
 	long moved = 0;
+
+	if (gLogEnabled)
+		SparkLogFrame();
 
 	smallest_size = 0;	//uninitialized
 	tex.drawtype = 2;
@@ -2367,7 +2414,12 @@ void S_DrawDrawSparksNEW(SPARKS* sptr, long smallest_size, float* xyz)
 	if (xyz[2] <= f_mznear || xyz[2] >= f_mzfar)
 	{
 		if (xyz[2] >= f_mzfar)
+		{
+			if (gLogEnabled)
+				SparkLog("kill", sptr, xyz[2]);
+
 			sptr->On = 0;
+		}
 
 		return;
 	}
@@ -3262,6 +3314,9 @@ void DrawDrips()
 
 		if (Z[0] > 0x5000)
 		{
+			if (gLogEnabled)
+				SparkLogOther("drip", "far", i, drip->Life, Z[0]);
+
 			drip->On = 0;
 			continue;
 		}
@@ -3545,6 +3600,10 @@ void DrawBubbles()
 
 		if (dx < -0x5000 || dx > 0x5000 || dy < -0x5000 || dy > 0x5000 || dz < -0x5000 || dz > 0x5000)
 		{
+			if (gLogEnabled)
+				SparkLogOther("bubble", "box", (long)(bubble - Bubbles),
+					bubble->size, 0);
+
 			bubble->size = 0;
 			bubble++;
 			continue;
@@ -3569,6 +3628,10 @@ void DrawBubbles()
 
 		if (Z[0] > 0x5000)
 		{
+			if (gLogEnabled)
+				SparkLogOther("bubble", "far", (long)(bubble - Bubbles),
+					bubble->size, Z[0]);
+
 			bubble->size = 0;
 			bubble++;
 			continue;
@@ -3578,6 +3641,10 @@ void DrawBubbles()
 
 		if (size > 128)
 		{
+			if (gLogEnabled)
+				SparkLogOther("bubble", "near", (long)(bubble - Bubbles),
+					bubble->size, Z[0]);
+
 			bubble->size = 0;
 			continue;
 		}

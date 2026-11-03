@@ -735,6 +735,18 @@ recorder, which the 64-bit build carries:
    The call that appears on one side only, or another call at the same
    place, is where the two runs part; what that caller read is the next
    question, not answered by the trace.
+
+   The first run of this kind named `TriggerExplosionSparks` and
+   `TriggerExplosionSmokeEnd`, 26 draws, on the live side only (#317): a
+   chained explosion, which `UpdateSparks` fires when a spark reaches a set
+   age. The draw had ended that spark in the recorded run -
+   `S_DrawDrawSparksNEW` ended a spark whose depth reached the far plane,
+   and that depth comes from the frame's camera, so where the pictures
+   fell decided whether the explosion came. With `-log` each such end is a
+   `SPARKLOG kill` line (and `SPARKLOG drip kill`, `SPARKLOG bubble kill`
+   for the two of the same kind): with a build before the fix the
+   recorded-clock log shows a `SPARKLOG kill` with `chain=` above 0 before
+   the drift tick, the live-clock log does not.
 4. `JOINTLOG passes=<n> ticks=<m> tween_frames=<k> blended_frames=<b>`,
    one line at the end of each level and of the title: `passes` equals
    `blended_frames`; at 30 both are 0; at 60 they are about `ticks` (a

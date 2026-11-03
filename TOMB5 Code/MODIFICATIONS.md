@@ -18371,6 +18371,53 @@ seven marks in their order.
 
 **Commits.** `a2fd0238`.
 
+### The draw no longer kills a spark beyond the view distance (#317)
+2026-11-03
+
+**Found.** A recording made at *Display* replayed equal to itself with the recorded clock
+and parted from it with `-liveclock` at tick 842 (`REPLAYLOG drift`). `-rngtrace 836 845`
+on both runs (#316) showed the span of tick 842 equal through the marks `items`,
+`effects`, `lara` and `camera`, and 26 draws of the logic generator longer in the live run
+before the mark `tick`: one chained explosion, `TriggerExplosionSparks` with 13 draws and
+`TriggerExplosionSmokeEnd` with 13, fired from `UpdateSparks` (`game/effect2.cpp`) when a
+spark whose `extras & 7` is set reaches the age `extras >> 3`. That trigger counts ticks,
+and both runs had drawn the same numbers up to it, so the spark lived in one run and was
+gone in the other. The one writer that ends a spark outside the logic is the draw:
+`S_DrawDrawSparksNEW` (`specific/specificfx.cpp`) set its `On` to 0 when the spark's
+view-space depth reached the far plane (`f_mzfar`). That depth comes from the frame's
+camera - at *Display* the blended camera, on each of the two or more frames of a tick - so
+a spark near the view distance was ended or not by where the frames fell, and
+`GetFreeSpark` then handed out other slots. The object that exploded in that run was a
+helicopter far from Lara. With one exact frame per tick, as in the original, the kill was
+deterministic. It also kept the spark's explosion light taken for good: `spark_dynamics`
+holds eight, and only `UpdateSparks` frees one, when its spark's `Life` runs out.
+
+The draw's other writes into the particles `ControlPhase` walks, measured: a drip ends in
+`DrawDrips` deeper than 0x5000 in view, a bubble in `DrawBubbles` outside 0x5000 of the
+camera, deeper than that or at the eye - the logic reads both (a drip landing in an even
+slot splashes through `TriggerDripSplash`, a bubble reaching air sets a ripple, both with
+draws), so they are the same kind of leak, rarer, and left as they are with a line each
+below; a spark lets go of the effect or bone it hangs off in `S_DrawSparks` (`x/y/z` and
+`Flags`, timed by the draw generator on the tick's frame) - the logic reads the position
+(the chained explosion's place, the fire and damage test against Lara) but draws the same
+count; the rain's splashes and ripples (`DoWeather`, slot use only); the HD bodies' rings
+(`hd_life.cpp`, HD only; `SetupRipple` skips its draw when all 128 ripples are taken).
+Lightning's flag 8 is read by nothing in the logic. No spark depends on the draw to end:
+every one ends in `UpdateSparks` by its `Life` or by fading out.
+
+**SPARKLOG.** A new `-log` family, one line per particle the draw ends:
+
+    SPARKLOG kill tick=<GlobalCounter> frame=<n> alpha=<InterpAlphaNow> tween=<0/1>
+        z=<view depth> zfar=<f_mzfar> slot=<index> life=<Life> slife=<sLife>
+        age=<sLife - Life> extras=<extras> chain=<extras & 7> fires_at=<extras >> 3>
+        fx=<SF_FX set> dyn=<Dynamic>
+    SPARKLOG drip kill tick= frame= alpha= tween= why=far z= slot= life=
+    SPARKLOG bubble kill tick= frame= alpha= tween= why=box|far|near z= slot= life=<size>
+
+`frame` counts the frames drawn since `GlobalCounter` changed, 1 the first; `S_DrawSparks`
+counts them and runs before the drips and the bubbles. A `kill` with `chain=` above 0 and
+`age=` below `fires_at=` is a chained explosion that will not happen.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -18795,3 +18842,4 @@ entries above.
 | #314 | The recorder writes the check's fields per input call: STATELOG |
 | #315 | The 64-bit engine plays the films through the minimal FFmpeg |
 | #316 | -rngtrace: the logic generator's callers in a window of ticks |
+| #317 | The draw no longer kills a spark beyond the view distance |

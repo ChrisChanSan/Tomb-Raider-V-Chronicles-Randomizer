@@ -21,7 +21,10 @@
 #define REPLAY_RECORD	1
 #define REPLAY_PLAY	2
 
-void ReplayOpen(long mode, const char* path, const char* stamp);
+/* `live_clock`: -liveclock was given; under REPLAY_PLAY only, the frames
+ * are blended by this machine's clock (ReplaySubTick). */
+void ReplayOpen(long mode, const char* path, const char* stamp,
+	bool live_clock);
 void ReplayClose();
 
 /* The one input point (S_UpdateInput, specific\input.cpp), after the
@@ -36,7 +39,8 @@ void ReplayInputSeam(char* keys, long* mouse_dx, long* mouse_dy,
 long ReplayFrames(long frames);
 
 /* A drawn frame's place between two ticks, as the clock gave it
- * (TIME_SubTick); the recorded one under -replay. */
+ * (TIME_SubTick); the recorded one under -replay, the given one under
+ * -replay -liveclock, the record taken and checked either way. */
 double ReplaySubTick(double subtick);
 
 /* A level's first tick: the generators' seeds and the frame counter. */

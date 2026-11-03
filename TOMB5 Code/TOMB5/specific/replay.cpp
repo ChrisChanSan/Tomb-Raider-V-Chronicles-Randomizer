@@ -38,6 +38,12 @@
  * clock; -replay sets them from the file. A save and a load write their
  * slot, as a check that the replayed run reached the same menu choice.
  *
+ * With -liveclock beside -replay the sub-ticks are read and checked like
+ * every record, but the frame is blended by the replaying machine's clock:
+ * the same ticks and input with the pictures elsewhere between two ticks.
+ * The logic reads nothing back from a picture, so such a replay plays the
+ * recorded game; a REPLAYLOG drift says where it does not.
+ *
  * Under -replay every record is checked against the run: its type, and the
  * tick it was written at. The first that does not fit ends the replay with
  * a REPLAYLOG desync line, and the run goes on with the devices - from
@@ -52,6 +58,7 @@ static size_t g_pos = 0;
 static long g_records = 0;
 static long g_inputs = 0;
 static bool g_drift_said = false;
+static bool g_live_clock = false;	// -replay with -liveclock
 
 /* The game's state as an input call finds it, mixed into one number: the
  * logic generator's seed and Lara's place, turn and life. -record writes it
@@ -130,7 +137,8 @@ static void ReplayPut(const ReplayRecord* r)
 		g_records++;
 }
 
-void ReplayOpen(long mode, const char* path, const char* stamp)
+void ReplayOpen(long mode, const char* path, const char* stamp,
+	bool live_clock)
 {
 	uint8_t head[REPLAY_HEADER_SIZE];
 	char rec_stamp[REPLAY_STAMP_SIZE];
@@ -185,8 +193,10 @@ void ReplayOpen(long mode, const char* path, const char* stamp)
 
 	g_pos = REPLAY_HEADER_SIZE;
 	g_mode = REPLAY_PLAY;
-	Log("REPLAYLOG open mode=replay file=%s version=%d bits=%d recorded=%s",
-		path, version, bits, rec_stamp);
+	g_live_clock = live_clock;
+	Log("REPLAYLOG open mode=replay file=%s version=%d bits=%d recorded=%s "
+		"clock=%s", path, version, bits, rec_stamp, live_clock ? "live" :
+		"recorded");
 }
 
 void ReplayClose()
@@ -325,7 +335,11 @@ double ReplaySubTick(double subtick)
 		return subtick;
 	}
 
-	return r.subtick;
+	// -liveclock: the record is taken and checked like every other, so the
+	// next one is where it should be; the frame is blended by this
+	// machine's clock. The ticks, the input and the generators stay the
+	// recording's - only the pictures fall elsewhere between two ticks.
+	return g_live_clock ? subtick : r.subtick;
 }
 
 void ReplayLevelStart()

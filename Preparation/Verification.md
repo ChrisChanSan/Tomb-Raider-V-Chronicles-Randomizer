@@ -670,10 +670,25 @@ recorder, which the 64-bit build carries:
    something shooting at Lara (the drones of ANDREA2):
    `PCtomb5.exe -log -record run.rec`.
 2. Replay it with the replaying machine's own clock in place of the
-   recorded sub-ticks: `PCtomb5.exe -log -replay run.rec -liveclock`.
+   recorded sub-ticks: `PCtomb5.exe -log -replay run.rec -liveclock`
+   (the switch after the file: the word after `-replay` is the file). The
+   sub-tick records are still read and checked by type and tick; only the
+   value the picture is blended by is the clock's. The open line ends
+   `clock=live` - that is the check that the switch was read;
+   `clock=recorded` is a replay of the recording's own pictures, which
+   proves nothing here.
 3. The log of the replay holds no `REPLAYLOG drift` line, and
    `REPLAYLOG end` names the recording's last tick. A drift line names the
-   tick where the replayed game left the recorded one.
+   tick where the replayed game left the recorded one. Under the live clock
+   the ticks, the input and the generators are the recording's, so a drift
+   means the logic read something back from a picture: a reader of the
+   blend that #310 did not catch - unless it is one of the two leftovers
+   below. Around the drift tick compare the two logs' `TICKLOG` second
+   (`after_death=`, a body's fade step) with the `ITEMLOG` line of the item
+   that died there (its room), and the level's `DOORLOG moves=`: a fade
+   step or a door move that differs between recording and replay, with the
+   body's room or the door's portal at the picture's edge, is the known
+   leftover; the same counts on both sides and a drift is a new finding.
 4. `JOINTLOG passes=<n> ticks=<m> tween_frames=<k> blended_frames=<b>`,
    one line at the end of each level and of the title: `passes` equals
    `blended_frames`; at 30 both are 0; at 60 they are about `ticks` (a

@@ -52,23 +52,29 @@ bool HighReserveSpan(uint64_t base, uint64_t size, uint64_t line,
 	return true;
 }
 
-bool HighSwitchGiven(const char* cmd)
+bool SwitchWordGiven(const char* cmd, const char* word)
 {
-	size_t len, i;
+	size_t len, n, i, k;
 
-	if (!cmd)
+	if (!cmd || !word)
 		return false;
 
 	len = strlen(cmd);
+	n = strlen(word);
 
-	for (i = 1; i + 4 <= len; i++)
+	if (!n)
+		return false;
+
+	for (i = 1; i + n <= len; i++)
 	{
 		// Through unsigned char, as WinCheckLogFlag does: a path with
 		// umlauts hands toupper a negative value otherwise.
-		if (toupper((unsigned char)cmd[i]) != 'H' ||
-			toupper((unsigned char)cmd[i + 1]) != 'I' ||
-			toupper((unsigned char)cmd[i + 2]) != 'G' ||
-			toupper((unsigned char)cmd[i + 3]) != 'H')
+		for (k = 0; k < n; k++)
+			if (toupper((unsigned char)cmd[i + k]) !=
+				toupper((unsigned char)word[k]))
+				break;
+
+		if (k < n)
 			continue;
 
 		if (cmd[i - 1] != '-' && cmd[i - 1] != '/')
@@ -77,13 +83,18 @@ bool HighSwitchGiven(const char* cmd)
 		if (i > 1 && cmd[i - 2] != ' ')
 			continue;
 
-		if (i + 4 < len && cmd[i + 4] != ' ')
+		if (i + n < len && cmd[i + n] != ' ')
 			continue;
 
 		return true;
 	}
 
 	return false;
+}
+
+bool HighSwitchGiven(const char* cmd)
+{
+	return SwitchWordGiven(cmd, "high");
 }
 
 #ifdef _WIN64

@@ -1569,18 +1569,21 @@ int __stdcall WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 
 	/* -record <file> or -replay <file>: the same inputs played again
 	 * (specific\replay.cpp). Opened before anything reads a device; the
-	 * file's header carries this build's stamp. */
+	 * file's header carries this build's stamp. -liveclock, read as -high
+	 * is, blends a replay's frames by this machine's clock; without -replay
+	 * it changes nothing. */
 	{
 		char replayPath[MAX_PATH];
+		const bool liveClock = SwitchWordGiven(lpCmdLine, "liveclock");
 
 		if (WinCheckPathFlag(lpCmdLine, "record", replayPath,
 			sizeof(replayPath)))
 			ReplayOpen(REPLAY_RECORD, replayPath,
-				"PCtomb5 built " __DATE__ " " __TIME__);
+				"PCtomb5 built " __DATE__ " " __TIME__, liveClock);
 		else if (WinCheckPathFlag(lpCmdLine, "replay", replayPath,
 			sizeof(replayPath)))
 			ReplayOpen(REPLAY_PLAY, replayPath,
-				"PCtomb5 built " __DATE__ " " __TIME__);
+				"PCtomb5 built " __DATE__ " " __TIME__, liveClock);
 	}
 
 	/* The crash seam, as early as the log: an exception nobody catches

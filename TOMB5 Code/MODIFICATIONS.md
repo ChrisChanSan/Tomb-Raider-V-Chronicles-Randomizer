@@ -17814,6 +17814,21 @@ present's ticks, `S` a save or a load - `ReplayEncode`, `ReplayDecode`. Under
   call where it differs and goes on. A file of version 1 is refused. The braid is
   built from the drawn frame and nothing in the logic reads `hairs[]`: `HAIRLOG` is
   a render family in xdiff.py.
+- `-liveclock` beside `-replay`, the proof of `Preparation/Verification.md` section 10:
+  `ReplaySubTick` still takes the `A` record and checks its type and tick, so the next
+  record of another type stays in step, and returns the clock's own value in place of
+  the recorded one. It keeps the devices, the presents' tick counts, the seeds and the
+  frame counter of the file and replaces only the frames' places between two ticks.
+  How often the two blends call it does not depend on the value it returns
+  (`InterpAlphaNow` asks the frame rate mode and `GameFrameMinTicks` first; the ring
+  calls it as an argument), and the loading screen's own reads of `TIME_SubTick`
+  (`specific/drawbars.cpp`) reach no logic. `specific/winmain.cpp` reads the switch
+  by `SwitchWordGiven` (`specific/high_pool.cpp`, the word taken out of
+  `HighSwitchGiven`, which now hands it "high"), so a path holding the word is no
+  switch; `ReplayOpen` takes it, and without `-replay` it changes nothing. The open
+  line ends `clock=recorded` or `clock=live`. A `REPLAYLOG drift` under it is a reader
+  of the blend in the logic, unless it falls where a body's fade or a closed door's
+  list move followed a carrying picture blended at another fraction.
 
 `game/collide_lists.h` (new): the places counted in pointers - items at 0 and 2048,
 statics at 256 and 3072 - the same bytes on a 32-bit build, twice them on a 64-bit
@@ -17867,7 +17882,7 @@ section 8, checks with SaveDiff.
 **Commits.** `7d7f324a` (the name block), `0a8578df` (the lists), `79afb7e9` (the
 recorder), `dfe69cb5` and `e52b0156` (the lists' comments), `22a1ddbf` (the checks),
 `fdd176e2` (xdiff.py), `4dc436d8` (the save's pointers by number), `62d924e5` (the frames'
-sub-tick), `3eb4f142` (xdiff.py's window).
+sub-tick), `3eb4f142` (xdiff.py's window), `1f2233d5` (`-liveclock`).
 ### The engine reads its texture blocks with the project's own inflater; zlib goes (#308)
 2026-11-02
 

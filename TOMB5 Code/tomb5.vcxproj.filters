@@ -310,6 +310,9 @@
     <ClCompile Include="TOMB5\specific\yuv_rgb.cpp">
       <Filter>TOMB5\specific</Filter>
     </ClCompile>
+    <ClCompile Include="TOMB5\specific\weather_sparks.cpp">
+      <Filter>TOMB5\specific</Filter>
+    </ClCompile>
     <ClCompile Include="TOMB5\game\mafia2.cpp">
       <Filter>TOMB5\game</Filter>
     </ClCompile>
@@ -826,6 +829,9 @@
       <Filter>TOMB5\specific</Filter>
     </ClInclude>
     <ClInclude Include="TOMB5\specific\yuv_rgb.h">
+      <Filter>TOMB5\specific</Filter>
+    </ClInclude>
+    <ClInclude Include="TOMB5\specific\weather_sparks.h">
       <Filter>TOMB5\specific</Filter>
     </ClInclude>
     <ClInclude Include="TOMB5\game\mafia2.h">

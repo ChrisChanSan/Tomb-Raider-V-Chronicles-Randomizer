@@ -38,6 +38,14 @@ void DoSnow();
 void DrawBinoculars();
 void S_DrawSparks();
 
+/* One spark and one ripple through the lines of S_DrawSparks and
+ * S_DrawSplashes; the weather's own (specific\weather_sparks.cpp) are drawn
+ * by them as the logic's are. S_DrawOneSpark runs inside S_DrawSparks'
+ * matrix and returns 1 when it trailed the spark. */
+long S_DrawOneSpark(SPARKS* sptr, long x, long y, long z, float pa,
+	long* smallest_size);
+void S_DrawOneRipple(RIPPLE_STRUCT* ripple);
+
 /* SPARKLOG (-log): the frame within the tick as S_DrawSparks counted it
  * last, 0 before its first frame of the tick; and the level's line of the
  * draw's spark allocations and the rain's splashes and ripples, written

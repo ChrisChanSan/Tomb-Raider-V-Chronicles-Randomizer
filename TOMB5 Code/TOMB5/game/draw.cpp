@@ -548,7 +548,8 @@ void LaraJointsLive()
 /* JOINTLOG, one line at the end of each level and of the title, with -log:
  * the passes against the level's ticks and the frames drawn as tween frames
  * and blended. fps_mode 0 writes passes=0 and blended_frames=0. RNGLOG
- * follows it, the same level's frames (game\interpolate.cpp). */
+ * follows it, the same level's frames (game\interpolate.cpp), then the
+ * SPARKLOG level line (specific\specificfx.cpp). */
 void LaraJointsLevelEnd()
 {
 	const unsigned long serial = InterpTickSerial();
@@ -563,6 +564,7 @@ void LaraJointsLevelEnd()
 	g_joints.blends = 0;
 	g_joints.serial = serial;
 	InterpRngLevelEnd();
+	SparkLogLevelEnd();
 }
 
 long DrawPhaseGame()

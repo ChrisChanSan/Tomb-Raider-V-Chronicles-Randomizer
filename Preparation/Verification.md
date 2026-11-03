@@ -735,6 +735,54 @@ recorder, which the 64-bit build carries:
    The call that appears on one side only, or another call at the same
    place, is where the two runs part; what that caller read is the next
    question, not answered by the trace.
+
+   The first run of this kind named `TriggerExplosionSparks` and
+   `TriggerExplosionSmokeEnd`, 26 draws, on the live side only (#317): a
+   chained explosion, which `UpdateSparks` fires when a spark reaches a set
+   age. The first thesis was that the draw had ended that spark in the
+   recorded run - `S_DrawDrawSparksNEW` ends a spark whose depth reaches
+   the far plane, and that depth comes from the frame's camera, so where
+   the pictures fell would decide whether the explosion came. With `-log` each such end is a
+   `SPARKLOG kill` line (and `SPARKLOG drip kill`, `SPARKLOG bubble kill`
+   for the two of the same kind): had that been the cause, the
+   recorded-clock log would show a `SPARKLOG kill` with `chain=` above 0
+   before the drift tick and the live-clock log not. The first such run
+   wrote no `SPARKLOG kill` at all, so `SPARKLOG born`, `fire`, `end` (why=life,
+   fade or evict), `light` and `light_index` now follow every chain spark
+   in `game\effect2.cpp`: the live log's `fire` line that the other log
+   lacks names a slot, the last `born` in that slot before it its born
+   tick, and the recorded-clock log's lines for that slot and born tick
+   tell its fate there. The spark slots the draw takes are `SPARKLOG
+   draw_alloc` lines (with `SPARKLOG rain` before each splash and ripple
+   and a `SPARKLOG level` total), and
+
+       python <repo>\Preparation\Tools\Diagnose\spark_life.py rt_rec.log rt_live.log --allocs --tick <t>
+
+   counts them in both logs up to tick t against the `next=` of the first
+   `born` after, so a shift of the slots is explained allocation by
+   allocation; without `--allocs` it pairs the chain sparks alive at tick
+   t in both logs and marks the ones whose fate differs.
+
+   The chain that found the cause (#317, #318): `-rngtrace` named the 26
+   draws of a chain's last link firing a tick early on the live side;
+   the life lines showed the field that parted, the spark slot - the
+   chain born in other slots with the same count of sparks on and the
+   same generator state; the draw-side lines named the taker, 3811
+   `draw_alloc` lines all from `TriggerSmallSplash` called by `DoRain`,
+   the rain's splashes made on the frame with the frame's camera, a
+   count that differs between the clocks (3714 against 3673 in the
+   title's rain before the level, `next=` 1008 against 967: 41 = 41,
+   `spark_life.py --allocs`); and the link that slot put below its
+   parent aged a pass later than one above it. The fix gives the
+   weather its own splashes and ripples (`specific\weather_sparks.cpp`),
+   so nothing the rain makes takes a slot or a draw of the logic. The
+   check, with any build from #318 on: replay a recording made with such
+   a build in a level with rain twice with `-liveclock`; no
+   `REPLAYLOG drift`, no `SPARKLOG draw_alloc` line whose `ret=` names
+   `TriggerSmallSplash` (`AddrLine.exe <exe> -ret <ret>`), and every
+   `SPARKLOG level` line's `weather_peak=` under 1024. A recording made
+   before #318 drifts with these builds in both clocks by design: its
+   logic carries the old splash slots.
 4. `JOINTLOG passes=<n> ticks=<m> tween_frames=<k> blended_frames=<b>`,
    one line at the end of each level and of the title: `passes` equals
    `blended_frames`; at 30 both are 0; at 60 they are about `ticks` (a

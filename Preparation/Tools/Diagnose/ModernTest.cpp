@@ -29169,6 +29169,394 @@ static void rngtrace_rule()
 	free(input);
 }
 
+/* SPARKLOG's life lines (game\effect2.cpp): a chained-explosion spark
+ * born in TriggerExplosionSparks, fired in UpdateSparks, ended by life, by
+ * the fade or by GetFreeSpark's eviction, a light not found, a light index
+ * below -1. Each is a Log call behind gLogEnabled and nothing else: the
+ * engine's own statements stand as they were, and the draw's far-plane end
+ * (specific\specificfx.cpp) still turns the spark off. Then the spark slots
+ * the draw takes (#317c): GetFreeSpark's draw_alloc line inside a frame
+ * that gives its draws back (InterpFrameSeedSaved), the rain's line before
+ * its splash and its ripple (DoRain), and the level's line after RNGLOG
+ * (LaraJointsLevelEnd). This group only reads the text. */
+static void spark_life()
+{
+	char* fx = hd_switch_text("../../game/effect2.cpp");
+	char* sfx = hd_switch_text("../specificfx.cpp");
+	char* interp = hd_switch_text("../../game/interpolate.cpp");
+	char* interph = hd_switch_text("../../game/interpolate.h");
+	char* draw = hd_switch_text("../../game/draw.cpp");
+	static char body[262144];
+
+	ok(fx && sfx && interp && interph && draw, "spark life: the five files",
+		0, 1);
+
+	// Born: the start and the count taken before GetFreeSpark, one line
+	// after the set-up, before the colour swap and the smoke.
+	glass_body(fx, "void TriggerExplosionSparks(long x, long y, long z, "
+		"long extras, long dynamic, long uw, short room_number)", body,
+		sizeof(body));
+	{
+		const char* pre = strstr(body, "if(gLogEnabled)log_next=next_spark;"
+			"log_on=SparkLogCountOn();}sptr=&spark[GetFreeSpark()];"
+			"sptr->On=1;");
+		const char* born = strstr(body, "sptr->MaxYvel=0;if(gLogEnabled)Log("
+			"\"SPARKLOGborntick=%uslot=%dchain=%dfires_at=%dlife=%d\"\"dyn=%d"
+			"next=%ldon=%ldevicted=%dparent=%ldin_pass=%ld\",");
+		const char* swap = strstr(body, "if(uw==2)");
+
+		ok(pre && born && swap && pre < born && born < swap &&
+			strstr(body, "log_on>=1024?1:0,spark_log_parent,"
+			"spark_log_in_pass);") != 0,
+			"spark life: born, one line per spark after its set-up", 0, 1);
+	}
+	ok(strstr(body, "if(i==8)if(gLogEnabled)Log(\"SPARKLOGlighttick=%u"
+		"slot=%ddyn=%ld\",(unsigned)GlobalCounter,(int)(sptr-spark),"
+		"dynamic);sptr->Dynamic=-1;}") != 0,
+		"spark life: light, said where no light is free, -1 kept", 0, 1);
+	ok(strstr(body, "sptr->extras=uchar(extras|((extras_table[extras]+("
+		"GetRandomControl()&7)+28)<<3));sptr->Dynamic=(char)dynamic;") != 0,
+		"spark life: the chain's arithmetic untouched", 0, 1);
+
+	// Fire, and the parent and the flag around the links only.
+	glass_body(fx, "void UpdateSparks()", body, sizeof(body));
+	{
+		const char* fire = strstr(body, "extras&7)if(gLogEnabled)Log(\""
+			"SPARKLOGfiretick=%uslot=%dage=%dchain=%dfires_at=%d\"\"dyn=%d\","
+			"(unsigned)GlobalCounter,i,");
+		const char* set = strstr(body, "spark_log_parent=i;"
+			"spark_log_in_pass=1;for(intj=0;j<(sptr->extras&7);j++)"
+			"TriggerExplosionSparks(sptr->x,sptr->y,sptr->z,(sptr->extras&7)"
+			"-1,sptr->Dynamic,uw,sptr->RoomNumber);sptr->Dynamic=-1;}"
+			"spark_log_parent=-1;spark_log_in_pass=0;");
+
+		ok(fire && set && fire < set,
+			"spark life: fire, before the links; parent set around them", 0,
+			1);
+	}
+	ok(strstr(body, "if(!sptr->Life)if(gLogEnabled&&sptr->extras&7)"
+		"SparkLogEnd(i,\"life\");if(sptr->Dynamic!=-1)spark_dynamics["
+		"sptr->Dynamic].On=0;sptr->On=0;continue;}") != 0,
+		"spark life: end by life, then the original end", 0, 1);
+	ok(strstr(body, "if(sptr->R<8&&sptr->G<8&&sptr->B<8)if(gLogEnabled&&"
+		"sptr->extras&7)SparkLogEnd(i,\"fade\");sptr->On=0;continue;}") != 0,
+		"spark life: end by the fade, then the original end", 0, 1);
+	ok(strstr(body, "if(!sptr->On||sptr->Dynamic==-1)continue;") &&
+		strstr(body, "if(gLogEnabled&&sptr->Dynamic<0)Log(\""
+		"SPARKLOGlight_indextick=%uslot=%ddyn=%d\",(unsigned)GlobalCounter,i,"
+		"(int)sptr->Dynamic);dynamic=&spark_dynamics[sptr->Dynamic];") != 0,
+		"spark life: light_index is a Log call only, the index as it was", 0,
+		1);
+
+	// Evict: said before GetFreeSpark moves its start; the start at file
+	// scope, the function's own static gone.
+	glass_body(fx, "long GetFreeSpark()", body, sizeof(body));
+	ok(strstr(body, "if(gLogEnabled&&spark[free].On&&spark[free].extras&7)"
+		"Log(\"SPARKLOGendtick=%uslot=%ldwhy=evictage=%dchain=%d\"\""
+		"fires_at=%dlife=%dmin_life=%ldnext=%ld\",") &&
+		strstr(body, "(int)spark[free].Life,min_life,next_spark);next_spark="
+		"(free+1)&0x3FF;spark[free].extras=0;spark[free].Dynamic=-1;") &&
+		strstr(body, "next_spark=(free+1)&0x3FF;spark[free].extras=0;"
+		"spark[free].Dynamic=-1;spark[free].Def=(uchar)objects["
+		"DEFAULT_SPRITES].mesh_index;if(log_draw)SparkLogDrawAlloc(free,"
+		"log_next,log_on,0,_ReturnAddress());returnfree;}}free=0;"
+		"min_life=4095;") && !strstr(body, "static"),
+		"spark life: end by eviction, the two loops as they were", 0, 1);
+
+	// draw_alloc: the test and the count before the search, one line at
+	// each of the two returns, the caller's address from GetFreeSpark
+	// itself, never inlined.
+	ok(strstr(body, "log_draw=gLogEnabled&&InterpFrameSeedSaved();"
+		"log_next=next_spark;log_on=log_draw?SparkLogCountOn():0;"
+		"free=next_spark;sptr=&spark[next_spark];for(lp=0;lp<1024;lp++)") &&
+		strstr(body, "spark[free].Def=(uchar)objects[DEFAULT_SPRITES]."
+		"mesh_index;if(log_draw)SparkLogDrawAlloc(free,log_next,log_on,1,"
+		"_ReturnAddress());returnfree;") &&
+		hd_switch_count(fx, "__declspec(noinline) long GetFreeSpark()") == 1 &&
+		hd_switch_count(fx, "_ReturnAddress()") == 2,
+		"spark life: draw_alloc, tested before the search, said at both "
+		"returns", 0, 1);
+	glass_body(fx, "static void SparkLogDrawAlloc(long slot, long next, "
+		"long on, long evicted,", body, sizeof(body));
+	ok(!strcmp(body, "spark_log_draw_allocs++;Log(\"SPARKLOGdraw_alloctick=%u"
+		"frame=%ldtween=%dslot=%ldnext=%ld\"\"on=%ldevicted=%ldret=%lx\","
+		"(unsigned)GlobalCounter,SparkLogFrameNow(),InterpIsTweenFrame()?1:"
+		"0,slot,next,on,evicted,(unsignedlong)((uintptr_t)ret-(uintptr_t)"
+		"GetModuleHandle(0)));"),
+		"spark life: the draw_alloc line counts and writes, relative ret", 0,
+		1);
+	glass_body(fx, "long SparkLogTakeDrawAllocs()", body, sizeof(body));
+	ok(!strcmp(body, "constlongn=spark_log_draw_allocs;"
+		"spark_log_draw_allocs=0;returnn;"),
+		"spark life: the level's draw_allocs taken and reset", 0, 1);
+	ok(hd_switch_count(fx, "static long next_spark = 0;") == 1 &&
+		hd_switch_count(fx, "next_spark") == 10,
+		"spark life: next_spark one file static, read by the lines",
+		hd_switch_count(fx, "next_spark"), 10);
+	glass_body(fx, "static void SparkLogEnd(long slot, const char* why)",
+		body, sizeof(body));
+	ok(!strcmp(body, "SPARKS*sptr=&spark[slot];Log(\"SPARKLOGendtick=%u"
+		"slot=%ldwhy=%sage=%dchain=%dfires_at=%d\"\"life=%d\",(unsigned)"
+		"GlobalCounter,slot,why,(int)sptr->sLife-(int)sptr->Life,(int)("
+		"sptr->extras&7),(int)(sptr->extras>>3),(int)sptr->Life);"),
+		"spark life: the end line writes and changes nothing", 0, 1);
+
+	// Every life line behind the flag; the kill line stays the draw's.
+	ok(hd_switch_count(fx, "Log(\"SPARKLOG") == 7 &&
+		hd_switch_count(fx, "SparkLogEnd(i, \"") == 2 &&
+		hd_switch_count(fx, "SPARKLOG kill") == 0,
+		"spark life: seven Log calls, two ends by name, no kill line here",
+		hd_switch_count(fx, "Log(\"SPARKLOG"), 7);
+
+	// The accessor: the flag InterpEndFrame gives back by, nothing more.
+	glass_body(interp, "bool InterpFrameSeedSaved()", body, sizeof(body));
+	ok(!strcmp(body, "returng_seedSaved;") && hd_switch_count(interph,
+		"bool InterpFrameSeedSaved();") == 1,
+		"spark life: InterpFrameSeedSaved reads g_seedSaved", 0, 1);
+
+	// The rain: a line before each of DoRain's two calls, the calls into
+	// the weather's own pools (#318, weather_rule) with the places as they
+	// were; the frame as S_DrawSparks counted it.
+	glass_body(sfx, "void DoRain()", body, sizeof(body));
+	ok(strstr(body, "if(room[room_number].flags&ROOM_UNDERWATER&&(i&7)==7)"
+		"if(gLogEnabled)SparkLogRain(\"ripple\",rptr,room_number);"
+		"WeatherRipple(rptr->x,GetWaterHeight(rptr->x,rptr->y,rptr->z,"
+		"room_number),rptr->z);}elseif(gLogEnabled)SparkLogRain("
+		"\"splash\",rptr,room_number);WeatherSplash(rptr->x,GetHeight("
+		"floor,rptr->x,rptr->y,rptr->z),rptr->z);}rptr->x=0;continue;}") &&
+		hd_switch_count(sfx, "SparkLogRain(\"") == 2,
+		"spark life: rain, one line before the ripple and the splash", 0, 1);
+	ok(hd_switch_count(sfx, "Log(\"SPARKLOG rain what=%s tick=%u frame=%ld "
+		"tween=%d drop=%ld,%ld,%ld \"") == 1 &&
+		hd_switch_count(sfx, "\"cam=%ld,%ld,%ld room=%d\"") == 1,
+		"spark life: the rain line's fields", 0, 1);
+	glass_body(sfx, "long SparkLogFrameNow()", body, sizeof(body));
+	ok(!strcmp(body, "returnGlobalCounter==spark_log_tick?spark_log_frame:"
+		"0;"), "spark life: the frame of the tick, 0 before its first", 0, 1);
+
+	// The level line after RNGLOG, its counters reset there; the weather
+	// pools' peaks at its end (#318), reset by their own clear.
+	glass_body(sfx, "void SparkLogLevelEnd()", body, sizeof(body));
+	ok(!strcmp(body, "constlongallocs=SparkLogTakeDrawAllocs();if("
+		"gLogEnabled)Log(\"SPARKLOGleveldraw_allocs=%ldsplashes=%ldripples="
+		"%ld\"\"weather_peak=%ldweather_ripple_peak=%ld\",allocs,"
+		"spark_log_splashes,spark_log_ripples,WeatherSparksPeak(),"
+		"WeatherRipplesPeak());spark_log_splashes=0;spark_log_ripples=0;"),
+		"spark life: the level line, its counters reset after it", 0, 1);
+	glass_body(draw, "void LaraJointsLevelEnd()", body, sizeof(body));
+	ok(strstr(body, "g_joints.serial=serial;InterpRngLevelEnd();"
+		"SparkLogLevelEnd();") != 0,
+		"spark life: the level line right after RNGLOG", 0, 1);
+
+	// The base's far-plane branch still ends the spark (no fix here).
+	glass_body(sfx, "void S_DrawDrawSparksNEW(SPARKS* sptr, long "
+		"smallest_size, float* xyz)", body, sizeof(body));
+	ok(strstr(body, "if(xyz[2]>=f_mzfar)if(gLogEnabled)SparkLog(\"kill\","
+		"sptr,xyz[2]);sptr->On=0;}return;}") != 0,
+		"spark life: the far plane still turns the spark off", 0, 1);
+
+	free(fx);
+	free(sfx);
+	free(interp);
+	free(interph);
+	free(draw);
+}
+
+/* The weather owns its splashes (#318). DoRain runs on the frame, and what
+ * a landing drop left - a spark of the logic's spark[] through
+ * TriggerSmallSplash, a slot of ripples[] through SetupRipple, and their
+ * draws of the logic's generator - moved the logic's next allocation by
+ * the frame timing. Now both are the weather's own pools
+ * (specific\weather_sparks.cpp). In the text: DoRain names none of the
+ * logic's spark, ripple or generator calls; the pool's file names none
+ * either; its step runs once, inside DoRain's simulation half, the ripples'
+ * before the drops land and the splashes' after; its clear at the rain's
+ * reset; its draws in S_DrawSparks and S_DrawSplashes; and the made and
+ * stepped fields are the logic's own statements, held against
+ * TriggerSmallSplash, UpdateSparks, SetupRipple and UpdateSplashes with
+ * the generator's name the only difference. This group only reads text. */
+static void weather_rule()
+{
+	char* sfx = hd_switch_text("../specificfx.cpp");
+	char* wsp = hd_switch_text("../weather_sparks.cpp");
+	char* wsh = hd_switch_text("../weather_sparks.h");
+	char* t4 = hd_switch_text("../../game/tomb4fx.cpp");
+	char* fx = hd_switch_text("../../game/effect2.cpp");
+	static char rain[262144];
+	static char guard[262144];
+	static char a[65536];
+	static char b[65536];
+	static char c[65536];
+
+	ok(sfx && wsp && wsh && t4 && fx, "weather rule: the five files", 0, 1);
+
+	// DoRain calls nothing of the logic's sparks, ripples or generator.
+	glass_body(sfx, "void DoRain()", rain, sizeof(rain));
+	ok(rain[0] && !strstr(rain, "TriggerSmallSplash") &&
+		!strstr(rain, "GetFreeSpark") && !strstr(rain, "GetRandomControl") &&
+		!strstr(rain, "SetupRipple") && !strstr(rain, "spark["),
+		"weather rule: DoRain takes nothing of the logic's", 0, 1);
+
+	// The pool's file draws nothing from the logic and holds no spark[].
+	ok(!strstr(wsp, "GetRandomControl") && !strstr(wsp, "GetFreeSpark") &&
+		!strstr(wsp, "spark[") && hd_switch_count(wsp, "GetRandomDraw()")
+		== 4, "weather rule: the pool draws the draw's generator only",
+		hd_switch_count(wsp, "GetRandomDraw()"), 4);
+
+	// The steps: once each, both inside the non-tween guard - the ripples'
+	// before the drops loop, the splashes' as its last statement.
+	glass_body(sfx ? strstr(sfx, "void DoRain()") : 0,
+		"if (!InterpIsTweenFrame())", guard, sizeof(guard));
+	{
+		const char* r = strstr(guard, "*/WeatherRipplesStep();for(inti=0;"
+			"i<rain_count;i++)rptr=&Rain[i];");
+		const size_t n = strlen(guard);
+		const char* tail = "rptr->x=0;}}WeatherSparksStep();";
+
+		ok(!strncmp(guard, "InterpNoteStep(INTERP_STEP_WEATHER);/*", 38) &&
+			r && n > strlen(tail) && !strcmp(guard + n - strlen(tail), tail),
+			"weather rule: ripples step before the drops, splashes after", 0,
+			1);
+	}
+	ok(hd_switch_count(sfx, "WeatherSparksStep();") == 1 &&
+		hd_switch_count(sfx, "WeatherRipplesStep();") == 1 &&
+		hd_switch_count(guard, "WeatherSparksStep();") == 1 &&
+		hd_switch_count(guard, "WeatherRipplesStep();") == 1,
+		"weather rule: each step called once, inside the guard",
+		hd_switch_count(sfx, "WeatherSparksStep();"), 1);
+
+	// The clear at the rain's reset, and only there.
+	glass_body(sfx, "void ClearFX()", a, sizeof(a));
+	{
+		const char* tail = "drops.WeatherSparksClear();";
+		const size_t n = strlen(a);
+
+		ok(strstr(a, "Rain[i].x=0;Snow[i].x=0;}//") && n > strlen(tail) &&
+			!strcmp(a + n - strlen(tail), tail) &&
+			hd_switch_count(sfx, "WeatherSparksClear()") == 1,
+			"weather rule: the pools clear with the drops", 0, 1);
+	}
+
+	// The draws: S_DrawSparks' loop and the pool through one helper, inside
+	// its matrix; the ripples after S_DrawSplashes' own.
+	glass_body(sfx, "void S_DrawSparks()", a, sizeof(a));
+	ok(hd_switch_count(a, "moved+=S_DrawOneSpark(sptr,x,y,z,pa,&smallest_"
+		"size);") == 1 && strstr(a, "moved+=WeatherSparksDraw();"
+		"phd_PopMatrix();InterpNoteParticles(INTERP_PART_SPARK,moved);"),
+		"weather rule: the pool drawn by S_DrawSparks' own lines", 0, 1);
+	glass_body(wsp, "long WeatherSparksDraw()", a, sizeof(a));
+	ok(strstr(a, "constfloatpa=InterpIsTweenFrame()?InterpParticleAlpha():"
+		"1.0F;") && strstr(a, "moved+=S_DrawOneSpark(sptr,sptr->x,sptr->y,"
+		"sptr->z,pa,&smallest_size);"),
+		"weather rule: untrailed on the frame that steps them", 0, 1);
+	glass_body(sfx, "void S_DrawSplashes()", a, sizeof(a));
+	ok(strstr(a, "if(ripple->flags&1)S_DrawOneRipple(ripple);}/*") &&
+		hd_switch_count(a, "*/WeatherRipplesDraw();") == 1,
+		"weather rule: the pool's ripples drawn by S_DrawSplashes", 0, 1);
+
+	// The sizes, as measured: 752 splashes alive at most in four runs.
+	ok(shell_number(wsh, "#define WEATHER_SPARKS") == 1024.0 &&
+		shell_number(wsh, "#define WEATHER_RIPPLES") == 128.0,
+		"weather rule: 1024 splashes, 128 ripples",
+		(long)shell_number(wsh, "#define WEATHER_SPARKS"), 1024);
+
+	// The splash: TriggerSmallSplash's statements for one spark, the
+	// generator's name the one difference.
+	glass_body(t4, "void TriggerSmallSplash(long x, long y, long z, "
+		"long num)", a, sizeof(a));
+	{
+		const char* s = strstr(a, "sptr->On=1;");
+		const char* e = s ? strstr(s, "num--;") : 0;
+		size_t m = 0;
+
+		for (const char* p = s; p && p < e && m + 1 < sizeof(b); )
+		{
+			if (!strncmp(p, "GetRandomControl", 16))
+			{
+				memcpy(b + m, "GetRandomDraw", 13);
+				m += 13;
+				p += 16;
+			}
+			else
+				b[m++] = *p++;
+		}
+
+		b[m] = 0;
+		glass_body(wsp, "void WeatherSplash(long x, long y, long z)", c,
+			sizeof(c));
+		ok(m > 300 && strstr(c, b) && strstr(c, "memset(sptr,0,sizeof("
+			"SPARKS));sptr->Dynamic=-1;sptr->Def=(uchar)objects["
+			"DEFAULT_SPRITES].mesh_index;sptr->On=1;"),
+			"weather rule: the splash made as TriggerSmallSplash makes it",
+			(long)m, 1);
+	}
+
+	// The step: UpdateSparks' statements for what a splash takes.
+	glass_body(fx, "void UpdateSparks()", a, sizeof(a));
+	glass_body(wsp, "void WeatherSparksStep()", c, sizeof(c));
+	{
+		static const char* const step[] = {
+			"if(!sptr->On)continue;sptr->Life--;if(!sptr->Life)",
+			"if(sptr->sLife-sptr->Life<sptr->ColFadeSpeed)fade=((sptr->"
+			"sLife-sptr->Life)<<16)/sptr->ColFadeSpeed;sptr->R=uchar(sptr->"
+			"sR+((fade*(sptr->dR-sptr->sR))>>16));sptr->G=uchar(sptr->sG+(("
+			"fade*(sptr->dG-sptr->sG))>>16));sptr->B=uchar(sptr->sB+((fade*("
+			"sptr->dB-sptr->sB))>>16));}elseif(sptr->Life<sptr->FadeToBlack)"
+			"fade=((sptr->Life-sptr->FadeToBlack)<<16)/sptr->FadeToBlack+"
+			"0x10000;sptr->R=uchar((sptr->dR*fade)>>16);sptr->G=uchar((sptr"
+			"->dG*fade)>>16);sptr->B=uchar((sptr->dB*fade)>>16);if(sptr->R<"
+			"8&&sptr->G<8&&sptr->B<8)",
+			"}elsesptr->R=sptr->dR;sptr->G=sptr->dG;sptr->B=sptr->dB;}",
+			"sptr->Yvel+=sptr->Gravity;",
+			"if(sptr->Friction&0xF)sptr->Xvel-=sptr->Xvel>>(sptr->Friction&"
+			"0xF);sptr->Zvel-=sptr->Zvel>>(sptr->Friction&0xF);}",
+			"sptr->x+=sptr->Xvel>>5;sptr->y+=sptr->Yvel>>5;sptr->z+=sptr->"
+			"Zvel>>5;",
+		};
+		long held = 0;
+
+		for (size_t i = 0; i < sizeof(step) / sizeof(step[0]); i++)
+			held += strstr(a, step[i]) && strstr(c, step[i]) ? 1 : 0;
+
+		ok(held == 6 && strstr(c, "sptr->On=0;continue;}") &&
+			!strstr(c, "Dynamic") && !strstr(c, "extras") &&
+			!strstr(c, "SmokeWind") && !strstr(c, "GetRandom"),
+			"weather rule: the splash steps as UpdateSparks steps it", held,
+			6);
+	}
+
+	// The ripple: SetupRipple's set-up and UpdateSplashes' loop.
+	glass_body(fx, "void SetupRipple(long x, long y, long z, long size, "
+		"long flags)", a, sizeof(a));
+	glass_body(wsp, "void WeatherRipple(long x, long y, long z)", c,
+		sizeof(c));
+	ok(strstr(a, "ripple->life=(GetRandomControl()&0xF)+48;ripple->init=1;"
+		"ripple->x=x;ripple->y=y;ripple->z=z;") && strstr(c,
+		"ripple->flags=1;ripple->size=3;ripple->life=(GetRandomDraw()&0xF)+"
+		"48;ripple->init=1;ripple->x=x;ripple->y=y;ripple->z=z;") &&
+		strstr(c, "if(num>=WEATHER_RIPPLES)return;"),
+		"weather rule: the ripple made as SetupRipple(.., 3, 0) makes it", 0,
+		1);
+	glass_body(fx, "void UpdateSplashes()", a, sizeof(a));
+	glass_body(wsp, "void WeatherRipplesStep()", c, sizeof(c));
+	{
+		const char* loop = "if(ripple->size<252)if(ripple->flags&2)ripple->"
+			"size+=2;elseripple->size+=4;}if(ripple->init)if(ripple->init<"
+			"ripple->life)if(ripple->flags&2)ripple->init+=8;elseripple->"
+			"init+=4;if(ripple->init>=ripple->life)ripple->init=0;}}else"
+			"ripple->life-=3;if(ripple->life>250)ripple->flags=0;}";
+
+		ok(strstr(a, loop) && strstr(c, loop),
+			"weather rule: the ripple steps as UpdateSplashes steps it", 0, 1);
+	}
+
+	free(sfx);
+	free(wsp);
+	free(wsh);
+	free(t4);
+	free(fx);
+}
+
 /* The films of the 64-bit build (specific\fmv_av.cpp): FFmpeg's Bink
  * decoders in three DLLs beside the EXE, loaded at run time. The conversion
  * of its pictures (specific\yuv_rgb.cpp, compiled beside this test) on known
@@ -37213,9 +37601,11 @@ static void logic_leftovers()
 		"undone=%ld kept_frames=%ld \"") == 1,
 		"leftovers: one RNGLOG line", 0, 1);
 	glass_body(draw, "void LaraJointsLevelEnd()", body, sizeof(body));
-	a = (long)strlen(body) - (long)strlen("InterpRngLevelEnd();");
-	ok(a > 0 && joints_at(body, "InterpRngLevelEnd();") == a,
-		"leftovers: RNGLOG follows JOINTLOG", 0, 1);
+	a = (long)strlen(body) - (long)strlen("InterpRngLevelEnd();"
+		"SparkLogLevelEnd();");
+	ok(a > 0 && joints_at(body, "InterpRngLevelEnd();SparkLogLevelEnd();") ==
+		a, "leftovers: RNGLOG follows JOINTLOG, then SPARKLOG's level line",
+		0, 1);
 
 	glass_body(draw, "void PrintObjects(short room_number)", body,
 		sizeof(body));
@@ -37532,6 +37922,8 @@ int main()
 	x64_layout();
 	replay_rule();
 	rngtrace_rule();
+	spark_life();
+	weather_rule();
 	film_av();
 	collide_lists();
 	lara_joints();

@@ -168,6 +168,13 @@ bool InterpDrawnFrameWasTween();
  * when it is true. Always false at fps_mode 0. */
 bool InterpFrameBlended();
 
+/* The frame being drawn saved the generator's state and InterpEndFrame
+ * gives it back (g_seedSaved): from InterpBeginFrame to InterpEndFrame on
+ * a tween frame, a blended one and every frame of fps_mode 2's display
+ * cadence; false between frames, so a tick never sees it. SPARKLOG only
+ * (game\effect2.cpp, GetFreeSpark's draw_alloc line). */
+bool InterpFrameSeedSaved();
+
 /* RNGLOG, one line per level with -log: the frames, the frames that gave
  * the generator's state and GetHeight's globals back and the draws they
  * undid, the frames that kept them and the draws they left in the stream.

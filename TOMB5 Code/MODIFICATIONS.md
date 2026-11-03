@@ -18052,7 +18052,7 @@ is written as before, and the frame's calls are the old ones in the old order.
 `game/deltapak.h` carries the modification notice now. ModernTest's group `lara_joints`
 (13 checks) holds the order and the wiring in the engine's text.
 
-What the frames leave behind besides the joints, four more:
+What the frames leave behind besides the joints, five more:
 - The generator's state. `game/interpolate.cpp`: `InterpBeginFrame` saves the state of
   `GetRandomControl` at every frame, and `InterpEndFrame` gives it back after a tween
   frame, after a blended frame and after every frame of the display's cadence. At
@@ -18095,6 +18095,9 @@ What the frames leave behind besides the joints, four more:
   for the rest of the tick at most, with the door's portal at the edge of the view. At
   *Display* the residual is the corpse marks': the lists follow that blended frame's
   camera, once per tick.
+- The rain's splashes and ripples. `DoRain` made them on the frame that carries the
+  tick, in the logic's `spark[]` and `ripples[]`; their draws went back, the slots and
+  the spark cursor stayed. They are the weather's own pools now - see #318.
 
 With `-log`, `RNGLOG frames= given_back= undone= kept_frames= kept_draws= heights= over=`
 follows each `JOINTLOG` line (`InterpRngLevelEnd`): the draws counted as steps of the
@@ -18370,6 +18373,260 @@ fields and overflow, the place before `STATELOG`, the reading in `WinMain`, and 
 seven marks in their order.
 
 **Commits.** `a2fd0238`.
+
+### SPARKLOG: a spark's life and what the draw takes (#317)
+2026-11-03
+
+The thesis this entry began with - the draw ending a spark at the far plane - was
+measured and refuted (**What the first run showed**); the far-plane end stands as it
+was, with its `kill` line. What the entry adds are the SPARKLOG seams that found the
+cause, the rain's splashes (#318).
+
+**Found.** A recording made at *Display* replayed equal to itself with the recorded clock
+and parted from it with `-liveclock` at tick 842 (`REPLAYLOG drift`). `-rngtrace 836 845`
+on both runs (#316) showed the span of tick 842 equal through the marks `items`,
+`effects`, `lara` and `camera`, and 26 draws of the logic generator longer in the live run
+before the mark `tick`: one chained explosion, `TriggerExplosionSparks` with 13 draws and
+`TriggerExplosionSmokeEnd` with 13, fired from `UpdateSparks` (`game/effect2.cpp`) when a
+spark whose `extras & 7` is set reaches the age `extras >> 3`. That trigger counts ticks,
+and both runs had drawn the same numbers up to it, so the spark lived in one run and was
+gone in the other. The one writer that ends a spark outside the logic is the draw:
+`S_DrawDrawSparksNEW` (`specific/specificfx.cpp`) sets its `On` to 0 when the spark's
+view-space depth reached the far plane (`f_mzfar`). That depth comes from the frame's
+camera - at *Display* the blended camera, on each of the two or more frames of a tick - so
+a spark near the view distance was ended or not by where the frames fell, and
+`GetFreeSpark` then handed out other slots. The object that exploded in that run was a
+helicopter far from Lara. With one exact frame per tick, as in the original, the kill was
+deterministic. It also keeps the spark's explosion light taken for good: `spark_dynamics`
+holds eight, and only `UpdateSparks` frees one, when its spark's `Life` runs out.
+
+The draw's other writes into the particles `ControlPhase` walks, measured: a drip ends in
+`DrawDrips` deeper than 0x5000 in view, a bubble in `DrawBubbles` outside 0x5000 of the
+camera, deeper than that or at the eye - the logic reads both (a drip landing in an even
+slot splashes through `TriggerDripSplash`, a bubble reaching air sets a ripple, both with
+draws), so they are the same kind of leak, rarer, and left as they are with a line each
+below; a spark lets go of the effect or bone it hangs off in `S_DrawSparks` (`x/y/z` and
+`Flags`, timed by the draw generator on the tick's frame) - the logic reads the position
+(the chained explosion's place, the fire and damage test against Lara) but draws the same
+count; the rain's splashes and ripples (`DoWeather`, slot use only); the HD bodies' rings
+(`hd_life.cpp`, HD only; `SetupRipple` skips its draw when all 128 ripples are taken).
+Lightning's flag 8 is read by nothing in the logic. No spark depends on the draw to end:
+every one ends in `UpdateSparks` by its `Life` or by fading out.
+
+**SPARKLOG.** A new `-log` family, one line per particle the draw ends:
+
+    SPARKLOG kill tick=<GlobalCounter> frame=<n> alpha=<InterpAlphaNow> tween=<0/1>
+        z=<view depth> zfar=<f_mzfar> slot=<index> life=<Life> slife=<sLife>
+        age=<sLife - Life> extras=<extras> chain=<extras & 7> fires_at=<extras >> 3>
+        fx=<SF_FX set> dyn=<Dynamic>
+    SPARKLOG drip kill tick= frame= alpha= tween= why=far z= slot= life=
+    SPARKLOG bubble kill tick= frame= alpha= tween= why=box|far|near z= slot= life=<size>
+
+`frame` counts the frames drawn since `GlobalCounter` changed, 1 the first; `S_DrawSparks`
+counts them and runs before the drips and the bubbles. A `kill` with `chain=` above 0 and
+`age=` below `fires_at=` is a chained explosion that will not happen.
+
+**What the first run showed.** The same recording replayed with this seam, once with the
+recorded clock and once with `-liveclock` (which parted at tick 842 as before), wrote no
+`SPARKLOG` line at all: the draw ended no spark, drip or bubble in either run. The account
+under **Found**, the far plane ending the spark that fires the chain, is refuted for that
+recording. What stands is the `-rngtrace` difference: one last link of a chain (`extras`
+0, 13 + 13 draws) fired in the live run's span of tick 842 and not in the other, while the
+two links before it with smoke came in both. Which spark fired it, and why the other run
+had none, is open.
+
+**SPARKLOG life lines.** Five more lines of the family follow a spark that carries a
+chain (`extras & 7`) from its birth to its end, in `game/effect2.cpp`:
+
+    SPARKLOG born tick=<GlobalCounter> slot=<j> chain=<extras & 7> fires_at=<extras >> 3>
+        life=<Life> dyn=<Dynamic> next=<next_spark before the call> on=<sparks on before
+        the call> evicted=<0/1> parent=<firing slot, or -1> in_pass=<0/1>
+    SPARKLOG fire tick= slot= age=<sLife - Life> chain= fires_at= dyn=
+    SPARKLOG end tick= slot= why=life|fade age= chain= fires_at= life=
+    SPARKLOG end tick= slot= why=evict age= chain= fires_at= life= min_life= next=
+    SPARKLOG light tick= slot= dyn=<the call's dynamic, -2>
+    SPARKLOG light_index tick= slot= dyn=<Dynamic>
+
+`born` is written by `TriggerExplosionSparks` for every spark it makes, the mirror's
+included, after its set-up; `next` and `on` are read before `GetFreeSpark`, and
+`evicted=1` means all 1024 slots were on, so `GetFreeSpark` took the spark with the least
+`Life` that has `Dynamic` -1 and no `SF_NOKILL`. `parent` and `in_pass` come from two file
+statics that `UpdateSparks` sets around its chain call and clears after: a link born
+inside the pass into a slot above its parent counts its first `Life--` in the same pass.
+`fire` is written in `UpdateSparks` when a spark's chain fires, before its links. `end`
+names a spark whose `extras & 7` is still set when it ends: its `Life` ran out, its fade
+fell below 8, or `GetFreeSpark`'s second loop took it while on (`min_life` and the
+caller's `next_spark`); the draw's end of a spark is the `kill` line above, so it has no
+`end` line. `light` is written where `TriggerExplosionSparks`, asked with `dynamic` -2,
+finds none of the eight `spark_dynamics` free; the spark then gets `Dynamic` -1, as
+before. `light_index` is written in `UpdateSparks`' second loop for a spark whose
+`Dynamic` is below -1, and the loop then indexes `spark_dynamics` with it as before -
+outside the array, reading and writing. In this code no writer leaves `Dynamic` below -1
+(the `light` case sets -1; the callers pass -2, -1 or 0, the chain its parent's light), so
+the line watches for it and changes nothing. `GetFreeSpark`'s `next_spark` moved from a
+function static to file scope, so the `born` line can read it; its start and its writes
+are the same.
+
+Cost with `-log` off: one test of `gLogEnabled` per spark `TriggerExplosionSparks` makes,
+per chain fired, per spark ending by life or fade, per eviction and per spark holding a
+light in the second loop, and two stores of the statics per chain fired. With `-log` the
+lines come only for explosions, and each `born` counts the 1024 slots once. To pair two
+runs: the live run's `SPARKLOG fire` that the other lacks names a slot, and the last
+`born` in that slot before it its born tick; the other log's lines for that slot and born
+tick tell its fate there.
+
+**What the second run showed.** The same pair replayed with the life lines did not part:
+no `REPLAYLOG drift` in either log, and `-rngtrace` equal over 840-843. Yet every chain
+spark sat two slots apart between the runs from the first `born` on - `born tick=834
+slot=1008 next=1008 on=41` with the recorded clock against `slot=1006 next=1006 on=41`
+with `-liveclock`: the same count of sparks on, the same state of the logic generator,
+`GetFreeSpark`'s start two slots further in the recorded-clock run. So something takes
+spark slots without a lasting draw of the logic generator. RNGLOG of that level says
+`undone=110` in both runs: 110 draws of the logic generator made inside frames and given
+back. The level has weather, and the simulation half of `DoRain` (on the frame that is
+not a tween frame, around the frame's camera, with the draw generator) ends a drop with
+`TriggerSmallSplash` (`game/tomb4fx.cpp`: `GetFreeSpark` and three `GetRandomControl`
+draws per spark, `Life` 24) or `SetupRipple`. `InterpEndFrame` gives the draws back; the
+sparks stay on and `next_spark` stays where the draw left it. That the rain's splashes are
+the allocations that part the two runs' slots, and through them the tick a chain fires
+at, is to be shown by the next pair.
+
+**SPARKLOG draw-side lines.** Three more lines of the family:
+
+    SPARKLOG draw_alloc tick=<GlobalCounter> frame=<n> tween=<0/1> slot=<the slot
+        returned> next=<next_spark before> on=<sparks on before> evicted=<0/1>
+        ret=<the caller's address minus the module's base, hex>
+    SPARKLOG rain what=splash|ripple tick= frame= tween= drop=<x,y,z>
+        cam=<camera.pos x,y,z> room=<room_number>
+    SPARKLOG level draw_allocs=<n> splashes=<n> ripples=<n>
+
+`draw_alloc` is written by `GetFreeSpark` (`game/effect2.cpp`) at either of its returns
+when the call comes inside a drawn frame that gives the generator's state back:
+`InterpFrameSeedSaved()` (`game/interpolate.cpp`) returns `g_seedSaved`, set by
+`InterpBeginFrame` on a tween frame, a blended one and every frame of fps_mode 2's display
+cadence, and cleared by `InterpEndFrame` - so a tick never sees it, and a frame that keeps
+its draws (fps_mode 0 and 1 at the tick's own state) writes no `draw_alloc`. `ret` is
+written as `-rngtrace` writes its addresses; `GetFreeSpark` is declared `noinline` so that
+`_ReturnAddress` names its caller under whole-program optimisation. `frame` is the frame
+within the tick as `S_DrawSparks` counted it last (`SparkLogFrameNow`, 0 before its first
+frame of the tick). `rain` is written in `DoRain` (`specific/specificfx.cpp`) before each
+of its two calls, with the drop's position and the frame's camera. `level` is written by
+`LaraJointsLevelEnd` (`game/draw.cpp`) right after RNGLOG, from three file-static counters
+reset there, as RNGLOG's are.
+
+Cost with `-log` off: one test of `gLogEnabled` per `GetFreeSpark` call and one per drop
+that ends in a splash or a ripple; `GetFreeSpark` is now always a call. With `-log` each
+`GetFreeSpark` call also asks `InterpFrameSeedSaved`, and each `draw_alloc` counts the
+1024 slots once. `spark_life.py --allocs` lists the `draw_alloc` lines of two logs up to a
+tick with their running count, the two counts per tick and the difference, and the
+`next=` of the first `born` after in each.
+
+### The weather owns its splash sparks (#318)
+2026-11-04
+
+**Found.** A recording made at *Display* replayed equal to itself with the recorded clock
+and parted from it with `-liveclock` at tick 842, in three live replays out of three.
+`-rngtrace 836 845` (#316) put the parting at 26 draws of the logic generator in the span
+of tick 842: the last link of a chained explosion (`TriggerExplosionSparks` 13,
+`TriggerExplosionSmokeEnd` 13) fired a tick earlier in the live runs. The far-plane cull
+was measured first and wrote no line (#317); wet nodes, the fly cheat, water and the light
+index were ruled out the same way. SPARKLOG's life lines then showed the field that
+parted: the spark slot. The chain's sparks were born in other slots from the first `born`
+on, with the same count of sparks on and the same state of the logic generator -
+`born tick=834 slot=1008 next=1008` with the recorded clock, `next=967` in the first live
+run. SPARKLOG's draw-side lines named the taker: 3811 `draw_alloc` lines in the
+recorded-clock run, every one with `ret=` in `TriggerSmallSplash` called by `DoRain`
+(`specific/specificfx.cpp`). The rain's simulation half runs on the frame that carries
+the tick, around that frame's camera and with the draw generator, and each drop that
+lands made one spark in the logic's `spark[]` through `GetFreeSpark`, with three
+`GetRandomControl` draws. `InterpEndFrame` gave the draws back (RNGLOG `undone=`); the
+spark and `GetFreeSpark`'s cursor `next_spark` stayed. In this recording the rain falls in
+the title's flyby (231 ticks): 3714 splashes in the recording's replay, 3673, 3659 and
+3753 in the live ones - the count hangs on where the frames fall. `next_spark` is a file
+static no level start resets (`InitialiseEffects` clears `spark[]`, not the cursor), so
+the title's splashes decided where the level's explosion sparks landed: 1008 - 967 = 41 =
+3714 - 3673 (`spark_life.py --allocs`). The chain's last link is born inside
+`UpdateSparks`' pass (`in_pass=1`): with the recorded clock it landed below its parent
+(slot 8 under 1010, past the wrap) and counted its first `Life--` only on the next pass,
+firing at 842; in all three live runs above its parent (991 over 969, 977 over 955, 47
+over 25), counting it in the same pass and firing at 841 - the 26 draws. With one exact
+frame per tick, as in the original, the rain's count was the same every time.
+
+**Changed.** What a landing drop leaves is the weather's own.
+`specific/weather_sparks.cpp` and `.h` (new; both platforms in `tomb5.vcxproj` and its
+filters) hold a pool of 1024 `SPARKS` with its own cursor and one of 128
+`RIPPLE_STRUCT`, and nothing in the logic reads them:
+
+- `WeatherSplash(x, y, z)` is `TriggerSmallSplash` for one spark, its statements in their
+  order with `GetRandomDraw` for `GetRandomControl` - the same three draws over the same
+  ranges. Its slot is the first free one from the pool's cursor, else the one with the
+  least `Life`. The slot is cleared first and gets `Dynamic` -1 and the default sprite as
+  `GetFreeSpark` gave them, so nothing of a previous spark is left in it. That is a change
+  in principle only: the logic's slot kept the sizes, the scalar, the turn and the room
+  from whoever held it before (in the rainy title mostly another splash), and none of
+  them is read for a splash, which has no `SF_DEF` and is drawn as a line.
+- `WeatherRipple(x, y, z)` is `SetupRipple(x, y, z, 3, 0)` the same way: first free slot,
+  none made when all are taken, its one draw from the draw generator.
+- `WeatherSparksStep()` is `UpdateSparks`' pass cut to what a splash takes: the life, the
+  colour from start to end over `ColFadeSpeed`, the fade to black under `FadeToBlack`
+  with its end below 8, gravity, the friction's low bits, the move. A splash takes none
+  of the rest - no `MaxYvel`, no high friction bits, no wind, no rotation, no chain, no
+  fire or damage test, no light; the size the pass walks is never read for it.
+  `WeatherRipplesStep()` is `UpdateSplashes`' ripple loop.
+- `DoRain` calls the two in place of `TriggerSmallSplash` and `SetupRipple`, the
+  `SPARKLOG rain` line before each as before, and steps the pools inside its non-tween
+  guard: the ripples before the drops loop, the splashes after it - once per frame at 30,
+  once per tick at the display's rate, as the drops themselves. `ClearFX` clears both
+  pools with the drops (`WeatherSparksClear`).
+- The draw: `S_DrawSparks`' per-spark body is `S_DrawOneSpark` now and `S_DrawSplashes`'
+  per-ripple body `S_DrawOneRipple`, the same lines for the logic's arrays and the pools:
+  `WeatherSparksDraw` inside `S_DrawSparks`' matrix after the logic's sparks,
+  `WeatherRipplesDraw` after the logic's ripples. The pool's splashes are stepped by
+  `DoRain` after `S_DrawSparks` has drawn, so the frame that carries the tick draws them
+  untrailed and the frames after it trail them back by the step just taken.
+
+The ripples too, because the logic reads `ripples[]` and `SetupRipple` draws from the
+logic generator: `UpdateSplashes` ages them, and `SetupRipple` and
+`TriggerUnderwaterBlood` skip their draws when all 128 are taken. The snow takes nothing
+of the logic's and is unchanged. The pool's size is measured: the four runs above had
+722 to 752 splashes alive at most, 410 to 423 on average (a splash lives 22 steps); 1024
+is the spark array's own size, the most the original could ever hold of them, and a full
+pool gives up the splash with the least life, as `GetFreeSpark` did. The ripples' 128 is
+the logic's own ceiling, which the rain shared; those runs had no rain on water.
+
+**What changes in behaviour.** At fps_mode 0 a splash and a rain ripple go through the
+same states on the same frames as before: the frame draws the sparks, then the rain, then
+the ripples, and the tick after it stepped both - stepping the splashes after the drops
+and the ripples before them gives the same order. Only a frame whose `ControlPhase` ran
+two ticks stepped the old splash twice; the pool steps once, like the drops. Their
+randomness is the draw generator's now. The logic generator no longer advances by the
+rain at any rate: at *Display* the draws were given back before; at 30 and on the live
+frame at 60 they were kept (RNGLOG `kept_draws`), three per splash and one per ripple, so
+**the logic's random sequence at classic rate changes, relative to before, in every
+level where rain lands** - intended, the weather must not touch the logic. `spark[]`'s
+cursor no longer moves by the rain, and the rain no longer fills the logic's array (up to
+752 of 1024 slots), so no logic spark is evicted for a splash. At the display's rate a
+splash goes through its states one tick sooner than before and no longer shows its birth
+tick in the previous spark's colour with a trail of a step it never took. A recording
+made before this change does not replay with it, in either clock: its logic carries the
+old splash slots.
+
+**SPARKLOG.** The level line gains two fields at its end:
+
+    SPARKLOG level draw_allocs= splashes= ripples= weather_peak=<most pool splashes alive
+        at once> weather_ripple_peak=<most pool ripples alive at once>
+
+both since `WeatherSparksClear` at the level's load. After this change no `draw_alloc`
+line names `TriggerSmallSplash`, and `weather_peak` stays under 1024. ModernTest's group
+`weather_rule` (14 checks) holds it in the engine's text: `DoRain` naming none of the
+logic's spark, ripple or generator calls, the pool's file none of them, the two steps
+once each in their places in the guard, the clear, the two draws, the sizes, and the made
+and stepped fields statement by statement against `TriggerSmallSplash`, `UpdateSparks`,
+`SetupRipple` and `UpdateSplashes`. `spark_life` follows the rain's calls and the level
+line. `Preparation/Tools/Diagnose/spark_life.py` (from the measurement) pairs two logs'
+SPARKLOG lines.
+
+**Commits.** `c0e2265b`.
 
 ## 3. Randomizer changes since Beta 1.0
 
@@ -18795,3 +19052,5 @@ entries above.
 | #314 | The recorder writes the check's fields per input call: STATELOG |
 | #315 | The 64-bit engine plays the films through the minimal FFmpeg |
 | #316 | -rngtrace: the logic generator's callers in a window of ticks |
+| #317 | SPARKLOG: a spark's life and what the draw takes |
+| #318 | The weather owns its splash sparks |

@@ -48,6 +48,7 @@
 #include "hd/hd_shadow.h"		// HDShadowBlobMode - the mode a blob is drawn with
 #include "hd/hd_object.h"		// HDObjectBlobWeight - a blob going out
 #include "hd/hd_debris.h"		// HDDebrisDrawn - a piece drawn in HD
+#include "weather_sparks.h"		// the rain's splashes and ripples
 #include "hdscreen.h"
 #include "LoadSave.h"
 
@@ -887,6 +888,9 @@ void ClearFX()
 		Rain[i].x = 0;
 		Snow[i].x = 0;
 	}
+
+	// The rain's splashes and ripples go with its drops.
+	WeatherSparksClear();
 }
 
 void InitTarget()
@@ -1378,6 +1382,9 @@ void DoWeather()
 		DoSnow();
 }
 
+// SPARKLOG's rain line, with the other SPARKLOG lines below S_DrawSparks.
+static void SparkLogRain(const char* what, RAINDROPS* rptr, short room_number);
+
 void DoRain()
 {
 	RAINDROPS* rptr;
@@ -1406,6 +1413,20 @@ void DoRain()
 	if (!InterpIsTweenFrame())
 	{
 		InterpNoteStep(INTERP_STEP_WEATHER);
+
+		/* What a landing drop leaves - a splash, or a ripple on water - is
+		 * the weather's own (specific\weather_sparks.cpp), never a slot of
+		 * the logic's spark or ripple arrays nor a draw of its generator. This
+		 * half runs on the frame, with the frame's camera and the draw
+		 * generator, so how many drops land hangs on the frame timing; every
+		 * slot they took in the logic's arrays moved where the logic's next
+		 * spark landed, and a chained explosion fired a tick early or late.
+		 *
+		 * The ripples age before the drops land, so a new one is drawn as it
+		 * was born, as S_DrawSplashes drew it after DoWeather; the splashes
+		 * age after the drops, so a new one is drawn first after one step,
+		 * as S_DrawSparks drew it after the tick's UpdateSparks. */
+		WeatherRipplesStep();
 
 		for (int i = 0; i < rain_count; i++)
 		{
@@ -1465,9 +1486,19 @@ void DoRain()
 					if (room_number == rptr->room_number || room[room_number].flags & ROOM_UNDERWATER)
 					{
 						if (room[room_number].flags & ROOM_UNDERWATER && (i & 7) == 7)
-							SetupRipple(rptr->x, GetWaterHeight(rptr->x, rptr->y, rptr->z, room_number), rptr->z, 3, 0);
+						{
+							if (gLogEnabled)
+								SparkLogRain("ripple", rptr, room_number);
+
+							WeatherRipple(rptr->x, GetWaterHeight(rptr->x, rptr->y, rptr->z, room_number), rptr->z);
+						}
 						else
-							TriggerSmallSplash(rptr->x, GetHeight(floor, rptr->x, rptr->y, rptr->z), rptr->z, 1);
+						{
+							if (gLogEnabled)
+								SparkLogRain("splash", rptr, room_number);
+
+							WeatherSplash(rptr->x, GetHeight(floor, rptr->x, rptr->y, rptr->z), rptr->z);
+						}
 
 						rptr->x = 0;
 						continue;
@@ -1506,6 +1537,8 @@ void DoRain()
 					rptr->x = 0;
 			}
 		}
+
+		WeatherSparksStep();
 	}
 
 	tex.drawtype = 2;
@@ -2090,18 +2123,238 @@ void DrawBinoculars()
 	}
 }
 
+/* SPARKLOG (-log): one line where the draw ends a particle the logic still
+ * walks - a spark past the far plane, a drip or a bubble out of reach.
+ * What the frame's camera decides there, the logic reads on the next tick:
+ * a spark's chained explosion (UpdateSparks, game\effect2.cpp), a drip's
+ * splash (UpdateDrips, game\tomb4fx.cpp), a bubble's ripple (UpdateBubbles)
+ * - each with draws from the logic generator. `frame` counts the frames
+ * drawn since GlobalCounter last changed, 1 being the first; S_DrawSparks
+ * counts them and runs before the drips and the bubbles in DrawPhaseGame
+ * (game\draw.cpp). One line per particle ended, never one per frame. */
+static ushort spark_log_tick = 0xFFFF;
+static long spark_log_frame = 0;
+
+static void SparkLogFrame()
+{
+	if (GlobalCounter != spark_log_tick)
+	{
+		spark_log_tick = GlobalCounter;
+		spark_log_frame = 0;
+	}
+
+	spark_log_frame++;
+}
+
+static void SparkLog(const char* what, SPARKS* sptr, float z)
+{
+	Log("SPARKLOG %s tick=%u frame=%ld alpha=%.3f tween=%d z=%.0f zfar=%.0f "
+		"slot=%d life=%d slife=%d age=%d extras=%d chain=%d fires_at=%d "
+		"fx=%d dyn=%d", what, (unsigned)GlobalCounter, spark_log_frame,
+		InterpAlphaNow(), InterpIsTweenFrame() ? 1 : 0, z, f_mzfar,
+		(int)(sptr - spark), (int)sptr->Life, (int)sptr->sLife,
+		(int)sptr->sLife - (int)sptr->Life, (int)sptr->extras,
+		(int)(sptr->extras & 7), (int)(sptr->extras >> 3),
+		(sptr->Flags & SF_FX) ? 1 : 0, (int)sptr->Dynamic);
+}
+
+static void SparkLogOther(const char* what, const char* why, long slot,
+	long life, long z)
+{
+	Log("SPARKLOG %s kill tick=%u frame=%ld alpha=%.3f tween=%d why=%s "
+		"z=%ld slot=%ld life=%ld", what, (unsigned)GlobalCounter,
+		spark_log_frame, InterpAlphaNow(), InterpIsTweenFrame() ? 1 : 0, why,
+		z, slot, life);
+}
+
+long SparkLogFrameNow()
+{
+	return GlobalCounter == spark_log_tick ? spark_log_frame : 0;
+}
+
+/* The rain's two calls for what a landing drop leaves (DoRain): a splash
+ * and a ripple. Both take slots of the weather's own pools
+ * (WeatherSplash, WeatherRipple; they took the logic's spark[] and
+ * ripples[] before). Counted per level with -log only; the level line
+ * adds the most pool splashes and ripples alive at once. */
+static long spark_log_splashes = 0;
+static long spark_log_ripples = 0;
+
+static void SparkLogRain(const char* what, RAINDROPS* rptr, short room_number)
+{
+	if (what[0] == 's')
+		spark_log_splashes++;
+	else
+		spark_log_ripples++;
+
+	Log("SPARKLOG rain what=%s tick=%u frame=%ld tween=%d drop=%ld,%ld,%ld "
+		"cam=%ld,%ld,%ld room=%d", what, (unsigned)GlobalCounter,
+		SparkLogFrameNow(), InterpIsTweenFrame() ? 1 : 0, rptr->x, rptr->y,
+		rptr->z, camera.pos.x, camera.pos.y, camera.pos.z, (int)room_number);
+}
+
+void SparkLogLevelEnd()
+{
+	const long allocs = SparkLogTakeDrawAllocs();
+
+	if (gLogEnabled)
+		Log("SPARKLOG level draw_allocs=%ld splashes=%ld ripples=%ld "
+			"weather_peak=%ld weather_ripple_peak=%ld", allocs,
+			spark_log_splashes, spark_log_ripples, WeatherSparksPeak(),
+			WeatherRipplesPeak());
+
+	spark_log_splashes = 0;
+	spark_log_ripples = 0;
+}
+
+/* One spark of S_DrawSparks, at its world place x, y, z: the step it
+ * trails by between two ticks, the projection, the near and screen
+ * tests, then the sprite (SF_DEF) or the line. Shared by the logic's
+ * spark[] and the weather's own sparks (specific\weather_sparks.cpp), so
+ * both are drawn by the same lines. `pa` is the trail's blend, 1 for no
+ * trail; `smallest_size` is the loop's own, set once an SF_SCALE spark
+ * is met, as it always was. Returns 1 when the spark was trailed (the
+ * count of INTERP_PART_SPARK), 0 otherwise. */
+long S_DrawOneSpark(SPARKS* sptr, long x, long y, long z, float pa,
+	long* smallest_size)
+{
+	D3DTLVERTEX v[2];
+	TEXTURESTRUCT tex;
+	FVECTOR fpos;
+	float fX, fY, fZ, zv;
+	float p[8];
+	long r, g, b, c0, c1, moved;
+
+	tex.drawtype = 2;
+	tex.tpage = 0;
+	tex.flag = 0;
+	moved = 0;
+
+	/* Applied to a thousand sparks at once, to the world position and
+	 * not to the spark's stored one, which matters for the two thirds
+	 * of the array that hang off an item or an effect: their x/y/z is
+	 * an offset from a body whose own position has already been
+	 * interpolated, and shifting the sum by the offset's own step is
+	 * the same number as blending both halves - the anchor is added to
+	 * either side identically. Doing it here, after S_DrawSparks'
+	 * detach, also keeps the detach writing the live position, which is
+	 * game state and must not have a half-step in it. */
+	if (pa < 1.0F)
+	{
+		long sx = sptr->Xvel >> 5;
+		long sy = sptr->Yvel >> 5;
+		long sz = sptr->Zvel >> 5;
+
+		// The wind is part of the step for an outdoor spark, and it is
+		// added after the velocity in UpdateSparks.
+		if (sptr->Flags & SF_OUTSIDE)
+		{
+			sx += SmokeWindX >> 1;
+			sz += SmokeWindZ >> 1;
+		}
+
+		x = InterpTrailLong(x, sx, pa);
+		y = InterpTrailLong(y, sy, pa);
+		z = InterpTrailLong(z, sz, pa);
+		moved = 1;
+	}
+
+	fX = float(x - lara_item->pos.x_pos);
+	fY = float(y - lara_item->pos.y_pos);
+	fZ = float(z - lara_item->pos.z_pos);
+	fpos.x = fX * D3DMView._11 + fY * D3DMView._21 + D3DMView._31 * fZ + D3DMView._41;
+	fpos.y = fX * D3DMView._12 + fY * D3DMView._22 + D3DMView._32 * fZ + D3DMView._42;
+	fpos.z = fX * D3DMView._13 + fY * D3DMView._23 + D3DMView._33 * fZ + D3DMView._43;
+
+	clipflags[0] = 0;
+	clipflags[1] = 0;
+	clipflags[2] = 0;
+	clipflags[3] = 0;
+
+	if (fpos.z < f_mznear)
+		return moved;
+
+	zv = f_mpersp / fpos.z;
+	p[0] = zv * fpos.x + f_centerx;
+	p[1] = zv * fpos.y + f_centery;
+	p[2] = fpos.z;
+	p[3] = f_moneopersp * zv;
+
+	if (p[0] < f_left || p[0] > f_right || p[1] < f_top || p[1] > f_bottom)
+		return moved;
+
+	if (sptr->Flags & SF_DEF)
+	{
+		if (sptr->Flags & SF_SCALE)
+			*smallest_size = 4;
+
+		S_DrawDrawSparksNEW(sptr, *smallest_size, p);
+	}
+	else
+	{
+		fX -= float(sptr->Xvel >> 4);
+		fY -= float(sptr->Yvel >> 4);
+		fZ -= float(sptr->Zvel >> 4);
+		fpos.x = fX * D3DMView._11 + fY * D3DMView._21 + D3DMView._31 * fZ + D3DMView._41;
+		fpos.y = fX * D3DMView._12 + fY * D3DMView._22 + D3DMView._32 * fZ + D3DMView._42;
+		fpos.z = fX * D3DMView._13 + fY * D3DMView._23 + D3DMView._33 * fZ + D3DMView._43;
+
+		if (fpos.z < f_mznear)
+			return moved;
+
+		zv = f_mpersp / fpos.z;
+		p[4] = zv * fpos.x + f_centerx;
+		p[5] = zv * fpos.y + f_centery;
+		p[6] = fpos.z;
+		p[7] = f_moneopersp * zv;
+
+		if (p[4] < f_left || p[4] > f_right || p[5] < f_top || p[5] > f_bottom)
+			return moved;
+
+		z = (long)fpos.z;
+
+		if (z <= 0x3000)
+		{
+			c0 = RGBA(sptr->R, sptr->G, sptr->B, 0xFF);
+			c1 = c0;
+		}
+		else
+		{
+			z = 0x5000 - z;
+			r = (z * sptr->R) >> 13;
+			g = (z * sptr->G) >> 13;
+			b = (z * sptr->B) >> 13;
+			c0 = RGBA(r, g, b, 0xFF);
+			c1 = RGBA(r >> 1, g >> 1, b >> 1, 0xFF);
+		}
+
+		v[0].sx = p[0];
+		v[0].sy = p[1];
+		v[0].sz = p[2];
+		v[0].rhw = p[3];
+		v[0].color = c0;
+		v[0].specular = 0xFF000000;
+
+		v[1].sx = p[4];
+		v[1].sy = p[5];
+		v[1].sz = p[6];
+		v[1].rhw = p[7];
+		v[1].color = c1;
+		v[1].specular = 0xFF000000;
+
+		AddPolyLine(v, &tex, (float)GetFixedScale(1));
+	}
+
+	return moved;
+}
+
 void S_DrawSparks()
 {
 	SPARKS* sptr;
 	FX_INFO* fx;
 	ITEM_INFO* item;
-	D3DTLVERTEX v[2];
-	TEXTURESTRUCT tex;
 	PHD_VECTOR pos;
-	FVECTOR fpos;
-	float fX, fY, fZ, zv;
-	float p[8];
-	long x, y, z, smallest_size, r, g, b, c0, c1;
+	long x, y, z, smallest_size;
 
 	/* The sparks between two ticks.
 	 *
@@ -2115,13 +2368,12 @@ void S_DrawSparks()
 	 * At thirty, and on the frame that carries the tick, `pa` is 1 and not
 	 * one of these lines runs. */
 	const float pa = InterpParticleAlpha();
-	const bool trail = pa < 1.0F;
 	long moved = 0;
 
+	if (gLogEnabled)
+		SparkLogFrame();
+
 	smallest_size = 0;	//uninitialized
-	tex.drawtype = 2;
-	tex.tpage = 0;
-	tex.flag = 0;
 
 	for (int i = 0; i < 16; i++)
 		NodeOffsets[i].GotIt = 0;
@@ -2235,121 +2487,12 @@ void S_DrawSparks()
 			z = sptr->z;
 		}
 
-		/* Applied to a thousand sparks at once, to the world position and
-		 * not to the spark's stored one, which matters for the two thirds
-		 * of the array that hang off an item or an effect: their x/y/z is
-		 * an offset from a body whose own position has already been
-		 * interpolated, and shifting the sum by the offset's own step is
-		 * the same number as blending both halves - the anchor is added to
-		 * either side identically. Doing it here also keeps the detach
-		 * above writing the live position, which is game state and must
-		 * not have a half-step in it. */
-		if (trail)
-		{
-			long sx = sptr->Xvel >> 5;
-			long sy = sptr->Yvel >> 5;
-			long sz = sptr->Zvel >> 5;
-
-			// The wind is part of the step for an outdoor spark, and it is
-			// added after the velocity in UpdateSparks.
-			if (sptr->Flags & SF_OUTSIDE)
-			{
-				sx += SmokeWindX >> 1;
-				sz += SmokeWindZ >> 1;
-			}
-
-			x = InterpTrailLong(x, sx, pa);
-			y = InterpTrailLong(y, sy, pa);
-			z = InterpTrailLong(z, sz, pa);
-			moved++;
-		}
-
-		fX = float(x - lara_item->pos.x_pos);
-		fY = float(y - lara_item->pos.y_pos);
-		fZ = float(z - lara_item->pos.z_pos);
-		fpos.x = fX * D3DMView._11 + fY * D3DMView._21 + D3DMView._31 * fZ + D3DMView._41;
-		fpos.y = fX * D3DMView._12 + fY * D3DMView._22 + D3DMView._32 * fZ + D3DMView._42;
-		fpos.z = fX * D3DMView._13 + fY * D3DMView._23 + D3DMView._33 * fZ + D3DMView._43;
-
-		clipflags[0] = 0;
-		clipflags[1] = 0;
-		clipflags[2] = 0;
-		clipflags[3] = 0;
-
-		if (fpos.z < f_mznear)
-			continue;
-
-		zv = f_mpersp / fpos.z;
-		p[0] = zv * fpos.x + f_centerx;
-		p[1] = zv * fpos.y + f_centery;
-		p[2] = fpos.z;
-		p[3] = f_moneopersp * zv;
-
-		if (p[0] < f_left || p[0] > f_right || p[1] < f_top || p[1] > f_bottom)
-			continue;
-
-		if (sptr->Flags & SF_DEF)
-		{
-			if (sptr->Flags & SF_SCALE)
-				smallest_size = 4;
-
-			S_DrawDrawSparksNEW(sptr, smallest_size, p);
-		}
-		else
-		{
-			fX -= float(sptr->Xvel >> 4);
-			fY -= float(sptr->Yvel >> 4);
-			fZ -= float(sptr->Zvel >> 4);
-			fpos.x = fX * D3DMView._11 + fY * D3DMView._21 + D3DMView._31 * fZ + D3DMView._41;
-			fpos.y = fX * D3DMView._12 + fY * D3DMView._22 + D3DMView._32 * fZ + D3DMView._42;
-			fpos.z = fX * D3DMView._13 + fY * D3DMView._23 + D3DMView._33 * fZ + D3DMView._43;
-
-			if (fpos.z < f_mznear)
-				continue;
-
-			zv = f_mpersp / fpos.z;
-			p[4] = zv * fpos.x + f_centerx;
-			p[5] = zv * fpos.y + f_centery;
-			p[6] = fpos.z;
-			p[7] = f_moneopersp * zv;
-
-			if (p[4] < f_left || p[4] > f_right || p[5] < f_top || p[5] > f_bottom)
-				continue;
-
-			z = (long)fpos.z;
-
-			if (z <= 0x3000)
-			{
-				c0 = RGBA(sptr->R, sptr->G, sptr->B, 0xFF);
-				c1 = c0;
-			}
-			else
-			{
-				z = 0x5000 - z;
-				r = (z * sptr->R) >> 13;
-				g = (z * sptr->G) >> 13;
-				b = (z * sptr->B) >> 13;
-				c0 = RGBA(r, g, b, 0xFF);
-				c1 = RGBA(r >> 1, g >> 1, b >> 1, 0xFF);
-			}
-
-			v[0].sx = p[0];
-			v[0].sy = p[1];
-			v[0].sz = p[2];
-			v[0].rhw = p[3];
-			v[0].color = c0;
-			v[0].specular = 0xFF000000;
-
-			v[1].sx = p[4];
-			v[1].sy = p[5];
-			v[1].sz = p[6];
-			v[1].rhw = p[7];
-			v[1].color = c1;
-			v[1].specular = 0xFF000000;
-
-			AddPolyLine(v, &tex, (float)GetFixedScale(1));
-		}
+		moved += S_DrawOneSpark(sptr, x, y, z, pa, &smallest_size);
 	}
+
+	/* The weather's splashes (specific\weather_sparks.cpp), through the
+	 * same lines, in the same matrix. */
+	moved += WeatherSparksDraw();
 
 	phd_PopMatrix();
 	InterpNoteParticles(INTERP_PART_SPARK, moved);
@@ -2367,7 +2510,12 @@ void S_DrawDrawSparksNEW(SPARKS* sptr, long smallest_size, float* xyz)
 	if (xyz[2] <= f_mznear || xyz[2] >= f_mzfar)
 	{
 		if (xyz[2] >= f_mzfar)
+		{
+			if (gLogEnabled)
+				SparkLog("kill", sptr, xyz[2]);
+
 			sptr->On = 0;
+		}
 
 		return;
 	}
@@ -3262,6 +3410,9 @@ void DrawDrips()
 
 		if (Z[0] > 0x5000)
 		{
+			if (gLogEnabled)
+				SparkLogOther("drip", "far", i, drip->Life, Z[0]);
+
 			drip->On = 0;
 			continue;
 		}
@@ -3545,6 +3696,10 @@ void DrawBubbles()
 
 		if (dx < -0x5000 || dx > 0x5000 || dy < -0x5000 || dy > 0x5000 || dz < -0x5000 || dz > 0x5000)
 		{
+			if (gLogEnabled)
+				SparkLogOther("bubble", "box", (long)(bubble - Bubbles),
+					bubble->size, 0);
+
 			bubble->size = 0;
 			bubble++;
 			continue;
@@ -3569,6 +3724,10 @@ void DrawBubbles()
 
 		if (Z[0] > 0x5000)
 		{
+			if (gLogEnabled)
+				SparkLogOther("bubble", "far", (long)(bubble - Bubbles),
+					bubble->size, Z[0]);
+
 			bubble->size = 0;
 			bubble++;
 			continue;
@@ -3578,6 +3737,10 @@ void DrawBubbles()
 
 		if (size > 128)
 		{
+			if (gLogEnabled)
+				SparkLogOther("bubble", "near", (long)(bubble - Bubbles),
+					bubble->size, Z[0]);
+
 			bubble->size = 0;
 			continue;
 		}
@@ -4091,6 +4254,182 @@ void DrawLightning()
 	phd_PopMatrix();
 }
 
+/* One ripple of S_DrawSplashes: the flat ring sprite round its place,
+ * its grey from `init` while it grows and from `life` after. Shared by
+ * the logic's ripples[] and the weather's own ripples
+ * (specific\weather_sparks.cpp), so both are drawn by the same lines. */
+void S_DrawOneRipple(RIPPLE_STRUCT* ripple)
+{
+	SPRITESTRUCT* sprite;
+	D3DTLVERTEX v[4];
+	TEXTURESTRUCT tex;
+	long* XY;
+	long* Z;
+	long* offsets;
+	ulong c0;
+	long x1, y1, z1, x2, y2, z2, x3, y3, z3, x4, y4, z4, r, g, b;
+
+	offsets = (long*)&tsv_buffer[1024];
+
+	/* Where a water sheet draws this ripple as a ring (hd_level.h), the
+	 * flat sprite stays out - as the classic water face does under a
+	 * sheet. False on the classic path. */
+	if (HDWaterRippleOnSheet(ripple->x, ripple->y, ripple->z,
+		ripple->flags))
+		return;
+
+	phd_PushMatrix();
+	phd_TranslateAbs(ripple->x, ripple->y, ripple->z);
+
+	XY = (long*)&tsv_buffer[0];
+	Z = (long*)&tsv_buffer[512];
+
+	offsets[0] = -ripple->size;
+	offsets[1] = 0;
+	offsets[2] = -ripple->size;
+	*XY++ = long(aMXPtr[M00] * offsets[0] + aMXPtr[M01] * offsets[1] + aMXPtr[M02] * offsets[2] + aMXPtr[M03]);
+	*XY++ = long(aMXPtr[M10] * offsets[0] + aMXPtr[M11] * offsets[1] + aMXPtr[M12] * offsets[2] + aMXPtr[M13]);
+	*Z++ = long(aMXPtr[M20] * offsets[0] + aMXPtr[M21] * offsets[1] + aMXPtr[M22] * offsets[2] + aMXPtr[M23]);
+	Z++;
+
+	offsets[0] = -ripple->size;
+	offsets[1] = 0;
+	offsets[2] = ripple->size;
+	*XY++ = long(aMXPtr[M00] * offsets[0] + aMXPtr[M01] * offsets[1] + aMXPtr[M02] * offsets[2] + aMXPtr[M03]);
+	*XY++ = long(aMXPtr[M10] * offsets[0] + aMXPtr[M11] * offsets[1] + aMXPtr[M12] * offsets[2] + aMXPtr[M13]);
+	*Z++ = long(aMXPtr[M20] * offsets[0] + aMXPtr[M21] * offsets[1] + aMXPtr[M22] * offsets[2] + aMXPtr[M23]);
+	Z++;
+
+	offsets[0] = ripple->size;
+	offsets[1] = 0;
+	offsets[2] = ripple->size;
+	*XY++ = long(aMXPtr[M00] * offsets[0] + aMXPtr[M01] * offsets[1] + aMXPtr[M02] * offsets[2] + aMXPtr[M03]);
+	*XY++ = long(aMXPtr[M10] * offsets[0] + aMXPtr[M11] * offsets[1] + aMXPtr[M12] * offsets[2] + aMXPtr[M13]);
+	*Z++ = long(aMXPtr[M20] * offsets[0] + aMXPtr[M21] * offsets[1] + aMXPtr[M22] * offsets[2] + aMXPtr[M23]);
+	Z++;
+
+	offsets[0] = ripple->size;
+	offsets[1] = 0;
+	offsets[2] = -ripple->size;
+	*XY++ = long(aMXPtr[M00] * offsets[0] + aMXPtr[M01] * offsets[1] + aMXPtr[M02] * offsets[2] + aMXPtr[M03]);
+	*XY++ = long(aMXPtr[M10] * offsets[0] + aMXPtr[M11] * offsets[1] + aMXPtr[M12] * offsets[2] + aMXPtr[M13]);
+	*Z++ = long(aMXPtr[M20] * offsets[0] + aMXPtr[M21] * offsets[1] + aMXPtr[M22] * offsets[2] + aMXPtr[M23]);
+	Z++;
+
+	phd_PopMatrix();
+
+	XY = (long*)&tsv_buffer[0];
+	Z = (long*)&tsv_buffer[512];
+
+	if (ripple->flags & 0x20)
+		sprite = &spriteinfo[objects[DEFAULT_SPRITES].mesh_index];
+	else
+		sprite = &spriteinfo[objects[DEFAULT_SPRITES].mesh_index + 9];
+
+	x1 = *XY++;
+	y1 = *XY++;
+	z1 = *Z++;
+	Z++;
+
+	x2 = *XY++;
+	y2 = *XY++;
+	z2 = *Z++;
+	Z++;
+
+	x3 = *XY++;
+	y3 = *XY++;
+	z3 = *Z++;
+	Z++;
+
+	x4 = *XY++;
+	y4 = *XY++;
+	z4 = *Z++;
+	Z++;
+
+	setXYZ4(v, x1, y1, z1, x2, y2, z2, x3, y3, z3, x4, y4, z4, clipflags);
+
+	if (ripple->flags & 0x10)
+	{
+		if (ripple->flags & 0x20)
+		{
+			if (ripple->init)
+			{
+				r = (ripple->init >> 1) << 1;
+				g = 0;
+				b = (ripple->init >> 4) << 1;
+			}
+			else
+			{
+				r = (ripple->life >> 1) << 1;
+				g = 0;
+				b = (ripple->life >> 4) << 1;
+			}
+		}
+		else
+		{
+			if (ripple->init)
+			{
+				r = ripple->init << 1;
+				g = ripple->init << 1;
+				b = ripple->init << 1;
+			}
+			else
+			{
+				r = ripple->life << 1;
+				g = ripple->life << 1;
+				b = ripple->life << 1;
+			}
+		}
+	}
+	else
+	{
+		if (ripple->init)
+		{
+			r = ripple->init << 2;
+			g = ripple->init << 2;
+			b = ripple->init << 2;
+		}
+		else
+		{
+			r = ripple->life << 2;
+			g = ripple->life << 2;
+			b = ripple->life << 2;
+		}
+	}
+
+	if (r > 255)
+		r = 255;
+
+	if (g > 255)
+		g = 255;
+
+	if (b > 255)
+		b = 255;
+
+	c0 = RGBA(r, g, b, 0xFF);
+
+	v[0].color = c0;
+	v[1].color = c0;
+	v[2].color = c0;
+	v[3].color = c0;
+	v[0].specular = 0xFF000000;
+	v[1].specular = 0xFF000000;
+	v[2].specular = 0xFF000000;
+	v[3].specular = 0xFF000000;
+	tex.drawtype = 2;
+	tex.flag = 0;
+	tex.tpage = sprite->tpage;
+	tex.u1 = sprite->x1;
+	tex.v1 = sprite->y1;
+	tex.u2 = sprite->x2;
+	tex.v2 = sprite->y1;
+	tex.v3 = sprite->y2;
+	tex.u3 = sprite->x2;
+	tex.u4 = sprite->x1;
+	tex.v4 = sprite->y2;
+	AddQuadSorted(v, 0, 1, 2, 3, &tex, 1);
+}
+
 void S_DrawSplashes()
 {
 	SPLASH_STRUCT* splash;
@@ -4251,167 +4590,13 @@ void S_DrawSplashes()
 	{
 		ripple = &ripples[i];
 
-		if (!(ripple->flags & 1))
-			continue;
-
-		/* Where a water sheet draws this ripple as a ring (hd_level.h), the
-		 * flat sprite stays out - as the classic water face does under a
-		 * sheet. False on the classic path. */
-		if (HDWaterRippleOnSheet(ripple->x, ripple->y, ripple->z,
-			ripple->flags))
-			continue;
-
-		phd_PushMatrix();
-		phd_TranslateAbs(ripple->x, ripple->y, ripple->z);
-
-		XY = (long*)&tsv_buffer[0];
-		Z = (long*)&tsv_buffer[512];
-
-		offsets[0] = -ripple->size;
-		offsets[1] = 0;
-		offsets[2] = -ripple->size;
-		*XY++ = long(aMXPtr[M00] * offsets[0] + aMXPtr[M01] * offsets[1] + aMXPtr[M02] * offsets[2] + aMXPtr[M03]);
-		*XY++ = long(aMXPtr[M10] * offsets[0] + aMXPtr[M11] * offsets[1] + aMXPtr[M12] * offsets[2] + aMXPtr[M13]);
-		*Z++ = long(aMXPtr[M20] * offsets[0] + aMXPtr[M21] * offsets[1] + aMXPtr[M22] * offsets[2] + aMXPtr[M23]);
-		Z++;
-
-		offsets[0] = -ripple->size;
-		offsets[1] = 0;
-		offsets[2] = ripple->size;
-		*XY++ = long(aMXPtr[M00] * offsets[0] + aMXPtr[M01] * offsets[1] + aMXPtr[M02] * offsets[2] + aMXPtr[M03]);
-		*XY++ = long(aMXPtr[M10] * offsets[0] + aMXPtr[M11] * offsets[1] + aMXPtr[M12] * offsets[2] + aMXPtr[M13]);
-		*Z++ = long(aMXPtr[M20] * offsets[0] + aMXPtr[M21] * offsets[1] + aMXPtr[M22] * offsets[2] + aMXPtr[M23]);
-		Z++;
-
-		offsets[0] = ripple->size;
-		offsets[1] = 0;
-		offsets[2] = ripple->size;
-		*XY++ = long(aMXPtr[M00] * offsets[0] + aMXPtr[M01] * offsets[1] + aMXPtr[M02] * offsets[2] + aMXPtr[M03]);
-		*XY++ = long(aMXPtr[M10] * offsets[0] + aMXPtr[M11] * offsets[1] + aMXPtr[M12] * offsets[2] + aMXPtr[M13]);
-		*Z++ = long(aMXPtr[M20] * offsets[0] + aMXPtr[M21] * offsets[1] + aMXPtr[M22] * offsets[2] + aMXPtr[M23]);
-		Z++;
-
-		offsets[0] = ripple->size;
-		offsets[1] = 0;
-		offsets[2] = -ripple->size;
-		*XY++ = long(aMXPtr[M00] * offsets[0] + aMXPtr[M01] * offsets[1] + aMXPtr[M02] * offsets[2] + aMXPtr[M03]);
-		*XY++ = long(aMXPtr[M10] * offsets[0] + aMXPtr[M11] * offsets[1] + aMXPtr[M12] * offsets[2] + aMXPtr[M13]);
-		*Z++ = long(aMXPtr[M20] * offsets[0] + aMXPtr[M21] * offsets[1] + aMXPtr[M22] * offsets[2] + aMXPtr[M23]);
-		Z++;
-
-		phd_PopMatrix();
-
-		XY = (long*)&tsv_buffer[0];
-		Z = (long*)&tsv_buffer[512];
-
-		if (ripple->flags & 0x20)
-			sprite = &spriteinfo[objects[DEFAULT_SPRITES].mesh_index];
-		else
-			sprite = &spriteinfo[objects[DEFAULT_SPRITES].mesh_index + 9];
-
-		x1 = *XY++;
-		y1 = *XY++;
-		z1 = *Z++;
-		Z++;
-
-		x2 = *XY++;
-		y2 = *XY++;
-		z2 = *Z++;
-		Z++;
-
-		x3 = *XY++;
-		y3 = *XY++;
-		z3 = *Z++;
-		Z++;
-
-		x4 = *XY++;
-		y4 = *XY++;
-		z4 = *Z++;
-		Z++;
-
-		setXYZ4(v, x1, y1, z1, x2, y2, z2, x3, y3, z3, x4, y4, z4, clipflags);
-
-		if (ripple->flags & 0x10)
-		{
-			if (ripple->flags & 0x20)
-			{
-				if (ripple->init)
-				{
-					r = (ripple->init >> 1) << 1;
-					g = 0;
-					b = (ripple->init >> 4) << 1;
-				}
-				else
-				{
-					r = (ripple->life >> 1) << 1;
-					g = 0;
-					b = (ripple->life >> 4) << 1;
-				}
-			}
-			else
-			{
-				if (ripple->init)
-				{
-					r = ripple->init << 1;
-					g = ripple->init << 1;
-					b = ripple->init << 1;
-				}
-				else
-				{
-					r = ripple->life << 1;
-					g = ripple->life << 1;
-					b = ripple->life << 1;
-				}
-			}
-		}
-		else
-		{
-			if (ripple->init)
-			{
-				r = ripple->init << 2;
-				g = ripple->init << 2;
-				b = ripple->init << 2;
-			}
-			else
-			{
-				r = ripple->life << 2;
-				g = ripple->life << 2;
-				b = ripple->life << 2;
-			}
-		}
-
-		if (r > 255)
-			r = 255;
-
-		if (g > 255)
-			g = 255;
-
-		if (b > 255)
-			b = 255;
-
-		c0 = RGBA(r, g, b, 0xFF);
-
-		v[0].color = c0;
-		v[1].color = c0;
-		v[2].color = c0;
-		v[3].color = c0;
-		v[0].specular = 0xFF000000;
-		v[1].specular = 0xFF000000;
-		v[2].specular = 0xFF000000;
-		v[3].specular = 0xFF000000;
-		tex.drawtype = 2;
-		tex.flag = 0;
-		tex.tpage = sprite->tpage;
-		tex.u1 = sprite->x1;
-		tex.v1 = sprite->y1;
-		tex.u2 = sprite->x2;
-		tex.v2 = sprite->y1;
-		tex.v3 = sprite->y2;
-		tex.u3 = sprite->x2;
-		tex.u4 = sprite->x1;
-		tex.v4 = sprite->y2;
-		AddQuadSorted(v, 0, 1, 2, 3, &tex, 1);
+		if (ripple->flags & 1)
+			S_DrawOneRipple(ripple);
 	}
+
+	/* The weather's ripples (specific\weather_sparks.cpp), through the
+	 * same lines. */
+	WeatherRipplesDraw();
 }
 
 void DrawRope(ROPE_STRUCT* rope)

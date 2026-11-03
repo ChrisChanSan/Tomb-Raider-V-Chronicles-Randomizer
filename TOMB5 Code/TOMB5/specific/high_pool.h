@@ -61,8 +61,12 @@ struct HighReserve
 bool HighReserveSpan(uint64_t base, uint64_t size, uint64_t line,
 	uint64_t granularity, uint64_t page, uint64_t* outBase, uint64_t* outSize);
 
-/* -high as a whole word behind '-' or '/', as -log is read: not inside a
- * longer word or a path. */
+/* A switch `word` (any case) as a whole word behind '-' or '/': the sign
+ * at the line's start or after a blank, the word ended by a blank or the
+ * line's end - not inside a longer word or a path. */
+bool SwitchWordGiven(const char* cmd, const char* word);
+
+/* -high, by SwitchWordGiven. */
 bool HighSwitchGiven(const char* cmd);
 
 /* Reserves every free region below 4 GB and says what it did. False on a

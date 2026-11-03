@@ -28880,6 +28880,68 @@ static void replay_rule()
 		"replay: the input record's check written, its drift said once", 0,
 		1);
 
+	// -liveclock: a whole word behind '-' or '/', as -high is read, never
+	// a word inside the replay's path.
+	{
+		const char* yes[4] = { "-replay run.rec -liveclock", "-liveclock",
+			"-log -replay \"C:\\a b\\run.rec\" /LiveClock",
+			"-LIVECLOCK -replay run.rec" };
+		const char* no[9] = { "", "liveclock", "-liveclocks", "x-liveclock",
+			"-live clock", "-replay C:\\-liveclock\\run.rec",
+			"-replay \"C:\\a b\\-liveclock\"",
+			"-replay \"C:\\a -liveclock\\run.rec\"", "-replay liveclock.rec" };
+		int right = 0;
+
+		for (int i = 0; i < 4; i++)
+			right += SwitchWordGiven(yes[i], "liveclock");
+
+		for (int i = 0; i < 9; i++)
+			right += !SwitchWordGiven(no[i], "liveclock");
+
+		right += !SwitchWordGiven(0, "liveclock");
+		right += !SwitchWordGiven("-liveclock", 0);
+		right += !SwitchWordGiven("-liveclock", "");
+		ok(right == 16, "replay: -liveclock as a whole word, not in a path",
+			right, 16);
+	}
+
+	glass_body(winmain, "int __stdcall WinMain(", body, sizeof(body));
+	ok(strstr(body, "constboolliveClock=SwitchWordGiven(lpCmdLine,\""
+		"liveclock\");if(WinCheckPathFlag(lpCmdLine,\"record\"") != 0 &&
+		hd_switch_count(body, "\"PCtomb5built\"__DATE__\"\"__TIME__,"
+		"liveClock);") == 2,
+		"replay: -liveclock read beside -record and -replay, handed to both",
+		hd_switch_count(body, "__TIME__,liveClock);"), 2);
+
+	// Under the live clock the record is still taken and checked - the
+	// next record of another type stays in step - and the given value is
+	// returned in place of the recorded one.
+	glass_body(replay, "double ReplaySubTick(double subtick)", body,
+		sizeof(body));
+	{
+		const char* next = strstr(body, "if(!ReplayNext(REPLAY_SUBTICK,&r))"
+			"returnsubtick;");
+		const char* tick = strstr(body, "if(r.tick!=GlobalCounter)"
+			"ReplayDesync(REPLAY_SUBTICK,&r,\"tick\");returnsubtick;}");
+		const char* back = strstr(body, "returng_live_clock?subtick:"
+			"r.subtick;");
+
+		ok(next && tick && back && next < tick && tick < back &&
+			!strcmp(back, "returng_live_clock?subtick:r.subtick;") &&
+			hd_switch_count(body, "returnr.subtick;") == 0,
+			"replay: the live clock takes the record, then returns its own",
+			0, 1);
+	}
+	glass_body(replay, "void ReplayOpen(", body, sizeof(body));
+	ok(strstr(body, "g_mode=REPLAY_PLAY;g_live_clock=live_clock;Log(\""
+		"REPLAYLOGopenmode=replayfile=%sversion=%dbits=%drecorded=%s\"\""
+		"clock=%s\",path,version,bits,rec_stamp,live_clock?\"live\":"
+		"\"recorded\");") != 0 && hd_switch_count(body,
+		"g_live_clock=") == 1 && strstr(body, "Log(\"REPLAYLOGopenmode="
+		"recordfile=%sversion=%dbits=%d\",path,REPLAY_VERSION,") != 0,
+		"replay: the replay's open line says clock=, the record's is as was",
+		0, 1);
+
 	free(input);
 	free(winmain);
 	free(gamemain);

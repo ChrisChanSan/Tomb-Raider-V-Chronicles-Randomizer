@@ -633,9 +633,12 @@ long DrawPhaseGame()
 	 * is rebuilt from the live camera - the next ControlPhase may run no tick
 	 * at all, and then nothing else would rebuild it. Then Lara's joint set
 	 * and wet nodes are built again from that state if this frame blended
-	 * them, before anything of the logic can read them. */
+	 * them, before anything of the logic can read them. -rngtrace marks the
+	 * frame before the give-back and after the pass (function_stubs.h). */
+	RngTraceMark("draw");
 	InterpEndFrame();
 	LaraJointsLive();
+	RngTraceMark("frame");
 
 	/* ProfileFrameEnd comes before the restore: it judges this frame
 	 * against the slot this frame actually asked for, and gPresentMinTicks is

@@ -1586,6 +1586,22 @@ int __stdcall WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 				"PCtomb5 built " __DATE__ " " __TIME__, liveClock);
 	}
 
+	/* -rngtrace <from> <to>, read as -high is, two tick numbers after it:
+	 * the logic generator's callers in that window of ticks, with -log
+	 * (function_stubs.h). Refused with one line otherwise. */
+	{
+		long rtFrom, rtTo;
+		const int rt = RngTraceSwitch(lpCmdLine, &rtFrom, &rtTo);
+
+		if (rt > 0 && RngTraceArm(rtFrom, rtTo))
+			Log("RNGTRACE window from=%ld to=%ld", rtFrom, rtTo);
+		else if (rt > 0)
+			Log("RNGTRACE refused: no memory for the window");
+		else if (rt < 0)
+			Log("RNGTRACE refused: -rngtrace takes two tick numbers, "
+				"from <= to, 0..65535");
+	}
+
 	/* The crash seam, as early as the log: an exception nobody catches
 	 * writes its CRASH line into the log (with -log) or into crash.txt
 	 * (without) and a minidump beside it - crashseam.h. This thread is the

@@ -52,18 +52,21 @@ bool HighReserveSpan(uint64_t base, uint64_t size, uint64_t line,
 	return true;
 }
 
-bool SwitchWordGiven(const char* cmd, const char* word)
+/* Where the first whole switch `word` ends in `cmd` - the index just past
+ * its last letter - or 0 when it is not there. 0 is never an end: the word
+ * has a letter and a sign before it. */
+static size_t SwitchWordEnd(const char* cmd, const char* word)
 {
 	size_t len, n, i, k;
 
 	if (!cmd || !word)
-		return false;
+		return 0;
 
 	len = strlen(cmd);
 	n = strlen(word);
 
 	if (!n)
-		return false;
+		return 0;
 
 	for (i = 1; i + n <= len; i++)
 	{
@@ -86,15 +89,66 @@ bool SwitchWordGiven(const char* cmd, const char* word)
 		if (i + n < len && cmd[i + n] != ' ')
 			continue;
 
-		return true;
+		return i + n;
 	}
 
-	return false;
+	return 0;
+}
+
+bool SwitchWordGiven(const char* cmd, const char* word)
+{
+	return SwitchWordEnd(cmd, word) != 0;
 }
 
 bool HighSwitchGiven(const char* cmd)
 {
 	return SwitchWordGiven(cmd, "high");
+}
+
+/* One tick number of -rngtrace from cmd[*at]: blanks, then 1..5 digits up
+ * to 65535 (GlobalCounter is an unsigned short), ended by a blank or the
+ * line's end. *at moves past it. */
+static bool SwitchTickNumber(const char* cmd, size_t* at, long* out)
+{
+	size_t i = *at;
+	long v = 0;
+	int digits = 0;
+
+	while (cmd[i] == ' ')
+		i++;
+
+	while (cmd[i] >= '0' && cmd[i] <= '9')
+	{
+		v = v * 10 + (cmd[i] - '0');
+		i++;
+
+		if (++digits > 5 || v > 65535)
+			return false;
+	}
+
+	if (!digits || (cmd[i] && cmd[i] != ' '))
+		return false;
+
+	*at = i;
+	*out = v;
+	return true;
+}
+
+int RngTraceSwitch(const char* cmd, long* from, long* to)
+{
+	size_t at = SwitchWordEnd(cmd, "rngtrace");
+	long a, b;
+
+	if (!at)
+		return 0;
+
+	if (!SwitchTickNumber(cmd, &at, &a) || !SwitchTickNumber(cmd, &at, &b) ||
+		a > b)
+		return -1;
+
+	*from = a;
+	*to = b;
+	return 1;
 }
 
 #ifdef _WIN64

@@ -69,6 +69,13 @@ bool SwitchWordGiven(const char* cmd, const char* word);
 /* -high, by SwitchWordGiven. */
 bool HighSwitchGiven(const char* cmd);
 
+/* -rngtrace <from> <to>, the word read as SwitchWordGiven reads it and two
+ * tick numbers after it (0..65535, each ended by a blank or the line's
+ * end): 1 with both read and from <= to, 0 when the switch is not given,
+ * -1 when it is given without two such numbers or with from above to.
+ * *from and *to are written on 1 only. */
+int RngTraceSwitch(const char* cmd, long* from, long* to);
+
 /* Reserves every free region below 4 GB and says what it did. False on a
  * 32-bit build, which has nothing above 4 GB to move to. Once per run. */
 bool HighReserveBelow4G(HighReserve* out);

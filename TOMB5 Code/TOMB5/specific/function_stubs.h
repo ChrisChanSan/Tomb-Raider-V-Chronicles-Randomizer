@@ -20,6 +20,18 @@ void free_game_malloc();	// GameClose: the pool itself
 long GetRandomControl();
 void SeedRandomControl(long seed);
 
+/* -rngtrace <from> <to>: GetRandomControl's callers by return address in
+ * the spans between two input calls whose closing tick lies in the window
+ * (function_stubs.cpp says the lines). RngTraceArm takes the window once,
+ * false when its two buffers cannot be had; RngTraceInputSeam closes and
+ * opens a span at every input call, with -log only; RngTraceMark notes a
+ * section boundary - its name, the calls before it, the generator's
+ * state - in an open span, and does nothing otherwise. `name` must be a
+ * string literal: it is kept until the span is written. */
+bool RngTraceArm(long from, long to);
+void RngTraceInputSeam(long tick, long fmv);
+void RngTraceMark(const char* name);
+
 /* Reads back the logic RNG's seed, for saving it across an interpolated
  * frame. The draw path calls GetRandomControl in several places - the star
  * twinkle alone takes four thousand draws a frame - so at sixty presents a

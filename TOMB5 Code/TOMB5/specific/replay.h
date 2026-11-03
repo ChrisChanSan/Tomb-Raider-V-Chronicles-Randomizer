@@ -30,7 +30,8 @@ void ReplayClose();
 /* The one input point (S_UpdateInput, specific\input.cpp), after the
  * keyboard, the mouse and the pad are read and before anything is built
  * from them. `fmv` is a film's own loop, which is left out of the file: a
- * 64-bit build plays no film. */
+ * 64-bit build plays no film. With -log each call also writes a STATELOG
+ * line, the state the input record's check mixes, field by field. */
 void ReplayInputSeam(char* keys, long* mouse_dx, long* mouse_dy,
 	long* mouse_buttons, long* captured, long fmv);
 

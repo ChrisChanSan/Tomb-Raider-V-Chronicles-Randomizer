@@ -18467,6 +18467,52 @@ runs: the live run's `SPARKLOG fire` that the other lacks names a slot, and the 
 `born` in that slot before it its born tick; the other log's lines for that slot and born
 tick tell its fate there.
 
+**What the second run showed.** The same pair replayed with the life lines did not part:
+no `REPLAYLOG drift` in either log, and `-rngtrace` equal over 840-843. Yet every chain
+spark sat two slots apart between the runs from the first `born` on - `born tick=834
+slot=1008 next=1008 on=41` with the recorded clock against `slot=1006 next=1006 on=41`
+with `-liveclock`: the same count of sparks on, the same state of the logic generator,
+`GetFreeSpark`'s start two slots further in the recorded-clock run. So something takes
+spark slots without a lasting draw of the logic generator. RNGLOG of that level says
+`undone=110` in both runs: 110 draws of the logic generator made inside frames and given
+back. The level has weather, and the simulation half of `DoRain` (on the frame that is
+not a tween frame, around the frame's camera, with the draw generator) ends a drop with
+`TriggerSmallSplash` (`game/tomb4fx.cpp`: `GetFreeSpark` and three `GetRandomControl`
+draws per spark, `Life` 24) or `SetupRipple`. `InterpEndFrame` gives the draws back; the
+sparks stay on and `next_spark` stays where the draw left it. That the rain's splashes are
+the allocations that part the two runs' slots, and through them the tick a chain fires
+at, is to be shown by the next pair.
+
+**SPARKLOG draw-side lines.** Three more lines of the family:
+
+    SPARKLOG draw_alloc tick=<GlobalCounter> frame=<n> tween=<0/1> slot=<the slot
+        returned> next=<next_spark before> on=<sparks on before> evicted=<0/1>
+        ret=<the caller's address minus the module's base, hex>
+    SPARKLOG rain what=splash|ripple tick= frame= tween= drop=<x,y,z>
+        cam=<camera.pos x,y,z> room=<room_number>
+    SPARKLOG level draw_allocs=<n> splashes=<n> ripples=<n>
+
+`draw_alloc` is written by `GetFreeSpark` (`game/effect2.cpp`) at either of its returns
+when the call comes inside a drawn frame that gives the generator's state back:
+`InterpFrameSeedSaved()` (`game/interpolate.cpp`) returns `g_seedSaved`, set by
+`InterpBeginFrame` on a tween frame, a blended one and every frame of fps_mode 2's display
+cadence, and cleared by `InterpEndFrame` - so a tick never sees it, and a frame that keeps
+its draws (fps_mode 0 and 1 at the tick's own state) writes no `draw_alloc`. `ret` is
+written as `-rngtrace` writes its addresses; `GetFreeSpark` is declared `noinline` so that
+`_ReturnAddress` names its caller under whole-program optimisation. `frame` is the frame
+within the tick as `S_DrawSparks` counted it last (`SparkLogFrameNow`, 0 before its first
+frame of the tick). `rain` is written in `DoRain` (`specific/specificfx.cpp`) before each
+of its two calls, with the drop's position and the frame's camera. `level` is written by
+`LaraJointsLevelEnd` (`game/draw.cpp`) right after RNGLOG, from three file-static counters
+reset there, as RNGLOG's are.
+
+Cost with `-log` off: one test of `gLogEnabled` per `GetFreeSpark` call and one per drop
+that ends in a splash or a ripple; `GetFreeSpark` is now always a call. With `-log` each
+`GetFreeSpark` call also asks `InterpFrameSeedSaved`, and each `draw_alloc` counts the
+1024 slots once. `spark_life.py --allocs` lists the `draw_alloc` lines of two logs up to a
+tick with their running count, the two counts per tick and the difference, and the
+`next=` of the first `born` after in each.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI

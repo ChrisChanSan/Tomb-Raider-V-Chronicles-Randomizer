@@ -29174,15 +29174,22 @@ static void rngtrace_rule()
  * the fade or by GetFreeSpark's eviction, a light not found, a light index
  * below -1. Each is a Log call behind gLogEnabled and nothing else: the
  * engine's own statements stand as they were, and the draw's far-plane end
- * (specific\specificfx.cpp) still turns the spark off - this group only
- * reads the text. */
+ * (specific\specificfx.cpp) still turns the spark off. Then the spark slots
+ * the draw takes (#317c): GetFreeSpark's draw_alloc line inside a frame
+ * that gives its draws back (InterpFrameSeedSaved), the rain's line before
+ * its splash and its ripple (DoRain), and the level's line after RNGLOG
+ * (LaraJointsLevelEnd). This group only reads the text. */
 static void spark_life()
 {
 	char* fx = hd_switch_text("../../game/effect2.cpp");
 	char* sfx = hd_switch_text("../specificfx.cpp");
-	static char body[65536];
+	char* interp = hd_switch_text("../../game/interpolate.cpp");
+	char* interph = hd_switch_text("../../game/interpolate.h");
+	char* draw = hd_switch_text("../../game/draw.cpp");
+	static char body[262144];
 
-	ok(fx && sfx, "spark life: the two files", 0, 1);
+	ok(fx && sfx && interp && interph && draw, "spark life: the five files",
+		0, 1);
 
 	// Born: the start and the count taken before GetFreeSpark, one line
 	// after the set-up, before the colour swap and the smoke.
@@ -29251,13 +29258,41 @@ static void spark_life()
 		"(free+1)&0x3FF;spark[free].extras=0;spark[free].Dynamic=-1;") &&
 		strstr(body, "next_spark=(free+1)&0x3FF;spark[free].extras=0;"
 		"spark[free].Dynamic=-1;spark[free].Def=(uchar)objects["
-		"DEFAULT_SPRITES].mesh_index;returnfree;}}free=0;min_life=4095;") &&
-		!strstr(body, "static"),
+		"DEFAULT_SPRITES].mesh_index;if(log_draw)SparkLogDrawAlloc(free,"
+		"log_next,log_on,0,_ReturnAddress());returnfree;}}free=0;"
+		"min_life=4095;") && !strstr(body, "static"),
 		"spark life: end by eviction, the two loops as they were", 0, 1);
+
+	// draw_alloc: the test and the count before the search, one line at
+	// each of the two returns, the caller's address from GetFreeSpark
+	// itself, never inlined.
+	ok(strstr(body, "log_draw=gLogEnabled&&InterpFrameSeedSaved();"
+		"log_next=next_spark;log_on=log_draw?SparkLogCountOn():0;"
+		"free=next_spark;sptr=&spark[next_spark];for(lp=0;lp<1024;lp++)") &&
+		strstr(body, "spark[free].Def=(uchar)objects[DEFAULT_SPRITES]."
+		"mesh_index;if(log_draw)SparkLogDrawAlloc(free,log_next,log_on,1,"
+		"_ReturnAddress());returnfree;") &&
+		hd_switch_count(fx, "__declspec(noinline) long GetFreeSpark()") == 1 &&
+		hd_switch_count(fx, "_ReturnAddress()") == 2,
+		"spark life: draw_alloc, tested before the search, said at both "
+		"returns", 0, 1);
+	glass_body(fx, "static void SparkLogDrawAlloc(long slot, long next, "
+		"long on, long evicted,", body, sizeof(body));
+	ok(!strcmp(body, "spark_log_draw_allocs++;Log(\"SPARKLOGdraw_alloctick=%u"
+		"frame=%ldtween=%dslot=%ldnext=%ld\"\"on=%ldevicted=%ldret=%lx\","
+		"(unsigned)GlobalCounter,SparkLogFrameNow(),InterpIsTweenFrame()?1:"
+		"0,slot,next,on,evicted,(unsignedlong)((uintptr_t)ret-(uintptr_t)"
+		"GetModuleHandle(0)));"),
+		"spark life: the draw_alloc line counts and writes, relative ret", 0,
+		1);
+	glass_body(fx, "long SparkLogTakeDrawAllocs()", body, sizeof(body));
+	ok(!strcmp(body, "constlongn=spark_log_draw_allocs;"
+		"spark_log_draw_allocs=0;returnn;"),
+		"spark life: the level's draw_allocs taken and reset", 0, 1);
 	ok(hd_switch_count(fx, "static long next_spark = 0;") == 1 &&
-		hd_switch_count(fx, "next_spark") == 8,
-		"spark life: next_spark one file static, read by the line",
-		hd_switch_count(fx, "next_spark"), 8);
+		hd_switch_count(fx, "next_spark") == 10,
+		"spark life: next_spark one file static, read by the lines",
+		hd_switch_count(fx, "next_spark"), 10);
 	glass_body(fx, "static void SparkLogEnd(long slot, const char* why)",
 		body, sizeof(body));
 	ok(!strcmp(body, "SPARKS*sptr=&spark[slot];Log(\"SPARKLOGendtick=%u"
@@ -29267,11 +29302,48 @@ static void spark_life()
 		"spark life: the end line writes and changes nothing", 0, 1);
 
 	// Every life line behind the flag; the kill line stays the draw's.
-	ok(hd_switch_count(fx, "Log(\"SPARKLOG") == 6 &&
+	ok(hd_switch_count(fx, "Log(\"SPARKLOG") == 7 &&
 		hd_switch_count(fx, "SparkLogEnd(i, \"") == 2 &&
 		hd_switch_count(fx, "SPARKLOG kill") == 0,
-		"spark life: six Log calls, two ends by name, no kill line here",
-		hd_switch_count(fx, "Log(\"SPARKLOG"), 6);
+		"spark life: seven Log calls, two ends by name, no kill line here",
+		hd_switch_count(fx, "Log(\"SPARKLOG"), 7);
+
+	// The accessor: the flag InterpEndFrame gives back by, nothing more.
+	glass_body(interp, "bool InterpFrameSeedSaved()", body, sizeof(body));
+	ok(!strcmp(body, "returng_seedSaved;") && hd_switch_count(interph,
+		"bool InterpFrameSeedSaved();") == 1,
+		"spark life: InterpFrameSeedSaved reads g_seedSaved", 0, 1);
+
+	// The rain: a line before each of DoRain's two calls, the calls and
+	// their arguments as they were; the frame as S_DrawSparks counted it.
+	glass_body(sfx, "void DoRain()", body, sizeof(body));
+	ok(strstr(body, "if(room[room_number].flags&ROOM_UNDERWATER&&(i&7)==7)"
+		"if(gLogEnabled)SparkLogRain(\"ripple\",rptr,room_number);"
+		"SetupRipple(rptr->x,GetWaterHeight(rptr->x,rptr->y,rptr->z,"
+		"room_number),rptr->z,3,0);}elseif(gLogEnabled)SparkLogRain("
+		"\"splash\",rptr,room_number);TriggerSmallSplash(rptr->x,GetHeight("
+		"floor,rptr->x,rptr->y,rptr->z),rptr->z,1);}rptr->x=0;continue;}") &&
+		hd_switch_count(sfx, "SparkLogRain(\"") == 2,
+		"spark life: rain, one line before the ripple and the splash", 0, 1);
+	ok(hd_switch_count(sfx, "Log(\"SPARKLOG rain what=%s tick=%u frame=%ld "
+		"tween=%d drop=%ld,%ld,%ld \"") == 1 &&
+		hd_switch_count(sfx, "\"cam=%ld,%ld,%ld room=%d\"") == 1,
+		"spark life: the rain line's fields", 0, 1);
+	glass_body(sfx, "long SparkLogFrameNow()", body, sizeof(body));
+	ok(!strcmp(body, "returnGlobalCounter==spark_log_tick?spark_log_frame:"
+		"0;"), "spark life: the frame of the tick, 0 before its first", 0, 1);
+
+	// The level line after RNGLOG, its counters reset there.
+	glass_body(sfx, "void SparkLogLevelEnd()", body, sizeof(body));
+	ok(!strcmp(body, "constlongallocs=SparkLogTakeDrawAllocs();if("
+		"gLogEnabled)Log(\"SPARKLOGleveldraw_allocs=%ldsplashes=%ldripples="
+		"%ld\",allocs,spark_log_splashes,spark_log_ripples);"
+		"spark_log_splashes=0;spark_log_ripples=0;"),
+		"spark life: the level line, its counters reset after it", 0, 1);
+	glass_body(draw, "void LaraJointsLevelEnd()", body, sizeof(body));
+	ok(strstr(body, "g_joints.serial=serial;InterpRngLevelEnd();"
+		"SparkLogLevelEnd();") != 0,
+		"spark life: the level line right after RNGLOG", 0, 1);
 
 	// The base's far-plane branch still ends the spark (no fix here).
 	glass_body(sfx, "void S_DrawDrawSparksNEW(SPARKS* sptr, long "
@@ -29282,6 +29354,9 @@ static void spark_life()
 
 	free(fx);
 	free(sfx);
+	free(interp);
+	free(interph);
+	free(draw);
 }
 
 /* The films of the 64-bit build (specific\fmv_av.cpp): FFmpeg's Bink
@@ -37328,9 +37403,11 @@ static void logic_leftovers()
 		"undone=%ld kept_frames=%ld \"") == 1,
 		"leftovers: one RNGLOG line", 0, 1);
 	glass_body(draw, "void LaraJointsLevelEnd()", body, sizeof(body));
-	a = (long)strlen(body) - (long)strlen("InterpRngLevelEnd();");
-	ok(a > 0 && joints_at(body, "InterpRngLevelEnd();") == a,
-		"leftovers: RNGLOG follows JOINTLOG", 0, 1);
+	a = (long)strlen(body) - (long)strlen("InterpRngLevelEnd();"
+		"SparkLogLevelEnd();");
+	ok(a > 0 && joints_at(body, "InterpRngLevelEnd();SparkLogLevelEnd();") ==
+		a, "leftovers: RNGLOG follows JOINTLOG, then SPARKLOG's level line",
+		0, 1);
 
 	glass_body(draw, "void PrintObjects(short room_number)", body,
 		sizeof(body));

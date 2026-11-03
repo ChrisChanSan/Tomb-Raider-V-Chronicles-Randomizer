@@ -29,6 +29,9 @@
 #include "camera.h"
 #include "lara.h"
 #include "../specific/hd/hd_level.h"	// HDWaterSplash
+#include "interpolate.h"	// InterpFrameSeedSaved - SPARKLOG draw_alloc
+#include "../specific/specificfx.h"	// SparkLogFrameNow - SPARKLOG draw_alloc
+#include <intrin.h>			// _ReturnAddress - SPARKLOG draw_alloc
 
 static long number_dynamics;
 DYNAMIC dynamics[64];
@@ -1348,6 +1351,32 @@ static long SparkLogCountOn()
 	return n;
 }
 
+/* draw_alloc: a slot GetFreeSpark hands out while the frame being drawn
+ * will give the generator's state back (InterpFrameSeedSaved) - the draw
+ * moves next_spark and turns a spark on, and nothing of it is undone. ret
+ * is the caller's address relative to the module's base, as -rngtrace
+ * writes it; GetFreeSpark is never inlined so that it is the caller's. */
+static long spark_log_draw_allocs = 0;
+
+static void SparkLogDrawAlloc(long slot, long next, long on, long evicted,
+	void* ret)
+{
+	spark_log_draw_allocs++;
+	Log("SPARKLOG draw_alloc tick=%u frame=%ld tween=%d slot=%ld next=%ld "
+		"on=%ld evicted=%ld ret=%lx", (unsigned)GlobalCounter,
+		SparkLogFrameNow(), InterpIsTweenFrame() ? 1 : 0, slot, next, on,
+		evicted, (unsigned long)((uintptr_t)ret -
+		(uintptr_t)GetModuleHandle(0)));
+}
+
+long SparkLogTakeDrawAllocs()
+{
+	const long n = spark_log_draw_allocs;
+
+	spark_log_draw_allocs = 0;
+	return n;
+}
+
 static void SparkLogEnd(long slot, const char* why)
 {
 	SPARKS* sptr = &spark[slot];
@@ -1802,10 +1831,16 @@ void TriggerSuperJetFlame(ITEM_INFO* item, long yvel, long deadly)
 		sptr->Xvel = (short)dy;
 }
 
-long GetFreeSpark()
+__declspec(noinline) long GetFreeSpark()
 {
 	SPARKS* sptr;
-	long free, min_life, lp;
+	long free, min_life, lp, log_next, log_on;
+	bool log_draw;
+
+	// SPARKLOG draw_alloc: inside a frame that gives its draws back.
+	log_draw = gLogEnabled && InterpFrameSeedSaved();
+	log_next = next_spark;
+	log_on = log_draw ? SparkLogCountOn() : 0;
 
 	free = next_spark;
 	sptr = &spark[next_spark];
@@ -1831,6 +1866,10 @@ long GetFreeSpark()
 			spark[free].extras = 0;
 			spark[free].Dynamic = -1;
 			spark[free].Def = (uchar)objects[DEFAULT_SPRITES].mesh_index;
+
+			if (log_draw)
+				SparkLogDrawAlloc(free, log_next, log_on, 0, _ReturnAddress());
+
 			return free;
 		}
 	}
@@ -1862,6 +1901,10 @@ long GetFreeSpark()
 	spark[free].extras = 0;
 	spark[free].Dynamic = -1;
 	spark[free].Def = (uchar)objects[DEFAULT_SPRITES].mesh_index;
+
+	if (log_draw)
+		SparkLogDrawAlloc(free, log_next, log_on, 1, _ReturnAddress());
+
 	return free;
 }
 

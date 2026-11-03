@@ -37,6 +37,13 @@ void DoRain();
 void DoSnow();
 void DrawBinoculars();
 void S_DrawSparks();
+
+/* SPARKLOG (-log): the frame within the tick as S_DrawSparks counted it
+ * last, 0 before its first frame of the tick; and the level's line of the
+ * draw's spark allocations and the rain's splashes and ripples, written
+ * and reset by LaraJointsLevelEnd (game\draw.cpp) after RNGLOG. */
+long SparkLogFrameNow();
+void SparkLogLevelEnd();
 void S_DrawDrawSparksNEW(SPARKS* sptr, long smallest_size, float* xyz);
 void S_DrawFireSparks(long size, long life);
 void S_DrawSmokeSparks();

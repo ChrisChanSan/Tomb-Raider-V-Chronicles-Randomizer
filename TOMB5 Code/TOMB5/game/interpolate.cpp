@@ -1389,6 +1389,11 @@ bool InterpFrameBlended()
 	return g_applied;
 }
 
+bool InterpFrameSeedSaved()
+{
+	return g_seedSaved;
+}
+
 void InterpNoteClassicPresent()
 {
 	/* A present that waited its full two ticks is a 30 Hz one: the load/save

@@ -1378,6 +1378,9 @@ void DoWeather()
 		DoSnow();
 }
 
+// SPARKLOG's rain line, with the other SPARKLOG lines below S_DrawSparks.
+static void SparkLogRain(const char* what, RAINDROPS* rptr, short room_number);
+
 void DoRain()
 {
 	RAINDROPS* rptr;
@@ -1465,9 +1468,19 @@ void DoRain()
 					if (room_number == rptr->room_number || room[room_number].flags & ROOM_UNDERWATER)
 					{
 						if (room[room_number].flags & ROOM_UNDERWATER && (i & 7) == 7)
+						{
+							if (gLogEnabled)
+								SparkLogRain("ripple", rptr, room_number);
+
 							SetupRipple(rptr->x, GetWaterHeight(rptr->x, rptr->y, rptr->z, room_number), rptr->z, 3, 0);
+						}
 						else
+						{
+							if (gLogEnabled)
+								SparkLogRain("splash", rptr, room_number);
+
 							TriggerSmallSplash(rptr->x, GetHeight(floor, rptr->x, rptr->y, rptr->z), rptr->z, 1);
+						}
 
 						rptr->x = 0;
 						continue;
@@ -2132,6 +2145,42 @@ static void SparkLogOther(const char* what, const char* why, long slot,
 		"z=%ld slot=%ld life=%ld", what, (unsigned)GlobalCounter,
 		spark_log_frame, InterpAlphaNow(), InterpIsTweenFrame() ? 1 : 0, why,
 		z, slot, life);
+}
+
+long SparkLogFrameNow()
+{
+	return GlobalCounter == spark_log_tick ? spark_log_frame : 0;
+}
+
+/* The rain's two calls into the particles the logic walks (DoRain): a
+ * splash takes spark slots (TriggerSmallSplash, GetFreeSpark), a ripple a
+ * ripple slot (SetupRipple). Counted per level with -log only. */
+static long spark_log_splashes = 0;
+static long spark_log_ripples = 0;
+
+static void SparkLogRain(const char* what, RAINDROPS* rptr, short room_number)
+{
+	if (what[0] == 's')
+		spark_log_splashes++;
+	else
+		spark_log_ripples++;
+
+	Log("SPARKLOG rain what=%s tick=%u frame=%ld tween=%d drop=%ld,%ld,%ld "
+		"cam=%ld,%ld,%ld room=%d", what, (unsigned)GlobalCounter,
+		SparkLogFrameNow(), InterpIsTweenFrame() ? 1 : 0, rptr->x, rptr->y,
+		rptr->z, camera.pos.x, camera.pos.y, camera.pos.z, (int)room_number);
+}
+
+void SparkLogLevelEnd()
+{
+	const long allocs = SparkLogTakeDrawAllocs();
+
+	if (gLogEnabled)
+		Log("SPARKLOG level draw_allocs=%ld splashes=%ld ripples=%ld", allocs,
+			spark_log_splashes, spark_log_ripples);
+
+	spark_log_splashes = 0;
+	spark_log_ripples = 0;
 }
 
 void S_DrawSparks()

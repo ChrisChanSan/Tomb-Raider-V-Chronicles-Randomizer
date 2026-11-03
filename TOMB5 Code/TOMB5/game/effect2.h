@@ -23,6 +23,10 @@ void TriggerExplosionSparks(long x, long y, long z, long extras, long dynamic, l
 void TriggerFireFlame(long x, long y, long z, long body_part, long type);
 void TriggerSuperJetFlame(ITEM_INFO* item, long yvel, long deadly);
 long GetFreeSpark();
+
+/* SPARKLOG (-log): the spark slots GetFreeSpark handed out inside a drawn
+ * frame since the last call, which resets the count (SparkLogLevelEnd). */
+long SparkLogTakeDrawAllocs();
 void DetatchSpark(long num, long type);
 void UpdateSparks();
 

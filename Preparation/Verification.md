@@ -733,3 +733,35 @@ vanishes, with the body's room at the picture's edge, is the one leftover
 between its two rooms' item lists by what the picture's walk saw, follows
 the same rule and leaves the same residual: at *Display* the lists follow
 that blended picture, once per step.
+
+## 11. Do the films play on the 64-bit build?
+
+The 64-bit build cannot load the game's 32-bit `binkw32.dll`; it plays the
+films through three FFmpeg DLLs beside its EXE (`specific\fmv_av.cpp`,
+`vendor\ffmpeg-min`). Two steps, the first without the game:
+
+1. The decoder. Build `BinkProbe` (`bbp.bat`) and run it on each of the
+   nine films: `BinkProbe.exe <repo>\vendor\ffmpeg-min\bin
+   <game>\movie\fmv1.bik`. Every film reports a video stream `binkvideo`
+   640x480 `yuv420p` and an audio stream, and decodes to its end with no
+   error line, many times faster than real time. `-bmp 300 out.bmp` writes
+   frame 300 through the engine's own conversion (`specific\yuv_rgb.cpp`):
+   the picture must look as the film does, no colour cast, not upside
+   down, and the three test pixels it prints are black, white and red.
+2. The game. Copy `release64\` with the three DLLs into the game folder
+   and start `PCtomb5_x64.exe -log`. Watch the intro: the sound in time
+   with the picture at the start and still after a minute (the lips, a
+   door, a shot). Skip it once with each of the three keys - Escape
+   (`IN_OPTION`), the draw key (`IN_DRAW`) and Enter or Cross
+   (`IN_SELECT`): a key already held when a film starts does not skip it,
+   only a new press does; the title must come up after it, with its
+   music. Play a level to its end for its outro film. Then read the log:
+   `FMVLOG av loaded avutil=61.20.100 avcodec=63.26.100
+   avformat=63.18.100` at the start, and per film
+   `FMVLOG film=<n> frames=<shown> dropped=<d> audio_frames=<a>
+   skipped=<0|1> seconds=<t>`. A film played to its end shows about all
+   its frames (fmv1: 1857) with `dropped` near 0 and `seconds` near its
+   length (fmv1: 74.3); a skipped one says `skipped=1`. A `clock=wall` line
+   means its audio stopped being the clock - an audio device that went
+   away, or a film whose sound ends early. Without the DLLs the start says
+   `FMVLOG av missing avutil-61.dll` and the game runs without films.

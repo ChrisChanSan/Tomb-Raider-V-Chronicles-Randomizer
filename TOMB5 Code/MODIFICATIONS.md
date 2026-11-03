@@ -18240,6 +18240,75 @@ no number drawn, and no other file writing the family.
 
 **Commits.** `6233e225`.
 
+### The 64-bit engine plays the films through the minimal FFmpeg (#315)
+2026-11-03
+
+**What.** The 64-bit build plays the game's films (`movie/fmv*.bik`) again. It decodes
+them with FFmpeg's Bink decoders, three DLLs that `be64.bat` and `basan.bat` copy beside
+the EXE (`avutil-61.dll`, `avcodec-63.dll`, `avformat-63.dll`; their origin, licence
+and source are in `THIRD-PARTY.md`). Without them the game goes on without films, as
+the 64-bit build did until now; the 32-bit build plays through Bink as before.
+
+**Why.** The game's `binkw32.dll` is 32-bit code, which a 64-bit process cannot load, so
+the 64-bit build skipped every film with `FMV off: no 64-bit Bink, films skipped` (the
+x64 entry of section 2.10 above). That line is gone.
+
+**How.** `specific/fmv_av.cpp` + `fmv_av.h`, under `#ifdef _WIN64` and left out of the
+two Win32 configurations in `tomb5.vcxproj`, so the 32-bit object list is the one it
+was; `fmv.cpp` keeps the Bink path for Win32 and, under `_WIN64`, routes
+`LoadBinkStuff`, `FreeBinkStuff`, `FmvDeviceLost` and `PlayFmv` to it, so `gameflow.cpp`
+and `LoadSave.cpp` call the same names.
+
+- Loading, at `LoadBinkStuff`'s place in `WinMain`: the three DLLs from the EXE's own
+  folder by full path with `LoadLibraryExW` and `LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR |
+  LOAD_LIBRARY_SEARCH_DEFAULT_DIRS`, avutil first (each imports the one before it); the
+  23 functions of `BinkProbe` by `GetProcAddress`; each library's major version checked
+  against the headers it was compiled with, another major refused. No import library
+  and no `#pragma comment(lib` - the DLLs are loaded at run time only. A failure is one
+  `FMVLOG av ...` line naming the DLL or the function, `fmvs_disabled` set and no
+  message box; success is `FMVLOG av loaded avutil=<v> avcodec=<v> avformat=<v>`.
+- Playback keeps `PlayFmv`'s frame: `S_CDStop`, the `fmvs_disabled` check (`-nofmv`),
+  the path `movie\fmv<n>.bik`, `App.fmv` set, the lazy 640x480 managed texture, the skip
+  rule copied word for word (a press of `IN_OPTION`, `IN_DRAW` or `IN_SELECT` after a
+  release; the key held on entry counts as held), `S_UpdateInput` once per picture
+  shown - so the replay's `fmv` flag leaves the film's input out as before - the same
+  scene steps to show a picture, and the same tail (`DXChangeOutputFormat`,
+  `HWInitialise`, `ClearSurfaces`, `App.fmv` cleared) on the one way out of the film,
+  which every end, skip and error reaches. The film plays until its video decoder is
+  drained, not for the frame counts the Bink path has. The 60 fps blend is not involved:
+  the film's loop presents its pictures itself and never reaches `InterpBeginFrame`.
+- The audio is the clock. The film's audio plays on an XAudio2 source voice of 32-bit
+  float at the stream's rate and channel count, on the game's mastering voice; each
+  decoded audio frame is copied into a buffer of its own (a ring of 32), and decoding
+  runs ahead only until 8 buffers are queued and a picture waits (8 pictures at most).
+  The voice's `SamplesPlayed` is the clock: a picture is shown when its time has come,
+  waited for in `Sleep(1)` steps with the voice kept fed, and dropped when the clock is
+  past it by more than a frame. A film without audio, a game without XAudio2, or an
+  audio that has ended or not moved for half a second goes on with
+  `QueryPerformanceCounter` from where the audio was (`FMVLOG film=<n> clock=wall at <t>
+  (<why>)`). At the end the queued audio plays out; a skip stops it at once. Every film
+  ends with `FMVLOG film=<n> frames=<shown> dropped=<d> audio_frames=<a>
+  skipped=<0|1> seconds=<t>`; an open, read or decode error ends the film with one line
+  and the game goes on.
+- `specific/yuv_rgb.cpp` + `.h` converts a picture: `yuv420p` (and `yuva420p`, alpha
+  ignored) in limited range with the BT.601 matrix to X8R8G8B8, in integers - 1.164,
+  1.596, 0.391, 0.813 and 2.018 times 65536 - one row at a time by each plane's
+  `linesize`, chroma shared by 2x2. Any other picture format refuses the film. The file
+  includes no engine header, so `BinkProbe` and `ModernTest` compile the same file.
+
+`BinkProbe` gains `-bmp <n> <out.bmp>`, frame n written as a 24-bit BMP through that
+conversion, with its three test pixels printed. ModernTest gains `film_av` (24 checks):
+the conversion's factors, black, white, red and the clamps, a padded 3x3 picture; in the
+engine's text the load with its search flags, avutil first, 23 functions, the version
+refusal, every failure logged with films off and no message box, no `av*.lib` in the
+project and no `#pragma comment`, the two files left out of Win32, `fmv.cpp`'s
+routing, the skip rule identical to the Bink path's, `App.fmv` set and cleared, the
+tail on the one way out, the audio clock, and the DLLs copied by `be64.bat` and
+`basan.bat` but not `be.bat`. The 64-bit EXE imports no `av*.dll`; it no longer imports
+`DDRAW.dll` either, which only the Bink path used.
+
+**Commits.** `058a7ef6`.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -18662,3 +18731,4 @@ entries above.
 | #311 | A sound the level lacks is not stopped through info -1 |
 | #312 | No fixed camera, no camera.fixed[-1]; empty ring slots skipped |
 | #314 | The recorder writes the check's fields per input call: STATELOG |
+| #315 | The 64-bit engine plays the films through the minimal FFmpeg |

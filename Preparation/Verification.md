@@ -718,16 +718,20 @@ recorder, which the 64-bit build carries:
    Each log carries `RNGTRACE window from=836 to=845` near its top and one
    `RNGTRACE tick=` line per input call from 836 to 845, the call list of
    the span that ends there, followed by its `RNGTRACE section=` lines.
-   Then, beside the two logs, with the EXE that wrote them and its PDB:
+   Then, beside the two logs, with the EXE that wrote them and its PDB
+   (`bal.bat` builds `AddrLine.exe` beside the script first):
 
-       python rngtrace_diff.py rt_rec.log rt_live.log --exe <folder>\PCtomb5_asan.exe
+       python <repo>\Preparation\Tools\Diagnose\rngtrace_diff.py rt_rec.log rt_live.log --exe <folder>\PCtomb5_asan.exe
 
-   `rngtrace_diff.py` (#316's comparison script) pairs the spans, prints
-   the first tick whose call lists differ, the index of the first
-   differing call, the marks it falls between on either side, ten
+   `Preparation\Tools\Diagnose\rngtrace_diff.py` pairs the spans, prints
+   the first tick whose call lists differ, the section marks of both side
+   by side with the first one whose state differs, the index of the first
+   differing call and the marks it falls between on either side, ten
    addresses around it in both logs, and each of them through
-   `AddrLine.exe <exe> -ret <addresses>` as `file:line function`. The same
-   lookup by hand: `AddrLine.exe <folder>\PCtomb5_asan.exe -ret 5622 2d7a`.
+   `AddrLine.exe <exe> -ret <addresses>` as `file:line function`. Without
+   `--exe` it takes `<repo>\releaseasan\PCtomb5_asan.exe`, the tree's own
+   Asan build. The same lookup by hand:
+   `AddrLine.exe <folder>\PCtomb5_asan.exe -ret 5622 2d7a`.
    The call that appears on one side only, or another call at the same
    place, is where the two runs part; what that caller read is the next
    question, not answered by the trace.

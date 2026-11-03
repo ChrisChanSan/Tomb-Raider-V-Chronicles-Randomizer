@@ -18346,10 +18346,13 @@ and the span's writer (`RngTraceInputSeam`, called first in `ReplayInputSeam`, b
 the recorder's own off test). `GetRandomControl` tests one static flag and calls the
 record through `_ReturnAddress()`; it is `__declspec(noinline)`, since the Release
 builds link with whole-program optimisation and an inlined copy has no return address
-of its own. Without the switch the generator pays that test - a compare with memory
-and a branch never taken, beside the multiply it already does - on every call,
-particles and the sky's twinkle included. `Log()` and the trace's line (longer than
-`Log()`'s 4 KB buffer) share one writer, `LogText`, and so one time stamp. The parse is
+of its own. Measured on the 64-bit Release build: before, the function was inlined at
+every site (1405 copies, no call); now it is called at 1548 sites - the behaviour is
+the same, the code generation is not. Without the switch the generator pays that
+test - a compare with memory and a branch never taken, beside the multiply it already
+does - on every call, particles and the sky's twinkle included. `Log()` and the trace's
+line (longer than `Log()`'s 4 KB buffer) share one writer, `LogText`, and so one time
+stamp. The parse is
 `RngTraceSwitch` in `specific/high_pool.cpp` beside `SwitchWordGiven` (now a wrapper of
 `SwitchWordEnd`), which ModernTest compiles. `specific/winmain.cpp` reads the switch
 after `-record`/`-replay`. Marks in `game/control.cpp` and `game/draw.cpp`.

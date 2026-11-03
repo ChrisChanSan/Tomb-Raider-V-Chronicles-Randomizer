@@ -28,12 +28,13 @@ void SeedRandomControl(long seed);
  * saves this over an in-between frame and restores it with
  * SeedRandomControl, so consumption per logic tick stays exactly what it is
  * at thirty. Nothing else may use it: a seed is not a random number. The
- * one other reader is the level header of -record (specific\replay.cpp),
- * which writes it and the draw generator's down, never a number from them. */
+ * one other reader is the recorder (specific\replay.cpp): -record's level
+ * header, the input record's check and the STATELOG line, which write it
+ * and the draw generator's down, never a number from them. */
 long GetRandomControlSeed();
 long GetRandomDraw();
 void SeedRandomDraw(long seed);
-long GetRandomDrawSeed();	// -record's level header only, as above
+long GetRandomDrawSeed();	// the recorder only, as above
 void Log(const char* s, ...);
 
 /* An address as a log line prints it with %x: its low 32 bits, so the line

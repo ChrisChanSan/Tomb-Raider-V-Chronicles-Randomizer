@@ -28942,6 +28942,37 @@ static void replay_rule()
 		"replay: the replay's open line says clock=, the record's is as was",
 		0, 1);
 
+	// STATELOG: the check's fields one by one, written at the input point
+	// after the recorder's own off test and before either check, with -log.
+	glass_body(replay, "void ReplayInputSeam(", body, sizeof(body));
+	ok(strstr(body, "if(g_mode==REPLAY_OFF||fmv)return;ReplayStateLog();"
+		"if(g_mode==REPLAY_RECORD)memset(&r,0,sizeof(r));") != 0 &&
+		hd_switch_count(replay, "ReplayStateLog();") == 1,
+		"replay: STATELOG only under an open recorder, before the check",
+		hd_switch_count(replay, "ReplayStateLog();"), 1);
+	glass_body(replay, "static void ReplayStateLog()", body, sizeof(body));
+	ok(strstr(body, "if(!gLogEnabled)return;") != 0 && strstr(body,
+		"Log(\"STATELOGtick=%dseed=0x%08lXdraw=0x%08lXx=%ldy=%ldz=%ld\"\""
+		"rot=%uhp=%dtarget=%dactive=%lddead=%ld\",(int)GlobalCounter,("
+		"unsignedlong)(uint32_t)GetRandomControlSeed(),(unsignedlong)("
+		"uint32_t)GetRandomDrawSeed(),(long)lara_item->pos.x_pos,(long)"
+		"lara_item->pos.y_pos,(long)lara_item->pos.z_pos,(unsigned)("
+		"unsignedshort)lara_item->pos.y_rot,(int)lara_item->hit_points,"
+		"target,active,dead);") != 0,
+		"replay: STATELOG's fields in their order, with -log only", 0, 1);
+	ok(strstr(body, "i=items[i].next_active)active++;") != 0 &&
+		strstr(body, "if(items[i].after_death>0&&items[i].after_death<128)"
+		"dead++;") != 0 && strstr(body, "if(lara.target)target=(int)("
+		"lara.target-items);") != 0 && hd_switch_count(body,
+		"GetRandomControl()") + hd_switch_count(body, "GetRandomDraw()") ==
+		0, "replay: STATELOG counts the chain and the fading bodies, draws "
+		"nothing", 0, 1);
+	ok(hd_switch_count(replay, "STATELOG tick=") == 2 &&
+		hd_switch_count(control, "STATELOG") == 0 &&
+		hd_switch_count(draw, "STATELOG") == 0,
+		"replay: STATELOG written by the recorder alone",
+		hd_switch_count(replay, "STATELOG tick="), 2);
+
 	free(input);
 	free(winmain);
 	free(gamemain);

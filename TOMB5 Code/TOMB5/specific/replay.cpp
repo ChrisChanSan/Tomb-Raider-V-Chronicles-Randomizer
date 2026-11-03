@@ -20,6 +20,7 @@
 #include "../game/text.h"	// GnFrameCounter
 #include "../game/gameflow.h"	// gfLevelId
 #include "../game/lara.h"		// lara_item - the input record's check
+#include "../game/items.h"		// next_item_active - STATELOG
 
 /* -record and -replay.
  *
@@ -79,6 +80,56 @@ static int32_t ReplayCheck()
 	}
 
 	return (int32_t)h;
+}
+
+/* STATELOG, with -log, and only while -record or -replay is open: what
+ * ReplayCheck mixes into one number, field by field, and four things it
+ * leaves out - the draw generator's seed, Lara's target, the length of
+ * the active item chain and the bodies still fading (after_death 1..127).
+ * Once per input call, before the check. A recording and its replay
+ * compared line by line then name the first field that parts and its
+ * tick, where REPLAYLOG drift names only the tick. A run without either
+ * switch never reaches this, so a plain -log run writes no such line. */
+static void ReplayStateLog()
+{
+	long active = 0, dead = 0;
+	int target = -1;
+
+	if (!gLogEnabled)
+		return;
+
+	if (items)
+	{
+		// Bounded: a chain that loops would otherwise hold the frame.
+		for (short i = next_item_active; i != NO_ITEM && i >= 0 &&
+			i < MAX_ITEMS && active < MAX_ITEMS; i = items[i].next_active)
+			active++;
+
+		for (int i = 0; i < MAX_ITEMS; i++)
+			if (items[i].after_death > 0 && items[i].after_death < 128)
+				dead++;
+
+		if (lara.target)
+			target = (int)(lara.target - items);
+	}
+
+	if (!lara_item)
+	{
+		Log("STATELOG tick=%d seed=0x%08lX draw=0x%08lX lara=none "
+			"active=%ld dead=%ld", (int)GlobalCounter,
+			(unsigned long)(uint32_t)GetRandomControlSeed(),
+			(unsigned long)(uint32_t)GetRandomDrawSeed(), active, dead);
+		return;
+	}
+
+	Log("STATELOG tick=%d seed=0x%08lX draw=0x%08lX x=%ld y=%ld z=%ld "
+		"rot=%u hp=%d target=%d active=%ld dead=%ld", (int)GlobalCounter,
+		(unsigned long)(uint32_t)GetRandomControlSeed(),
+		(unsigned long)(uint32_t)GetRandomDrawSeed(),
+		(long)lara_item->pos.x_pos, (long)lara_item->pos.y_pos,
+		(long)lara_item->pos.z_pos,
+		(unsigned)(unsigned short)lara_item->pos.y_rot,
+		(int)lara_item->hit_points, target, active, dead);
 }
 
 static void ReplayStop(const char* why)
@@ -222,6 +273,8 @@ void ReplayInputSeam(char* keys, long* mouse_dx, long* mouse_dy,
 
 	if (g_mode == REPLAY_OFF || fmv)
 		return;
+
+	ReplayStateLog();
 
 	if (g_mode == REPLAY_RECORD)
 	{

@@ -689,6 +689,21 @@ recorder, which the 64-bit build carries:
    step or a door move that differs between recording and replay, with the
    body's room or the door's portal at the picture's edge, is the known
    leftover; the same counts on both sides and a drift is a new finding.
+   The drift line names the tick, not what parted: with `-log` both runs
+   write a `STATELOG` line per input call (`tick= seed= draw= x= y= z=
+   rot= hp= target= active= dead=`), and `xdiff.py` over the two logs
+   names the first line that differs. Its first differing field names the
+   reader: `seed=` alone, something in the step before drew another
+   number; `hp=`, something hurt Lara; `x=`..`rot=`, her own control;
+   `target=`, her weapons chose another enemy; `active=`, an item was
+   started or ended on another step; `dead=`, a body fades a step longer
+   or shorter (the leftover below). A field that parts on an earlier tick
+   than `seed=` is the cause, the seed the consequence. A body's fade one
+   step off by itself is no drift: a body whose death animation ended is
+   off the active chain and out of the AI slots, and the kill a step later
+   draws no number and touches nothing of Lara's (#314: ANDREA2, the fade
+   one step apart in one live replay and equal in the other, both
+   drifting at the same tick with the same hashes).
 4. `JOINTLOG passes=<n> ticks=<m> tween_frames=<k> blended_frames=<b>`,
    one line at the end of each level and of the title: `passes` equals
    `blended_frames`; at 30 both are 0; at 60 they are about `ticks` (a

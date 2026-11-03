@@ -18206,6 +18206,40 @@ wet cloth only (172 to 240), so the start slot was never wrong there.
 
 **Commits.** `c7df99bb`, `010a1b06`.
 
+### The recorder writes the check's fields per input call: STATELOG (#314)
+2026-11-03
+
+**What.** A log line beside the input record's check. With `-log`, and only while
+`-record` or `-replay` is open, every call of the input point writes
+
+    STATELOG tick=<n> seed=0x<ctrl> draw=0x<draw> x=<> y=<> z=<> rot=<> hp=<>
+             target=<item or -1> active=<n> dead=<n>
+
+before the record's check is taken or compared: the logic generator's state, the draw
+generator's state, Lara's place, turn and life (the fields `ReplayCheck` mixes into one
+number), Lara's target as an item number, the length of the active item chain and the
+number of items with `after_death` 1 to 127 (the bodies still fading). Before a level
+has a Lara the line says `lara=none` in place of her six fields. Nothing is drawn from
+either generator; a run without `-record` or `-replay` writes no such line, so a plain
+`-log` run does not grow.
+
+**Why.** `REPLAYLOG drift` says the first tick at which the replayed game is no longer the
+recorded one, and nothing more: the generator's state and Lara's five fields go into one
+hash. A recording and its replay with STATELOG, put through `xdiff.py`, name the first
+field that parts and its tick, and the three counts say whether a state the hash does
+not hold (a target, an item that stayed active, a body that fades a tick longer) parted
+first.
+
+**How.** `specific/replay.cpp`: `ReplayStateLog`, called in `ReplayInputSeam` right after
+its `REPLAY_OFF`/film return and before either branch. The active chain is walked from
+`next_item_active` with a bound of `MAX_ITEMS` steps; the fading bodies are counted over
+all `MAX_ITEMS` slots. `specific/function_stubs.h`: the note on the two seed readers
+names the recorder as their one other reader. ModernTest's `replay_rule` gains 4 checks:
+the call's place, the line's fields in their order with `-log` only, the two counts and
+no number drawn, and no other file writing the family.
+
+**Commits.** `6233e225`.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -18627,3 +18661,4 @@ entries above.
 | #310 | The logic reads Lara's joints from the live state, not a blend |
 | #311 | A sound the level lacks is not stopped through info -1 |
 | #312 | No fixed camera, no camera.fixed[-1]; empty ring slots skipped |
+| #314 | The recorder writes the check's fields per input call: STATELOG |

@@ -176,6 +176,8 @@
 // lists in tsv_buffer (collide_lists).
 #include "../../../TOMB5 Code/TOMB5/specific/replay_format.h"
 #include "../../../TOMB5 Code/TOMB5/game/collide_lists.h"
+// The films' picture conversion of the 64-bit build (film_av).
+#include "../../../TOMB5 Code/TOMB5/specific/yuv_rgb.h"
 #include <io.h>
 #include <new>
 #include <vector>
@@ -28984,6 +28986,316 @@ static void replay_rule()
 	free(output);
 }
 
+/* The films of the 64-bit build (specific\fmv_av.cpp): FFmpeg's Bink
+ * decoders in three DLLs beside the EXE, loaded at run time. The conversion
+ * of its pictures (specific\yuv_rgb.cpp, compiled beside this test) on known
+ * pixels and a small picture; in the engine's text the loading - its search
+ * flags, avutil first, no import library, no #pragma comment - the skip
+ * rule as fmv.cpp has it for Bink, the tail on the one way out, App.fmv set
+ * and cleared, and the packaging of be64.bat and basan.bat. */
+static char* film_text(const char* rel)
+{
+	FILE* f = tree_open(rel);
+
+	if (!f)
+		return 0;
+
+	fseek(f, 0, SEEK_END);
+
+	const long size = ftell(f);
+	char* text = (char*)malloc((size_t)size + 1);
+
+	fseek(f, 0, SEEK_SET);
+
+	if (text)
+		text[fread(text, 1, (size_t)size, f)] = 0;
+
+	fclose(f);
+	return text;
+}
+
+// The whole text with every blank taken out, as glass_body does a body.
+static char* film_strip(const char* text)
+{
+	char* out = text ? (char*)malloc(strlen(text) + 1) : 0;
+	size_t n = 0;
+
+	if (!out)
+		return 0;
+
+	for (const char* p = text; *p; p++)
+	{
+		if ((unsigned char)*p > ' ')
+			out[n++] = *p;
+	}
+
+	out[n] = 0;
+	return out;
+}
+
+// The part of `text` from `from` to the end of `to`, or an empty string.
+static void film_span(const char* text, const char* from, const char* to,
+	char* out, size_t size)
+{
+	const char* a = text ? strstr(text, from) : 0;
+	const char* b = a ? strstr(a, to) : 0;
+
+	out[0] = 0;
+
+	if (a && b && (size_t)(b + strlen(to) - a) < size)
+	{
+		memcpy(out, a, (size_t)(b + strlen(to) - a));
+		out[b + strlen(to) - a] = 0;
+	}
+}
+
+static void film_av()
+{
+	printf("the films of the 64-bit build: FFmpeg loaded at run time\n");
+
+	// The conversion: BT.601, limited range, the factors times 65536.
+	uint8_t r, g, b;
+
+	ok(YUV_RGB_Y == 76309 && YUV_RGB_RV == 104597 && YUV_RGB_GU == 25675 &&
+		YUV_RGB_GV == 53279 && YUV_RGB_BU == 132201,
+		"film_av: 1.164 1.596 0.391 0.813 2.018 times 65536", YUV_RGB_Y,
+		76309);
+	ok(fabs(YUV_RGB_Y / 65536.0 - 255.0 / 219.0) < 0.00001 &&
+		fabs(YUV_RGB_RV / 65536.0 - 1.402 * 255.0 / 224.0) < 0.00001 &&
+		fabs(YUV_RGB_GU / 65536.0 - 0.344136 * 255.0 / 224.0) < 0.00001 &&
+		fabs(YUV_RGB_GV / 65536.0 - 0.714136 * 255.0 / 224.0) < 0.00001 &&
+		fabs(YUV_RGB_BU / 65536.0 - 1.772 * 255.0 / 224.0) < 0.00001,
+		"film_av: the factors are BT.601's, scaled to limited range", 0, 0);
+	YuvRgbPixel(16, 128, 128, &r, &g, &b);
+	ok(r == 0 && g == 0 && b == 0, "film_av: Y=16 U=V=128 is black",
+		r + g + b, 0);
+	YuvRgbPixel(235, 128, 128, &r, &g, &b);
+	ok(r == 255 && g == 255 && b == 255, "film_av: Y=235 U=V=128 is white",
+		r + g + b, 765);
+	YuvRgbPixel(81, 90, 240, &r, &g, &b);
+	ok(r >= 253 && g <= 2 && b <= 2, "film_av: Y=81 U=90 V=240 is red",
+		r, 255);
+	YuvRgbPixel(0, 128, 128, &r, &g, &b);
+	ok(r == 0 && g == 0 && b == 0, "film_av: below black clamps to 0",
+		r + g + b, 0);
+	YuvRgbPixel(255, 128, 128, &r, &g, &b);
+	ok(r == 255 && g == 255 && b == 255,
+		"film_av: above white clamps to 255", r + g + b, 765);
+
+	/* A picture of 3x3 with padded rows (linesize 8 and 4): pixel (2,2)
+	 * takes chroma (1,1), pixel (1,1) chroma (0,0), every word has its
+	 * X byte set, and the row pitch of the target is kept. */
+	{
+		uint8_t yp[3 * 8], up[2 * 4], vp[2 * 4];
+		uint32_t out[3 * 5];
+
+		memset(yp, 81, sizeof(yp));
+		memset(up, 128, sizeof(up));
+		memset(vp, 128, sizeof(vp));
+		memset(out, 0x55, sizeof(out));
+		up[1 * 4 + 1] = 90;
+		vp[1 * 4 + 1] = 240;
+
+		const uint8_t* const planes[3] = { yp, up, vp };
+		const int lines[3] = { 8, 4, 4 };
+
+		YuvRgbImage(planes, lines, 3, 3, out, 5 * 4);
+
+		const uint32_t red = out[2 * 5 + 2], grey = out[1 * 5 + 1];
+
+		ok((red >> 24) == 0xFF && ((red >> 16) & 255) >= 253 &&
+			((red >> 8) & 255) <= 2 && (red & 255) <= 2 &&
+			grey == 0xFF4C4C4Cu && out[0 * 5 + 3] == 0x55555555u &&
+			out[2 * 5 + 4] == 0x55555555u,
+			"film_av: 2x2 chroma, linesize, pitch and the X byte",
+			(long)(grey & 255), 0x4C);
+	}
+
+	// The engine's text.
+	char* av = hd_switch_text("../fmv_av.cpp");
+	char* fmv = hd_switch_text("../fmv.cpp");
+	char* yuv = hd_switch_text("../yuv_rgb.cpp");
+	char* yuvh = hd_switch_text("../yuv_rgb.h");
+	char* winmain = hd_switch_text("../winmain.cpp");
+	char* proj = hd_switch_text("../../../tomb5.vcxproj");
+	char* be = film_text("be.bat");
+	char* be64 = film_text("be64.bat");
+	char* basan = film_text("basan.bat");
+	char* sav = film_strip(av);
+	char* sfmv = film_strip(fmv);
+	char* sproj = film_strip(proj);
+	char* swin = film_strip(winmain);
+	static char body[65536];
+	static char span[4096];
+
+	ok(av && fmv && yuv && yuvh && winmain && proj && be && be64 &&
+		basan && sav && sfmv && sproj && swin, "film_av: the files", 0, 1);
+
+	// Loading: full path, the search flags, avutil first, no other load.
+	glass_body(av, "bool FmvAvLoad()", body, sizeof(body));
+	ok(strstr(body, "av_dll[i]=LoadLibraryExW(path,0,LOAD_LIBRARY_SEARCH_"
+		"DLL_LOAD_DIR|LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);") != 0 &&
+		hd_switch_count(av, "LoadLibrary") == 1 &&
+		strstr(body, "n=GetModuleFileNameW(0,dir,MAX_PATH);") != 0,
+		"film_av: one load, from the EXE's folder, with the search flags",
+		hd_switch_count(av, "LoadLibrary"), 1);
+	ok(strstr(body, "\"avutil\",LIBAVUTIL_VERSION_MAJOR},\"avcodec\","
+		"LIBAVCODEC_VERSION_MAJOR},\"avformat\",LIBAVFORMAT_VERSION_MAJOR}"
+		) != 0 && strstr(body, "for(longi=0;i<AV_LIBS;i++)snprintf(file,"
+		"sizeof(file),\"%s-%d.dll\",lib[i].stem,lib[i].major);") != 0,
+		"film_av: avutil, then avcodec, then avformat", 0, 1);
+	ok(strstr(body, "if((int)(ver[i]>>16)!=lib[i].major)Log(") != 0 &&
+		hd_switch_count(body, "fmvs_disabled=1;") == 4 &&
+		hd_switch_count(body, "Log(\"FMVLOGav") == 5 &&
+		hd_switch_count(av, "MessageBox") == 0,
+		"film_av: a wrong major refused; every failure logged, films off",
+		hd_switch_count(body, "fmvs_disabled=1;"), 4);
+	ok(hd_switch_count(sav, "GetProcAddress(") == 1 &&
+		hd_switch_count(sav, "PROC(AV_") == 23 &&
+		strstr(sav, "Log(\"FMVLOGavloadedavutil=%savcodec=%savformat=%s\""
+		) != 0, "film_av: 23 functions by name, the loaded line",
+		hd_switch_count(sav, "PROC(AV_"), 23);
+
+	// No import library, no #pragma comment.
+	ok(hd_switch_count(av, "#pragma comment") == 0 &&
+		hd_switch_count(yuv, "#pragma comment") == 0 &&
+		hd_switch_count(fmv, "#pragma comment") == 0 &&
+		hd_switch_count(proj, "avutil") == 0 &&
+		hd_switch_count(proj, "avcodec") == 0 &&
+		hd_switch_count(proj, "avformat") == 0 &&
+		hd_switch_count(proj, "ffmpeg-min\\lib") == 0 &&
+		hd_switch_count(proj, "ffmpeg-min\\include") == 1,
+		"film_av: no av*.lib in the project, no #pragma comment(lib",
+		hd_switch_count(proj, "avutil"), 0);
+	ok(strstr(sproj, "<ClCompileInclude=\"TOMB5\\specific\\fmv_av.cpp\">"
+		"<ExcludedFromBuildCondition=\"'$(Platform)'=='Win32'\">true"
+		"</ExcludedFromBuild>") != 0 && strstr(sproj, "<ClCompileInclude="
+		"\"TOMB5\\specific\\yuv_rgb.cpp\"><ExcludedFromBuildCondition=\"'$("
+		"Platform)'=='Win32'\">true</ExcludedFromBuild>") != 0 &&
+		strstr(sav, "#include\"../tomb5/pch.h\"") != 0 &&
+		strstr(sav, "#ifdef_WIN64extern\"C\"{") != 0 &&
+		!strcmp(sav + strlen(sav) - 6, "#endif"),
+		"film_av: x64 only - left out of Win32, its body under _WIN64", 0,
+		1);
+
+	// fmv.cpp routes its public names under _WIN64, Bink stays for Win32.
+	static const char* const ELSE64 = "#else/*The64-bitbuild:thesamenames";
+
+	ok(strstr(sfmv, "#ifndef_WIN64") != 0 && strstr(sfmv, ELSE64) != 0 &&
+		strstr(sfmv, "boolLoadBinkStuff(){returnFmvAvLoad();}") != 0 &&
+		strstr(sfmv, "voidFmvDeviceLost(){FmvAvDeviceLost();}") != 0 &&
+		strstr(sfmv, "voidFreeBinkStuff(){FmvAvFree();}") != 0 &&
+		strstr(sfmv, "longPlayFmv(longnum){returnFmvAvPlay(num);}") != 0 &&
+		strstr(sfmv, "hBinkW32=LoadLibrary(\"binkw32.dll\");") != 0 &&
+		strstr(sfmv, "#ifndef_WIN64") < strstr(sfmv, "hBinkW32=LoadLibrary("
+		"\"binkw32.dll\");") && strstr(sfmv, "hBinkW32=LoadLibrary("
+		"\"binkw32.dll\");") < strstr(sfmv, ELSE64),
+		"film_av: fmv.cpp keeps Bink for Win32, routes the four for x64",
+		0, 1);
+	ok(strstr(swin, "#ifdef_WIN64") != 0 && strstr(swin, "if(!fmvs_"
+		"disabled&&!LoadBinkStuff())fmvs_disabled=1;#elseif(!fmvs_disabled)"
+		"{if(!LoadBinkStuff()){MessageBox(") != 0 &&
+		hd_switch_count(winmain, "FMV off") == 0,
+		"film_av: WinMain loads them where Bink is loaded, no message box",
+		0, 1);
+
+	// The skip rule, word for word as fmv.cpp has it for Bink.
+	{
+		film_span(sfmv, "//Skiponlyontheedge", "longskipHeld=1;", span,
+			sizeof(span));
+		const size_t a = strlen(span);
+		const bool same_a = a > 200 && hd_switch_count(sav, span) == 1 &&
+			hd_switch_count(sfmv, span) == 1;
+
+		film_span(sfmv, "//IN_SELECTadded", "skipHeld=skipNow;", span,
+			sizeof(span));
+		const size_t c = strlen(span);
+		const bool same_b = c > 200 && hd_switch_count(sav, span) == 1 &&
+			hd_switch_count(sfmv, span) == 1 && strstr(span,
+			"constlongskipNow=(input&(IN_OPTION|IN_DRAW|IN_SELECT))!=0;if(("
+			"skipNow&&!skipHeld)||MainThread.ended)break;skipHeld=skipNow;"
+			) != 0;
+
+		ok(same_a && same_b, "film_av: the skip rule identical to Bink's, "
+			"on the edge", (long)(a + c), 0);
+	}
+
+	// The frame: the checks, App.fmv, and the tail on the one way out.
+	glass_body(av, "long FmvAvPlay(long num)", body, sizeof(body));
+	{
+		const char* set = strstr(body, "App.fmv=1;");
+		const char* run = strstr(body, "FmvRun(&film,path);");
+		const char* tail = strstr(body, "DXChangeOutputFormat(sfx_"
+			"frequencies[SoundQuality],1);HWInitialise();ClearSurfaces();"
+			"App.fmv=0;return0;");
+		int returns = 0;
+
+		for (const char* p = set ? strstr(set, "return") : 0; p && p < tail;
+			p = strstr(p + 1, "return"))
+			returns++;
+
+		ok(strstr(body, "if(MainThread.ended)return0;S_CDStop();if(fmvs_"
+			"disabled)return0;sprintf(name,\"movie\\\\fmv%01d.bik\",num);") !=
+			0 && set && run && tail && set < run && run < tail &&
+			returns == 0 && hd_switch_count(body, "App.fmv=1;") == 1 &&
+			hd_switch_count(body, "App.fmv=0;") == 1 &&
+			hd_switch_count(sav, "App.fmv=") == 2,
+			"film_av: App.fmv set, the film, then the tail - no way around",
+			returns, 0);
+		ok(hd_switch_count(body, "DXChangeOutputFormat(") +
+			hd_switch_count(body, "HWInitialise();") +
+			hd_switch_count(body, "ClearSurfaces();") == 3,
+			"film_av: the tail's calls once each, after every way out",
+			hd_switch_count(body, "HWInitialise();"), 1);
+	}
+	glass_body(av, "static void FmvRun(FMV_FILM* f, const char* path)",
+		body, sizeof(body));
+	ok(body[0] && hd_switch_count(body, "return") == 0 &&
+		hd_switch_count(body, "S_UpdateInput();") == 2 &&
+		strstr(body, "FmvShowPicture(pic);FmvPop(f);f->shown++;S_Update"
+		"Input();}") != 0 && strstr(body, "if(now-pts>f->fdur)f->"
+		"dropped++;FmvPop(f);continue;}") != 0 && strstr(body,
+		"Log(\"FMVLOGfilm=%ldframes=%lddropped=%ldaudio_frames=%ldskipped=%d"
+		"\"\"seconds=%.2f\"") != 0,
+		"film_av: input once per picture shown, late ones dropped, logged",
+		hd_switch_count(body, "S_UpdateInput();"), 2);
+	ok(strstr(sav, "#defineFMV_AUDIO_AHEAD8") != 0 &&
+		strstr(sav, "wfx.wFormatTag=WAVE_FORMAT_IEEE_FLOAT;") != 0 &&
+		strstr(sav, "t=f->audio_start+(double)st.SamplesPlayed/f->rate;") !=
+		0 && hd_switch_count(sav, "QueryPerformanceCounter(") == 1,
+		"film_av: the audio is the clock, the QPC without it", 0, 1);
+
+	// The conversion's file brings no engine header.
+	ok(hd_switch_count(yuv, "#include") == 1 &&
+		strstr(yuv, "#include \"yuv_rgb.h\"") != 0 &&
+		hd_switch_count(yuvh, "#include") == 1 &&
+		strstr(yuvh, "#include <stdint.h>") != 0 &&
+		strstr(sav, "YuvRgbImage(pic->data,pic->linesize,") != 0,
+		"film_av: yuv_rgb.cpp has no engine include, the engine calls it",
+		hd_switch_count(yuv, "#include"), 1);
+
+	// The DLLs go beside the 64-bit EXEs; the 32-bit build has none.
+	ok(strstr(be64, "copy /Y \"vendor\\ffmpeg-min\\bin\\*.dll\" "
+		"\"release64\\\"") != 0 && strstr(basan, "copy /Y \"vendor\\"
+		"ffmpeg-min\\bin\\*.dll\" \"releaseasan\\\"") != 0 &&
+		hd_switch_count(be, "ffmpeg") == 0,
+		"film_av: be64 and basan copy the DLLs, be does not", 0, 1);
+
+	free(av);
+	free(fmv);
+	free(yuv);
+	free(yuvh);
+	free(winmain);
+	free(proj);
+	free(be);
+	free(be64);
+	free(basan);
+	free(sav);
+	free(sfmv);
+	free(sproj);
+	free(swin);
+}
+
 /* GetCollidedObjects' two lists in tsv_buffer (game\collide_lists.h): the
  * places the callers gave in bytes, counted in pointers - the same bytes on
  * this 32-bit build, room for the same number of pointers on a 64-bit one -
@@ -37036,6 +37348,7 @@ int main()
 	pool_guard_rule();
 	x64_layout();
 	replay_rule();
+	film_av();
 	collide_lists();
 	lara_joints();
 	logic_leftovers();

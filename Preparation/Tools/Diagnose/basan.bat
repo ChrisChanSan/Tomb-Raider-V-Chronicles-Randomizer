@@ -33,4 +33,12 @@ if errorlevel 1 (
 	exit /b 1
 )
 echo   sanitizer runtime copied to releaseasan\
+
+rem The films' three FFmpeg DLLs beside the EXE, as be64.bat does.
+copy /Y "vendor\ffmpeg-min\bin\*.dll" "releaseasan\" >nul
+if errorlevel 1 (
+	echo basan: the FFmpeg DLLs could not be copied to releaseasan\
+	exit /b 1
+)
+echo   FFmpeg DLLs copied to releaseasan\
 exit /b 0

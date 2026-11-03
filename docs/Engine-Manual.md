@@ -119,8 +119,10 @@ of their own. How the two are used to compare the 64-bit build with the
 32-bit one is in `Preparation\Verification.md`, section 8. `-liveclock`,
 given after the file of `-replay`, keeps everything the file holds but the
 frames' places between two logic steps, which it takes from this machine's
-clock - the check that the 60 fps modes play the classic game (section 10
-there); a file name may hold the word, since the switch counts only as a
+clock: this machine draws as many frames in a step as its own clock gives,
+and the recorded frame places are skipped (`skipped_subticks=` in the
+`REPLAYLOG end` line) - the check that the 60 fps modes play the classic
+game (section 10 there); a file name may hold the word, since the switch counts only as a
 word of its own behind `-` or `/`. The 64-bit build
 also takes `-high`, a test switch that keeps what the run allocates after its
 start above 4 GB, so that a pointer cut to 32 bits fails at once (section 9

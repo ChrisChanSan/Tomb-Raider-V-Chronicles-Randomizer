@@ -28915,25 +28915,59 @@ static void replay_rule()
 		"replay: -liveclock read beside -record and -replay, handed to both",
 		hd_switch_count(body, "__TIME__,liveClock);"), 2);
 
-	// Under the live clock the record is still taken and checked - the
-	// next record of another type stays in step - and the given value is
-	// returned in place of the recorded one.
+	// Under the live clock the recorded frame places are not read: the
+	// given value comes back before ReplayNext is asked, after the
+	// recorder's own branch. Without it the record is taken and checked,
+	// and its value returned, as before.
 	glass_body(replay, "double ReplaySubTick(double subtick)", body,
 		sizeof(body));
 	{
-		const char* next = strstr(body, "if(!ReplayNext(REPLAY_SUBTICK,&r))"
-			"returnsubtick;");
+		const char* put = strstr(body, "ReplayPut(&r);returnsubtick;}");
+		const char* live = strstr(body, "if(g_live_clock)returnsubtick;"
+			"if(!ReplayNext(REPLAY_SUBTICK,&r))returnsubtick;");
 		const char* tick = strstr(body, "if(r.tick!=GlobalCounter)"
 			"ReplayDesync(REPLAY_SUBTICK,&r,\"tick\");returnsubtick;}");
-		const char* back = strstr(body, "returng_live_clock?subtick:"
-			"r.subtick;");
+		const char* back = strstr(body, "returnr.subtick;");
 
-		ok(next && tick && back && next < tick && tick < back &&
-			!strcmp(back, "returng_live_clock?subtick:r.subtick;") &&
-			hd_switch_count(body, "returnr.subtick;") == 0,
-			"replay: the live clock takes the record, then returns its own",
-			0, 1);
+		ok(put && live && tick && back && put < live && live < tick &&
+			tick < back && !strcmp(back, "returnr.subtick;") &&
+			hd_switch_count(body, "g_live_clock") == 1 &&
+			hd_switch_count(body, "ReplayNext(") == 1,
+			"replay: the live clock returns its own before ReplayNext", 0,
+			1);
 	}
+
+	// ReplayNext passes over the sub-tick records only under the live
+	// clock and only when the wanted type is another, counted apart from
+	// records=; then the end of the file and the type check as before -
+	// without -liveclock a wrong type is still a desync.
+	glass_body(replay, "static bool ReplayNext(", body, sizeof(body));
+	{
+		const char* off = strstr(body, "if(g_mode!=REPLAY_PLAY)returnfalse;");
+		const char* skip = strstr(body, "if(g_live_clock&&type!="
+			"REPLAY_SUBTICK)while(g_pos<g_size)constsize_ts=ReplayDecode("
+			"g_data+g_pos,g_size-g_pos,r);if(!s||r->type!=REPLAY_SUBTICK)"
+			"break;g_pos+=s;g_subticks_skipped++;}}");
+		const char* end = strstr(body, "if(g_pos>=g_size)ReplayStop("
+			"\"file\");returnfalse;}");
+		const char* type = strstr(body, "if(!n||r->type!=type)ReplayDesync("
+			"(char)type,r,n?\"type\":\"cut\");returnfalse;}g_pos+=n;"
+			"g_records++;returntrue;");
+
+		ok(off && skip && end && type && off < skip && skip < end &&
+			end < type && hd_switch_count(body, "g_live_clock") == 1 &&
+			hd_switch_count(replay, "g_subticks_skipped++") == 1 &&
+			hd_switch_count(replay, "g_records++") == 2,
+			"replay: ReplayNext skips sub-ticks under the live clock alone",
+			hd_switch_count(replay, "g_subticks_skipped++"), 1);
+	}
+	glass_body(replay, "static void ReplayStop(", body, sizeof(body));
+	ok(strstr(body, "Log(\"REPLAYLOGendmode=replaywhy=%srecords=%ldtick="
+		"%dleft=%lu\"\"skipped_subticks=%ld\",why,g_records,(int)"
+		"GlobalCounter,(unsignedlong)(g_size-g_pos),g_subticks_skipped);")
+		!= 0 && hd_switch_count(replay, "\"skipped_subticks=%ld\"") == 1,
+		"replay: the replay's end line ends with skipped_subticks=",
+		hd_switch_count(replay, "\"skipped_subticks=%ld\""), 1);
 	glass_body(replay, "void ReplayOpen(", body, sizeof(body));
 	ok(strstr(body, "g_mode=REPLAY_PLAY;g_live_clock=live_clock;Log(\""
 		"REPLAYLOGopenmode=replayfile=%sversion=%dbits=%drecorded=%s\"\""

@@ -18628,6 +18628,59 @@ SPARKLOG lines.
 
 **Commits.** `c0e2265b`.
 
+### -liveclock reads no frame places from the recording (#319)
+2026-11-04
+
+**Found.** Two live-clock replays of a recording in ANDREA2 ended at the same place, with
+no drift before it (STATELOG equal through tick 864, no `REPLAYLOG drift`):
+
+    REPLAYLOG desync want=A got=P what=type rec_tick=864 tick=864 record=10347 at=128633
+    REPLAYLOG end mode=replay why=desync records=10347 tick=864 left=190767
+
+`A` is the sub-tick record, a drawn frame's place between two ticks, `P` the frames
+record (`specific/replay_format.h`). `ReplaySubTick` took one `A` record per drawn frame
+under `-liveclock` too, so that the next record stayed in step. The recording drew two
+frames in tick 864 (a hitch at the dive, where the rooms change); the replaying machine
+drew a third, asked for a third `A` and found the next tick's `P`. `ReplayNext` called
+that a desync, and `ReplayStop` ended the replay: no more input records, Lara stood still
+under water. With the recorded clock the frames per tick are the recording's, so it never
+happened there. A limit of the tool, not a drift of the game - but it ended exactly the
+replays that section 10 of `Preparation/Verification.md` needs, whenever the replaying
+machine was faster at some moment than the recording machine had been.
+
+**Changed.** `specific/replay.cpp`, the reader under `-liveclock` alone:
+
+- `ReplaySubTick` returns the given value at once and reads nothing; the recording's
+  branch before it and the recorded clock's after it are as they were.
+- `ReplayNext`, when the wanted type is not `A`, passes over every `A` record before the
+  next record: decoded, `g_pos` advanced, counted in `g_subticks_skipped` and not in
+  `g_records`, so `records=` stays the records taken. Then the end of the file and the
+  type check as before.
+- Without `-liveclock` nothing changes: every record is taken and checked, and a wrong
+  type is still a desync.
+
+The replaying machine's frame count per tick is now its own; the ticks, the input and the
+generators stay the recording's. The open line keeps `clock=live`. The file format does
+not change (version 2).
+
+**The end line** gains one field at its end, 0 without `-liveclock`:
+
+    REPLAYLOG end mode=replay why=<file|desync|exit> records= tick= left=
+        skipped_subticks=<sub-tick records passed over>
+
+The record's own end line (`mode=record`) is unchanged. A replay whose game asks for a
+record past the file's end ends `why=file`; a game left through its own menu would end
+`why=exit` from `WinClose`, but `GameClose` (`specific/gamemain.cpp`) has closed log.txt
+before that, so neither that line nor the record's end line reaches the log - a replay
+that plays the recording to its quit ends after its last `STATELOG` line and `GameClose`,
+with no `REPLAYLOG end` (unchanged here). ModernTest's
+`replay_rule` (52 checks) holds the live branch of `ReplaySubTick` returning before
+`ReplayNext`, `ReplayNext` skipping only under the live clock and only for another
+wanted type, with its end and type checks after it, and the end line's
+`skipped_subticks=`.
+
+**Commits.** `dc94530f`.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -19054,3 +19107,4 @@ entries above.
 | #316 | -rngtrace: the logic generator's callers in a window of ticks |
 | #317 | SPARKLOG: a spark's life and what the draw takes |
 | #318 | The weather owns its splash sparks |
+| #319 | -liveclock reads no frame places from the recording |

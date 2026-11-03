@@ -26,4 +26,16 @@ call "C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\v
 cd /d "%~dp0..\..\.."
 
 msbuild "TOMB5 Code\tomb5.vcxproj" /t:Rebuild /p:Configuration=Release /p:Platform=x64 /v:minimal /nologo
-exit /b %errorlevel%
+if errorlevel 1 exit /b 1
+
+rem The films: this build plays them through the three FFmpeg DLLs of
+rem vendor\ffmpeg-min\bin, which it loads at run time from its own folder
+rem (specific\fmv_av.cpp) - so they go beside the EXE, and a copy of the
+rem folder takes them along. Without them the game runs without films.
+copy /Y "vendor\ffmpeg-min\bin\*.dll" "release64\" >nul
+if errorlevel 1 (
+	echo be64: the FFmpeg DLLs could not be copied to release64\
+	exit /b 1
+)
+echo   FFmpeg DLLs copied to release64\
+exit /b 0

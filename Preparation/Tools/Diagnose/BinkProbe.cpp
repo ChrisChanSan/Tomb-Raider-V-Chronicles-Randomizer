@@ -49,6 +49,12 @@
  *        converts it, and as interleaved 32-bit float), for a comparison
  *        of EVERY frame with ffmpeg -f framemd5
  *   BinkProbe <dll folder> -wrongorder         load avformat first
+ *   BinkProbe <dll folder> <film.bik> -bmp <n> <out.bmp>
+ *        report, and video frame n (from 0) written as a 24-bit BMP
+ *        through the engine's own conversion, specific\yuv_rgb.cpp
+ *        (BT.601, limited range) - the picture the 64-bit build shows
+ *        for it - with the conversion's three test pixels printed. The
+ *        only file the tool ever writes.
  *
  * Build: bbp.bat (x64 only - the DLLs are 64-bit).
  */
@@ -71,6 +77,9 @@ extern "C" {
 #include "libavutil/pixdesc.h"
 #include "libavutil/samplefmt.h"
 }
+
+// The engine's conversion of the films' pictures, compiled beside this.
+#include "../../../TOMB5 Code/TOMB5/specific/yuv_rgb.h"
 
 #pragma comment(lib, "bcrypt.lib")
 
@@ -259,6 +268,76 @@ struct StreamState
 };
 
 static bool g_frames = false;
+static long long g_bmpIndex = -1;
+static const wchar_t *g_bmpPath = 0;
+
+/* The frame through yuv_rgb.cpp into a 24-bit BMP, bottom-up, rows padded
+ * to four bytes. */
+static void WriteBmp(const AVFrame *f, const wchar_t *path)
+{
+	if (f->format != AV_PIX_FMT_YUV420P && f->format != AV_PIX_FMT_YUVA420P)
+	{
+		printf("bmp: picture format %d is not yuv420p\n", f->format);
+		return;
+	}
+	const int w = f->width, h = f->height;
+	std::vector<uint32_t> px((size_t)w * h);
+	YuvRgbImage(f->data, f->linesize, w, h, px.data(), w * 4);
+
+	const int row = (w * 3 + 3) & ~3;
+	BITMAPFILEHEADER fh = {};
+	BITMAPINFOHEADER ih = {};
+	fh.bfType = 0x4D42;
+	fh.bfOffBits = sizeof(fh) + sizeof(ih);
+	fh.bfSize = fh.bfOffBits + (DWORD)row * h;
+	ih.biSize = sizeof(ih);
+	ih.biWidth = w;
+	ih.biHeight = h;
+	ih.biPlanes = 1;
+	ih.biBitCount = 24;
+	ih.biCompression = BI_RGB;
+	ih.biSizeImage = (DWORD)row * h;
+
+	FILE *o = 0;
+	if (_wfopen_s(&o, path, L"wb") || !o)
+	{
+		printf("bmp: cannot write the file\n");
+		return;
+	}
+	fwrite(&fh, sizeof(fh), 1, o);
+	fwrite(&ih, sizeof(ih), 1, o);
+	std::vector<uint8_t> line(row, 0);
+	for (int y = h - 1; y >= 0; y--)
+	{
+		for (int x = 0; x < w; x++)
+		{
+			uint32_t c = px[(size_t)y * w + x];
+			line[x * 3 + 0] = (uint8_t)c;
+			line[x * 3 + 1] = (uint8_t)(c >> 8);
+			line[x * 3 + 2] = (uint8_t)(c >> 16);
+		}
+		fwrite(line.data(), 1, row, o);
+	}
+	fclose(o);
+	char name[MAX_PATH * 3];
+	WideCharToMultiByte(CP_UTF8, 0, path, -1, name, sizeof(name), 0, 0);
+	printf("bmp: frame %lld, %dx%d, %d bytes -> %s\n", g_bmpIndex, w, h,
+		(int)fh.bfSize, name);
+}
+
+// The conversion's three test pixels: black, white and red.
+static void PrintTestPixels()
+{
+	static const int t[3][3] = { { 16, 128, 128 }, { 235, 128, 128 },
+		{ 81, 90, 240 } };
+	for (int i = 0; i < 3; i++)
+	{
+		uint8_t r, g, b;
+		YuvRgbPixel(t[i][0], t[i][1], t[i][2], &r, &g, &b);
+		printf("pixel Y=%d U=%d V=%d -> R=%d G=%d B=%d\n", t[i][0],
+			t[i][1], t[i][2], r, g, b);
+	}
+}
 
 static void TakeFrame(StreamState &s, AVFrame *f)
 {
@@ -272,6 +351,8 @@ static void TakeFrame(StreamState &s, AVFrame *f)
 				s.linesize[i] = f->linesize[i];
 		}
 		s.lastMd5 = m;
+		if (s.frames == g_bmpIndex)
+			WriteBmp(f, g_bmpPath);
 		if (g_frames)
 			printf("v %lld %s\n", s.frames, m.c_str());
 	}
@@ -315,6 +396,7 @@ int wmain(int argc, wchar_t **argv)
 	if (argc < 3)
 	{
 		printf("usage: BinkProbe <dll folder> <film.bik> [-frames]\n"
+			"       BinkProbe <dll folder> <film.bik> -bmp <n> <out.bmp>\n"
 			"       BinkProbe <dll folder> -wrongorder\n");
 		return 2;
 	}
@@ -337,6 +419,12 @@ int wmain(int argc, wchar_t **argv)
 	}
 	if (argc > 3 && !wcscmp(argv[3], L"-frames"))
 		g_frames = true;
+	if (argc > 5 && !wcscmp(argv[3], L"-bmp"))
+	{
+		g_bmpIndex = _wtoi64(argv[4]);
+		g_bmpPath = argv[5];
+		PrintTestPixels();
+	}
 
 	HMODULE mU = Load(pU, nU);
 	HMODULE mC = mU ? Load(pC, nC) : 0;

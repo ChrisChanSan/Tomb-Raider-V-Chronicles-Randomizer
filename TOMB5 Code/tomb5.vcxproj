@@ -141,6 +141,18 @@
     <ClCompile Include="TOMB5\specific\dxsound.cpp" />
     <ClCompile Include="TOMB5\specific\file.cpp" />
     <ClCompile Include="TOMB5\specific\fmv.cpp" />
+    <ClCompile Include="TOMB5\specific\fmv_av.cpp">
+      <ExcludedFromBuild Condition="'$(Platform)'=='Win32'">true</ExcludedFromBuild>
+      <AdditionalIncludeDirectories>$(ProjectDir)..\vendor\ffmpeg-min\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <ClCompile Include="TOMB5\specific\yuv_rgb.cpp">
+      <ExcludedFromBuild Condition="'$(Platform)'=='Win32'">true</ExcludedFromBuild>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Asan|x64'">NotUsing</PrecompiledHeader>
+    </ClCompile>
     <ClCompile Include="TOMB5\specific\function_stubs.cpp" />
     <ClCompile Include="TOMB5\specific\function_table.cpp" />
     <ClCompile Include="TOMB5\specific\gamemain.cpp" />
@@ -658,6 +670,8 @@
     <ClInclude Include="TOMB5\specific\dxsound.h" />
     <ClInclude Include="TOMB5\specific\file.h" />
     <ClInclude Include="TOMB5\specific\fmv.h" />
+    <ClInclude Include="TOMB5\specific\fmv_av.h" />
+    <ClInclude Include="TOMB5\specific\yuv_rgb.h" />
     <ClInclude Include="TOMB5\specific\function_stubs.h" />
     <ClInclude Include="TOMB5\specific\function_table.h" />
     <ClInclude Include="TOMB5\specific\gamemain.h" />

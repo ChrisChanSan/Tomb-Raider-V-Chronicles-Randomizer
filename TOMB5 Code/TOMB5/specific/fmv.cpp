@@ -32,7 +32,13 @@
 #include "gamemain.h"
 #include "LoadSave.h"
 #include "setupdlg.h"
+#ifdef _WIN64
+#include "fmv_av.h"
+#endif
 
+#ifndef _WIN64
+// The 32-bit build: the game's own binkw32.dll, down to PlayFmv. The
+// 64-bit build cannot load it and takes the #else below.
 #define GET_DLL_PROC(dll, proc, n) \
 { \
 	*(FARPROC *)&(proc) = GetProcAddress((dll), n); \
@@ -306,6 +312,31 @@ long PlayFmv(long num)
 	App.fmv = 0;
 	return 0;
 }
+#else
+/* The 64-bit build: the same names, played through FFmpeg's Bink decoders
+ * (fmv_av.cpp) - three DLLs beside the EXE, loaded at run time. The
+ * callers in the game do not change. ShowBinkFrame has no 64-bit body:
+ * fmv_av.cpp shows its pictures itself, and nothing else calls it. */
+bool LoadBinkStuff()
+{
+	return FmvAvLoad();
+}
+
+void FmvDeviceLost()
+{
+	FmvAvDeviceLost();
+}
+
+void FreeBinkStuff()
+{
+	FmvAvFree();
+}
+
+long PlayFmv(long num)
+{
+	return FmvAvPlay(num);
+}
+#endif
 
 long PlayFmvNow(long num, long u)
 {

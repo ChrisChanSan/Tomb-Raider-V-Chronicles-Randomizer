@@ -1679,13 +1679,12 @@ int __stdcall WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 
 #ifdef _WIN64
 	// The game's binkw32.dll is 32-bit code, which a 64-bit process cannot
-	// load: the x64 build plays no film and goes on at once, with a line in
-	// the log instead of the message box below at every start.
-	if (!fmvs_disabled)
-	{
-		Log("FMV off: no 64-bit Bink, films skipped");
+	// load: the x64 build plays the films through three FFmpeg DLLs beside
+	// the EXE (specificmv_av.cpp), loaded here. They are optional -
+	// without them it plays no film and goes on at once, with an FMVLOG
+	// line instead of the message box below at every start.
+	if (!fmvs_disabled && !LoadBinkStuff())
 		fmvs_disabled = 1;
-	}
 #else
 	if (!fmvs_disabled)
 	{

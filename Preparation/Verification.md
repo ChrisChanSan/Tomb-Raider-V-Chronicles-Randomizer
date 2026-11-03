@@ -672,8 +672,13 @@ recorder, which the 64-bit build carries:
 2. Replay it with the replaying machine's own clock in place of the
    recorded sub-ticks: `PCtomb5.exe -log -replay run.rec -liveclock`
    (the switch after the file: the word after `-replay` is the file). The
-   sub-tick records are still read and checked by type and tick; only the
-   value the picture is blended by is the clock's. The open line ends
+   recording's frame places are not read: the replaying machine draws as
+   many frames in a tick as its own clock gives and blends each by that
+   clock, and the sub-tick records are skipped - the end line counts them
+   in `skipped_subticks=` (since #319; before it a machine that drew one
+   frame more in a tick than the recording ended the replay with a
+   `REPLAYLOG desync want=A got=P`). The ticks, the input and the
+   generators stay the recording's. The open line ends
    `clock=live` - that is the check that the switch was read;
    `clock=recorded` is a replay of the recording's own pictures, which
    proves nothing here.

@@ -39,11 +39,14 @@
  * clock; -replay sets them from the file. A save and a load write their
  * slot, as a check that the replayed run reached the same menu choice.
  *
- * With -liveclock beside -replay the sub-ticks are read and checked like
- * every record, but the frame is blended by the replaying machine's clock:
- * the same ticks and input with the pictures elsewhere between two ticks.
- * The logic reads nothing back from a picture, so such a replay plays the
- * recorded game; a REPLAYLOG drift says where it does not.
+ * With -liveclock beside -replay the recorded frame places are not read:
+ * the replaying machine draws as many frames in a tick as its own clock
+ * gives, blends each by that clock, and the next record of another type
+ * skips the sub-tick records before it (skipped_subticks= in the end
+ * line). The ticks, the input and the generators stay the recording's,
+ * with the pictures elsewhere between two ticks. The logic reads nothing
+ * back from a picture, so such a replay plays the recorded game; a
+ * REPLAYLOG drift says where it does not.
  *
  * Under -replay every record is checked against the run: its type, and the
  * tick it was written at. The first that does not fit ends the replay with
@@ -57,6 +60,7 @@ static uint8_t* g_data = 0;		// -replay: the whole file
 static size_t g_size = 0;
 static size_t g_pos = 0;
 static long g_records = 0;
+static long g_subticks_skipped = 0;	// -liveclock: not in g_records
 static long g_inputs = 0;
 static bool g_drift_said = false;
 static bool g_live_clock = false;	// -replay with -liveclock
@@ -136,9 +140,9 @@ static void ReplayStop(const char* why)
 {
 	if (g_mode == REPLAY_PLAY)
 	{
-		Log("REPLAYLOG end mode=replay why=%s records=%ld tick=%d left=%lu",
-			why, g_records, (int)GlobalCounter,
-			(unsigned long)(g_size - g_pos));
+		Log("REPLAYLOG end mode=replay why=%s records=%ld tick=%d left=%lu "
+			"skipped_subticks=%ld", why, g_records, (int)GlobalCounter,
+			(unsigned long)(g_size - g_pos), g_subticks_skipped);
 		free(g_data);
 		g_data = 0;
 	}
@@ -159,6 +163,24 @@ static bool ReplayNext(uint8_t type, ReplayRecord* r)
 {
 	if (g_mode != REPLAY_PLAY)
 		return false;
+
+	/* -liveclock: the recorded frame places are not read (ReplaySubTick),
+	 * so the sub-tick records before the next one of another type are
+	 * passed over, as many as the recording drew in that tick. They are
+	 * counted apart: records= stays the records taken. */
+	if (g_live_clock && type != REPLAY_SUBTICK)
+	{
+		while (g_pos < g_size)
+		{
+			const size_t s = ReplayDecode(g_data + g_pos, g_size - g_pos, r);
+
+			if (!s || r->type != REPLAY_SUBTICK)
+				break;
+
+			g_pos += s;
+			g_subticks_skipped++;
+		}
+	}
 
 	if (g_pos >= g_size)
 	{
@@ -383,6 +405,13 @@ double ReplaySubTick(double subtick)
 		return subtick;
 	}
 
+	// -liveclock: the recorded frame places are not read - this machine
+	// draws as many frames in a tick as its clock gives and blends each by
+	// it; ReplayNext passes over the sub-tick records. The ticks, the input
+	// and the generators stay the recording's.
+	if (g_live_clock)
+		return subtick;
+
 	if (!ReplayNext(REPLAY_SUBTICK, &r))
 		return subtick;
 
@@ -392,11 +421,7 @@ double ReplaySubTick(double subtick)
 		return subtick;
 	}
 
-	// -liveclock: the record is taken and checked like every other, so the
-	// next one is where it should be; the frame is blended by this
-	// machine's clock. The ticks, the input and the generators stay the
-	// recording's - only the pictures fall elsewhere between two ticks.
-	return g_live_clock ? subtick : r.subtick;
+	return r.subtick;
 }
 
 void ReplayLevelStart()

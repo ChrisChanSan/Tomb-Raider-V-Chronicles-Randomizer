@@ -271,6 +271,10 @@ void ReplayInputSeam(char* keys, long* mouse_dx, long* mouse_dy,
 {
 	ReplayRecord r;
 
+	/* -rngtrace (function_stubs.h): the span that ends at this input call
+	 * is written before STATELOG, with or without -record and -replay. */
+	RngTraceInputSeam((long)GlobalCounter, fmv);
+
 	if (g_mode == REPLAY_OFF || fmv)
 		return;
 

@@ -733,6 +733,7 @@ long ControlPhase(long nframes, long demo_mode)
 
 		InItemControlLoop = 0;
 		KillMoveItems();
+		RngTraceMark("items");	// -rngtrace's sections (function_stubs.h)
 		InItemControlLoop = 1;
 		fx_num = next_fx_active;
 
@@ -749,6 +750,7 @@ long ControlPhase(long nframes, long demo_mode)
 
 		InItemControlLoop = 0;
 		KillMoveEffects();
+		RngTraceMark("effects");
 
 		if (KillEverythingFlag)
 			KillEverything();
@@ -819,6 +821,7 @@ long ControlPhase(long nframes, long demo_mode)
 
 		InItemControlLoop = 0;
 		KillMoveItems();
+		RngTraceMark("lara");
 
 		if (gfLevelFlags & GF_OFFICE && !bUseSpotCam && room[lara_item->room_number].FlipNumber > 10)
 		{
@@ -867,6 +870,7 @@ long ControlPhase(long nframes, long demo_mode)
 		}
 
 		PoisonLogTickCamera(false);
+		RngTraceMark("camera");
 
 		CamRot.y = (mGetAngle(camera.pos.z, camera.pos.x, camera.target.z, camera.target.x) >> 4) & 0xFFF;
 		wibble = (wibble + 4) & 0xFC;
@@ -919,6 +923,7 @@ long ControlPhase(long nframes, long demo_mode)
 		}
 
 		UpdateFadeClip();
+		RngTraceMark("tick");
 	}
 
 	return 0;

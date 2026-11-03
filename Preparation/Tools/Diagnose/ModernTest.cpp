@@ -28986,6 +28986,189 @@ static void replay_rule()
 	free(output);
 }
 
+/* -rngtrace <from> <to> (specific\function_stubs.cpp): the switch as
+ * high_pool.cpp reads it, compiled beside this test - a whole word, two
+ * tick numbers, refused without them or with from above to; in the
+ * engine's text the one test GetRandomControl makes, the bounded record,
+ * the window, the line written at the input point before STATELOG, the
+ * reading in WinMain and the sections' marks. */
+static void rngtrace_rule()
+{
+	printf("the logic generator's callers: -rngtrace\n");
+
+	struct Yes { const char* cmd; long from, to; };
+	const Yes yes[6] = {
+		{ "-rngtrace 838 843", 838, 843 },
+		{ "-log -rngtrace 0 65535", 0, 65535 },
+		{ "/RNGTRACE 5 5", 5, 5 },
+		{ "-replay run.rec -rngtrace 836 845 -liveclock", 836, 845 },
+		{ "-log -RngTrace  836  845", 836, 845 },
+		{ "-replay \"C:\\a b\\run.rec\" -rngtrace 836 845", 836, 845 } };
+	const char* refused[9] = { "-rngtrace", "-log -rngtrace -high",
+		"-rngtrace 843", "-rngtrace 845 836", "-rngtrace 836 65536",
+		"-rngtrace a b", "-rngtrace 836x 845", "-rngtrace 836 845x",
+		"-rngtrace -1 5" };
+	const char* no[8] = { "", "rngtrace 1 2", "-rngtraces 1 2",
+		"x-rngtrace 1 2", "-replay C:\\-rngtrace\\x.rec",
+		"-replay \"C:\\a b\\-rngtrace\" 1 2", "-replay rngtrace.rec",
+		"-rng trace 1 2" };
+	int right = 0;
+	long from, to;
+
+	for (int i = 0; i < 6; i++)
+	{
+		from = to = -7;
+		right += RngTraceSwitch(yes[i].cmd, &from, &to) == 1 &&
+			from == yes[i].from && to == yes[i].to;
+	}
+
+	ok(right == 6, "rngtrace: -rngtrace with two tick numbers, any case, "
+		"beside the other switches", right, 6);
+	right = 0;
+
+	for (int i = 0; i < 9; i++)
+	{
+		from = to = -7;
+		right += RngTraceSwitch(refused[i], &from, &to) == -1 &&
+			from == -7 && to == -7;
+	}
+
+	ok(right == 9, "rngtrace: refused without two numbers, past 65535 or "
+		"with from above to, nothing written", right, 9);
+	right = 0;
+
+	for (int i = 0; i < 8; i++)
+		right += RngTraceSwitch(no[i], &from, &to) == 0;
+
+	right += RngTraceSwitch(0, &from, &to) == 0;
+	ok(right == 9, "rngtrace: not a word inside a path or a longer word",
+		right, 9);
+
+	char* stubs = hd_switch_text("../function_stubs.cpp");
+	char* replay = hd_switch_text("../replay.cpp");
+	char* winmain = hd_switch_text("../winmain.cpp");
+	char* control = hd_switch_text("../../game/control.cpp");
+	char* draw = hd_switch_text("../../game/draw.cpp");
+	char* input = hd_switch_text("../input.cpp");
+	static char body[262144];
+
+	ok(stubs && replay && winmain && control && draw && input,
+		"rngtrace: the six files", 0, 1);
+
+	// The generator: one test of a static flag, then the step as before.
+	glass_body(stubs, "long GetRandomControl()", body, sizeof(body));
+	ok(!strcmp(body, "if(rt_armed)RngTraceNote(_ReturnAddress());"
+		"rand_1=0x41C64E6D*rand_1+12345;return(rand_1>>10)&0x7FFF;") &&
+		hd_switch_count(stubs, "__declspec(noinline) long "
+		"GetRandomControl()") == 1,
+		"rngtrace: GetRandomControl tests one flag and is never inlined",
+		0, 1);
+	glass_body(stubs, "long GetRandomDraw()", body, sizeof(body));
+	ok(!strcmp(body, "rand_2=0x41C64E6D*rand_2+12345;return(rand_2>>10)&"
+		"0x7FFF;"), "rngtrace: the draw generator untouched", 0, 1);
+
+	// The record: bounded, relative to the module, marks bounded too.
+	glass_body(stubs, "static __declspec(noinline) void RngTraceNote(",
+		body, sizeof(body));
+	ok(!strcmp(body, "if(rt_count<RNGTRACE_CALLS)rt_calls[rt_count++]=("
+		"uint32_t)((uintptr_t)ret-rt_base);elsert_dropped++;") &&
+		glass_define(stubs, "#define RNGTRACE_CALLS") == 65536 &&
+		hd_switch_count(stubs, "#define RNGTRACE_LINE\t(RNGTRACE_CALLS * "
+		"9 + 256)") == 1 && hd_switch_count(stubs, "malloc("
+		"RNGTRACE_CALLS * sizeof(uint32_t));") == 1,
+		"rngtrace: the record kept up to RNGTRACE_CALLS, the rest counted",
+		glass_define(stubs, "#define RNGTRACE_CALLS"), 65536);
+	glass_body(stubs, "void RngTraceMark(const char* name)", body,
+		sizeof(body));
+	ok(strstr(body, "if(!rt_armed)return;if(rt_nmarks>=RNGTRACE_MARKS)"
+		"rt_marks_dropped++;return;}") != 0 &&
+		glass_define(stubs, "#define RNGTRACE_MARKS") == 256,
+		"rngtrace: a mark only in an open span, bounded",
+		glass_define(stubs, "#define RNGTRACE_MARKS"), 256);
+	glass_body(stubs, "bool RngTraceArm(long from, long to)", body,
+		sizeof(body));
+	ok(strstr(body, "rt_base=(uintptr_t)GetModuleHandle(0);") != 0,
+		"rngtrace: the addresses relative to the module's base", 0, 1);
+
+	// The window and the line, at the input point.
+	glass_body(stubs, "void RngTraceInputSeam(long tick, long fmv)", body,
+		sizeof(body));
+	{
+		const char* off = strstr(body, "if(rt_from<0||fmv||!gLogEnabled)"
+			"return;");
+		const char* write = strstr(body, "if(rt_armed)RngTraceWrite(tick);");
+		const char* arm = strstr(body, "rt_armed=tick+1>=rt_from&&tick+1<="
+			"rt_to;");
+		const char* in = strstr(body, "rt_seed_in=rand_1;");
+
+		ok(off && write && arm && in && off < write && write < arm &&
+			arm < in, "rngtrace: the span closed, written, the next opened "
+			"when its tick lies in the window", 0, 1);
+	}
+	glass_body(stubs, "static void RngTraceWrite(long tick)", body,
+		sizeof(body));
+	ok(strstr(body, "\"RNGTRACEtick=%ldcalls=%ld\"\"seed_in=0x%08lXseed_out"
+		"=0x%08lX\",tick,rt_count+rt_dropped,") != 0 && strstr(body,
+		"if(rt_dropped)n+=(size_t)sprintf(rt_line+n,\"overflow=%ld\","
+		"rt_dropped);") != 0 && strstr(body, "\"addrs=\"") != 0 &&
+		strstr(body, "LogText(rt_line,n);") != 0 &&
+		hd_switch_count(body, "GetRandomControl(") == 0 &&
+		hd_switch_count(body, "GetRandomDraw(") == 0,
+		"rngtrace: one line per span, its overflow said, drawing nothing",
+		0, 1);
+	glass_body(replay, "void ReplayInputSeam(", body, sizeof(body));
+	ok(strstr(body, "RngTraceInputSeam((long)GlobalCounter,fmv);if(g_mode=="
+		"REPLAY_OFF||fmv)return;ReplayStateLog();") != 0 &&
+		hd_switch_count(replay, "RngTraceInputSeam(") == 1 &&
+		hd_switch_count(input, "RngTraceInputSeam(") == 0 &&
+		hd_switch_count(stubs, "RngTraceInputSeam(") == 1,
+		"rngtrace: written at the one input point, before STATELOG and "
+		"the recorder's own test", 0, 1);
+
+	glass_body(winmain, "int __stdcall WinMain(", body, sizeof(body));
+	ok(strstr(body, "constintrt=RngTraceSwitch(lpCmdLine,&rtFrom,&rtTo);if("
+		"rt>0&&RngTraceArm(rtFrom,rtTo))Log(\"RNGTRACEwindowfrom=%ldto=%ld"
+		"\",rtFrom,rtTo);") != 0 && hd_switch_count(winmain,
+		"Log(\"RNGTRACE refused: ") == 2,
+		"rngtrace: read in WinMain, armed, a refusal said in one line", 0,
+		1);
+
+	// The sections.
+	glass_body(draw, "long DrawPhaseGame()", body, sizeof(body));
+	ok(strstr(body, "RngTraceMark(\"draw\");InterpEndFrame();LaraJointsLive"
+		"();RngTraceMark(\"frame\");") != 0 &&
+		hd_switch_count(draw, "RngTraceMark(") == 2,
+		"rngtrace: a frame marked before its give-back and after the pass",
+		hd_switch_count(draw, "RngTraceMark("), 2);
+	glass_body(control, "long ControlPhase(long nframes, long demo_mode)",
+		body, sizeof(body));
+	{
+		const char* items = strstr(body, "KillMoveItems();RngTraceMark("
+			"\"items\");");
+		const char* fx = strstr(body, "KillMoveEffects();RngTraceMark("
+			"\"effects\");");
+		const char* lara = strstr(body, "KillMoveItems();RngTraceMark("
+			"\"lara\");");
+		const char* cam = strstr(body, "PoisonLogTickCamera(false);"
+			"RngTraceMark(\"camera\");");
+		const char* tick = strstr(body, "UpdateFadeClip();RngTraceMark("
+			"\"tick\");}return0;");
+
+		ok(items && fx && lara && cam && tick && items < fx && fx < lara &&
+			lara < cam && cam < tick && hd_switch_count(control,
+			"RngTraceMark(") == 5,
+			"rngtrace: the tick's five sections in their order",
+			hd_switch_count(control, "RngTraceMark("), 5);
+	}
+
+	free(stubs);
+	free(replay);
+	free(winmain);
+	free(control);
+	free(draw);
+	free(input);
+}
+
 /* The films of the 64-bit build (specific\fmv_av.cpp): FFmpeg's Bink
  * decoders in three DLLs beside the EXE, loaded at run time. The conversion
  * of its pictures (specific\yuv_rgb.cpp, compiled beside this test) on known
@@ -37348,6 +37531,7 @@ int main()
 	pool_guard_rule();
 	x64_layout();
 	replay_rule();
+	rngtrace_rule();
 	film_av();
 	collide_lists();
 	lara_joints();

@@ -704,6 +704,37 @@ recorder, which the 64-bit build carries:
    draws no number and touches nothing of Lara's (#314: ANDREA2, the fade
    one step apart in one live replay and equal in the other, both
    drifting at the same tick with the same hashes).
+
+   When only `seed=` parts, the call that drew one number more or less is
+   named by `-rngtrace` (#316): replay the same file twice with the same
+   build, once with the recorded clock and once with `-liveclock`, each
+   with `-rngtrace <drift tick - 6> <drift tick + 3>` beside the switches
+   the drifting run had, and keep both logs. For a drift at tick 842 with
+   the Asan build, from the game folder in `cmd`:
+
+       set "ASAN_OPTIONS=continue_on_error=1" & start /wait PCtomb5_asan.exe -log -high -replay run1.rec -rngtrace 836 845 & ren log.txt rt_rec.log
+       set "ASAN_OPTIONS=continue_on_error=1" & start /wait PCtomb5_asan.exe -log -high -replay run1.rec -liveclock -rngtrace 836 845 & ren log.txt rt_live.log
+
+   Each log carries `RNGTRACE window from=836 to=845` near its top and one
+   `RNGTRACE tick=` line per input call from 836 to 845, the call list of
+   the span that ends there, followed by its `RNGTRACE section=` lines.
+   Then, beside the two logs, with the EXE that wrote them and its PDB
+   (`bal.bat` builds `AddrLine.exe` beside the script first):
+
+       python <repo>\Preparation\Tools\Diagnose\rngtrace_diff.py rt_rec.log rt_live.log --exe <folder>\PCtomb5_asan.exe
+
+   `Preparation\Tools\Diagnose\rngtrace_diff.py` pairs the spans, prints
+   the first tick whose call lists differ, the section marks of both side
+   by side with the first one whose state differs, the index of the first
+   differing call and the marks it falls between on either side, ten
+   addresses around it in both logs, and each of them through
+   `AddrLine.exe <exe> -ret <addresses>` as `file:line function`. Without
+   `--exe` it takes `<repo>\releaseasan\PCtomb5_asan.exe`, the tree's own
+   Asan build. The same lookup by hand:
+   `AddrLine.exe <folder>\PCtomb5_asan.exe -ret 5622 2d7a`.
+   The call that appears on one side only, or another call at the same
+   place, is where the two runs part; what that caller read is the next
+   question, not answered by the trace.
 4. `JOINTLOG passes=<n> ticks=<m> tween_frames=<k> blended_frames=<b>`,
    one line at the end of each level and of the title: `passes` equals
    `blended_frames`; at 30 both are 0; at 60 they are about `ticks` (a

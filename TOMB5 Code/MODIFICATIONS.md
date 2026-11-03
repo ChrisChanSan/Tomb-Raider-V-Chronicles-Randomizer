@@ -18309,6 +18309,68 @@ tail on the one way out, the audio clock, and the DLLs copied by `be64.bat` and
 
 **Commits.** `058a7ef6`.
 
+### -rngtrace: the logic generator's callers in a window of ticks (#316)
+2026-11-03
+
+**What.** A diagnostic switch, `-rngtrace <from> <to>`, with `-log`. Between two input
+calls whose closing tick (`GlobalCounter` at the second) lies in `[from, to]`, every
+call of `GetRandomControl` keeps its return address, relative to the module's base. At
+the closing input call, before `STATELOG`, the span becomes one line
+
+    RNGTRACE tick=<n> calls=<k> seed_in=0x<state at the opening input call>
+             seed_out=0x<state now> [overflow=<dropped>] addrs=<hex,hex,...>
+
+with every address in call order; the first 65536 are kept, the rest counted as
+`overflow=`. One `RNGTRACE section=<name> tick=<n> at=<calls before it> seed=0x<state>`
+line per mark follows: `items` (after the item control and `KillMoveItems`), `effects`
+(after the effects' control), `lara` (after her control), `camera` (after the camera
+and the braid), `tick` (the tick body's end, after the particles, the sound and the
+fade), and per drawn frame `draw` (after the present, before `InterpEndFrame` gives the
+frame's draws back) and `frame` (after the joint pass). Calls after the last mark
+belong to the closing tick's start up to its input call. A `RNGTRACE window` line
+says the switch was read; `RNGTRACE refused` that it was given without two tick numbers
+(0 to 65535) or with `from` above `to`. The line is written with or without `-record`
+and `-replay`; films' input calls are left out, a menu's own input calls close a span
+like a tick's.
+
+**Why.** A replay with the live clock can part from its recording at a tick where
+`STATELOG` shows only the logic generator's state parting (#316's measurement of the
+ANDREA2 replay): somewhere between two input calls one run drew a number the other did
+not, and no field says which call. Two such replays with `-rngtrace` around that tick
+name the call by its return address, and the section lines say in which part of the
+tick or which frame it fell.
+
+**How.** `specific/function_stubs.cpp`: the record (`RngTraceNote`, bounded at
+`RNGTRACE_CALLS`), the window (`RngTraceArm`), the marks (`RngTraceMark`, 256 per span)
+and the span's writer (`RngTraceInputSeam`, called first in `ReplayInputSeam`, before
+the recorder's own off test). `GetRandomControl` tests one static flag and calls the
+record through `_ReturnAddress()`; it is `__declspec(noinline)`, since the Release
+builds link with whole-program optimisation and an inlined copy has no return address
+of its own. Measured on the 64-bit Release build: before, the function was inlined at
+every site (1405 copies, no call); now it is called at 1548 sites - the behaviour is
+the same, the code generation is not. Without the switch the generator pays that
+test - a compare with memory and a branch never taken, beside the multiply it already
+does - on every call, particles and the sky's twinkle included. `Log()` and the trace's
+line (longer than `Log()`'s 4 KB buffer) share one writer, `LogText`, and so one time
+stamp. The parse is
+`RngTraceSwitch` in `specific/high_pool.cpp` beside `SwitchWordGiven` (now a wrapper of
+`SwitchWordEnd`), which ModernTest compiles. `specific/winmain.cpp` reads the switch
+after `-record`/`-replay`. Marks in `game/control.cpp` and `game/draw.cpp`.
+
+`Preparation/Tools/Diagnose/AddrLine.cpp` (`bal.bat`, x64) turns the addresses into
+`<rva> <file>:<line> <function>+0x<disp>` through Windows' `dbghelp.dll`: the EXE's
+preferred base from its PE header, the search path the EXE's folder alone,
+`_NT_SYMBOL_PATH` ignored and cleared, no symbol server; when the PDB the EXE names is
+not beside it, the PDB of the EXE's own name is loaded, and either way its GUID and age
+must match the EXE's CodeView record. `-ret` looks a return address up one byte back,
+inside its call. ModernTest gains `rngtrace_rule` (15 checks): the switch's yes,
+refused and no lists, the generator's one test and `noinline`, the draw generator
+untouched, the bounded record and marks, the module base, the window, the line's
+fields and overflow, the place before `STATELOG`, the reading in `WinMain`, and the
+seven marks in their order.
+
+**Commits.** `a2fd0238`.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -18732,3 +18794,4 @@ entries above.
 | #312 | No fixed camera, no camera.fixed[-1]; empty ring slots skipped |
 | #314 | The recorder writes the check's fields per input call: STATELOG |
 | #315 | The 64-bit engine plays the films through the minimal FFmpeg |
+| #316 | -rngtrace: the logic generator's callers in a window of ticks |

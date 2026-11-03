@@ -29169,6 +29169,121 @@ static void rngtrace_rule()
 	free(input);
 }
 
+/* SPARKLOG's life lines (game\effect2.cpp): a chained-explosion spark
+ * born in TriggerExplosionSparks, fired in UpdateSparks, ended by life, by
+ * the fade or by GetFreeSpark's eviction, a light not found, a light index
+ * below -1. Each is a Log call behind gLogEnabled and nothing else: the
+ * engine's own statements stand as they were, and the draw's far-plane end
+ * (specific\specificfx.cpp) still turns the spark off - this group only
+ * reads the text. */
+static void spark_life()
+{
+	char* fx = hd_switch_text("../../game/effect2.cpp");
+	char* sfx = hd_switch_text("../specificfx.cpp");
+	static char body[65536];
+
+	ok(fx && sfx, "spark life: the two files", 0, 1);
+
+	// Born: the start and the count taken before GetFreeSpark, one line
+	// after the set-up, before the colour swap and the smoke.
+	glass_body(fx, "void TriggerExplosionSparks(long x, long y, long z, "
+		"long extras, long dynamic, long uw, short room_number)", body,
+		sizeof(body));
+	{
+		const char* pre = strstr(body, "if(gLogEnabled)log_next=next_spark;"
+			"log_on=SparkLogCountOn();}sptr=&spark[GetFreeSpark()];"
+			"sptr->On=1;");
+		const char* born = strstr(body, "sptr->MaxYvel=0;if(gLogEnabled)Log("
+			"\"SPARKLOGborntick=%uslot=%dchain=%dfires_at=%dlife=%d\"\"dyn=%d"
+			"next=%ldon=%ldevicted=%dparent=%ldin_pass=%ld\",");
+		const char* swap = strstr(body, "if(uw==2)");
+
+		ok(pre && born && swap && pre < born && born < swap &&
+			strstr(body, "log_on>=1024?1:0,spark_log_parent,"
+			"spark_log_in_pass);") != 0,
+			"spark life: born, one line per spark after its set-up", 0, 1);
+	}
+	ok(strstr(body, "if(i==8)if(gLogEnabled)Log(\"SPARKLOGlighttick=%u"
+		"slot=%ddyn=%ld\",(unsigned)GlobalCounter,(int)(sptr-spark),"
+		"dynamic);sptr->Dynamic=-1;}") != 0,
+		"spark life: light, said where no light is free, -1 kept", 0, 1);
+	ok(strstr(body, "sptr->extras=uchar(extras|((extras_table[extras]+("
+		"GetRandomControl()&7)+28)<<3));sptr->Dynamic=(char)dynamic;") != 0,
+		"spark life: the chain's arithmetic untouched", 0, 1);
+
+	// Fire, and the parent and the flag around the links only.
+	glass_body(fx, "void UpdateSparks()", body, sizeof(body));
+	{
+		const char* fire = strstr(body, "extras&7)if(gLogEnabled)Log(\""
+			"SPARKLOGfiretick=%uslot=%dage=%dchain=%dfires_at=%d\"\"dyn=%d\","
+			"(unsigned)GlobalCounter,i,");
+		const char* set = strstr(body, "spark_log_parent=i;"
+			"spark_log_in_pass=1;for(intj=0;j<(sptr->extras&7);j++)"
+			"TriggerExplosionSparks(sptr->x,sptr->y,sptr->z,(sptr->extras&7)"
+			"-1,sptr->Dynamic,uw,sptr->RoomNumber);sptr->Dynamic=-1;}"
+			"spark_log_parent=-1;spark_log_in_pass=0;");
+
+		ok(fire && set && fire < set,
+			"spark life: fire, before the links; parent set around them", 0,
+			1);
+	}
+	ok(strstr(body, "if(!sptr->Life)if(gLogEnabled&&sptr->extras&7)"
+		"SparkLogEnd(i,\"life\");if(sptr->Dynamic!=-1)spark_dynamics["
+		"sptr->Dynamic].On=0;sptr->On=0;continue;}") != 0,
+		"spark life: end by life, then the original end", 0, 1);
+	ok(strstr(body, "if(sptr->R<8&&sptr->G<8&&sptr->B<8)if(gLogEnabled&&"
+		"sptr->extras&7)SparkLogEnd(i,\"fade\");sptr->On=0;continue;}") != 0,
+		"spark life: end by the fade, then the original end", 0, 1);
+	ok(strstr(body, "if(!sptr->On||sptr->Dynamic==-1)continue;") &&
+		strstr(body, "if(gLogEnabled&&sptr->Dynamic<0)Log(\""
+		"SPARKLOGlight_indextick=%uslot=%ddyn=%d\",(unsigned)GlobalCounter,i,"
+		"(int)sptr->Dynamic);dynamic=&spark_dynamics[sptr->Dynamic];") != 0,
+		"spark life: light_index is a Log call only, the index as it was", 0,
+		1);
+
+	// Evict: said before GetFreeSpark moves its start; the start at file
+	// scope, the function's own static gone.
+	glass_body(fx, "long GetFreeSpark()", body, sizeof(body));
+	ok(strstr(body, "if(gLogEnabled&&spark[free].On&&spark[free].extras&7)"
+		"Log(\"SPARKLOGendtick=%uslot=%ldwhy=evictage=%dchain=%d\"\""
+		"fires_at=%dlife=%dmin_life=%ldnext=%ld\",") &&
+		strstr(body, "(int)spark[free].Life,min_life,next_spark);next_spark="
+		"(free+1)&0x3FF;spark[free].extras=0;spark[free].Dynamic=-1;") &&
+		strstr(body, "next_spark=(free+1)&0x3FF;spark[free].extras=0;"
+		"spark[free].Dynamic=-1;spark[free].Def=(uchar)objects["
+		"DEFAULT_SPRITES].mesh_index;returnfree;}}free=0;min_life=4095;") &&
+		!strstr(body, "static"),
+		"spark life: end by eviction, the two loops as they were", 0, 1);
+	ok(hd_switch_count(fx, "static long next_spark = 0;") == 1 &&
+		hd_switch_count(fx, "next_spark") == 8,
+		"spark life: next_spark one file static, read by the line",
+		hd_switch_count(fx, "next_spark"), 8);
+	glass_body(fx, "static void SparkLogEnd(long slot, const char* why)",
+		body, sizeof(body));
+	ok(!strcmp(body, "SPARKS*sptr=&spark[slot];Log(\"SPARKLOGendtick=%u"
+		"slot=%ldwhy=%sage=%dchain=%dfires_at=%d\"\"life=%d\",(unsigned)"
+		"GlobalCounter,slot,why,(int)sptr->sLife-(int)sptr->Life,(int)("
+		"sptr->extras&7),(int)(sptr->extras>>3),(int)sptr->Life);"),
+		"spark life: the end line writes and changes nothing", 0, 1);
+
+	// Every life line behind the flag; the kill line stays the draw's.
+	ok(hd_switch_count(fx, "Log(\"SPARKLOG") == 6 &&
+		hd_switch_count(fx, "SparkLogEnd(i, \"") == 2 &&
+		hd_switch_count(fx, "SPARKLOG kill") == 0,
+		"spark life: six Log calls, two ends by name, no kill line here",
+		hd_switch_count(fx, "Log(\"SPARKLOG"), 6);
+
+	// The base's far-plane branch still ends the spark (no fix here).
+	glass_body(sfx, "void S_DrawDrawSparksNEW(SPARKS* sptr, long "
+		"smallest_size, float* xyz)", body, sizeof(body));
+	ok(strstr(body, "if(xyz[2]>=f_mzfar)if(gLogEnabled)SparkLog(\"kill\","
+		"sptr,xyz[2]);sptr->On=0;}return;}") != 0,
+		"spark life: the far plane still turns the spark off", 0, 1);
+
+	free(fx);
+	free(sfx);
+}
+
 /* The films of the 64-bit build (specific\fmv_av.cpp): FFmpeg's Bink
  * decoders in three DLLs beside the EXE, loaded at run time. The conversion
  * of its pictures (specific\yuv_rgb.cpp, compiled beside this test) on known
@@ -37532,6 +37647,7 @@ int main()
 	x64_layout();
 	replay_rule();
 	rngtrace_rule();
+	spark_life();
 	film_av();
 	collide_lists();
 	lara_joints();

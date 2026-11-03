@@ -1323,11 +1323,46 @@ void TriggerExplosionSmoke(long x, long y, long z, long uw)
 	sptr->Size = sptr->sSize >> 2;
 }
 
+/* SPARKLOG (-log): the life of a spark that carries a chained explosion
+ * (extras & 7) - its birth here, the pass of UpdateSparks that fires its
+ * links, its end by life, by the fade or by an eviction in GetFreeSpark.
+ * The draw's end is the kill line in specific\specificfx.cpp. UpdateSparks
+ * sets spark_log_parent (the slot that fires) and spark_log_in_pass around
+ * the chain call only and clears them after. next_spark is GetFreeSpark's
+ * start, at file scope so the birth line can name it; read nowhere else.
+ * Every line is behind gLogEnabled; nothing here changes a spark. */
+static long next_spark = 0;
+static long spark_log_parent = -1;
+static long spark_log_in_pass = 0;
+
+static long SparkLogCountOn()
+{
+	long n = 0;
+
+	for (int i = 0; i < 1024; i++)
+	{
+		if (spark[i].On)
+			n++;
+	}
+
+	return n;
+}
+
+static void SparkLogEnd(long slot, const char* why)
+{
+	SPARKS* sptr = &spark[slot];
+
+	Log("SPARKLOG end tick=%u slot=%ld why=%s age=%d chain=%d fires_at=%d "
+		"life=%d", (unsigned)GlobalCounter, slot, why,
+		(int)sptr->sLife - (int)sptr->Life, (int)(sptr->extras & 7),
+		(int)(sptr->extras >> 3), (int)sptr->Life);
+}
+
 void TriggerExplosionSparks(long x, long y, long z, long extras, long dynamic, long uw, short room_number)
 {
 	SPARKS* sptr;
 	SP_DYNAMIC* pDL;
-	long scalar, mirror, i;
+	long scalar, mirror, i, log_next, log_on;
 	uchar extras_table[4];
 	uchar r, g, b;
 
@@ -1337,6 +1372,8 @@ void TriggerExplosionSparks(long x, long y, long z, long extras, long dynamic, l
 	extras_table[3] = 10;
 	scalar = 0;
 	mirror = 0;
+	log_next = 0;
+	log_on = 0;
 
 	if (room_number < 0)
 	{
@@ -1349,6 +1386,13 @@ void TriggerExplosionSparks(long x, long y, long z, long extras, long dynamic, l
 
 	do
 	{
+		// Where GetFreeSpark starts and how full the slots are, before it.
+		if (gLogEnabled)
+		{
+			log_next = next_spark;
+			log_on = SparkLogCountOn();
+		}
+
 		sptr = &spark[GetFreeSpark()];
 		sptr->On = 1;
 		sptr->sR = 255;
@@ -1406,7 +1450,13 @@ void TriggerExplosionSparks(long x, long y, long z, long extras, long dynamic, l
 			}
 
 			if (i == 8)
+			{
+				if (gLogEnabled)
+					Log("SPARKLOG light tick=%u slot=%d dyn=%ld",
+						(unsigned)GlobalCounter, (int)(sptr - spark), dynamic);
+
 				sptr->Dynamic = -1;
+			}
 		}
 
 		sptr->Xvel = (GetRandomControl() & 0xFFF) - 2048;
@@ -1453,6 +1503,14 @@ void TriggerExplosionSparks(long x, long y, long z, long extras, long dynamic, l
 		sptr->dSize = sptr->Size << (scalar + 1);
 		sptr->Size <<= scalar;
 		sptr->MaxYvel = 0;
+
+		if (gLogEnabled)
+			Log("SPARKLOG born tick=%u slot=%d chain=%d fires_at=%d life=%d "
+				"dyn=%d next=%ld on=%ld evicted=%d parent=%ld in_pass=%ld",
+				(unsigned)GlobalCounter, (int)(sptr - spark),
+				(int)(sptr->extras & 7), (int)(sptr->extras >> 3),
+				(int)sptr->Life, (int)sptr->Dynamic, log_next, log_on,
+				log_on >= 1024 ? 1 : 0, spark_log_parent, spark_log_in_pass);
 
 		if (uw == 2)
 		{
@@ -1747,7 +1805,6 @@ void TriggerSuperJetFlame(ITEM_INFO* item, long yvel, long deadly)
 long GetFreeSpark()
 {
 	SPARKS* sptr;
-	static long next_spark = 0;
 	long free, min_life, lp;
 
 	free = next_spark;
@@ -1791,6 +1848,15 @@ long GetFreeSpark()
 			min_life = sptr->Life;
 		}
 	}
+
+	// A chain spark taken while it is on; next is the caller's start.
+	if (gLogEnabled && spark[free].On && spark[free].extras & 7)
+		Log("SPARKLOG end tick=%u slot=%ld why=evict age=%d chain=%d "
+			"fires_at=%d life=%d min_life=%ld next=%ld",
+			(unsigned)GlobalCounter, free,
+			(int)spark[free].sLife - (int)spark[free].Life,
+			(int)(spark[free].extras & 7), (int)(spark[free].extras >> 3),
+			(int)spark[free].Life, min_life, next_spark);
 
 	next_spark = (free + 1) & 0x3FF;
 	spark[free].extras = 0;
@@ -1857,6 +1923,9 @@ void UpdateSparks()
 
 		if (!sptr->Life)
 		{
+			if (gLogEnabled && sptr->extras & 7)
+				SparkLogEnd(i, "life");
+
 			if (sptr->Dynamic != -1)
 				spark_dynamics[sptr->Dynamic].On = 0;
 
@@ -1880,6 +1949,9 @@ void UpdateSparks()
 
 			if (sptr->R < 8 && sptr->G < 8 && sptr->B < 8)
 			{
+				if (gLogEnabled && sptr->extras & 7)
+					SparkLogEnd(i, "fade");
+
 				sptr->On = 0;
 				continue;
 			}
@@ -1899,6 +1971,12 @@ void UpdateSparks()
 
 		if (sptr->sLife - sptr->Life == sptr->extras >> 3 && sptr->extras & 7)
 		{
+			if (gLogEnabled)
+				Log("SPARKLOG fire tick=%u slot=%d age=%d chain=%d fires_at=%d "
+					"dyn=%d", (unsigned)GlobalCounter, i,
+					(int)sptr->sLife - (int)sptr->Life, (int)(sptr->extras & 7),
+					(int)(sptr->extras >> 3), (int)sptr->Dynamic);
+
 			if (sptr->Flags & SF_UNWATER)
 				uw = 1;
 			else if (sptr->Flags & SF_GREEN)
@@ -1906,11 +1984,17 @@ void UpdateSparks()
 			else
 				uw = 0;
 
+			spark_log_parent = i;
+			spark_log_in_pass = 1;
+
 			for (int j = 0; j < (sptr->extras & 7); j++)
 			{
 				TriggerExplosionSparks(sptr->x, sptr->y, sptr->z, (sptr->extras & 7) - 1, sptr->Dynamic, uw, sptr->RoomNumber);
 				sptr->Dynamic = -1;
 			}
+
+			spark_log_parent = -1;
+			spark_log_in_pass = 0;
 
 			if (uw == 1)
 				TriggerExplosionBubble(sptr->x, sptr->y, sptr->z, sptr->RoomNumber);
@@ -1970,6 +2054,11 @@ void UpdateSparks()
 
 		if (!sptr->On || sptr->Dynamic == -1)
 			continue;
+
+		// Only said, not guarded: below -1 the index leaves the 8 lights.
+		if (gLogEnabled && sptr->Dynamic < 0)
+			Log("SPARKLOG light_index tick=%u slot=%d dyn=%d",
+				(unsigned)GlobalCounter, i, (int)sptr->Dynamic);
 
 		dynamic = &spark_dynamics[sptr->Dynamic];
 

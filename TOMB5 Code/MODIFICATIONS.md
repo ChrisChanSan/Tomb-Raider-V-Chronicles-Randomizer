@@ -18418,6 +18418,55 @@ every one ends in `UpdateSparks` by its `Life` or by fading out.
 counts them and runs before the drips and the bubbles. A `kill` with `chain=` above 0 and
 `age=` below `fires_at=` is a chained explosion that will not happen.
 
+**What the first run showed.** The same recording replayed with this seam, once with the
+recorded clock and once with `-liveclock` (which parted at tick 842 as before), wrote no
+`SPARKLOG` line at all: the draw ended no spark, drip or bubble in either run. The account
+under **Found**, the far plane ending the spark that fires the chain, is refuted for that
+recording. What stands is the `-rngtrace` difference: one last link of a chain (`extras`
+0, 13 + 13 draws) fired in the live run's span of tick 842 and not in the other, while the
+two links before it with smoke came in both. Which spark fired it, and why the other run
+had none, is open.
+
+**SPARKLOG life lines.** Five more lines of the family follow a spark that carries a
+chain (`extras & 7`) from its birth to its end, in `game/effect2.cpp`:
+
+    SPARKLOG born tick=<GlobalCounter> slot=<j> chain=<extras & 7> fires_at=<extras >> 3>
+        life=<Life> dyn=<Dynamic> next=<next_spark before the call> on=<sparks on before
+        the call> evicted=<0/1> parent=<firing slot, or -1> in_pass=<0/1>
+    SPARKLOG fire tick= slot= age=<sLife - Life> chain= fires_at= dyn=
+    SPARKLOG end tick= slot= why=life|fade age= chain= fires_at= life=
+    SPARKLOG end tick= slot= why=evict age= chain= fires_at= life= min_life= next=
+    SPARKLOG light tick= slot= dyn=<the call's dynamic, -2>
+    SPARKLOG light_index tick= slot= dyn=<Dynamic>
+
+`born` is written by `TriggerExplosionSparks` for every spark it makes, the mirror's
+included, after its set-up; `next` and `on` are read before `GetFreeSpark`, and
+`evicted=1` means all 1024 slots were on, so `GetFreeSpark` took the spark with the least
+`Life` that has `Dynamic` -1 and no `SF_NOKILL`. `parent` and `in_pass` come from two file
+statics that `UpdateSparks` sets around its chain call and clears after: a link born
+inside the pass into a slot above its parent counts its first `Life--` in the same pass.
+`fire` is written in `UpdateSparks` when a spark's chain fires, before its links. `end`
+names a spark whose `extras & 7` is still set when it ends: its `Life` ran out, its fade
+fell below 8, or `GetFreeSpark`'s second loop took it while on (`min_life` and the
+caller's `next_spark`); the draw's end of a spark is the `kill` line above, so it has no
+`end` line. `light` is written where `TriggerExplosionSparks`, asked with `dynamic` -2,
+finds none of the eight `spark_dynamics` free; the spark then gets `Dynamic` -1, as
+before. `light_index` is written in `UpdateSparks`' second loop for a spark whose
+`Dynamic` is below -1, and the loop then indexes `spark_dynamics` with it as before -
+outside the array, reading and writing. In this code no writer leaves `Dynamic` below -1
+(the `light` case sets -1; the callers pass -2, -1 or 0, the chain its parent's light), so
+the line watches for it and changes nothing. `GetFreeSpark`'s `next_spark` moved from a
+function static to file scope, so the `born` line can read it; its start and its writes
+are the same.
+
+Cost with `-log` off: one test of `gLogEnabled` per spark `TriggerExplosionSparks` makes,
+per chain fired, per spark ending by life or fade, per eviction and per spark holding a
+light in the second loop, and two stores of the statics per chain fired. With `-log` the
+lines come only for explosions, and each `born` counts the 1024 slots once. To pair two
+runs: the live run's `SPARKLOG fire` that the other lacks names a slot, and the last
+`born` in that slot before it its born tick; the other log's lines for that slot and born
+tick tell its fate there.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI

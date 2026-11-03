@@ -746,7 +746,13 @@ recorder, which the 64-bit build carries:
    `SPARKLOG kill` line (and `SPARKLOG drip kill`, `SPARKLOG bubble kill`
    for the two of the same kind): with a build before the fix the
    recorded-clock log shows a `SPARKLOG kill` with `chain=` above 0 before
-   the drift tick, the live-clock log does not.
+   the drift tick, the live-clock log does not. The first such run wrote no
+   `SPARKLOG kill` at all, so `SPARKLOG born`, `fire`, `end` (why=life,
+   fade or evict), `light` and `light_index` now follow every chain spark
+   in `game\effect2.cpp`: the live log's `fire` line that the other log
+   lacks names a slot, the last `born` in that slot before it its born
+   tick, and the recorded-clock log's lines for that slot and born tick
+   tell its fate there.
 4. `JOINTLOG passes=<n> ticks=<m> tween_frames=<k> blended_frames=<b>`,
    one line at the end of each level and of the title: `passes` equals
    `blended_frames`; at 30 both are 0; at 60 they are about `ticks` (a

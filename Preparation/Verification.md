@@ -850,6 +850,16 @@ between its two rooms' item lists by what the picture's walk saw, follows
 the same rule and leaves the same residual: at *Display* the lists follow
 that blended picture, once per step.
 
+A stalled frame (#322): `grep "PROFLOG.*pause"` and sort by `frame=`; a
+line with `presents=1` was no menu, so its `frame` minus `work` is the
+stall. The six fields at its end, `logic= clear= begin_wait= begin= parked=
+rest=`, add up to that stall to a few milliseconds (`parked` is the tick
+clock's; a `late` line carries them from `clear=` on). The largest names
+the place - `logic` the game's tick, `clear`/`begin` the driver at the
+scene's start, `begin_wait` a hold there that was no park, `parked` the
+window in the background (compare `WINLOG wake ... parked_ms=`), `rest` the
+loop's remainder (the cutscene trigger, the legend).
+
 ## 11. Do the films play on the 64-bit build?
 
 The 64-bit build cannot load the game's 32-bit `binkw32.dll`; it plays the

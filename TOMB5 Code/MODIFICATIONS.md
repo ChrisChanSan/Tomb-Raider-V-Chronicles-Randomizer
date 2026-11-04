@@ -18850,6 +18850,60 @@ with `logF = 0` after it, none in `GameClose` or `WinMain`, `WinClose` calling
 
 **Commits.** `31d9aebb`.
 
+### A stalled frame says where its time went (#322)
+2026-11-04
+
+**Found.** A 56-minute run with `-log` (HD on, 14 levels) stood still once in RICH2. The
+last line of the running game was a `CAMLOG tick`; 8.3 s later the mouse was released,
+4 s after that `WM_ACTIVATE` parked the game thread (`WINLOG park result=parked`), and
+22 s later it woke (`WINLOG wake by=activateapp parked_ms=21984`). The frame that
+followed wrote `PROFLOG level=DATA\RICH2 pause at=51s frame=34253.29 work=1.65
+presents=1`: one interval of 34253 ms, 1.65 ms of it work, about 22 s of it parked and
+8 to 12 s before the park that no line accounts for. A dump taken during the park shows
+the game thread in `HWBeginScene`'s spin on `WaitAtBeginScene` - the place the park
+holds it, so it says nothing about the seconds before.
+
+`work` is `ProfileFrameBegin` to `ProfileFrameEnd`, the drawing half of a frame, and the
+present (`PROF_SPIN`, `PROF_FLIP`) lies inside it, so the present was not the stall.
+Outside it, from one `ProfileFrameEnd` to the next `ProfileFrameBegin`, lie, in loop
+order (`DoLevel`, `game/gameflow.cpp`): `handle_cutseq_triggering`, `ControlPhase`
+(`PROF_LOGIC`, not printed on the pause line until now), the loop top,
+`S_InitialisePolyList` - the device's `Clear`, then `_BeginScene` (`HWBeginScene`: the
+spin on `WaitAtBeginScene`, then the device's `BeginScene`), the buckets' and the sort
+list's reset - and the legend. `ProfileFrameBegin` is `DrawPhaseGame`'s first line.
+
+**Changed.** The pause line ends with that interval split six ways, in milliseconds:
+`logic=` (`ControlPhase`), `clear=` (the `Clear` in `S_InitialisePolyList`,
+`PROF_CLEAR`), `begin_wait=` (the spin, `PROF_BEGIN_WAIT`), `begin=` (the device's
+`BeginScene`, `PROF_BEGIN`), `parked=` (the park that ended in this interval) and `rest=`
+(the interval less `work` and the five: the cutscene trigger, the legend, the loop). The
+late line gains the same from `clear=` on, since it lists `logic` among its phases. The
+three new phases come after `PROF_FLIP`, are kept over `ProfileFrameBegin` like
+`PROF_LOGIC` and cleared at `ProfileFrameEnd`, and stay out of the per-second and
+`first_frame` lists, which read as they did. They count only outside the work and
+outside `ControlPhase`: a modal loop inside the logic - the inventory, the death menu -
+clears and begins scenes of its own, and those are its logic's. The pause rule itself is
+unchanged.
+
+The park's hand-over: `WinWakeGame` (`specific/winmain.cpp`) calls
+`ProfileNoteParked(GetTickCount() - park_since)` before it resumes the game thread, so the
+window thread writes while the reader is suspended; the counter is a running total moved
+by `InterlockedExchangeAdd` and read with `InterlockedCompareExchange`. `ProfileFrameEnd`
+takes what arrived since the last frame end. Since the park suspends the thread inside
+the spin (or inside a modal loop's spin within `ControlPhase`), each of those two phases
+takes the parked milliseconds that arrived while it was open off itself, so the six fields
+are disjoint and add up to `frame - work`, to `GetTickCount`'s grain. `rest` is left
+signed for that reason. With `-log` off every stamp is one bool test and the hand-over
+one more.
+
+**Checked.** ModernTest's group `pause_rule` (9 checks): the six fields in order at the
+end of the pause line, the late line from `clear=` on, the pause rule as it was, the
+three phases after `PROF_FLIP` and out of the printed lists, the stamps around exactly the
+`Clear`, the spin and the `BeginScene`, and `ProfileNoteParked` once, in `WinWakeGame`,
+before `ResumeThread`.
+
+**Commits.** `4f70fc3d`.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -19279,3 +19333,4 @@ entries above.
 | #319 | -liveclock reads no frame places from the recording |
 | #320 | The draw ends no particle: bubbles, drips and far sparks live on in the logic |
 | #321 | The recorder is a test build's; The log closes after the recorder |
+| #322 | A stalled frame says where its time went |

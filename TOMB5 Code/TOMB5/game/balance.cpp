@@ -117,6 +117,13 @@ static const BALANCE_LINE balanceLines[] =
 	HEALTH("HP_Mafia",			hpMafia,		35,	24,		MAFIA),
 	HEALTH("HP_Mafia2",			hpMafia2,		35,	26,		MAFIA2),
 	HEALTH("HP_Scientist",		hpScientist,	35,	24,		SCIENTIST),
+	/*
+	 * The armed scientist runs SWAT's block and stands at SWAT's numbers:
+	 * the standard is HP_Swat's, and the vanilla column is the 24 Core gave
+	 * SWAT and the scientist alike, which setup.cpp writes for him too. His
+	 * shots are the soldiers' shared DMG_Soldier lines below.
+	 */
+	HEALTH("HP_ScientistArmed",	hpScientistArmed,	35,	24,	SCIENTIST_ARMED),
 	HEALTH("HP_CraneGuy",		hpCraneGuy,		35,	24,		CRANE_GUY),
 	HEALTH("HP_Hitman",			hpHitman,		50,	50,		HITMAN),
 	HEALTH("HP_Cyborg",			hpCyborg,		180,	50,		CYBORG),

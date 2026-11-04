@@ -37,7 +37,7 @@ Revolver 				347
 Revolver/Deagle_Ammo	348
 }
 
-// Seven enemy slots the randomizer itself uses, and a
+// Ten enemy slots the randomizer itself uses, and a
 // warning. Four vanilla slots were repurposed for the Tomb Raider III
 // guests, so their enum NAME does not say what stands there. Read the
 // number, not the name - and see Preparation\Enemies\Enemy Pools.txt.
@@ -57,6 +57,8 @@ Revolver/Deagle_Ammo	348
 //         439 there) on the chef's animations and control
 //   472 = Drone        DRONE, likewise - RICH3's gunship (91), copied
 //         shrunk to the vulture's size; 91 stays RICH3's helicopter
+//   473 = Scientist    SCIENTIST_ARMED, likewise - RICH1's scientist
+//         (69) on SWAT's animations and control; 69 stays unarmed
 // Not to be confused: 41 = DOG, 85 = HUSKIE. Upstream calls both "Dog".
 //Enemies:{
 SWAT					33

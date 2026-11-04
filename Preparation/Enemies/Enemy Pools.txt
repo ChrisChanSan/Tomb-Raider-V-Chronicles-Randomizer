@@ -249,6 +249,23 @@ Special cases - own rules
 	    - Six of joby2's texture pages and 153 texinfos, about 1.18 MB in a
 	      level that holds none of them yet.
 
+	7 SCIENTIST_ARMED (sas.cpp, engine slot 473) - added by this project.
+	  RICH1's scientist in the orange suit (slot 69) is a live object there,
+	  but SasControl never lets him shoot: he flees when hurt and raises his
+	  hands when Lara aims at him. His bone tree is SWAT's to the last
+	  offset, so the randomizer builds a COMPOSITE (Cross Enemy Pool.txt):
+	  his meshes out of rich1, SWAT's 64 animations out of rich3, and SWAT's
+	  two hands, the rifle in mesh 13. He runs SWAT's block on a slot of his
+	  own; slot 69 stays the unarmed scientist and is no pool row.
+
+	  What is different about him in play: nothing but the look. He alerts,
+	  turns, aims and fires SWAT's burst, dies SWAT's two deaths with SWAT's
+	  cry, and stands in SWAT's BASIC_ZONE. HP_ScientistArmed 35 (SWAT's);
+	  his shots are the soldiers' DMG_Soldier lines. Eight of rich1's pages
+	  and five of rich3's, about 2.2 MB in a level that holds none of them.
+	  With the Remaster installed he wears RICH1's SCIENTIST, whose gloves
+	  are empty: the HD picture shows no rifle.
+
 
 ================================================================
 Still open

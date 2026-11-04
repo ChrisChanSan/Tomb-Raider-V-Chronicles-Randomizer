@@ -767,6 +767,10 @@ public:
     // Refused unless both slots carry the same number of meshes and the
     // same bone tree to the last word - the frames turn meshes by bone, so
     // a deviating tree would tear the model apart while drawing.
+    // A composite may also take single meshes out of src's slot instead,
+    // with their texinfos and pages from src's own blocks: the table
+    // kMeshesFromAnims in Tr5Transfer.cpp, keyed by the target slot (the
+    // armed scientist, 473: SWAT's two hands, the rifle in one of them).
     //
     // stats (may be 0): what the copy brought - for the import's log line.
     struct TransferStats

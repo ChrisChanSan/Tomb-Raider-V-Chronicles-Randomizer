@@ -171,6 +171,12 @@ beside it, and says so when the two disagree.
   files identical. Deselecting him (`enemiesoff=471`) takes him out
   before the roll and is the same case: the full build so, at seed 380
   with the cross switches above, gives the old build's 39 files.
+- **The armed scientist in the cross pool (#302).** The same claim the
+  same way: a build with only his pool row (473) removed gives the build
+  before him at the four seed and switch pairs above, all 156 files, and
+  `enemiesoff=473` gives it with the row. That build also carries the
+  change to the transfer (meshes taken from the anim donor), so the
+  same runs prove every other import untouched by it.
 - **Not the build id.** `RANDO_BUILD_ID` (`TR5Randomizer/src/core/
   BuildId.h`) moved from 19 to 20 because #214 and #223 change what a seed
   writes, and `RANDO_VERSION_STRING` became `Beta_3.0` with it. Neither

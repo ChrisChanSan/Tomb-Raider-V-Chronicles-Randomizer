@@ -19052,6 +19052,51 @@ documents.
 
 **Commits.** `4717877c`, `7a959d63`, `bef0454d`.
 
+### The engine builds without a warning (#328)
+2026-11-05
+
+**Found.** Since #326 the engine built with 51 warning lines at Level3 in each 64-bit
+configuration (seven in the 32-bit build), all of them older than the toolset change:
+45 C4244 at 43 places, 3 C4005 in `global/types.h` and 3 C4101 at one place. The C4244
+were 64-bit pointer differences (`item - items`) handed to or stored in a `short` or
+`long` item number, two Windows results (`SendMessage`'s `LRESULT`, `DialogBox`'s
+`INT_PTR`) stored in a `long` or `ulong`, the first-person field of view (`ulong`,
+60..100 times 182) handed to `AlterFOV(short)`, a string length of the language file
+(two `ushort` offsets apart) in a `long`, and one item number stored in a spark's 8-bit
+`FxObj`. The three C4005: `DD_OK`, `DD_FALSE` and `DDENUMRET_OK`, defined in `types.h`
+for the files that no longer include `ddraw.h`, met `ddraw.h` in `specific/fmv.cpp`, the
+one file that still includes it, before `types.h`. `ddraw.h` gives `DD_OK` and
+`DD_FALSE` the same values (`S_OK`, `S_FALSE`), but `DDENUMRET_OK` is 1 there and was 0
+here - and no file uses it. The C4101: `x`, `y` and `z` in `DinoControl`, never used.
+
+**Changed.** Each C4244 place casts to the type the value was already converted to -
+`(short)`, `(long)`, `(ulong)`, `(uchar)` - so the conversion is written where it
+happens; no field, variable or parameter changed its type and no value changes, since
+the implicit conversion truncated in the same way. Every value fits: item numbers stay
+below the engine's `MAX_ITEMS` (512), the combo box's selection and the dialog's result
+are small, the field of view is clamped to 60..100 where it is read. The one exception
+is kept as it was and named: `skeleton.cpp` stores the item number in `FxObj`, which is
+8 bits wide, so an item numbered above 255 wraps there - as in the six other places that
+already wrote `(uchar)item_number` into the same field; widening it is a struct change
+and not part of this. The `find_a_fucking_item` places (one in `deltapak.cpp`, five in
+`init.cpp`) cast a difference that is only meaningful when the object is found; the
+null case is unchanged. `types.h` guards `DD_OK` and `DD_FALSE` with `#ifndef`, so
+`fmv.cpp` keeps `ddraw.h`'s definitions and every other file ours; `DDENUMRET_OK` is
+gone. The unused locals of `DinoControl` are gone.
+
+`TreatSpecificWarningsAsErrors` of all five configurations of `tomb5.vcxproj` gains
+C4005 and C4101 beside the five of #324. C4244 is not in the list: as an error it also
+switches on its level-4 form (an `int` result of arithmetic stored in a `char` or
+`short`), which Level3 never shows - 96 more places in 33 files of the 64-bit build.
+
+**Checked.** The `.text` section of the 64-bit and the 32-bit release EXE, each built
+from the commit before and from this one in the same folder: the same bytes. The logs
+of `be64.bat`, `basan.bat`, `be64.bat test` and `be.bat` hold no warning line; `b1.bat`
+and `b2.bat` build. ModernTest's group `warning_rule` (6 checks) holds the list in each
+configuration and the guard.
+
+**Commits.** `499e8835`.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -19518,3 +19563,4 @@ entries above.
 | #322 | A stalled frame says where its time went |
 | #324 | The dynamic runtime, its DLLs beside the programs, a 64-bit-only package |
 | #326 | The current toolset, one language standard, and the warnings the randomizer never saw |
+| #328 | The engine builds without a warning |

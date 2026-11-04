@@ -66,6 +66,9 @@ and a fifth, seed 380 with `mix cross allsanity 8 weapons outfit
 outfits-off=Lara_Joby` and the glitched secret list: every `.trc`, `.hdm` and
 printout identical. The source levels must be untouched ones - a level the
 randomizer has written is refused as "not the vanilla level".
+Since #328 the engine's builds are free of warnings as well: `grep -c
+"warning C"` gives 0 on the logs of `be64.bat`, `basan.bat`, `be64.bat test`
+and `be.bat`, and those logs are the proof.
 
 **Exercise the risky path on purpose.** A run that never touches the changed
 code proves nothing. When the change was to the TR3 cache keys, the test had

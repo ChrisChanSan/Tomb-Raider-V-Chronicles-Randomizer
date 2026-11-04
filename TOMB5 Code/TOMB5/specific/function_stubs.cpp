@@ -389,3 +389,19 @@ void Log(const char* s, ...)
 	LogText(buf, strlen(buf));
 #endif
 }
+
+/* The log's end, once (WinMain, after WinClose). It used to close in
+ * GameClose, before WinClose and its ReplayClose had written: the
+ * recorder's end line and every later line went into a closed FILE*.
+ * gLogEnabled goes first, so a Log() after this is the no-op of its first
+ * test - and never LogText's reopening, which would empty log.txt. */
+void LogClose()
+{
+	gLogEnabled = false;
+
+	if (logF)
+	{
+		fclose(logF);
+		logF = 0;
+	}
+}

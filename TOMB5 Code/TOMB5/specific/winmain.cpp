@@ -1685,6 +1685,7 @@ int __stdcall WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 			free(gfScriptFile);
 			free(gfLanguageFile);
 			WinClose();
+			LogClose();
 			return 0;
 		}
 
@@ -1814,6 +1815,7 @@ int __stdcall WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 	}
 
 	WinClose();
+	LogClose();		// after ReplayClose's end line (function_stubs.cpp)
 	desktop = GetDesktopWindow();
 	hdc = GetDC(desktop);
 	devmode.dmSize = sizeof(DEVMODE);

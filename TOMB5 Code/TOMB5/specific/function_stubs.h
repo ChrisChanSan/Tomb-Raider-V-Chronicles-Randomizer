@@ -65,6 +65,10 @@ void SeedRandomDraw(long seed);
 long GetRandomDrawSeed();	// the recorder only, as above
 void Log(const char* s, ...);
 
+/* The log's end: closed once, after the recorder's last line (WinMain,
+ * after WinClose). Log() is a no-op from there on. */
+void LogClose();
+
 /* An address as a log line prints it with %x: its low 32 bits, so the line
  * has the same width on a 32-bit and a 64-bit build. For the eye only - an
  * address differs from run to run anyway, and no reader of a log takes it

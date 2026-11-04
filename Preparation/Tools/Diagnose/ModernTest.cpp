@@ -30160,7 +30160,10 @@ static char* test_build_block(const char* text, const char* from,
  * stand only inside the define's blocks, replay.cpp is empty without it,
  * replay.h's shipping path is empty functions handing their value back, and
  * GetRandomControl and GetFreeSpark are noinline through the macro alone.
- * This group only reads text. */
+ * And the log closes after the recorder: GameClose closes nothing,
+ * LogClose follows each WinClose in WinMain - after ReplayClose's end line
+ * - and leaves logF 0 with the log switched off. This group only reads
+ * text. */
 static void test_build_rule()
 {
 	char* proj = hd_switch_text("../../../tomb5.vcxproj");
@@ -30320,6 +30323,28 @@ static void test_build_rule()
 		"TOMB5_NOINLINE_IN_TEST long GetFreeSpark()") == 1,
 		"test build: GetRandomControl and GetFreeSpark noinline through the "
 		"macro alone", 0, 1);
+
+	// The log's end: once, after the recorder's.
+	glass_body(stubs, "void LogClose()", body, sizeof(body));
+	ok(!strcmp(body, "gLogEnabled=false;if(logF)fclose(logF);logF=0;}") &&
+		hd_switch_count(stubs, "fclose(logF)") == 1 &&
+		hd_switch_count(gamemain, "fclose(logF)") == 0 &&
+		hd_switch_count(winmain, "fclose(logF)") == 0,
+		"end line: fclose(logF) once, in LogClose, logF 0 after it", 0, 1);
+	glass_body(gamemain, "void GameClose()", body, sizeof(body));
+	n = hd_switch_count(body, "logF") + hd_switch_count(body, "fclose(");
+	glass_body(winmain, "void WinClose()", body, sizeof(body));
+	ok(n == 0 && strstr(body, "Log(__FUNCTION__);ReplayClose();") == body &&
+		hd_switch_count(body, "LogClose") == 0,
+		"end line: GameClose closes no log, WinClose ends the recorder",
+		n, 0);
+	glass_body(winmain, "int __stdcall WinMain(", body, sizeof(body));
+	ok(hd_switch_count(body, "WinClose();LogClose();") == 2 &&
+		hd_switch_count(body, "LogClose();") == 2 &&
+		hd_switch_count(body, "WinClose();") == 2 &&
+		hd_switch_count(body, "ReplayClose(") == 0,
+		"end line: the log closes after each WinClose, nothing after it",
+		hd_switch_count(body, "WinClose();LogClose();"), 2);
 
 	free(proj);
 	free(be);

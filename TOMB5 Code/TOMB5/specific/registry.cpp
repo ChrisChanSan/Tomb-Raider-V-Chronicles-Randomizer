@@ -858,7 +858,7 @@ bool SaveSetup(HWND hDlg)
 			REG_DeleteValue((char*)WindowPlaceNames[i]);
 	}
 
-	REG_WriteLong((char*)"DD", SendMessage(GetDlgItem(hDlg, IDC_GRAPHICS_ADAPTER), CB_GETCURSEL, 0, 0));
+	REG_WriteLong((char*)"DD", (ulong)SendMessage(GetDlgItem(hDlg, IDC_GRAPHICS_ADAPTER), CB_GETCURSEL, 0, 0));
 	// D3D, DS and TFormat no longer have a control behind them - one device
 	// per adapter, one texture format, and XAudio2 always on the default
 	// endpoint. Written as 0 rather than left alone, so a value from an older

@@ -736,7 +736,7 @@ void ProcessClosedDoors()
 		{
 			if (!item->InDrawRoom)
 			{
-				ItemNewRoom(item - items, item->draw_room);
+				ItemNewRoom((short)(item - items), item->draw_room);
 				item->room_number = room_number;
 				item->InDrawRoom = 1;
 				g_doorMoves++;
@@ -745,7 +745,7 @@ void ProcessClosedDoors()
 		else if (item->InDrawRoom)
 		{
 			item->room_number = item->draw_room;
-			ItemNewRoom(item - items, room_number);
+			ItemNewRoom((short)(item - items), room_number);
 			item->InDrawRoom = 0;
 			g_doorMoves++;
 		}

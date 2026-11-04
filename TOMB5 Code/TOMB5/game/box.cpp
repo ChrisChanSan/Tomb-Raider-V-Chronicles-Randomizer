@@ -911,7 +911,7 @@ void CreatureDie(short item_number, long explode)
 		if (item && !(item->flags & IFL_INVISIBLE))
 		{
 			item->flags |= IFL_CODEBITS;
-			AddActiveItem(item - items);
+			AddActiveItem((short)(item - items));
 		}
 	}
 }

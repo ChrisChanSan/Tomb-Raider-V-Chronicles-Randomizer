@@ -2123,15 +2123,19 @@ void DrawBinoculars()
 	}
 }
 
-/* SPARKLOG (-log): one line where the draw ends a particle the logic still
- * walks - a spark past the far plane, a drip or a bubble out of reach.
- * What the frame's camera decides there, the logic reads on the next tick:
- * a spark's chained explosion (UpdateSparks, game\effect2.cpp), a drip's
- * splash (UpdateDrips, game\tomb4fx.cpp), a bubble's ripple (UpdateBubbles)
- * - each with draws from the logic generator. `frame` counts the frames
- * drawn since GlobalCounter last changed, 1 being the first; S_DrawSparks
- * counts them and runs before the drips and the bubbles in DrawPhaseGame
- * (game\draw.cpp). One line per particle ended, never one per frame. */
+/* SPARKLOG (-log): one line where the draw culls a particle the logic
+ * walks - a spark past the far plane (one carrying a chain), a drip or a
+ * bubble out of reach. The draw used to end these there (`kill`), and what
+ * the frame's camera decided the logic read on the next tick: a spark's
+ * chained explosion (UpdateSparks, game\effect2.cpp), a drip's splash
+ * (UpdateDrips, game\tomb4fx.cpp), a bubble's ripple (UpdateBubbles) - each
+ * with draws from the logic generator. Now the draw only leaves them
+ * undrawn and the logic ends them (#320). `frame` counts the frames drawn
+ * since GlobalCounter last changed, 1 being the first; S_DrawSparks counts
+ * them and runs before the drips and the bubbles in DrawPhaseGame
+ * (game\draw.cpp). One line per particle (per reason for a bubble), on the
+ * first frame it is culled, never one per frame; the level line counts
+ * them. */
 static ushort spark_log_tick = 0xFFFF;
 static long spark_log_frame = 0;
 
@@ -2158,10 +2162,93 @@ static void SparkLog(const char* what, SPARKS* sptr, float z)
 		(sptr->Flags & SF_FX) ? 1 : 0, (int)sptr->Dynamic);
 }
 
+static long spark_log_culls = 0;
+static long spark_log_bubble_culls = 0;
+static long spark_log_drip_culls = 0;
+
+/* A culled spark is known by its slot and the tick it was born on
+ * (GlobalCounter less its age - both step once per tick), kept in a ring of
+ * the last 64 written. Nothing in SPARKS holds it. */
+static short spark_cull_slot[64];
+static ushort spark_cull_born[64];
+static long spark_cull_next = 0;
+static long spark_cull_used = 0;
+
+static bool SparkCullFirst(SPARKS* sptr)
+{
+	const short slot = (short)(sptr - spark);
+	const ushort b = (ushort)(GlobalCounter - (sptr->sLife - sptr->Life));
+
+	for (long i = 0; i < spark_cull_used; i++)
+	{
+		if (spark_cull_slot[i] == slot && spark_cull_born[i] == b)
+			return false;
+	}
+
+	spark_cull_slot[spark_cull_next] = slot;
+	spark_cull_born[spark_cull_next] = b;
+	spark_cull_next = (spark_cull_next + 1) & 63;
+
+	if (spark_cull_used < 64)
+		spark_cull_used++;
+
+	spark_log_culls++;
+	return true;
+}
+
+/* A drip by its slot and the tick its Life runs out, GlobalCounter plus
+ * Life: constant while it lives (UpdateDrips takes one Life a tick). */
+static ushort drip_cull_end[32];
+static bool drip_cull_set[32];
+
+static bool DripCullFirst(long slot, DRIP_STRUCT* drip)
+{
+	const ushort end = (ushort)(GlobalCounter + drip->Life);
+
+	if (drip_cull_set[slot] && drip_cull_end[slot] == end)
+		return false;
+
+	drip_cull_set[slot] = 1;
+	drip_cull_end[slot] = end;
+	spark_log_drip_culls++;
+	return true;
+}
+
+/* A bubble has no life or birth tick: per slot its dsize (set at birth,
+ * never changed), its size at the last cull and that tick. The same bubble
+ * while dsize matches and size has not shrunk and grew at most one a tick
+ * (UpdateBubbles' step); else the slot holds a new one. `bit` the reason:
+ * 1 box, 2 far, 4 near - one line per bubble per reason. */
+static short bubble_cull_dsize[40];
+static short bubble_cull_size[40];
+static ushort bubble_cull_tick[40];
+static uchar bubble_cull_why[40];
+
+static bool BubbleCullFirst(long slot, BUBBLE_STRUCT* bubble, long bit)
+{
+	const ushort now = GlobalCounter;
+	const long grew = bubble->size - bubble_cull_size[slot];
+
+	if (!bubble_cull_why[slot] || bubble->dsize != bubble_cull_dsize[slot] ||
+		grew < 0 || grew > (ushort)(now - bubble_cull_tick[slot]))
+		bubble_cull_why[slot] = 0;
+
+	bubble_cull_dsize[slot] = bubble->dsize;
+	bubble_cull_size[slot] = bubble->size;
+	bubble_cull_tick[slot] = now;
+
+	if (bubble_cull_why[slot] & bit)
+		return false;
+
+	bubble_cull_why[slot] |= (uchar)bit;
+	spark_log_bubble_culls++;
+	return true;
+}
+
 static void SparkLogOther(const char* what, const char* why, long slot,
 	long life, long z)
 {
-	Log("SPARKLOG %s kill tick=%u frame=%ld alpha=%.3f tween=%d why=%s "
+	Log("SPARKLOG %s cull tick=%u frame=%ld alpha=%.3f tween=%d why=%s "
 		"z=%ld slot=%ld life=%ld", what, (unsigned)GlobalCounter,
 		spark_log_frame, InterpAlphaNow(), InterpIsTweenFrame() ? 1 : 0, why,
 		z, slot, life);
@@ -2199,12 +2286,20 @@ void SparkLogLevelEnd()
 
 	if (gLogEnabled)
 		Log("SPARKLOG level draw_allocs=%ld splashes=%ld ripples=%ld "
-			"weather_peak=%ld weather_ripple_peak=%ld", allocs,
-			spark_log_splashes, spark_log_ripples, WeatherSparksPeak(),
-			WeatherRipplesPeak());
+			"weather_peak=%ld weather_ripple_peak=%ld culls=%ld "
+			"bubble_culls=%ld drip_culls=%ld", allocs, spark_log_splashes,
+			spark_log_ripples, WeatherSparksPeak(), WeatherRipplesPeak(),
+			spark_log_culls, spark_log_bubble_culls, spark_log_drip_culls);
 
 	spark_log_splashes = 0;
 	spark_log_ripples = 0;
+	spark_log_culls = 0;
+	spark_log_bubble_culls = 0;
+	spark_log_drip_culls = 0;
+	spark_cull_next = 0;
+	spark_cull_used = 0;
+	memset(drip_cull_set, 0, sizeof(drip_cull_set));
+	memset(bubble_cull_why, 0, sizeof(bubble_cull_why));
 }
 
 /* One spark of S_DrawSparks, at its world place x, y, z: the step it
@@ -2509,13 +2604,16 @@ void S_DrawDrawSparksNEW(SPARKS* sptr, long smallest_size, float* xyz)
 
 	if (xyz[2] <= f_mznear || xyz[2] >= f_mzfar)
 	{
-		if (xyz[2] >= f_mzfar)
-		{
-			if (gLogEnabled)
-				SparkLog("kill", sptr, xyz[2]);
-
-			sptr->On = 0;
-		}
+		/* Not drawn, and nothing more: the spark lives on and ends in
+		 * UpdateSparks (game\effect2.cpp) by its Life, which also frees its
+		 * light. The draw used to end a spark past the far plane here, by
+		 * the frame's camera - blended on each of a tick's frames - so a
+		 * chained explosion (extras & 7) and its draws of the logic
+		 * generator went off or not by where the frames fell (#317, #320).
+		 * A spark carrying a chain gets one SPARKLOG line. */
+		if (xyz[2] >= f_mzfar && gLogEnabled && sptr->extras & 7 &&
+			SparkCullFirst(sptr))
+			SparkLog("cull", sptr, xyz[2]);
 
 		return;
 	}
@@ -3408,12 +3506,15 @@ void DrawDrips()
 		if (!Z[0])
 			continue;
 
+		/* Too far in view to draw. The drip lives on and ends in UpdateDrips
+		 * (game\tomb4fx.cpp) by its Life, the floor or the water - the draw
+		 * used to end it here by the frame's camera, and with it a splash
+		 * and its draws of the logic generator (#320). */
 		if (Z[0] > 0x5000)
 		{
-			if (gLogEnabled)
+			if (gLogEnabled && DripCullFirst(i, drip))
 				SparkLogOther("drip", "far", i, drip->Life, Z[0]);
 
-			drip->On = 0;
 			continue;
 		}
 
@@ -3694,13 +3795,19 @@ void DrawBubbles()
 		dy = bubble->pos.y - lara_item->pos.y_pos;
 		dz = bubble->pos.z - lara_item->pos.z_pos;
 
+		/* Out of the frame's reach (the box, too far in view, too near the
+		 * eye): not drawn, and nothing more. The bubble lives on and ends in
+		 * UpdateBubbles (game\tomb4fx.cpp) at the floor, the ceiling or the
+		 * surface with its ripple. The draw used to set its size to 0 here,
+		 * by the frame's camera, and the logic skipped it - one ripple and
+		 * its draw of the logic generator less (#320). */
 		if (dx < -0x5000 || dx > 0x5000 || dy < -0x5000 || dy > 0x5000 || dz < -0x5000 || dz > 0x5000)
 		{
-			if (gLogEnabled)
+			if (gLogEnabled &&
+				BubbleCullFirst((long)(bubble - Bubbles), bubble, 1))
 				SparkLogOther("bubble", "box", (long)(bubble - Bubbles),
 					bubble->size, 0);
 
-			bubble->size = 0;
 			bubble++;
 			continue;
 		}
@@ -3724,24 +3831,28 @@ void DrawBubbles()
 
 		if (Z[0] > 0x5000)
 		{
-			if (gLogEnabled)
+			if (gLogEnabled &&
+				BubbleCullFirst((long)(bubble - Bubbles), bubble, 2))
 				SparkLogOther("bubble", "far", (long)(bubble - Bubbles),
 					bubble->size, Z[0]);
 
-			bubble->size = 0;
 			bubble++;
 			continue;
 		}
 
 		size = phd_persp * (bubble->size >> 1) / Z[0];
 
+		/* The original did not step `bubble` here and reached the next slot
+		 * through this one's size of 0; with the bubble left alive it steps
+		 * now, or the walk would test this one to the end. */
 		if (size > 128)
 		{
-			if (gLogEnabled)
+			if (gLogEnabled &&
+				BubbleCullFirst((long)(bubble - Bubbles), bubble, 4))
 				SparkLogOther("bubble", "near", (long)(bubble - Bubbles),
 					bubble->size, Z[0]);
 
-			bubble->size = 0;
+			bubble++;
 			continue;
 		}
 

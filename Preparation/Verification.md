@@ -788,6 +788,17 @@ recorder, which the 64-bit build carries:
    `SPARKLOG level` line's `weather_peak=` under 1024. A recording made
    before #318 drifts with these builds in both clocks by design: its
    logic carries the old splash slots.
+
+   The next drift (#320) was a bubble: 61 `SPARKLOG bubble kill` lines in
+   the recording, 62 in both live replays, the extra one a bubble that
+   `DrawBubbles` ended a tick before it surfaced in `UpdateBubbles`, one
+   ripple and one draw of the logic generator less. Since #320 the draw
+   ends no spark, drip or bubble - it only leaves them undrawn - and the
+   three lines are `cull` lines, once per particle. The check, with any
+   build from #320 on: no `kill` line of any kind (`SPARKLOG kill`,
+   `drip kill`, `bubble kill`); `cull` lines are allowed and change
+   nothing. A recording made before #320 drifts with these builds
+   wherever a particle its draw ended now lives on.
 4. `JOINTLOG passes=<n> ticks=<m> tween_frames=<k> blended_frames=<b>`,
    one line at the end of each level and of the title: `passes` equals
    `blended_frames`; at 30 both are 0; at 60 they are about `ticks` (a

@@ -19201,6 +19201,8 @@ modified, one moved out into `package/`, one removed.
   bytes of the build before it, so the transfer's change moves no other import; with the
   row every cross draw after his first changes, a run without the cross mix is unchanged
   (`ea71da57`). `Preparation/Item Infos/types.json` names the slot "Scientist (pool)".
+  `core/BuildId.h`: `RANDO_BUILD_ID` 23 to 24, `0.24`, because the pool changes what a
+  seed writes.
 - **#306 - deflate of its own, and the data as files only.** `core/Inflate.cpp` / `.h`
   and `core/DataFile.h` new, `core/Tr5Transfer.cpp`, `core/DataFile.cpp`,
   `core/DataFolder.h`, `Randomize.cpp`, `gui/Main.cpp`, `SelfTest.cpp`, `build/b1.bat`,

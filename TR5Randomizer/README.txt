@@ -7,7 +7,14 @@ What is in here
   docs\               The two manuals with their pictures, and the
                       picture behind the tool's window (Background.jpg);
                       without it the window is plain.
-  PCTomb5.exe         The game engine, native for Windows 11.
+  PCTomb5.exe         The game engine, a native 64-bit program for
+                      Windows 11.
+  vcruntime140.dll, vcruntime140_1.dll, msvcp140.dll
+                      Microsoft's C++ runtime, which both programs
+                      need; nothing has to be installed.
+  avutil-61.dll, avcodec-63.dll, avformat-63.dll
+                      FFmpeg, which plays the films. Keep all six DLLs
+                      next to the two EXEs.
   Setup.bat           Opens the engine's setup dialog: resolution,
                       renderer, controls.
   Log.bat             Starts the game writing a logfile - use this if
@@ -25,7 +32,7 @@ What is in here
                       engine, TR5Randomizer\ the tool.
   Licenses\           The licenses.
   trview\             Slot names for the trview level viewer (optional).
-  SHA256SUMS.txt      The SHA-256 of every program in here.
+  SHA256SUMS.txt      The SHA-256 of every program and DLL in here.
 
 You additionally need your own installation of Tomb Raider
 Chronicles. Game data is deliberately NOT included here - the game

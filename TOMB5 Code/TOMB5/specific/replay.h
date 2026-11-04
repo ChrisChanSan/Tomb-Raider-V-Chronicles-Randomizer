@@ -15,11 +15,18 @@
 /* -record <file> and -replay <file>: the devices' readings written once per
  * call of the input function, and played back in their place (replay.cpp,
  * the format in replay_format.h). Without either switch every function
- * here returns at its first line and changes nothing. */
+ * here returns at its first line and changes nothing.
+ *
+ * A test build's only (TOMB5_TEST_BUILD, tomb5.vcxproj: Asan|x64 and
+ * be64.bat test). The shipping EXEs compile replay.cpp to nothing and take
+ * the empty functions at the end of this file: the call sites stay as they
+ * are, each handing its own value back. */
 
 #define REPLAY_OFF	0
 #define REPLAY_RECORD	1
 #define REPLAY_PLAY	2
+
+#ifdef TOMB5_TEST_BUILD
 
 /* `live_clock`: -liveclock was given; under REPLAY_PLAY only, the frames
  * are blended by this machine's clock (ReplaySubTick). */
@@ -49,3 +56,15 @@ void ReplayLevelStart();
 
 /* A save ('s') or a load ('l') of `slot`. */
 void ReplaySlot(char kind, long slot);
+
+#else
+
+// The shipping build: no file, no line, the given value back.
+inline void ReplayClose() {}
+inline void ReplayInputSeam(char*, long*, long*, long*, long*, long) {}
+inline long ReplayFrames(long frames) { return frames; }
+inline double ReplaySubTick(double subtick) { return subtick; }
+inline void ReplayLevelStart() {}
+inline void ReplaySlot(char, long) {}
+
+#endif

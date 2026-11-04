@@ -19,23 +19,40 @@ rem 32 bits or a 32-bit value made a pointer (C4311, C4302, C4312), a size_t
 rem cut (C4267) and a printf format that does not fit its argument (C4477)
 rem are errors in tomb5.vcxproj, not warnings - in the 32-bit
 rem configurations as well, which have none of them.
+rem
+rem "be64 test" builds the same engine as a test build: TOMB5_TEST_BUILD
+rem (tomb5.vcxproj, property Tomb5Test) compiles the recorder in (-record,
+rem -replay, -liveclock), -rngtrace and STATELOG, into
+rem releasetest\PCtomb5_x64t.exe - a folder and a name of its own, so a
+rem copy into the game folder never passes for the shipping EXE. A property
+rem of the Release|x64 configuration, not a configuration of its own: one
+rem would have to repeat every per-file setting of the project. The test
+rem build records; basan.bat's, a test build as well, replays. The plain
+rem "be64" is the shipping build and knows none of these switches.
 call "%~dp0be.bat" guard
 if errorlevel 1 exit /b 1
+
+set "OUT=release64"
+set "TEST="
+if /i "%~1"=="test" (
+	set "OUT=releasetest"
+	set "TEST=/p:Tomb5Test=true"
+)
 
 call "C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvars64.bat" >nul
 cd /d "%~dp0..\..\.."
 
-msbuild "TOMB5 Code\tomb5.vcxproj" /t:Rebuild /p:Configuration=Release /p:Platform=x64 /v:minimal /nologo
+msbuild "TOMB5 Code\tomb5.vcxproj" /t:Rebuild /p:Configuration=Release /p:Platform=x64 %TEST% /v:minimal /nologo
 if errorlevel 1 exit /b 1
 
 rem The films: this build plays them through the three FFmpeg DLLs of
 rem vendor\ffmpeg-min\bin, which it loads at run time from its own folder
 rem (specific\fmv_av.cpp) - so they go beside the EXE, and a copy of the
 rem folder takes them along. Without them the game runs without films.
-copy /Y "vendor\ffmpeg-min\bin\*.dll" "release64\" >nul
+copy /Y "vendor\ffmpeg-min\bin\*.dll" "%OUT%\" >nul
 if errorlevel 1 (
-	echo be64: the FFmpeg DLLs could not be copied to release64\
+	echo be64: the FFmpeg DLLs could not be copied to %OUT%\
 	exit /b 1
 )
-echo   FFmpeg DLLs copied to release64\
+echo   FFmpeg DLLs copied to %OUT%\
 exit /b 0

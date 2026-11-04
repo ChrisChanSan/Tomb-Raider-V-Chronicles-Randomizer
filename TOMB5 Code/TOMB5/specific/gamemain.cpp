@@ -313,9 +313,7 @@ void GameClose()
 	if (ADPCMBuffer)
 		free(ADPCMBuffer);
 
-	if (logF)
-		fclose(logF);
-
+	// The log stays open: WinMain closes it after WinClose (LogClose).
 	free_game_malloc();	// the heap's, or -high's VirtualAlloc
 	free(gfScriptFile);
 	free(gfLanguageFile);

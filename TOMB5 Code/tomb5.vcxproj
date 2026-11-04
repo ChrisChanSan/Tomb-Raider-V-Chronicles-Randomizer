@@ -897,6 +897,15 @@
     <IntDir>$(Platform)\$(Configuration)\</IntDir>
     <TargetName>PCtomb5_x64</TargetName>
   </PropertyGroup>
+  <!-- Release|x64 with Tomb5Test=true (be64.bat test): the same engine as
+       a test build, into releasetest\PCtomb5_x64t.exe - its own folder,
+       its own objects and a name no copy can take for the shipping EXE.
+       TOMB5_TEST_BUILD is defined below. -->
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64' And '$(Tomb5Test)'=='true'">
+    <OutDir>$(ProjectDir)..\releasetest\</OutDir>
+    <IntDir>$(Platform)\ReleaseTest\</IntDir>
+    <TargetName>PCtomb5_x64t</TargetName>
+  </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Asan|x64'">
     <LinkIncremental>false</LinkIncremental>
     <OutDir>$(ProjectDir)..\releaseasan\</OutDir>
@@ -1060,6 +1069,15 @@ exit /b 0</Command>
       <Command>
       </Command>
     </PostBuildEvent>
+  </ItemDefinitionGroup>
+  <!-- TOMB5_TEST_BUILD: the test builds, Asan|x64 and Release|x64 with
+       Tomb5Test=true, carry the recorder (-record, -replay, -liveclock),
+       -rngtrace and STATELOG; the shipping EXEs (be.bat, be64.bat) do
+       not. The one place the name is defined. -->
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Asan|x64' Or ('$(Configuration)|$(Platform)'=='Release|x64' And '$(Tomb5Test)'=='true')">
+    <ClCompile>
+      <PreprocessorDefinitions>TOMB5_TEST_BUILD;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
   </ItemDefinitionGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

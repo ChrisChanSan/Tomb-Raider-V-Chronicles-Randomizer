@@ -5,6 +5,7 @@ TOMB5 Code/x64/
 release/
 release64/
 releaseasan/
+releasetest/
 *.obj
 *.pdb
 *.ilk

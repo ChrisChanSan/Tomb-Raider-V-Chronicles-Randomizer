@@ -14,7 +14,9 @@
 #include "function_stubs.h"
 #include "pool_guard.h"		// the pool under AddressSanitizer
 #include "high_pool.h"		// -high: the pool from the top
+#ifdef TOMB5_TEST_BUILD
 #include <intrin.h>			// _ReturnAddress - -rngtrace
+#endif
 
 // Keeps the logging code compiled in; gLogEnabled below controls whether
 // Log() actually does anything at runtime.
@@ -177,6 +179,8 @@ static void LogText(const char* text, size_t n)
 	fflush(logF);
 }
 
+#ifdef TOMB5_TEST_BUILD
+
 /* -rngtrace <from> <to> (winmain.cpp reads it, high_pool.h parses it): who
  * draws from the logic generator, by return address. A span runs from one
  * input call (ReplayInputSeam, specific\replay.cpp) to the next and is
@@ -319,12 +323,17 @@ void RngTraceInputSeam(long tick, long fmv)
 	rt_seed_in = rand_1;
 }
 
-/* Not inlined: -rngtrace's return address has to be the caller's, in every
- * build (the Release builds link with whole-program optimisation). */
-__declspec(noinline) long GetRandomControl()
+#endif	// TOMB5_TEST_BUILD
+
+/* Not inlined in a test build: -rngtrace's return address has to be the
+ * caller's (the Release builds link with whole-program optimisation). A
+ * shipping build has no -rngtrace and inlines it as before. */
+TOMB5_NOINLINE_IN_TEST long GetRandomControl()
 {
+#ifdef TOMB5_TEST_BUILD
 	if (rt_armed)
 		RngTraceNote(_ReturnAddress());
+#endif
 
 	rand_1 = 0x41C64E6D * rand_1 + 12345;
 	return (rand_1 >> 10) & 0x7FFF;
@@ -379,4 +388,20 @@ void Log(const char* s, ...)
 
 	LogText(buf, strlen(buf));
 #endif
+}
+
+/* The log's end, once (WinMain, after WinClose). It used to close in
+ * GameClose, before WinClose and its ReplayClose had written: the
+ * recorder's end line and every later line went into a closed FILE*.
+ * gLogEnabled goes first, so a Log() after this is the no-op of its first
+ * test - and never LogText's reopening, which would empty log.txt. */
+void LogClose()
+{
+	gLogEnabled = false;
+
+	if (logF)
+	{
+		fclose(logF);
+		logF = 0;
+	}
 }

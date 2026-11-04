@@ -108,9 +108,12 @@ Run the game normally, or use the two helpers in the package:
 | **`Setup.bat`** | opens the setup dialog (`PCTomb5.exe -setup`) |
 | **`Log.bat`** | starts the game writing a log (`PCTomb5.exe -log`) |
 
-Two more switches play the same inputs again. `PCTomb5.exe -record <file>`
+Two more switches play the same inputs again - in the test builds only
+(`PCtomb5_x64t.exe` of `be64.bat test`, `PCtomb5_asan.exe` of `basan.bat`);
+the game's own EXEs do not know them, nor `-liveclock` and `-rngtrace`, and
+start as without them. `-record <file>`
 writes what the run takes from the keyboard, the mouse, the pad and the clock
-into `<file>`; `PCTomb5.exe -replay <file>` plays the same inputs again in
+into `<file>`; `-replay <file>` plays the same inputs again in
 their place, and when the file ends the game goes on with the devices. Both go
 with `-log`, which then writes a `REPLAYLOG` line at every level start, save
 and load; a file name with a blank goes in quotes, and a file name must not

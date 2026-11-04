@@ -1355,7 +1355,8 @@ static long SparkLogCountOn()
  * will give the generator's state back (InterpFrameSeedSaved) - the draw
  * moves next_spark and turns a spark on, and nothing of it is undone. ret
  * is the caller's address relative to the module's base, as -rngtrace
- * writes it; GetFreeSpark is never inlined so that it is the caller's. */
+ * writes it; in a test build GetFreeSpark is never inlined so that it is
+ * the caller's (a shipping build inlines it: ret= is then one further up). */
 static long spark_log_draw_allocs = 0;
 
 static void SparkLogDrawAlloc(long slot, long next, long on, long evicted,
@@ -1831,7 +1832,9 @@ void TriggerSuperJetFlame(ITEM_INFO* item, long yvel, long deadly)
 		sptr->Xvel = (short)dy;
 }
 
-__declspec(noinline) long GetFreeSpark()
+// A call of its own in a test build only (TOMB5_NOINLINE_IN_TEST): there
+// SPARKLOG draw_alloc's ret= names the caller.
+TOMB5_NOINLINE_IN_TEST long GetFreeSpark()
 {
 	SPARKS* sptr;
 	long free, min_life, lp, log_next, log_on;

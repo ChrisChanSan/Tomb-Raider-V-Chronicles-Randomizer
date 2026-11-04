@@ -22,6 +22,9 @@
 #include "../game/lara.h"		// lara_item - the input record's check
 #include "../game/items.h"		// next_item_active - STATELOG
 
+// A test build's only (replay.h); the shipping EXEs have none of it.
+#ifdef TOMB5_TEST_BUILD
+
 /* -record and -replay.
  *
  * What a run consumes that is not in the level file: the devices, read once
@@ -503,3 +506,5 @@ void ReplaySlot(char kind, long slot)
 	Log("REPLAYLOG %s slot=%ld tick=%d", kind == 's' ? "save" : "load", slot,
 		(int)GlobalCounter);
 }
+
+#endif	// TOMB5_TEST_BUILD

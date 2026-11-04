@@ -60,6 +60,12 @@ the thirteen campaign levels at seed 380 plain and with `mix cross
 allsanity 8 weapons items20 weather`, seed 1 with `mix cross 8 weapons` and
 seed 77 with `mix cross allsanity 8 items20`: every `.hdm` and log
 identical, every `.trc` identical or `SAME CONTENT`.
+#326 ran the recipe across `/MD` (the build before #324 against the one
+after), `/W4 /sdl /permissive-` and the warning fixes, with the same four sets
+and a fifth, seed 380 with `mix cross allsanity 8 weapons outfit
+outfits-off=Lara_Joby` and the glitched secret list: every `.trc`, `.hdm` and
+printout identical. The source levels must be untouched ones - a level the
+randomizer has written is refused as "not the vanilla level".
 
 **Exercise the risky path on purpose.** A run that never touches the changed
 code proves nothing. When the change was to the TR3 cache keys, the test had

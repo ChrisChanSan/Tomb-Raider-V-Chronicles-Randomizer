@@ -18948,6 +18948,68 @@ with a PE reader, not by running anything.
 
 **Commits.** `2075cf64`, `f08f8245`.
 
+### The current toolset, one language standard, and the warnings the randomizer never saw (#326)
+2026-11-04
+
+**Found.** `tomb5.vcxproj` built four of its five configurations with the v142 toolset
+(Visual Studio 2019's), the pin of the TOMB5 upstream project the engine comes from;
+only Asan|x64 had moved to v145, because the v142 sanitizer runtime stops at its own
+start on Windows 11. The project had no language standard of its own: 23 source files
+carried `<LanguageStandard>stdcpp17</LanguageStandard>` once per configuration (115
+entries), the other files of the project compiled as C++14, the compiler's default.
+Every `PreprocessorDefinitions` carried `TR4M_EXPORTS` and `_USRDLL`, the defines of
+the upstream DLL project, which no source file reads. The engine's link had
+`/guard:cf` but not `/CETCOMPAT`, which the randomizer's EXEs carry. Whole-program
+optimisation was already on for both Release configurations.
+
+The randomizer's `b1.bat` and `b2.bat` had no warning level, no `/sdl` and no
+`/permissive-` - and a `/w` in the middle of both `cl` lines, left from the zlib
+sources they compiled before #306. `cl` takes an option for the whole line wherever it
+stands, so that `/w` silenced every warning of every file: the randomizer was built
+without one warning ever shown.
+
+**Changed.** The project: `PlatformToolset` v145 in all five configurations; one
+`<LanguageStandard>stdcpp17</LanguageStandard>` beside `ConformanceMode` in each
+configuration's ClCompile settings and the 115 per-file entries removed, so every file
+of the engine is C++17; `TR4M_EXPORTS` and `_USRDLL` out of every
+`PreprocessorDefinitions` (`WIN32`, `_WINDOWS`, `NDEBUG`/`_DEBUG` and
+`_CRT_SECURE_NO_WARNINGS` stay); `/CETCOMPAT` in the link options of Release|Win32,
+Release|x64 and Asan|x64, which all three link with. The engine compiled under v145
+and C++17 without a change to a source file and with the same warnings as before: 47
+places at Level3 in the 64-bit build (43 C4244, the 64-bit pointer differences and
+results narrowed to `short` or `long`; 3 C4005 in `global/types.h`; 1 C4101), none new;
+the five warnings that are errors stay errors.
+
+The randomizer: `/W4 /sdl /permissive-` on both `cl` lines and the `/w` gone. What
+showed, each cleared without changing what the program does: the level reader's `goto`
+jumped over the initialisation of the lambda `mark()` (C2362 under `/permissive-`; it
+is declared before the first step now), an unused constant and an unused reference
+(C4189, `Tr5Level.cpp`); `sscanf` for three `"%d,%d,%d"` reads (C4996 under `/sdl`,
+now `sscanf_s`, which reads numbers alike); `_wfopen` in `BalanceFile.cpp` (C4996, now
+`_wfsopen` with `_SH_DENYNO`, the call `_wfopen` makes - not `_wfopen_s`, which would
+lock the file); a signed/unsigned compare and a 32-bit shift handed to a 64-bit
+parameter (C4018, C4334, `SecretList.cpp`); a loop counter shadowing another (C4456,
+`Randomize.cpp`); an unused wrapper function in the GUI (C4505, `Main.cpp`). Dear
+ImGui compiles without a warning at that level. Both EXEs build with none.
+
+README.md and the engine manual name v145, which any current Visual Studio 2026 with
+the C++ workload brings along, in place of the v142 component of the installer.
+
+**Checked.** The randomizer's output, Verification.md section 1: the CLI built from the
+commit before #324 (static runtime, the old flags) and from this one, each run from the
+same folder beside the same `data\`, over the thirteen campaign levels with the four
+measured switch sets and a fifth with the glitched secret list and a wardrobe
+(`outfit outfits-off=`), the paths the warning fixes touched: all 65 levels, their
+`.hdm` and the printouts the same bytes. The sets name no Tomb Raider III folder
+(`tr3=`), so no guest was drawn in either build. The engine's own proof is a replay: the
+newer compiler and C++17 change its machine code, so a recording played on the test
+build must keep its course with `-liveclock`; a drift there would point to a float
+path that the code generation computes differently. ModernTest's group
+`toolset_rule` (8 checks) holds the project's settings, the two build lines and the two
+documents.
+
+**Commits.** `4717877c`, `7a959d63`, `bef0454d`.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -19182,6 +19244,12 @@ modified, one moved out into `package/`, one removed.
   import tables) copied beside them from the compiler's redist folder
   (`VCToolsRedistDir`). Both programs and the engine now share one runtime set in the
   package, with no installer. No source file changed.
+- **#326 - the warnings shown.** `build/b1.bat`, `build/b2.bat`: `/W4 /sdl /permissive-`
+  and the leftover `/w` gone, which had silenced every warning; `Randomize.cpp`,
+  `core/Tr5Level.cpp`, `core/Randomizer.cpp`, `core/BalanceFile.cpp`,
+  `core/SecretList.cpp`, `gui/Main.cpp`: what showed, cleared with no change to what
+  the programs do - checked on the output of thirteen levels in five switch sets
+  against the build before #324, the same bytes everywhere (`7a959d63`).
 
 ## 4. Building this yourself
 
@@ -19389,3 +19457,4 @@ entries above.
 | #321 | The recorder is a test build's; The log closes after the recorder |
 | #322 | A stalled frame says where its time went |
 | #324 | The dynamic runtime, its DLLs beside the programs, a 64-bit-only package |
+| #326 | The current toolset, one language standard, and the warnings the randomizer never saw |

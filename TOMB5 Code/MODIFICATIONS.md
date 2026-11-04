@@ -18946,6 +18946,8 @@ engine and the set, never the 32-bit EXE; the ledger has the entry; README.md no
 longer calls the engine a 32-bit program. The import tables before and after were read
 with a PE reader, not by running anything.
 
+**Commits.** `2075cf64`, `f08f8245`.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI

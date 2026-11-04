@@ -18052,7 +18052,7 @@ is written as before, and the frame's calls are the old ones in the old order.
 `game/deltapak.h` carries the modification notice now. ModernTest's group `lara_joints`
 (13 checks) holds the order and the wiring in the engine's text.
 
-What the frames leave behind besides the joints, five more:
+What the frames leave behind besides the joints, six more:
 - The generator's state. `game/interpolate.cpp`: `InterpBeginFrame` saves the state of
   `GetRandomControl` at every frame, and `InterpEndFrame` gives it back after a tween
   frame, after a blended frame and after every frame of the display's cadence. At
@@ -18098,6 +18098,9 @@ What the frames leave behind besides the joints, five more:
 - The rain's splashes and ripples. `DoRain` made them on the frame that carries the
   tick, in the logic's `spark[]` and `ripples[]`; their draws went back, the slots and
   the spark cursor stayed. They are the weather's own pools now - see #318.
+- The draw's particle ends. `S_DrawDrawSparksNEW`, `DrawDrips` and `DrawBubbles` ended a
+  far spark, a far drip and a bubble out of reach by the frame's camera, and the logic
+  read it. They only cull now - see #320.
 
 With `-log`, `RNGLOG frames= given_back= undone= kept_frames= kept_draws= heights= over=`
 follows each `JOINTLOG` line (`InterpRngLevelEnd`): the draws counted as steps of the
@@ -18378,9 +18381,9 @@ seven marks in their order.
 2026-11-03
 
 The thesis this entry began with - the draw ending a spark at the far plane - was
-measured and refuted (**What the first run showed**); the far-plane end stands as it
-was, with its `kill` line. What the entry adds are the SPARKLOG seams that found the
-cause, the rain's splashes (#318).
+measured and refuted (**What the first run showed**); the far-plane end stood as it
+was, with its `kill` line, until #320 removed it. What the entry adds are the SPARKLOG
+seams that found the cause, the rain's splashes (#318).
 
 **Found.** A recording made at *Display* replayed equal to itself with the recorded clock
 and parted from it with `-liveclock` at tick 842 (`REPLAYLOG drift`). `-rngtrace 836 845`
@@ -18680,6 +18683,75 @@ wanted type, with its end and type checks after it, and the end line's
 `skipped_subticks=`.
 
 **Commits.** `dc94530f`.
+
+### The draw ends no particle: bubbles, drips and far sparks live on in the logic (#320)
+2026-11-04
+
+**Found.** A recording made at *Display* replayed twice with `-liveclock` on the #319
+build: both replays ran to the recording's end and parted from it at tick 1996, with the
+same hashes. The recording wrote 61 `SPARKLOG bubble kill` lines, each replay 62, and the
+extra one was the same in both: `bubble kill tick=1994 frame=3 ... why=near z=610
+slot=28`. In the recording that bubble rose to the surface in `UpdateBubbles`
+(`game/tomb4fx.cpp`) and paid one `GetRandomControl` for its ripple; in the replays
+`DrawBubbles` had set its `size` to 0 a tick earlier - its projected size over 128 in the
+frame's blended camera - and `UpdateBubbles` skips a bubble of size 0: one draw less, and
+the generator parted. The other 61 kills ended alike in every run and cost nothing. The
+shape is the rain's (#318) and the spark far plane's (#317): the draw wrote a field the
+logic reads, from the frame's camera.
+
+**The rule.** The draw decides only whether it draws a particle, never whether it lives. A
+particle out of the frame's reach is not drawn and goes on in the logic until the logic
+ends it, as every particle the camera does not look at already does.
+
+**Changed.** `specific/specificfx.cpp`, the three places #317 measured:
+
+- `S_DrawDrawSparksNEW`: a sprite spark at or past the far plane only returns and no
+  longer has `On` set to 0. `UpdateSparks` (`game/effect2.cpp`) ends it by its Life (a
+  uchar, at most 255 ticks), which frees its light; the draw's end never did, so every far
+  spark with a light kept one of the eight `spark_dynamics` for good.
+- `DrawDrips`: a drip deeper than 20 sectors in view is skipped; `UpdateDrips` ends it by
+  its Life (16 to 47 ticks), on the floor or in the water.
+- `DrawBubbles`: the box (20 sectors around the camera), the far depth and the near size
+  skip the bubble and leave its `size`; `UpdateBubbles` ends it at the floor, the ceiling
+  or the surface with its ripple. A bubble rises at least 32 sectors before its speed
+  could wrap, so each meets one of these first. The near branch now steps to the next
+  bubble; the original reached it through the killed one's size of 0 and so left the last
+  slot undrawn on that frame (a draw-only difference).
+
+The logic walks the whole arrays every tick already (`spark[1024]`, `Drips[32]`,
+`Bubbles[40]`), so a particle living on costs it nothing new. `game/effect2.cpp` and
+`specific/weather_sparks.cpp` have only their comments brought up to date.
+
+**What changes in play.** A particle beyond the frame's reach lives its life unseen: a
+bubble surfaces and ripples whether or not the camera sees it, a far chained explosion
+fires on its tick, a far drip lands and splashes, and a far spark's light is freed by its
+end. What the logic generator draws no longer depends on where the frames fell.
+
+**The lines.** With `-log` the three `kill` lines are `cull` lines - the one renaming in
+SPARKLOG's text, every field kept - and each is written once per particle, on the first
+frame it is culled:
+
+    SPARKLOG cull tick= frame= alpha= tween= z= zfar= slot= life= slife= age= extras=
+        chain= fires_at= fx= dyn=
+    SPARKLOG drip cull tick= frame= alpha= tween= why=far z= slot= life=
+    SPARKLOG bubble cull tick= frame= alpha= tween= why=<box|far|near> z= slot= life=
+
+The spark line stays for a spark carrying a chain (`extras & 7`), as the kill line was
+used; a bubble's `life=` is its `size` (a bubble has no life field). The keys: a spark by
+its slot and birth tick (`GlobalCounter` less its age) in a ring of the last 64; a drip by
+its slot and the tick its Life runs out (`GlobalCounter` plus Life, constant while it
+lives); a bubble by its slot, its `dsize` (fixed at birth) and its growth (at most one a
+tick), one line per reason. The `SPARKLOG level` line gains `culls= bubble_culls=
+drip_culls=` at its end, the lines written in the level, reset with the rain's counters.
+ModernTest's group `cull_rule` (14 checks) holds no write of the alive fields of `SPARKS`,
+`DRIP_STRUCT` or `BUBBLE_STRUCT` under `specific/` but the weather pool's own step, the
+three places with their cull lines and keys, and the logic's own ends; `spark_life`'s
+far-plane check asserts the cull now.
+
+A recording made before #320 drifts on a #320 build wherever a particle the recording's
+draw ended now lives on - by design.
+
+**Commits.** `fe236669`.
 
 ## 3. Randomizer changes since Beta 1.0
 
@@ -19108,3 +19180,4 @@ entries above.
 | #317 | SPARKLOG: a spark's life and what the draw takes |
 | #318 | The weather owns its splash sparks |
 | #319 | -liveclock reads no frame places from the recording |
+| #320 | The draw ends no particle: bubbles, drips and far sparks live on in the logic |

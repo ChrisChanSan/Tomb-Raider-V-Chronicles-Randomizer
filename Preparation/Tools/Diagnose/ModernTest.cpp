@@ -38661,6 +38661,97 @@ static void scientist_rule()
 	free(language);
 }
 
+/* A composite's node lines (hd_object.cpp, kCompositeNodes): the armed
+ * scientist's hands 10 and 13 drawn by the model of MESHSWAP_CROSS_SWAT,
+ * the warehouse that binds SWAT.TRM, and no other row - the brawler takes
+ * no mesh from his anim donor. The draw asks the table before the
+ * cutscene's rules, the node hangs at the actor's bind, and the level's
+ * line carries its fields in order behind -log. Read from the tree. */
+static void composite_nodes()
+{
+	char* object = hd_switch_text("hd_object.cpp");
+	char* model = hd_switch_text("hd_model.cpp");
+	static char begin[65536];
+	static char take[4096];
+	static char push[8192];
+	const char* table = object ? strstr(object,
+		"const CompositeRow kCompositeNodes[] =") : 0;
+	const char* tableEnd = table ? strstr(table, "};") : 0;
+	int rows = 0;
+
+	for (const char* q = table ? strstr(table, "{ \"") : 0; q && q < tableEnd;
+		q = strstr(q + 1, "{ \""))
+		rows++;
+
+	ok(table && strstr(table, "{ \"SCIENTIST_ARMED\", (1u << 10) | (1u << 13), "
+		"\"MESHSWAP_CROSS_SWAT\" }") && rows == 1,
+		"composite: SCIENTIST_ARMED 10, 13 from MESHSWAP_CROSS_SWAT, one row",
+		rows, 1);
+
+	// Before rule 1-3: asked ahead of the cutscene's answer, for every node.
+	glass_body(object, "bool HDObjectBegin(ITEM_INFO* item, OBJECT_INFO* obj)",
+		begin, sizeof(begin));
+	const char* asked = strstr(begin,
+		"constunsignedintcomposite=composite_nodes_of(slot,item,");
+	const char* cut = strstr(begin, "g_open_cut=g_cut;");
+	const char* taken = strstr(begin,
+		"if(composite)composite_take(composite,compositeSource);");
+	const char* swap = strstr(begin, "g_open_swap=swap_model_for(");
+
+	ok(asked && cut && taken && swap && asked < cut && cut < taken &&
+		taken < swap,
+		"composite: the table asked before the cutscene's rules, taken over",
+		0, 0);
+
+	glass_body(object, "static unsigned int composite_nodes_of(", take,
+		sizeof(take));
+	ok(strstr(take, "for(intn=0;n<HD_OBJ_NODES;n++)") &&
+		strstr(take, "borrowable(row.source,n)") &&
+		strstr(take, "((unsignedint)item->mesh_bits>>n&1)"),
+		"composite: every node, under rule 2's test and the mesh bits", 0, 0);
+
+	glass_body(object, "static void composite_take(", take, sizeof(take));
+	ok(strstr(take, "b.drawn=BORROW_NODE;") &&
+		strstr(take, "b.anchor=g_open_slot;") &&
+		strstr(take, "g_open_mask&=~(1u<<n);"),
+		"composite: rule 2's entry at the actor's bind, its own node out",
+		0, 0);
+
+	// Rule 2's draw, mirror and shadow included: the entry is the actor's.
+	glass_body(object, "static void push_borrowed(int actorEntry)", push,
+		sizeof(push));
+	ok(strstr(push, "entry=actor;") &&
+		strstr(push, "if(b.anchor>=0)composite_matrices(b.slot,b.index,"
+			"b.anchor,b.node,") != 0,
+		"composite: drawn as rule 2's entry, hung at the actor's bind", 0, 0);
+
+	glass_body(model, "void HDModelBorrowJointsAt(", take, sizeof(take));
+	ok(strstr(take, "constfloatdx=bind[node*3+0]-anchor[0];") &&
+		strstr(take, "HDModelBorrowJoints(bind,node,moved,out,nodes);"),
+		"composite: the anchor moves the lender's joints by bind - anchor",
+		0, 0);
+
+	// The level's line: fields in order, behind -log, four reasons.
+	const char* line = object ? strstr(object, "Log(\"HDLOG composite "
+		"slot=%d name=%s nodes=%s from=%s model=%s \"") : 0;
+	const char* guard = object ? strstr(object,
+		"if (gLogEnabled)\r\n\t\t\tLog(\"HDLOG composite") : 0;
+
+	ok(line && guard && strstr(line, "\"hd=%d reason=%s\", one.actor, "
+		"row.actor, nodes, row.source,") != 0,
+		"composite: slot name nodes from model hd reason, behind -log", 0, 0);
+	ok(object && strstr(object, "why = \"not_loaded\";") &&
+		strstr(object, "why = \"source_classic\";") &&
+		strstr(object, "why = \"no_geometry\";") &&
+		strstr(object, "why = \"actor_classic\";") &&
+		strstr(object, "const char* why = \"ok\";"),
+		"composite: ok, not_loaded, actor_classic, source_classic, no_geometry",
+		0, 0);
+
+	free(object);
+	free(model);
+}
+
 int main()
 {
 	printf("ModernTest - the arithmetic of the modern control\n");
@@ -38933,6 +39024,7 @@ int main()
 	collide_lists();
 	lara_joints();
 	logic_leftovers();
+	composite_nodes();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

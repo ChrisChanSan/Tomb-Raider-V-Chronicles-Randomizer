@@ -746,6 +746,10 @@
  *                         with -slot: its node <node> drawn by node <index>
  *                         of <slot>'s model, as a cutscene's borrowed mesh
  *                         is drawn (hd_model.h, HDModelBorrowJoints).
+ *     -borrowown          with -borrow: hang it at the bind of -slot's own
+ *                         node, as a composite's node line is drawn
+ *                         (hd_object.cpp, kCompositeNodes;
+ *                         HDModelBorrowJointsAt).
  *     -crossdrift         with -all: every model on every other slot of the
  *                         level with its node count, by both drifts and the
  *                         fit - the foreign trees the skeleton test refuses.
@@ -13867,6 +13871,9 @@ int main(int argc, char** argv)
 	 * node <node> drawn by <slot>'s model, its node <index> hung on it the
 	 * way the engine hangs it (hd_model.h, HDModelBorrowJoints). */
 	int borrowNode = -1, borrowSlot = -1, borrowIndex = -1;
+	/* -borrowown: at the bind of -slot's own node instead of the lender's -
+	 * a composite's node line (hd_object.cpp, kCompositeNodes). */
+	bool borrowOwn = false;
 	std::string modelAsked;
 	// -alpha: the glass rule taken apart; -noglass: the rule left off.
 	bool alphaCheck = false, noGlass = false;
@@ -14427,6 +14434,8 @@ int main(int argc, char** argv)
 			borrowSlot = atoi(argv[++i]);
 			borrowIndex = atoi(argv[++i]);
 		}
+		else if (!_stricmp(argv[i], "-borrowown"))
+			borrowOwn = true;
 		else if (!_stricmp(argv[i], "-model") && i + 1 < argc)
 			modelAsked = argv[++i];
 		else if (!_stricmp(argv[i], "-hdm"))
@@ -17256,9 +17265,23 @@ int main(int argc, char** argv)
 			HDModelBorrowJoints(&lender->bind[0][0], borrowIndex,
 				&own[(size_t)borrowNode * 16], &joints[0], lender->nodes);
 
+			// -borrowown: the composite's anchor, -slot's own bind.
+			if (borrowOwn)
+				HDModelBorrowJointsAt(&lender->bind[0][0], borrowIndex,
+					&here->bind[borrowNode][0],
+					&own[(size_t)borrowNode * 16], &joints[0], lender->nodes);
+
 			for (int n = 0; n < lender->nodes; n++)
 				memcpy(&lent[(size_t)n * 3], &light[(size_t)borrowNode * 3],
 					sizeof(float) * 3);
+
+			if (borrowOwn)
+				printf("borrow  : hung at slot %d's own bind of node %d, "
+					"%.0f %.0f %.0f (the lender's %.0f %.0f %.0f)\n", slot,
+					borrowNode, here->bind[borrowNode][0],
+					here->bind[borrowNode][1], here->bind[borrowNode][2],
+					lender->bind[borrowIndex][0], lender->bind[borrowIndex][1],
+					lender->bind[borrowIndex][2]);
 
 			printf("borrow  : node %d of slot %d drawn by %s, its node %d%s\n",
 				borrowNode, slot, HDModelName(borrowSlot) ? HDModelName(borrowSlot)

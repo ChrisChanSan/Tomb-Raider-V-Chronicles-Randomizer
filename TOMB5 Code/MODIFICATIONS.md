@@ -19052,6 +19052,80 @@ documents.
 
 **Commits.** `4717877c`, `7a959d63`, `bef0454d`.
 
+### A composite's borrowed nodes draw from their donor's HD model (#327)
+2026-11-05
+
+**Found.** In ANDREA2 with HD objects on, the armed scientist (`SCIENTIST_ARMED`, slot
+473) bound `SCIENTIST.TRM` through his donor line (`HDLOG bind ... via=donor`, RICH1's
+slot 69) and drew it with 15 of 15 nodes, `reason=ok` - and held nothing: the rifle
+showed in the classic picture only. He is a composite of the randomizer: RICH1's
+scientist on SWAT's whole animation set out of RICH3, and SWAT's hand meshes 10 and 13
+with it (`Tr5Transfer.cpp`, `kMeshesFromAnims`); the rifle is part of SWAT's hand 13.
+The hands are written into his own mesh list when the level is written. An HD model
+is drawn out of its own file whatever the mesh table says, and the three rules for a
+node whose mesh is not the one its slot had at the load (`HDObjectMeshTableTake`;
+rule 1 a whole alternative file, rule 2 the lender's node, rule 3 the own node) are
+asked for a cutscene's actor only - and for him the hands are his own from the first
+frame, so none of them ever fired. `SCIENTIST.TRM`'s bare gloves were drawn.
+
+Measured with ModelProbe, ANDREA2 as written: `SWAT.TRM` (bound in the level through
+SWAT's warehouse `MESHSWAP_CROSS_SWAT`, slot 462) has 15 nodes with geometry; node 13
+is the right hand WITH the rifle (1176 vertices, centre 134 143 23), node 10 the left
+glove (208); `-meshbits 0x2000` draws the rifle hand alone. `SCIENTIST.TRM` has 15 of
+15, nodes 10 and 13 his gloves (195 vertices each). The slot's classic mesh 13 is
+SWAT's hand of 36 vertices (8 the hand, 28 the rifle). The brawler (471) takes no mesh
+from his anim donor (`kMeshesFromAnims` has rows for 473 only) and gets no row.
+
+The measurement found a second fault, in rule 2's anchor. Rule 2 hangs the lender's
+node at the actor's node matrix by the LENDER slot's bind pose. The warehouse's mesh
+tree is not SWAT's: its node 13 sits at -68 5 -4, the other side of the body, while
+the scientist's tree is SWAT's to the last bone (126 61 -21, as RICH3's SWAT in slot
+33; 0 of 14 bones deviating, as the pool row says). `ModelProbe -slot 473 -borrow 13
+462 13` draws the rifle hand 203 units beside his arm.
+
+**Changed.** `hd_object.cpp`: a table beside `kSwapRules`, `kCompositeNodes` - per row
+the actor's slot name, its nodes and the slot whose model draws them; one row,
+`SCIENTIST_ARMED` nodes 10 and 13 from `MESHSWAP_CROSS_SWAT`. The source is named by
+slot and not by model because a model is drawn only through a slot that binds it:
+SWAT's own slot is in no level the scientist goes to, while his row carries the
+warehouse wherever he stands, and `hd_bind.cpp`'s hand table binds it to `SWAT.TRM`.
+The level build resolves each row after the verdicts (both slots by name, loaded,
+both drawing HD, the source's model with geometry on the node). `HDObjectBegin` asks
+the table for every node before the cutscene's answer: a listed node takes rule 2
+unconditionally under rule 2's own test (`borrowable`) and the item's mesh bits - the
+source's model's node at the actor's node matrix, the actor's light, the actor's own
+node left out; a cutscene's answer for that node gives way. Otherwise the actor's own
+node, as before. The entry is anchored at the ACTOR's bind (`Borrow::anchor`,
+`composite_matrices`, and `HDModelBorrowJointsAt` in `hd_model.cpp`: the lender's
+joints moved by its bind minus the anchor, so the node's vertices land as if measured
+against the actor's bind). Cutscene borrows keep the lender's bind. Reflections and
+the shadow follow without code of their own: the composite's node is an entry of rule
+2's kind, made in `push_borrowed` as a copy of the actor's entry - the same mirror,
+clip, room, light and shadow receiver - and it casts its node when the actor casts.
+HD off, a classic actor or a classic source is the classic picture, whose mesh table
+already holds the rifle; that path is not touched.
+
+The log, behind `-log`, one line per row at the level build:
+`HDLOG composite slot=<n> name=<NAME> nodes=<k,k> from=<SLOTNAME> model=<MODEL>
+hd=<0|1> reason=<ok|not_loaded|actor_classic|source_classic|no_geometry>`.
+`actor_classic` is one more than the four first named: a composite that draws classic
+as a whole has nothing for the table to do, and says so.
+
+ModelProbe: `-borrowown` beside `-borrow` hangs the node at the bind of `-slot`'s own
+node, through the same `HDModelBorrowJointsAt`; `-slot 473 -borrow 13 462 13
+-borrowown` puts the rifle in his hand, and with `-pose 11 0 -90` it follows the
+raised arm.
+
+**Checked.** ModernTest's group `composite_nodes` (8 checks): the table and its one
+row, the order in `HDObjectBegin` (the table asked before the cutscene's answer and
+the mesh swap), every node under rule 2's test and the mesh bits, the entry's kind,
+mask and anchor, `push_borrowed` and `HDModelBorrowJointsAt`, the log line's fields in
+order behind `gLogEnabled` and its five reasons. The suites: ModernTest 17691,
+MenuTest 45043, InterpTest 754, LipsTest 272, 0 failures; the 64-bit engine, its test
+build and the sanitizer build, no new warning.
+
+**Commits.** `04e69273`.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -19518,3 +19592,4 @@ entries above.
 | #322 | A stalled frame says where its time went |
 | #324 | The dynamic runtime, its DLLs beside the programs, a 64-bit-only package |
 | #326 | The current toolset, one language standard, and the warnings the randomizer never saw |
+| #327 | A composite's borrowed nodes draw from their donor's HD model |

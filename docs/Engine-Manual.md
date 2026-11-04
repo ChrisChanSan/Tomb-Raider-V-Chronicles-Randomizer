@@ -5401,7 +5401,7 @@ Three extra kinds of line are written on their own:
 ```
 PROFLOG level=ANDREA1 first_frame fps=60 work=61.30 logic=0.00 gather=22.40 ...
 PROFLOG level=ANDREA1 late at=3s budget=25.0 frame=63.20 work=62.90 logic=2.10 ...
-PROFLOG level=ANDREA1 pause at=41s frame=5516.30 work=8.90 presents=1204
+PROFLOG level=ANDREA1 pause at=41s frame=5516.30 work=8.90 presents=1204 logic=5506.80 clear=0.04 begin_wait=0.00 begin=0.02 parked=0.00 rest=0.54
 ```
 
 - **`first_frame`** — the very first frame of a level, always written. This is
@@ -5416,6 +5416,13 @@ PROFLOG level=ANDREA1 pause at=41s frame=5516.30 work=8.90 presents=1204
   interval; anything above `1` means a menu drew them. These are counted
   separately and are **never** counted as late — nothing about them says
   anything about the frame rate, which is why they get no phases either.
+  Instead the line ends with where the time *outside* the frame's own work
+  went: `logic=` the game's tick (a menu's time lands here), `clear=` and
+  `begin=` the card's clear and scene start, `begin_wait=` the wait at the
+  scene start, `parked=` how long the game stood still in the background
+  (the window lost the focus), and `rest=` whatever none of those covers.
+  The six add up to `frame` minus `work`. A `late` line carries the same
+  from `clear=` on.
 
 If a level is rough for its first seconds, look at `first_frame` and at the
 `late` lines with a low `at=`; if one room is rough every time you enter it,

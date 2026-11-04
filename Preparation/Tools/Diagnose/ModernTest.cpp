@@ -30360,6 +30360,106 @@ static void test_build_rule()
 	free(control);
 }
 
+/* A stalled frame says where its time went (#322). The PROFLOG pause line
+ * ends with the interval outside the work split six ways - logic, clear,
+ * begin_wait, begin, parked, rest - and the late line with the five after
+ * logic, which it lists already. The stamps bracket exactly the device's
+ * Clear in S_InitialisePolyList, the spin on WaitAtBeginScene and the
+ * device's BeginScene in HWBeginScene; WinWakeGame hands the park's length
+ * over before it resumes the thread. The pause rule is the one it was.
+ * This group only reads text. */
+static void pause_rule()
+{
+	char* prof = hd_switch_text("../profile.cpp");
+	char* profh = hd_switch_text("../profile.h");
+	char* out = hd_switch_text("../output.cpp");
+	char* ft = hd_switch_text("../function_table.cpp");
+	char* winmain = hd_switch_text("../winmain.cpp");
+
+	printf("A stalled frame says where its time went\n");
+	ok(prof && profh && out && ft && winmain, "pause rule: the five files",
+		0, 1);
+
+	// The six fields, in order, once; the pause line ends with them.
+	ok(hd_switch_count(prof, "\"logic=%.2f clear=%.2f \"\r\n\t\t\t"
+		"\"begin_wait=%.2f begin=%.2f parked=%.2f rest=%.2f\", logic,\r\n"
+		"\t\t\tg_frame[PROF_CLEAR], wait, g_frame[PROF_BEGIN], parked,\r\n"
+		"\t\t\tframe_ms - work_ms - logic - g_frame[PROF_CLEAR] - wait -\r\n"
+		"\t\t\tg_frame[PROF_BEGIN] - parked);") == 1 &&
+		hd_switch_count(prof, "Log(\"PROFLOG level=%s pause at=%ds "
+		"frame=%.2f work=%.2f presents=%d \"\r\n\t\t\t\"%s\", g_level[0] ? "
+		"g_level : \"?\", at_s, frame_ms, work_ms,\r\n\t\t\tg_presents, "
+		"outside);") == 1,
+		"pause rule: the pause line ends with the six fields in order", 0,
+		1);
+	ok(hd_switch_count(prof, "late at=%ds budget=%.1f frame=%.2f "
+		"work=%.2f %s \"\r\n\t\t\t\"%s\"") == 1 && hd_switch_count(prof,
+		"work_ms, buf, strstr(outside, \"clear=\"));") == 1,
+		"pause rule: the late line gains them from clear= on", 0, 1);
+	ok(hd_switch_count(prof, "paused = g_presents > 1 || frame_ms - "
+		"work_ms > 1000.0;") == 1 && hd_switch_count(prof, "missed = "
+		"BudgetMs() + 1000.0 / 120.0;") == 1,
+		"pause rule: the rule itself unchanged", 0, 1);
+
+	// The phases: after FLIP, out of the lists the other lines print.
+	ok(hd_switch_count(profh, "\tPROF_FLIP,\r\n\tPROF_CLEAR,") == 1 &&
+		hd_switch_count(profh, "\tPROF_BEGIN_WAIT,") == 1 &&
+		hd_switch_count(profh, "\tPROF_BEGIN,\r\n\tPROF_COUNT") == 1 &&
+		hd_switch_count(prof, "\"flip\",\r\n\t\t\"clear\",\r\n\t\t"
+		"\"begin_wait\",\r\n\t\t\"begin\"\r\n\t};") == 1 &&
+		hd_switch_count(prof, "const int kListed = PROF_CLEAR;") == 1 &&
+		hd_switch_count(prof, "for (int i = 0; i < kListed && at >= 0") ==
+		2, "pause rule: three phases after FLIP, kept out of the lists",
+		0, 1);
+	ok(hd_switch_count(prof, "if (phase >= PROF_CLEAR && (g_in_work || "
+		"g_start[PROF_LOGIC]))\r\n\t\treturn;") == 1 &&
+		hd_switch_count(prof, "if (!OutsidePhase(i))\r\n\t\t\t"
+		"g_frame[i] = 0;") == 1 && hd_switch_count(prof,
+		"if (OutsidePhase(i))\r\n\t\t\tg_frame[i] = 0;") == 1,
+		"pause rule: kept over FrameBegin, cleared at FrameEnd, never "
+		"inside the work or the logic", 0, 1);
+
+	// The stamps bracket exactly the Clear, the spin and the BeginScene.
+	ok(hd_switch_count(out, "ProfBegin(PROF_CLEAR);\r\n\tDXAttempt(App.dx."
+		"lpD3DDevice->Clear(1, &r,") == 1 && hd_switch_count(out,
+		"0, 1.0F, 0));\r\n\tProfEnd(PROF_CLEAR);\r\n\r\n\t_BeginScene();")
+		== 1 && hd_switch_count(out, "(PROF_CLEAR)") == 2,
+		"pause rule: the stamps bracket the Clear", 0, 1);
+	ok(hd_switch_count(ft, "App.dx.InScene = 1;\r\n\tApp.dx.DoneBlit = 0;"
+		"\r\n") == 1 && hd_switch_count(ft, "\tProfBegin(PROF_BEGIN_WAIT);"
+		"\r\n\twhile (App.dx.WaitAtBeginScene) {};\r\n\tProfEnd("
+		"PROF_BEGIN_WAIT);\r\n\tProfBegin(PROF_BEGIN);\r\n\thr = App.dx."
+		"lpD3DDevice->BeginScene();\r\n\tProfEnd(PROF_BEGIN);\r\n\treturn "
+		"hr;\r\n}") == 1 && hd_switch_count(ft, "WaitAtBeginScene") == 1,
+		"pause rule: the stamps bracket the spin and the BeginScene", 0, 1);
+
+	// The hand-over: once, in WinWakeGame, before the resume; guarded.
+	{
+		char* wake = test_build_block(winmain, "static bool WinWakeGame("
+			"const char* by)", "\r\n}\r\n");
+
+		ok(wake && hd_switch_count(wake, "KillTimer(App.hWnd, "
+			"WIN_PARK_TIMER);\r\n\t// The pause line's `parked=`, handed "
+			"over while the thread still sleeps.\r\n\tProfileNoteParked("
+			"GetTickCount() - park_since);\r\n\tResumeThread(MainThread."
+			"handle);") == 1 && hd_switch_count(winmain,
+			"ProfileNoteParked(") == 1 && hd_switch_count(profh,
+			"inline void ProfileNoteParked(unsigned long ms)\r\n{\r\n\tif "
+			"(gLogEnabled)\r\n\t\tProfileNoteParkedMs(ms);\r\n}") == 1 &&
+			hd_switch_count(prof, "InterlockedExchangeAdd(&g_parked_total, "
+			"(LONG)ms);") == 1,
+			"pause rule: WinWakeGame hands the park over before the resume",
+			0, 1);
+		free(wake);
+	}
+
+	free(prof);
+	free(profh);
+	free(out);
+	free(ft);
+	free(winmain);
+}
+
 /* GetCollidedObjects' two lists in tsv_buffer (game\collide_lists.h): the
  * places the callers gave in bytes, counted in pointers - the same bytes on
  * this 32-bit build, room for the same number of pointers on a 64-bit one -
@@ -38420,6 +38520,7 @@ int main()
 	cull_rule();
 	film_av();
 	test_build_rule();
+	pause_rule();
 	collide_lists();
 	lara_joints();
 	logic_leftovers();

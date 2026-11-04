@@ -98,6 +98,11 @@
  *   FLIP        _EndScene + DXShowFrame - Present itself, and whatever the
  *               driver does inside it.
  *
+ *   CLEAR, BEGIN_WAIT, BEGIN lie outside the work, at the next frame's
+ *   start (#322, ProfileNoteParked below). They are printed only at the
+ *   end of the pause and late lines, never in the phase lists, so the
+ *   per-second and first_frame lines read as they always did.
+ *
  * The three numbers that are not phases, on the first_frame and late
  * lines:
  *
@@ -158,6 +163,9 @@ enum ProfPhase
 	PROF_SORTDRAW,
 	PROF_SPIN,
 	PROF_FLIP,
+	PROF_CLEAR,		// the three below are outside the work: see the
+	PROF_BEGIN_WAIT,	// note on the pause line at ProfileNoteParked
+	PROF_BEGIN,
 	PROF_COUNT
 };
 
@@ -210,6 +218,43 @@ inline void ProfPresent()
 {
 	if (gLogEnabled)
 		ProfileNotePresent();
+}
+
+/* Where a stalled interval went (#322). `work` is ProfileFrameBegin to
+ * ProfileFrameEnd, and the present - SPIN and FLIP - lies inside it. The
+ * interval outside it, from one ProfileFrameEnd to the next
+ * ProfileFrameBegin, is DoLevel's tail and head: handle_cutseq_triggering,
+ * ControlPhase (LOGIC), the loop top, S_InitialisePolyList - the device's
+ * Clear, then HWBeginScene with its spin on WaitAtBeginScene and the
+ * device's BeginScene - and the legend. The pause line, and the late line
+ * after it, end with that interval split up:
+ *
+ *   logic       ControlPhase, less any park that fell inside it.
+ *   clear       the Clear in S_InitialisePolyList (PROF_CLEAR).
+ *   begin_wait  the spin in HWBeginScene (PROF_BEGIN_WAIT), less any park
+ *               that fell inside it - the park suspends the thread there.
+ *   begin       the device's BeginScene in HWBeginScene (PROF_BEGIN).
+ *   parked      the park's length (WM_ACTIVATE, specific/winmain.cpp) that
+ *               ended in this interval, handed over by ProfileNoteParked.
+ *   rest        the interval less work and all five above: the cutscene
+ *               trigger, the legend, the loop and anything unstamped.
+ *
+ * The three phases are counted only outside the work and outside LOGIC: a
+ * modal loop inside ControlPhase - the inventory, the death menu - clears
+ * and begins scenes of its own, and those are its logic's. So the six are
+ * disjoint and add up to `frame - work`, to the clock's grain: `parked` is
+ * GetTickCount's, a few milliseconds coarse.
+ *
+ * The hand-over. WinWakeGame on the window thread calls this before it
+ * resumes the game thread, so the write happens while the reader is
+ * suspended; and the counter is moved by an Interlocked add and read by an
+ * Interlocked compare, which is a full barrier on both sides. */
+void ProfileNoteParkedMs(unsigned long ms);
+
+inline void ProfileNoteParked(unsigned long ms)
+{
+	if (gLogEnabled)
+		ProfileNoteParkedMs(ms);
 }
 
 // How long the sort list was. One call from SortPolyList; the frame keeps

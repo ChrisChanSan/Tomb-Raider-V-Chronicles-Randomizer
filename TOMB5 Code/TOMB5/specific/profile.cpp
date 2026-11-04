@@ -38,8 +38,17 @@ namespace
 		"sort",
 		"sortdraw",
 		"spin",
-		"flip"
+		"flip",
+		"clear",
+		"begin_wait",
+		"begin"
 	};
+
+	/* The phases the per-second line and the frame lines list, in order.
+	 * CLEAR, BEGIN_WAIT and BEGIN lie outside the work and are printed only
+	 * at the end of the pause and late lines (#322), so the other lines
+	 * read as they always did. */
+	const int kListed = PROF_CLEAR;
 
 	__int64 g_freq = 0;		// 0 = not read yet, -1 = no clock on this machine
 
@@ -73,6 +82,16 @@ namespace
 	double g_fog_gpu_sum = 0, g_fog_gpu_max = 0;
 	int g_fog_gpu_n = 0;
 
+	/* The park's hand-over (ProfileNoteParked, #322): the milliseconds the
+	 * game thread was parked, added up since the process began. Written by
+	 * the window thread while the game thread is suspended, read by the
+	 * game thread; Interlocked on both sides. */
+	volatile LONG g_parked_total = 0;
+	LONG g_parked_seen = 0;		// the total at the last ProfileFrameEnd
+	LONG g_park_at[PROF_COUNT];	// the total when LOGIC/BEGIN_WAIT opened
+	double g_park_in[PROF_COUNT];	// parked inside LOGIC/BEGIN_WAIT, ms
+	bool g_in_work = false;		// between ProfileFrameBegin and End
+
 	int g_level_late = 0;		// the level's totals, for the summary
 	int g_level_pauses = 0;
 
@@ -105,6 +124,48 @@ namespace
 		return (double)ticks * 1000.0 / (double)g_freq;
 	}
 
+	LONG ParkedNow()
+	{
+		return InterlockedCompareExchange(&g_parked_total, 0, 0);
+	}
+
+	// The phases a park can fall into: the spin it suspends the thread in,
+	// and ControlPhase, whose modal loops have spins of their own.
+	bool ParkPhase(int phase)
+	{
+		return phase == PROF_LOGIC || phase == PROF_BEGIN_WAIT;
+	}
+
+	// A phase that belongs to the interval outside the work, not to it.
+	bool OutsidePhase(int phase)
+	{
+		return phase == PROF_LOGIC || phase >= PROF_CLEAR;
+	}
+
+	/* The end of the pause and late lines (#322): the interval outside the
+	 * work, split. Each phase is taken net of the park inside it, so the
+	 * six are disjoint; `rest` is what none of them covers, and it is left
+	 * signed - a few milliseconds below zero is the tick clock's grain of
+	 * `parked`, anything more is a stamp counted twice. */
+	void OutsideLine(char* out, size_t size, double frame_ms,
+		double work_ms, double parked)
+	{
+		double logic = g_frame[PROF_LOGIC] - g_park_in[PROF_LOGIC];
+		double wait = g_frame[PROF_BEGIN_WAIT] - g_park_in[PROF_BEGIN_WAIT];
+
+		if (logic < 0)
+			logic = 0;
+
+		if (wait < 0)
+			wait = 0;
+
+		_snprintf_s(out, size, _TRUNCATE, "logic=%.2f clear=%.2f "
+			"begin_wait=%.2f begin=%.2f parked=%.2f rest=%.2f", logic,
+			g_frame[PROF_CLEAR], wait, g_frame[PROF_BEGIN], parked,
+			frame_ms - work_ms - logic - g_frame[PROF_CLEAR] - wait -
+			g_frame[PROF_BEGIN] - parked);
+	}
+
 	/* Everything classic the output phase did: the buckets, the sort list,
 	 * the binocular mask, the pickup display and the fade. HD_DRAW and
 	 * HD_GLOW are the only two phases that run inside S_OutputPolyList and
@@ -129,7 +190,7 @@ namespace
 	{
 		int at = 0;
 
-		for (int i = 0; i < PROF_COUNT && at >= 0 && (size_t)at < size; i++)
+		for (int i = 0; i < kListed && at >= 0 && (size_t)at < size; i++)
 			at += _snprintf_s(out + at, size - at, _TRUNCATE, "%s=%.2f ",
 				kName[i], p[i]);
 
@@ -163,7 +224,7 @@ namespace
 		const double n = frames > 0 ? (double)frames : 1.0;
 		int at = 0;
 
-		for (int i = 0; i < PROF_COUNT && at >= 0 && (size_t)at < size; i++)
+		for (int i = 0; i < kListed && at >= 0 && (size_t)at < size; i++)
 			at += _snprintf_s(out + at, size - at, _TRUNCATE,
 				"%s=%.2f/%.2f ", kName[i], g_sum[i] / n, g_max[i]);
 
@@ -238,6 +299,15 @@ void ProfileBeginPhase(int phase)
 	if (phase < 0 || phase >= PROF_COUNT || !ClockReady())
 		return;
 
+	/* CLEAR, BEGIN_WAIT and BEGIN count only outside the work and outside
+	 * ControlPhase: a modal loop's scene inside the logic is its logic's,
+	 * and the six fields of the pause line stay disjoint (#322). */
+	if (phase >= PROF_CLEAR && (g_in_work || g_start[PROF_LOGIC]))
+		return;
+
+	if (ParkPhase(phase))
+		g_park_at[phase] = ParkedNow();
+
 	QueryPerformanceCounter(&now);
 	g_start[phase] = now.QuadPart;
 }
@@ -252,6 +322,10 @@ void ProfileEndPhase(int phase)
 	QueryPerformanceCounter(&now);
 	g_frame[phase] += Ms(now.QuadPart - g_start[phase]);
 	g_start[phase] = 0;
+
+	if (ParkPhase(phase))
+		g_park_in[phase] += (double)(unsigned long)(ParkedNow() -
+			g_park_at[phase]);
 }
 
 void ProfileLevel(const char* fileName)
@@ -301,8 +375,12 @@ void ProfileLevel(const char* fileName)
 	{
 		g_start[i] = 0;
 		g_frame[i] = 0;
+		g_park_in[i] = 0;
 	}
 
+	// A park during the load is no frame's: the next interval starts here.
+	g_parked_seen = ParkedNow();
+	g_in_work = false;
 	NewSecond();
 }
 
@@ -320,6 +398,12 @@ void ProfileNoteSort(long count)
 {
 	if (count > g_sort_max)
 		g_sort_max = count;
+}
+
+// The window thread, with the game thread suspended (profile.h).
+void ProfileNoteParkedMs(unsigned long ms)
+{
+	InterlockedExchangeAdd(&g_parked_total, (LONG)ms);
 }
 
 void ProfileNoteFog(double cpuMs, double gpuMs)
@@ -342,14 +426,18 @@ void ProfileFrameBegin()
 	 * and belong to the frame that is starting - see the note in
 	 * profile.h. ProfileFrameEnd clears it once it has reported it;
 	 * clearing it in neither place would let `logic` grow without bound.
+	 * CLEAR, BEGIN_WAIT and BEGIN are kept the same way and for the same
+	 * reason: they ran outside the work, before this call (#322).
 	 * Everything else is this frame's own and starts at nothing. */
 	for (int i = 0; i < PROF_COUNT; i++)
 	{
 		g_start[i] = 0;
 
-		if (i != PROF_LOGIC)
+		if (!OutsidePhase(i))
 			g_frame[i] = 0;
 	}
+
+	g_in_work = true;
 
 	g_sort_max = 0;
 	g_fog_cpu = 0;
@@ -362,14 +450,22 @@ void ProfileFrameEnd()
 {
 	LARGE_INTEGER now;
 	char buf[832];
-	double frame_ms, work_ms, missed;
+	char outside[160];
+	double frame_ms, work_ms, missed, parked;
 	bool paused;
 	int at_s;
+	LONG parked_now;
 
 	if (!gLogEnabled || !ClockReady())
 		return;
 
 	QueryPerformanceCounter(&now);
+	g_in_work = false;
+
+	// The park that ended since the last frame end: this interval's.
+	parked_now = ParkedNow();
+	parked = (double)(unsigned long)(parked_now - g_parked_seen);
+	g_parked_seen = parked_now;
 
 	// Whole seconds since ProfileLevel, off the clock rather than off the
 	// flushed-second counter: a menu or a cutscene draws no game frame, no
@@ -399,6 +495,7 @@ void ProfileFrameEnd()
 	 * longer than the work in it. */
 	missed = BudgetMs() + 1000.0 / 120.0;
 	paused = g_presents > 1 || frame_ms - work_ms > 1000.0;
+	OutsideLine(outside, sizeof(outside), frame_ms, work_ms, parked);
 
 	if (g_first_frame)
 	{
@@ -417,15 +514,19 @@ void ProfileFrameEnd()
 		 * seventeen phases beside it only invites the interval to be blamed on
 		 * one of them. */
 		g_sec_pauses++;
-		Log("PROFLOG level=%s pause at=%ds frame=%.2f work=%.2f presents=%d",
-			g_level[0] ? g_level : "?", at_s, frame_ms, work_ms, g_presents);
+		Log("PROFLOG level=%s pause at=%ds frame=%.2f work=%.2f presents=%d "
+			"%s", g_level[0] ? g_level : "?", at_s, frame_ms, work_ms,
+			g_presents, outside);
 	}
 	else if (frame_ms > missed)
 	{
 		g_sec_late++;
 		OneFrameLine(buf, sizeof(buf), g_frame);
-		Log("PROFLOG level=%s late at=%ds budget=%.1f frame=%.2f work=%.2f %s",
-			g_level[0] ? g_level : "?", at_s, missed, frame_ms, work_ms, buf);
+		/* The late line lists `logic` among its phases already, so it gains
+		 * the split from `clear=` on: the same numbers, one key once. */
+		Log("PROFLOG level=%s late at=%ds budget=%.1f frame=%.2f work=%.2f %s "
+			"%s", g_level[0] ? g_level : "?", at_s, missed, frame_ms,
+			work_ms, buf, strstr(outside, "clear="));
 	}
 
 	for (int i = 0; i < PROF_COUNT; i++)
@@ -442,6 +543,15 @@ void ProfileFrameEnd()
 	 * it is never cleared at all and every PROFLOG second reads a running
 	 * total. */
 	g_frame[PROF_LOGIC] = 0;
+
+	// The other outside phases, and the parks inside two of them, likewise.
+	for (int i = 0; i < PROF_COUNT; i++)
+	{
+		if (OutsidePhase(i))
+			g_frame[i] = 0;
+
+		g_park_in[i] = 0;
+	}
 
 	g_work_sum += work_ms;
 

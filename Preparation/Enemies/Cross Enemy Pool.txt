@@ -74,6 +74,15 @@ follows the meshes, so the sidecar names the mesh donor. A composite is a
 clone of nothing, so the rule that keeps a sourceSlot row out of its own
 donor level leaves it alone.
 
+The armed scientist (473) is the second: RICH1's scientist, slot 69, on
+SWAT's animations out of rich3 (slot 33) - the two trees are the same to the
+last offset - and he runs SWAT's block, while 69 stays Core's scientist who
+never shoots. He adds one thing: a composite may take single meshes out of
+the ANIM donor's slot instead (kMeshesFromAnims in Tr5Transfer.cpp, keyed by
+the target slot). The scientist's gloves are empty and SWAT's rifle is part
+of SWAT's hand mesh 13, so both of his hands, 10 and 13, are SWAT's; each
+such mesh brings its texinfos and pages out of its own level.
+
 
 THE SWAP HALVES, AND WHY EVERY TYPE HAS HIS OWN SLOT
 ================================================================
@@ -114,6 +123,11 @@ joby3 although his model comes from joby2.
 
 The halves are copied with onlyMeshes: MESHSWAP1 carries an anim_index
 without animations of its own, and only the meshes are wanted.
+
+One slot is shared on purpose: the armed scientist (473) reads SWAT's 462.
+His hands are SWAT's and both rows name rich3 as the swap donor, so the
+slot holds the same meshes whichever of the two imports it first, and the
+emission writes it once.
 
 
 REACHING PAST THE OWN SLICE

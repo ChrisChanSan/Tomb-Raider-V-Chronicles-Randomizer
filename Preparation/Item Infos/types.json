@@ -6,7 +6,7 @@
 // file is not an error. Comments are allowed - trview parses with comments
 // enabled (tested in game 2026-08-25).
 //
-// Only eleven slots need an entry. Everything else trview already names right.
+// Only fourteen slots need an entry. Everything else trview already names right.
 {
     "games": {
         "tr5": [
@@ -47,7 +47,10 @@
             { "id": 471, "name": "Brawler",                  "categories": [ "Enemy" ] },
             // RICH3's gunship as a pool enemy, shrunk to the vulture's size.
             // Slot 91 keeps its name: that is RICH3's own helicopter.
-            { "id": 472, "name": "Drone (pool)",             "categories": [ "Enemy" ] }
+            { "id": 472, "name": "Drone (pool)",             "categories": [ "Enemy" ] },
+            // RICH1's scientist on SWAT's animations, with SWAT's rifle. Slot
+            // 69 keeps its name: that is RICH1's own unarmed scientist.
+            { "id": 473, "name": "Scientist (pool)",         "categories": [ "Enemy" ] }
 
             // Deliberately absent: 462-468 and 470, the meshswap stores. They
             // are never an item in a level, and naming them would suggest

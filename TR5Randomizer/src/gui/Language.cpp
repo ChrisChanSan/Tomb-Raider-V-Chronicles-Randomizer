@@ -130,6 +130,7 @@ static const std::unordered_map<std::string, const char*>& table()
         { "Lion",                     "Loewe" },
         { "Chef",                     "Koch" },
         { "Brawler",                  "Raufbold" },
+        { "Scientist",                "Wissenschaftler" },
         { "Soldier statue (sword)",   "Soldatenstatue (Schwert)" },
         { "Soldier statue (hammer)",  "Soldatenstatue (Hammer)" },
         { "Maze monster",             "Labyrinth-Monster" },

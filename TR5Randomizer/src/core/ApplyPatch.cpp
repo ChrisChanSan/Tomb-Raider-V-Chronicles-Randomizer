@@ -929,7 +929,9 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
             // A composite (Tr5Level.h, copyMoveableFrom): the entry's own
             // slot and level give the MESHES, and animsFromLevel /
             // animsFromSlot the animations, frames, bones and the sounds
-            // of their commands. The brawler is the one so far.
+            // of their commands. The brawler and the armed scientist so
+            // far; the scientist's hands come out of the anim donor too
+            // (Tr5Transfer.cpp, kMeshesFromAnims).
             const std::string animsFrom = w["animsFromLevel"].asString();
             const int animsSlot = static_cast<int>(w["animsFromSlot"].asInt(-1));
             if (!animsFrom.empty())
@@ -1798,7 +1800,8 @@ bool Patch::writeHdMarkers(const Tr5Level& level, const std::wstring& levelPath,
     // Lara's own block and the slots this project added past vanilla. Both
     // numbers are the engine's (hd_bind.cpp: lara_block_last = 30, and the
     // hand table covers BLUE_GUARD2 460 .. MESHSWAP_CROSS_CRANEGUY 470).
-    // BRAWLER 471 is no hand-table slot: his donor line is the binding.
+    // BRAWLER 471 is no hand-table slot: his donor line is the binding;
+    // SCIENTIST_ARMED 473 likewise (rich1's 69).
     const int kLaraBlockLast = 30;
     const int kHandTableFirst = 460, kHandTableLast = 470;
 

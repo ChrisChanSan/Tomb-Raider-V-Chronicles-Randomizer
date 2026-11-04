@@ -126,7 +126,7 @@ which is not code at all. The same
 seed on two different builds is two different games.
 
 That is why both numbers stand at the top of the window and in `spoiler.txt`:
-`Beta_5.0` is the release, `Build 0.23` is the placement data. Nothing stops
+`Beta_5.0` is the release, `Build 0.24` is the placement data. Nothing stops
 you mixing a randomizer and an engine of different versions — the numbers are
 there to be read, not enforced.
 
@@ -304,10 +304,12 @@ appears in one level only and cannot be killed there — outside it he now
 goes down like anyone else; and the **brawler**, the soldier from the cutscene
 at the end of the Base, who in the original never fights at all — here he
 hunts you with his bare fists, on the chef's moves and twice the chef's
-toughness. One is new altogether: the **drone**, Red Alert's gunship shrunk to
-the vulture's size, which flies after Lara and fires in bursts (never in Red
-Alert itself, whose own helicopter stays as it was). Deselect the ones you
-would rather not run into.
+toughness; and the **scientist** in the orange suit from the 13th Floor,
+who there only runs and raises his hands — here he carries SWAT's rifle
+and fights like SWAT. One is new altogether: the **drone**, Red Alert's
+gunship shrunk to the vulture's size, which flies after Lara and fires in
+bursts (never in Red Alert itself, whose own helicopter stays as it was).
+Deselect the ones you would rather not run into.
 
 **"Enemy health" / "Enemy damage"** — *1.00x each,* range 0.50x to 2.00x, each
 with its own "Random" box. Traps, falls, fire, poison, drowning and the

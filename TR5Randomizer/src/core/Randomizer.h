@@ -111,7 +111,8 @@ inline bool isDespawningSwarm(int typeId)
 // receive it there are listed here: the 31 read out of game/setup.cpp (every
 // `obj->intelligent = 1`), less the Cyborg (469), which GetCarriedItems
 // itself leaves out, and the brawler (471), the chef's block on a slot of
-// his own, who carries as the chef does. Added to that is the range
+// his own, who carries as the chef does, and the armed scientist (473),
+// SWAT's block on a slot of his own, likewise. Added to that is the range
 // SEARCH_OBJECT1..SEARCH_OBJECT3, which GetCarriedItems explicitly also
 // checks: the searchable crates and lockers. Across the sixteen levels they
 // make up the majority of all carriers.
@@ -129,8 +130,8 @@ inline bool isCarrierType(int typeId)
     case 47: case 49: case 51: case 53: case 55: case 57: case 59: case 61:
     case 63: case 67: case 69: case 71: case 73: case 75: case 77: case 79:
     case 81: case 83: case 85: case 87: case 89: case 460: case 461:
-    case 471:
-        return true;                              // intelligent = 1
+    case 471: case 473:
+        return true;                             // intelligent = 1
     default:
         return typeId >= 164 && typeId <= 168;    // SEARCH_OBJECT1..3 incl. MIPs
     }

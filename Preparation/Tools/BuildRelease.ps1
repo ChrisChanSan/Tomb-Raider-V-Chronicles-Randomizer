@@ -146,11 +146,11 @@ foreach ($f in (Get-ChildItem "$secretsIn\*.txt" | Sort-Object Name)) {
 Say "Secret lists  : $lists files (data\secrets)"
 
 # --- 3b. trview type names ---------------------------------------------------
-# Thirteen slots that a level viewer would otherwise name wrongly or not at
+# Fourteen slots that a level viewer would otherwise name wrongly or not at
 # all: four (31/43/53/75) carry different contents afterwards - the TR3
 # guests overwrite SAS, CROW, SAILOR and REAPER; two (47/55) are ordinary
-# Chronicles slots trview has no entry for; five (460/461/469/471/472) lie
-# beyond trview's list, which ends at id 452; and two it knows but cannot
+# Chronicles slots trview has no entry for; six (460/461/469/471/472/473)
+# lie beyond trview's list, which ends at id 452; and two it knows but cannot
 # tell apart - 41 and 85 are both called "Dog" although only one is the
 # husky, and "Soldier Statue" cannot tell apart the two Roman gods that can
 # stand in one level.

@@ -17602,6 +17602,48 @@ under TOMB5's licence, and its pictures section names four pictures of this proj
 
 **Commits.** `a1461f45`, `aeb55675` (the ledger).
 
+### RICH1's scientist as a pool enemy on SWAT's control, slot 473 (#302)
+2026-11-02
+
+**What.** The scientist in the orange suit of the 13th Floor is an enemy of the
+randomizer's pool: `SCIENTIST_ARMED`, engine slot 473, written out behind `DRONE`
+(`NUMBER_OBJECTS` 474, `SLOT_FILE_BOUNDARY` stays 460). His slot carries his own meshes,
+SWAT's two hands with SWAT's rifle and SWAT's whole animation set; he runs SWAT's block -
+`InitialiseSas`, `SasControl`, the gun flash, the swap halves out of
+`MESHSWAP_CROSS_SWAT` - and fights as SWAT does. `Balance.txt` gains `HP_ScientistArmed`
+(35, `HP_Swat`'s standard; the vanilla column is Core's 24 for SWAT and the scientist
+alike). His shots are the soldiers' shared `DMG_Soldier` lines. Core's scientist on slot
+69 is unchanged and stays unarmed.
+
+**Why.** Slot 69 is a live object in RICH1, but `SasControl` never lets him shoot: it
+makes him unaimable, sends him fleeing once hurt and raises his hands when Lara aims at
+him - as a pool enemy he would be harmless. His bone tree is SWAT's to the last word
+(`BoneCheck rich1.trc 69 rich3.trc 33`: 0 of 14 bones deviating), so SWAT's animations
+move him joint for joint; posed on SWAT's rest frame his meshes stand 797 high inside the
+frame's stored box of 809. His gloves are empty eight-vertex hands, and SWAT's rifle is
+part of SWAT's hand mesh 13 (36 vertices: the hand's 8, the rifle's 28) where `sas_gun`
+fires from, so both hands are SWAT's.
+
+**How.** `game/objects.h` holds the slot; `game/setup.cpp` the `SCIENTIST_ARMED` block,
+SWAT's word for word but for the slot, with his own `anim_index` (the copy brings SWAT's
+set, so there is no anchor) and `hit_points` 24; `game/balance.cpp` / `.h` the line;
+`specific/hd/hd_bind.cpp` / `.h` the slot's name and `HD_SLOT_COUNT` 474. `game/sas.cpp`
+and `game/lot.cpp` are unchanged: every test of the item's own slot in `SasControl` names
+an exact slot - the scientist, SWAT+, the two guards, the crane guy - and none of them is
+his, so he takes SWAT's path in each (he alerts, turns, aims, fires the burst of state
+35); SWAT has no case in `InitialiseSlot`, so both stand in `BASIC_ZONE`. The HD model
+follows the meshes: the sidecar's line `donor 473 rich1 69` binds RICH1's `SCIENTIST`
+(`MapProbe -hdm`: HD if the skeleton fits, all 15 nodes covered), whose gloves are empty,
+so the HD picture shows no rifle; without the installation he draws classic, rifle in
+hand. `ModernTest` gains the group `scientist_rule`, 15 checks.
+
+**Decisions.** He shares SWAT's swap slot 462 instead of a fallback slot of his own: his
+hands are SWAT's and both rows name rich3 as the swap donor, so the slot holds the same
+meshes whichever imports it. The stealth cutscenes of joby3 (`game/deltapak.cpp`) list
+SWAT and not him, as they list no other pool enemy.
+
+**Commits.** `baea0dec` (the slot, the block, the line), `76669647` (ModernTest).
+
 ### The engine builds as a 64-bit program; level file and save unchanged (#303)
 2026-11-02
 
@@ -19144,6 +19186,23 @@ modified, one moved out into `package/`, one removed.
   `Background.jpg` moves into `package/docs/` and `loadBackground` reads it from there,
   and the release copies the two manuals with the nine pictures they show beside it, so
   the package reads like the repository's docs folder (`9ce96228`).
+- **#302 - the armed scientist, a composite with the anim donor's hands.**
+  `core/Tr5Transfer.cpp`, `core/Tr5Level.h`: a composite may take single meshes out of
+  its anim donor's slot - the table `kMeshesFromAnims`, keyed by the target slot and the
+  anim donor's slot - each with its texinfos and pages out of its own level; the mesh,
+  texinfo and page steps run per mesh source, and with no such mesh only the mesh donor
+  is read. `core/ApplyPatch.cpp` / `.h` say so beside the composite. `core/Randomizer.cpp`
+  / `.h`, `gui/Language.cpp`: the armed scientist's row - slot 473, meshes rich1:69,
+  animations rich3:33, SWAT's hands 10 and 13 (the rifle in 13), the swap halves of
+  SWAT's row into 462, no base type - measured by SWAT's rest pose (809), "Scientist" in
+  the enemy list ("Wissenschaftler" in German), 473 a carrier; `IMPORT composite
+  slot=473 meshes=rich1:69 anims=rich3:33 nodes=15 animations=64 sounds=5 pages=13
+  texinfos=198` into a vanilla ANDREA1. A build with only his row removed writes the
+  bytes of the build before it, so the transfer's change moves no other import; with the
+  row every cross draw after his first changes, a run without the cross mix is unchanged
+  (`ea71da57`). `Preparation/Item Infos/types.json` names the slot "Scientist (pool)".
+  `core/BuildId.h`: `RANDO_BUILD_ID` 23 to 24, `0.24`, because the pool changes what a
+  seed writes.
 - **#306 - deflate of its own, and the data as files only.** `core/Inflate.cpp` / `.h`
   and `core/DataFile.h` new, `core/Tr5Transfer.cpp`, `core/DataFile.cpp`,
   `core/DataFolder.h`, `Randomize.cpp`, `gui/Main.cpp`, `SelfTest.cpp`, `build/b1.bat`,
@@ -19370,6 +19429,7 @@ entries above.
 | #299 | The engine builds with Control Flow Guard |
 | #300 | A loading screen shows no texture page of the level, not for a frame |
 | #301 | The missing-file message, the X-ray tone's comment and the engine icon's origin |
+| #302 | RICH1's scientist as a pool enemy on SWAT's control, slot 473; section 3 (the randomizer) |
 | #303 | The engine builds as a 64-bit program; level file and save unchanged |
 | #305 | -record and -replay; the collision lists kept inside tsv_buffer |
 | #306 | section 3 (the randomizer); no engine entry: no file under `TOMB5 Code/TOMB5` changed |

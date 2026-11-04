@@ -4955,7 +4955,7 @@ are not case-sensitive.
 | Block | What is in it |
 |---|---|
 | Damage of Lara's weapons | nine lines. The revolver and the HK have two each — the revolver is weak up to Colosseum and strong from the submarine on, and the HK hits harder aimed from a standstill than fired on the move. `Crossbow` is the Grappling Gun. Shotgun damage counts **per pellet**. |
-| Enemy hit points | 34 lines, `HP_<enemy>`, absolute as in the original |
+| Enemy hit points | 35 lines, `HP_<enemy>`, absolute as in the original |
 | Enemy damage against Lara | per attack |
 | Level hazards | the ceiling gun and its kind |
 | Everything at once | `WeaponDamage`, `EnemyHealth`, `EnemyDamage` — percentages applied **on top** of everything above |
@@ -5099,6 +5099,17 @@ own, measured on that fist: he swings only once Lara is within about 425
 units of him, where the chef with his knife swings from 730, and the punch
 lands as it crosses in front of him — on a Lara who stands or backs away,
 not on one who runs, and it passes over her head when she crouches.
+
+**The scientist from the 13th Floor shoots back.** In the original the bald
+man in the orange suit never fires: he runs when hurt and puts his hands up
+when Lara aims at him. The enemy pool places an armed copy of him on a slot
+of its own: his look, SWAT's two hands with SWAT's rifle, and everything
+else SWAT's - the moves, the bursts, the cover, the deaths and the cry; the
+two skeletons are the same bone for bone. His line in `Balance.txt` is
+`HP_ScientistArmed` (35, SWAT's); his shots are the soldiers' lines. The
+scientists of the 13th Floor itself stay unarmed. With the Remaster
+installed he wears its model of the scientist, whose gloves are empty, so
+the rifle shows only in the classic picture.
 
 **The drone is the gunship from Red Alert, shrunk to the size of the
 vulture.** The helicopter in Red Alert stays what it was: it flies along its

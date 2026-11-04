@@ -1,6 +1,15 @@
 # Assembles the shippable folder: randomizer, engine, bundled source code
 # and the licenses.
 #
+# Since #324 the package is 64-bit only. The engine is be64.bat's
+# release64\PCtomb5_x64.exe, shipped as PCTomb5.exe - the name the game and
+# Steam start; the 32-bit EXE of be.bat is a comparison build and never goes
+# in. Beside the two EXEs: the films' three FFmpeg DLLs from
+# vendor\ffmpeg-min\bin, and the three Visual C++ runtime DLLs both programs
+# import (/MD) - vcruntime140.dll, vcruntime140_1.dll, msvcp140.dll - from
+# the compiler's redist folder: $env:VCToolsRedistDir (set by vcvars64.bat),
+# or -RedistDir when the script runs outside a vcvars64 shell. No installer.
+#
 # Why the COMPLETE engine source must come along and not only our changed
 # files: TOMB5 is under the GNU GPL v3. Our version is a derivative work,
 # and GPLv3 section 6 demands, when distributing a binary, the complete
@@ -16,6 +25,7 @@
 # randomizer copies what it needs on first start by itself.
 param(
     [string]$OutDir = "",
+    [string]$RedistDir = "",
     [switch]$Clean
 )
 $ErrorActionPreference = "Stop"
@@ -25,7 +35,12 @@ $ErrorActionPreference = "Stop"
 $Root      = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 if ($OutDir -eq "") { $OutDir = Join-Path $Root "Release Package" }
 $EngineSrc = "$Root\TOMB5 Code"
-$EngineExe = "$Root\release\PCtomb5.exe"
+$EngineExe = "$Root\release64\PCtomb5_x64.exe"
+$FfmpegBin = "$Root\vendor\ffmpeg-min\bin"
+$FfmpegDlls = @('avutil-61.dll', 'avcodec-63.dll', 'avformat-63.dll')
+# The runtime set, as the import tables of the three EXEs name it (#324).
+$CrtDlls   = @('vcruntime140.dll', 'vcruntime140_1.dll', 'msvcp140.dll')
+if ($RedistDir -eq "") { $RedistDir = "$env:VCToolsRedistDir" }
 $RandoRoot = "$Root\TR5Randomizer"
 $RandoExe  = "$RandoRoot\build\TR5Randomizer.exe"
 # The MIT license comes from the VERSIONED imgui (external\imgui) - the
@@ -47,6 +62,35 @@ New-Item -ItemType Directory -Path $OutDir -Force | Out-Null
 if (-not (Test-Path $EngineExe)) { throw "engine not built: $EngineExe" }
 Copy-Item $EngineExe "$OutDir\PCTomb5.exe" -Force
 Say ("Engine        : PCTomb5.exe ({0:N0} KB)" -f ((Get-Item $EngineExe).Length/1KB))
+
+# --- 1b. The DLLs beside the EXEs --------------------------------------------
+# The films: the engine loads the three FFmpeg DLLs at run time from its own
+# folder (specific\fmv_av.cpp). LGPL, linked dynamically; the licence text
+# goes into Licenses\ below.
+foreach ($d in $FfmpegDlls) {
+    $p = Join-Path $FfmpegBin $d
+    if (-not (Test-Path $p)) { throw "FFmpeg DLL missing: $p" }
+    Copy-Item $p $OutDir -Force
+}
+Say "FFmpeg        : $($FfmpegDlls -join ', ')"
+# The C++ runtime, unchanged from the compiler's redist folder: the
+# x64\Microsoft.VC14?.CRT folder under it, its version read, not written
+# down here. One set serves the engine and the randomizer.
+if ($RedistDir -eq "") {
+    throw "no redist folder: run under vcvars64 (VCToolsRedistDir) or give -RedistDir"
+}
+$crtDir = Get-ChildItem (Join-Path $RedistDir "x64") -Directory -ErrorAction SilentlyContinue |
+          Where-Object { $_.Name -like "Microsoft.VC14?.CRT" } |
+          Sort-Object Name | Select-Object -Last 1
+if (-not $crtDir) { throw "no Microsoft.VC14?.CRT folder in $(Join-Path $RedistDir 'x64')" }
+foreach ($d in $CrtDlls) {
+    $p = Join-Path $crtDir.FullName $d
+    if (-not (Test-Path $p)) { throw "runtime DLL missing: $p" }
+    Copy-Item $p $OutDir -Force
+}
+Say ("C++ runtime   : {0} ({1}, from {2})" -f ($CrtDlls -join ', '),
+     (Get-Item (Join-Path $crtDir.FullName $CrtDlls[0])).VersionInfo.FileVersion,
+     $crtDir.FullName)
 
 # --- 2. Randomizer -----------------------------------------------------------
 if (Test-Path $RandoExe) {
@@ -182,6 +226,8 @@ if (Test-Path $drpc) { Copy-Item $drpc "$lic\DiscordRPC-MIT.txt" -Force }
 # notice has to travel with the binary, not only with the source.
 $trf = "$EngineSrc\TOMB5\vendor\trforge\LICENSE"
 if (Test-Path $trf) { Copy-Item $trf "$lic\TRForge-MIT.txt" -Force }
+# FFmpeg's LGPL v2.1, for the three DLLs beside the engine (THIRD-PARTY.md).
+Copy-Item "$Root\vendor\ffmpeg-min\COPYING.LGPLv2.1" "$lic\COPYING.LGPLv2.1" -Force
 # stb_vorbis keeps its notice inside its own source. It is lifted from there
 # rather than copied into a second file, so the package cannot end up
 # shipping a stale version of someone else's licence.
@@ -204,7 +250,7 @@ $tp = $tp.Replace('TR5Randomizer/', 'Source/TR5Randomizer/')
 $tp = $tp.Replace('](LICENSE)', '](GPLv3.txt)')
 [IO.File]::WriteAllText("$lic\THIRD-PARTY.md", $tp)
 $n = (Get-ChildItem $lic -File).Count
-Say "Licenses      : $n files (GPLv3, Dear ImGui, discord-rpc, stb, TRForge)"
+Say "Licenses      : $n files (GPLv3, Dear ImGui, discord-rpc, stb, TRForge, FFmpeg LGPL)"
 
 # --- 6. Manual ---------------------------------------------------------------
 # One source of truth: the player README is versioned at
@@ -251,22 +297,25 @@ if (Test-Path (Split-Path $RandoExe -Parent)) {
 }
 
 # --- 8. Checksums ------------------------------------------------------------
-# SHA256SUMS.txt in the package root: the SHA-256 of every EXE in the package,
-# so a player can check that a downloaded file is the one built here, by eye
+# SHA256SUMS.txt in the package root: the SHA-256 of every EXE and, since
+# #324, every DLL in the package (the six beside the EXEs are binaries a
+# player runs as well), so a player can check that a downloaded file is the
+# one built here, by eye
 # or with "sha256sum -c SHA256SUMS.txt" in the unpacked folder. The lines have
 # the form "<hash> *<name>" (the star marks binary mode), lower-case hex,
 # forward slashes and LF line ends, exactly as sha256sum writes them itself.
 # Last of all, so that no later step can change a file after it was measured.
 $pkg  = (Resolve-Path $OutDir).Path.TrimEnd('\')
-$exes = Get-ChildItem $pkg -Recurse -File -Filter "*.exe" |
-        Where-Object { $_.Extension -eq ".exe" } | Sort-Object FullName
+$exes = Get-ChildItem $pkg -Recurse -File |
+        Where-Object { $_.Extension -eq ".exe" -or $_.Extension -eq ".dll" } |
+        Sort-Object FullName
 $sums = foreach ($x in $exes) {
     $rel = $x.FullName.Substring($pkg.Length + 1).Replace('\', '/')
     "{0} *{1}" -f (Get-FileHash $x.FullName -Algorithm SHA256).Hash.ToLower(), $rel
 }
 $sumText = (@($sums) -join "`n") + "`n"
 [IO.File]::WriteAllText("$pkg\SHA256SUMS.txt", $sumText, [Text.Encoding]::ASCII)
-Say ("Checksums     : SHA256SUMS.txt ({0} EXE: {1})" -f @($exes).Count,
+Say ("Checksums     : SHA256SUMS.txt ({0} EXE/DLL: {1})" -f @($exes).Count,
      ((@($exes) | ForEach-Object { $_.Name }) -join ", "))
 
 Say ""

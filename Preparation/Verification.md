@@ -375,15 +375,20 @@ it shows as a line of the `-log` seams that differs. So the same game is
 played on both builds and their logs are compared line by line: the same
 level files, the same input, the same ticks.
 
+Since #324 the 64-bit build is the one that ships, as `PCTomb5.exe`; the
+32-bit build of `be.bat` (`release\PCtomb5.exe`) is no longer in the
+package and stays only as the comparison build of this section.
+
 A person cannot play the same five minutes twice, so the 32-bit build
 records what the run takes from outside and both builds play it again:
 
 Since #321 the recorder is compiled only into test builds (section 10):
 `releasetest\PCtomb5_x64t.exe` and `releaseasan\PCtomb5_asan.exe`. There is
-no 32-bit test build; the shipping `PCtomb5.exe` and `PCtomb5_x64.exe`
-do not know `-record` or `-replay` and start as without them. The 32-bit
-steps below need a 32-bit build with `TOMB5_TEST_BUILD`, which no script
-makes today; the 64-bit steps take `PCtomb5_x64t.exe`.
+no 32-bit test build; `PCtomb5.exe` of `be.bat` and the shipping
+`PCtomb5_x64.exe` do not know `-record` or `-replay` and start as without
+them. The 32-bit steps below need a 32-bit build with
+`TOMB5_TEST_BUILD`, which no script makes today; the 64-bit steps take
+`PCtomb5_x64t.exe`.
 
 - `-record <file>` writes, once per call of the input function, what the
   keyboard, the mouse and the pad delivered, with a check of the game's

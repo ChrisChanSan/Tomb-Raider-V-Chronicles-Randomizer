@@ -52,7 +52,11 @@ enemies and four guest outfits. Everything else works without them. Details
 in [The Tomb Raider III guests](#the-tomb-raider-iii-guests).
 
 The package holds `TR5Randomizer.exe` (this program) and `PCTomb5.exe` (the
-engine that plays the result). The engine has its own manual —
+engine that plays the result), both 64-bit programs, and beside them the
+DLLs they need: the Microsoft C++ runtime (`vcruntime140.dll`,
+`vcruntime140_1.dll`, `msvcp140.dll`, shared by both) and the engine's three
+FFmpeg DLLs for the films. Keep them next to the EXEs; nothing has to be
+installed. The engine has its own manual —
 [Engine-Manual.md](Engine-Manual.md).
 
 ---

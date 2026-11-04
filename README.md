@@ -337,8 +337,10 @@ is the floor of the first question, so a level that has spent less than that
 is never stopped on the card's account.
 
 **Why the address space, on a machine with 16 GiB of video memory?** Because
-`PCtomb5.exe` is a 32 bit program: four gigabytes of address space and no
-more, whatever the card and the RAM hold. Measured with `PoolProbe`, the
+the engine was a 32 bit program until Beta_5.0: four gigabytes of address
+space and no more, whatever the card and the RAM held. Since #324 the
+package's `PCTomb5.exe` is the 64-bit build and that ceiling is gone, but
+the budget below still decides. Measured with `PoolProbe`, the
 pages themselves live on the CARD and cost the program almost nothing of it —
 0.04 MiB for a page of 85.25 — so in practice it is the texture budget that
 decides, and on a big card's automatic budget a level has room for well over
@@ -889,9 +891,14 @@ too; their models and sounds are read from it at run time and none of them
 ships here either.
 
 **The machine:** Windows 10 or 11 (the engine is tested on Windows 11; the
-XAudio2 it uses comes with Windows 10). `PCtomb5.exe` is a 32-bit program on
-Direct3D 9 and XAudio2, marked large-address-aware, so on 64-bit Windows it has
-four gigabytes of address space whatever the machine holds. The HD path also
+XAudio2 it uses comes with Windows 10). `PCTomb5.exe` is a 64-bit program on
+Direct3D 9 and XAudio2, so it needs 64-bit Windows and has no four-gigabyte
+limit of address space. Three Microsoft C++ runtime DLLs (`vcruntime140.dll`,
+`vcruntime140_1.dll`, `msvcp140.dll`) lie beside it and beside
+`TR5Randomizer.exe`, and three FFmpeg DLLs (`avutil-61.dll`, `avcodec-63.dll`,
+`avformat-63.dll`) play the films, whose 32-bit Bink library a 64-bit program
+cannot load; keep all six next to the EXEs - nothing has to be installed. The
+HD path also
 needs a graphics card with shader model 3.0 (vertex and pixel shader 3.0, at
 least 512 pixel shader instruction slots, the UBYTE4 vertex type and A8R8G8B8
 textures); a card that lacks one of them plays the classic art, with the reason
@@ -916,19 +923,25 @@ Another version, edition or drive means editing that one line in the script
 you are running, and nothing else. The engine project builds with the
 **v142** toolset, "MSVC v142 - VS 2019 C++ x64/x86 build tools": an
 individual component of the Visual Studio Installer on newer versions, and
-present in Visual Studio 2019 itself.
+present in Visual Studio 2019 itself. Both programs link the C++ runtime as
+DLLs (`/MD`); the build scripts copy the three the EXEs import from the
+compiler's redist folder (`VCToolsRedistDir` of `vcvars64.bat`) beside them.
 
-- **Engine:** `TOMB5 Code\tomb5.vcxproj` with Visual Studio (Win32, Release),
-  or `Preparation\Tools\Diagnose\be.bat` on the command line, which first
-  checks every compiled HD shader (`.inc`) against its `.hlsl` and rebuilds
-  one that is out of step; a build from the Visual Studio window skips that
-  check. `be64.bat` beside it builds the same engine as a 64-bit program
-  (x64, Release) into `release64\PCtomb5_x64.exe`; it plays no film and is
-  not part of the package.
+- **Engine:** `Preparation\Tools\Diagnose\be64.bat` is the shipping build:
+  `TOMB5 Code\tomb5.vcxproj`, x64, Release, into
+  `release64\PCtomb5_x64.exe` (the package names it `PCTomb5.exe`), with the
+  FFmpeg and C++ runtime DLLs copied beside it. It first checks every
+  compiled HD shader (`.inc`) against its `.hlsl` and rebuilds one that is
+  out of step; a build from the Visual Studio window skips that check.
+  `be.bat` beside it builds the same engine as a 32-bit program (Win32,
+  Release) into `release\PCtomb5.exe` - the comparison build, not shipped.
 - **Randomizer:** `TR5Randomizer\build\b1.bat` (command line) and
   `b2.bat` (GUI).
-- **Package:** `Preparation\Tools\BuildRelease.ps1` assembles
-  the shippable folder including source code and licenses.
+- **Package:** `Preparation\Tools\BuildRelease.ps1` assembles the shippable
+  folder, 64-bit only: `be64.bat`'s engine as `PCTomb5.exe`,
+  `TR5Randomizer.exe`, the three FFmpeg DLLs, the three C++ runtime DLLs from
+  `VCToolsRedistDir` (or `-RedistDir`), the data, the source code and the
+  licenses. The 32-bit `release\PCtomb5.exe` never goes in.
 
 ## Thanks and origin
 

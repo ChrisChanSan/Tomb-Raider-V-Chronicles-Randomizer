@@ -921,6 +921,7 @@
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>../tomb5/pch.h</PrecompiledHeaderFile>
       <EnableEnhancedInstructionSet>NotSet</EnableEnhancedInstructionSet>
+      <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
       <DisableSpecificWarnings>
       </DisableSpecificWarnings>
       <TreatSpecificWarningsAsErrors>4311;4312;4302;4267;4477;%(TreatSpecificWarningsAsErrors)</TreatSpecificWarningsAsErrors>
@@ -953,7 +954,7 @@
       <AssemblerOutput>NoListing</AssemblerOutput>
       <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
       <EnableEnhancedInstructionSet>NotSet</EnableEnhancedInstructionSet>
-      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
       <TreatSpecificWarningsAsErrors>4311;4312;4302;4267;4477;%(TreatSpecificWarningsAsErrors)</TreatSpecificWarningsAsErrors>
     </ClCompile>
     <Link>
@@ -992,6 +993,7 @@ exit /b 0</Command>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>../tomb5/pch.h</PrecompiledHeaderFile>
       <EnableEnhancedInstructionSet>NotSet</EnableEnhancedInstructionSet>
+      <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
       <TreatSpecificWarningsAsErrors>4311;4312;4302;4267;4477;%(TreatSpecificWarningsAsErrors)</TreatSpecificWarningsAsErrors>
     </ClCompile>
     <Link>
@@ -1020,7 +1022,7 @@ exit /b 0</Command>
       <AssemblerOutput>NoListing</AssemblerOutput>
       <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
       <EnableEnhancedInstructionSet>NotSet</EnableEnhancedInstructionSet>
-      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
       <TreatSpecificWarningsAsErrors>4311;4312;4302;4267;4477;%(TreatSpecificWarningsAsErrors)</TreatSpecificWarningsAsErrors>
     </ClCompile>
     <Link>
@@ -1053,7 +1055,7 @@ exit /b 0</Command>
       <AssemblerOutput>NoListing</AssemblerOutput>
       <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
       <EnableEnhancedInstructionSet>NotSet</EnableEnhancedInstructionSet>
-      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
       <TreatSpecificWarningsAsErrors>4311;4312;4302;4267;4477;%(TreatSpecificWarningsAsErrors)</TreatSpecificWarningsAsErrors>
     </ClCompile>
     <Link>

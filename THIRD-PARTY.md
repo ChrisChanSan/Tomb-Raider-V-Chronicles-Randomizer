@@ -271,6 +271,41 @@ the headers and import libraries sit beside the DLLs, and
 was not modified; that snapshot is offered with every release that ships the
 three DLLs.
 
+### Microsoft Visual C++ runtime - the DLLs beside the 64-bit programs
+
+| Library | Licence | Full text |
+|---|---|---|
+| **Microsoft Visual C++ runtime** — Microsoft Corporation | Microsoft's terms for the Visual Studio "Distributable Code" | the Redist license text that ships with Visual Studio, `Licenses\1031\Redist.txt` under the Visual Studio folder, and the Visual Studio licence terms it belongs to |
+
+Since #324 both programs link the C++ runtime as DLLs (`/MD`) instead of
+compiling it in: `PCTomb5.exe` (the 64-bit engine of `be64.bat`),
+`TR5Randomizer.exe` and `Randomize.exe` import `vcruntime140.dll`,
+`vcruntime140_1.dll` and `msvcp140.dll`, measured in each EXE's import
+table, and nothing else of the Visual C++ runtime. Those three files lie
+beside the programs, version **14.51.36247.0**, copied unchanged from the
+compiler's own redist folder - the one `vcvars64.bat` names in
+`VCToolsRedistDir`, on the build machine `VC\Redist\MSVC\14.51.36231\x64\
+Microsoft.VC145.CRT\` of Visual Studio 18. They are passed on under
+Microsoft's terms for "Distributable Code for Microsoft Visual Studio", the
+title of the Redist license text named above, whose current list of files
+that file itself points to; the redistributable installer is not used and
+not shipped. The `api-ms-win-crt-*` names the EXEs also import are the
+Universal C runtime, part of Windows 10 and 11; nothing of it is shipped.
+
+The GPL's side: GPLv3 section 1 leaves the "System Libraries" out of the
+Corresponding Source - a library that comes with a major component of the
+operating system or of the compiler that produces the program, and serves
+only to run it with that component. The Visual C++ runtime is the
+compiler's runtime in exactly that sense. No source is offered for the three
+DLLs, because none of it is this project's to offer; they are Microsoft's
+binaries, and the package carries them only so the programs start on a
+machine without the runtime installed.
+
+Beta_5.0 compiled the runtime statically into each EXE (`/MT`). That is gone
+for one reason: both programs now use one runtime set beside them, with no
+installer to run first - the engine and the randomizer each carried their own
+copy of the same code before.
+
 ### discord-rpc — shipped in the source tree, not in the binaries
 
 | Library | Licence | Full text in this tree |

@@ -849,6 +849,71 @@ namespace
 	int g_swap_plans = 0;
 	int g_swap_models = 0;
 
+	/* ------------------------------------------ a composite's node lines --
+	 *
+	 * The randomizer builds a few creatures out of two slots (Randomizer.cpp,
+	 * the pool's composite rows): one level's meshes on another level's
+	 * animation set. The armed scientist (473) wears RICH1's scientist and
+	 * runs SWAT's set, and his hand meshes 10 and 13 are SWAT's, written into
+	 * his own mesh list when the level is written (Tr5Transfer.cpp,
+	 * kMeshesFromAnims) - the rifle is part of SWAT's hand 13. The classic
+	 * picture has the rifle. The HD picture had the gloves of SCIENTIST.TRM,
+	 * which hold nothing: the hands are his own from the level's first frame,
+	 * so none of the borrow rules below ever sees a borrowed mesh on them.
+	 *
+	 * A row says it once: the actor's slot, its nodes, and the slot whose
+	 * model draws them. Those nodes take rule 2 below unconditionally - the
+	 * source's model's node at the actor's node matrix, with the actor's
+	 * light and the actor's own node left out - while its preconditions
+	 * hold (the source draws HD in this level and its model has geometry on
+	 * the node); else the actor's own node, as before. HD off, or a source
+	 * that stayed classic, is the classic picture, whose mesh table already
+	 * holds the rifle.
+	 *
+	 * The source is named by slot and not by model, because a model is only
+	 * drawn through a slot that binds it: SWAT's own slot is in no level the
+	 * scientist goes to, while his row brings SWAT's warehouse,
+	 * MESHSWAP_CROSS_SWAT, wherever he stands (Randomizer.cpp, the swap
+	 * halves into 462), and hd_bind.cpp's hand table binds the warehouse to
+	 * SWAT.TRM. Measured (ModelProbe -bindcheck, ANDREA2 as written): SWAT's
+	 * rifle is node 13 (1176 vertices, centre 134 143 23), node 10 the left
+	 * glove (208); the scientist's 10 and 13 are his gloves (195 each).
+	 *
+	 * The node is hung at the ACTOR's bind and not the source's: the
+	 * warehouse's mesh tree is not SWAT's (its node 13 sits at -68 5 -4, the
+	 * other side of the body), while the scientist's tree is SWAT's to the
+	 * last bone (126 61 -21, as RICH3's SWAT) - the tree the hand meshes
+	 * were cut for. At the warehouse's own bind the rifle hangs 203 units
+	 * off the hand (ModelProbe -borrow); at the actor's it is in it
+	 * (-borrowown). The brawler (471) takes no mesh from his anim donor and
+	 * has no row. */
+	struct CompositeRow
+	{
+		const char* actor;	// the composite's slot name
+		unsigned int nodes;	// its nodes the source draws
+		const char* source;	// the slot whose model draws them
+	};
+
+	const CompositeRow kCompositeNodes[] =
+	{
+		{ "SCIENTIST_ARMED", (1u << 10) | (1u << 13), "MESHSWAP_CROSS_SWAT" }
+	};
+
+	#define HD_COMPOSITES \
+		(sizeof(kCompositeNodes) / sizeof(kCompositeNodes[0]))
+
+	/* A row as this level resolved it at the build: the two slots, and the
+	 * nodes the draw takes from the source (0 when it cannot). */
+	struct CompositeSlot
+	{
+		int actor;
+		int source;
+		unsigned int drawn;
+	};
+
+	CompositeSlot g_composite[HD_COMPOSITES];
+	int g_composites = 0;
+
 	/* ---------------------------------------- a cutscene's borrowed meshes --
 	 *
 	 * The classic engine gives a cutscene's actor, and Lara, a thing to hold
@@ -915,6 +980,9 @@ namespace
 		int slot;		// the slot the mesh belongs to, -1 for none
 		int index;		// its node in that slot
 		int drawn;		// BorrowDrawn
+		/* The slot whose bind pose the node is hung at: -1 for the lender's
+		 * own (a cutscene), the actor's for a composite's node line. */
+		int anchor;
 	};
 
 	/* One cut actor's answer, from HDObjectCutActor through HDObjectBegin to
@@ -2266,6 +2334,7 @@ static void ObjectLevelBuild(const char* installRoot, const char* stem,
 	g_swap_plans = 0;
 	g_swap_models = 0;
 	g_ring_models = 0;
+	g_composites = 0;
 
 	if (!tomb5.hd_objects)
 		return;
@@ -3035,6 +3104,72 @@ static void ObjectLevelBuild(const char* installRoot, const char* stem,
 			have, lost);
 	}
 
+	/* The composites' node lines (kCompositeNodes), after the verdicts
+	 * because only now is it known which slots draw HD. A row whose two
+	 * slots are not both in this level, whose actor or source stays
+	 * classic, draws nothing of the source's; one whose source has no
+	 * geometry on a node draws the actor's own node there. One line a row,
+	 * behind -log; the reason names why it cannot draw when it cannot. */
+	g_composites = 0;
+
+	for (size_t r = 0; r < HD_COMPOSITES; r++)
+	{
+		const CompositeRow& row = kCompositeNodes[r];
+		CompositeSlot& one = g_composite[g_composites];
+		const char* why = "ok";
+		char nodes[64] = "";
+		int at = 0;
+
+		one.actor = -1;
+		one.source = -1;
+		one.drawn = 0;
+
+		for (int s = 0; s < NUMBER_OBJECTS; s++)
+		{
+			const char* name = HDSlotName(s);
+
+			if (name && _stricmp(name, row.actor) == 0)
+				one.actor = s;
+
+			if (name && _stricmp(name, row.source) == 0)
+				one.source = s;
+		}
+
+		for (int n = 0; n < HD_OBJ_NODES && at < (int)sizeof(nodes); n++)
+			if (row.nodes >> n & 1)
+				at += std::snprintf(nodes + at, sizeof(nodes) - at, "%s%d",
+					at ? "," : "", n);
+
+		if (one.actor < 0 || one.source < 0 || !objects[one.actor].loaded ||
+			!objects[one.source].loaded)
+			why = "not_loaded";
+		else if (!g_slot[one.actor].hd)
+			why = "actor_classic";
+		else if (!g_slot[one.source].hd || !HDModelHas(one.source))
+			why = "source_classic";
+		else
+		{
+			for (int n = 0; n < HD_OBJ_NODES; n++)
+				if ((row.nodes >> n & 1) && n < g_slot[one.actor].nodes &&
+					n < g_slot[one.source].nodes &&
+					HDModelNodeCovered(one.source, n))
+					one.drawn |= 1u << n;
+
+			if (one.drawn != row.nodes)
+				why = "no_geometry";
+		}
+
+		if (one.actor >= 0)
+			g_composites++;
+
+		if (gLogEnabled)
+			Log("HDLOG composite slot=%d name=%s nodes=%s from=%s model=%s "
+				"hd=%d reason=%s", one.actor, row.actor, nodes, row.source,
+				one.source >= 0 && HDModelName(one.source)
+					? HDModelName(one.source) : "-",
+				one.drawn == row.nodes ? 1 : 0, why);
+	}
+
 	/* A mod's inventory model, measured. After the verdicts,
 	 * because both boxes have to be on the card before either can be measured
 	 * - and because a slot whose own model did not come out HD draws classic in
@@ -3538,6 +3673,7 @@ void HDObjectLevelEnd()
 	g_swap_models = 0;
 	g_swap_drawn = 0;
 	g_ring_models = 0;	// a mod's inventory models
+	g_composites = 0;	// the composites' node lines
 	/* And the cached up direction. ViewSerial only ever
 	 * counts up, so this cannot go stale on its own - it is cleared here so
 	 * that it could not if the serial were ever reset with a level. */
@@ -3792,6 +3928,92 @@ static void borrow_matrices(int slot, int node, const float* at, float* out,
 	HDModelBorrowJoints(bind, node, at, out, nodes);
 }
 
+/* A composite's node line: the same hanging, at the bind of the actor's
+ * node `actorNode` instead of the lender's (hd_model.h,
+ * HDModelBorrowJointsAt) - the tree the composite's meshes were cut for. */
+static void composite_matrices(int slot, int node, int actor, int actorNode,
+	const float* at, float* out, int nodes)
+{
+	float bind[HD_OBJ_NODES * 3];
+	float own[HD_OBJ_NODES * 3];
+	const int actorNodes = g_slot[actor].nodes < HD_OBJ_NODES
+		? g_slot[actor].nodes : HD_OBJ_NODES;
+
+	if (nodes > HD_OBJ_NODES)
+		nodes = HD_OBJ_NODES;
+
+	if (actorNode < 0 || actorNode >= actorNodes)
+	{
+		borrow_matrices(slot, node, at, out, nodes);
+		return;
+	}
+
+	bind_pose_of(slot, bind, nodes);
+	bind_pose_of(actor, own, actorNodes);
+	HDModelBorrowJointsAt(bind, node, own + actorNode * 3, at, out, nodes);
+}
+
+/* The nodes of `item` a composite's node line draws from another slot's
+ * model this frame (kCompositeNodes), and that slot - asked for every node
+ * before the cutscene's rules: the resolved row, the item's mesh bits (a
+ * hidden node draws nothing) and rule 2's own test, which also asks
+ * whether this frame draws HD at all. */
+static unsigned int composite_nodes_of(int slot, const ITEM_INFO* item,
+	int* source)
+{
+	*source = -1;
+
+	for (int i = 0; i < g_composites; i++)
+	{
+		const CompositeSlot& row = g_composite[i];
+
+		if (row.actor != slot || !row.drawn)
+			continue;
+
+		unsigned int nodes = 0;
+
+		for (int n = 0; n < HD_OBJ_NODES; n++)
+			if ((row.drawn >> n & 1) &&
+				((unsigned int)item->mesh_bits >> n & 1) &&
+				borrowable(row.source, n))
+				nodes |= 1u << n;
+
+		*source = row.source;
+		return nodes;
+	}
+
+	return 0;
+}
+
+/* The composite's nodes join the actor's borrowed nodes as rule 2's
+ * entries, hung at the actor's bind; a cutscene's answer for the same
+ * node gives way. */
+static void composite_take(unsigned int nodes, int source)
+{
+	int kept = 0;
+
+	for (int i = 0; i < g_open_cut.count; i++)
+		if (!(nodes >> g_open_cut.node[i].node & 1))
+			g_open_cut.node[kept++] = g_open_cut.node[i];
+
+	g_open_cut.count = kept;
+
+	for (int n = 0; n < HD_OBJ_NODES && g_open_cut.count < HD_OBJ_NODES; n++)
+	{
+		if (!(nodes >> n & 1))
+			continue;
+
+		Borrow& b = g_open_cut.node[g_open_cut.count++];
+
+		b.node = n;
+		b.slot = source;
+		b.index = n;
+		b.drawn = BORROW_NODE;
+		b.anchor = g_open_slot;
+		g_open_mask &= ~(1u << n);
+	}
+}
+
 /* Rule 2's draws: an entry per borrowed node, right after the actor's own,
  * with everything of the actor's but the model, the node mask, the matrices
  * and a face - its light, its room, its mirror, its clip, its shadow. */
@@ -3827,6 +4049,11 @@ static void push_borrowed(int actorEntry)
 		entry.castMask = actor.cast != HD_OBJ_CAST_NONE ? entry.mask : 0;
 		borrow_matrices(b.slot, b.index, actor.matrix + b.node * 16,
 			entry.matrix, nodes);
+
+		// A composite's node line hangs it at the actor's bind instead.
+		if (b.anchor >= 0)
+			composite_matrices(b.slot, b.index, b.anchor, b.node,
+				actor.matrix + b.node * 16, entry.matrix, nodes);
 
 		for (int n = 0; n < nodes; n++)
 			memcpy(entry.light + n * 3, actor.light + b.node * 3,
@@ -3980,6 +4207,7 @@ void HDObjectCutActor(int actor, ITEM_INFO* item, bool fading, bool lineFollows)
 		b.slot = memo.slot;
 		b.index = memo.index;
 		b.drawn = BORROW_CLASSIC;
+		b.anchor = -1;
 		cut.borrowed |= 1u << n;
 	}
 
@@ -4157,6 +4385,10 @@ bool HDObjectBegin(ITEM_INFO* item, OBJECT_INFO* obj)
 	/* The borrowed nodes (see "a cutscene's borrowed meshes"): rule 1's model
 	 * through swap_model_for below, and rule 2's nodes left out of the actor
 	 * - their entries follow its own in HDObjectEnd. */
+	int compositeSource = -1;
+	const unsigned int composite = composite_nodes_of(slot, item,
+		&compositeSource);
+
 	if (cutArmed)
 	{
 		g_open_cut = g_cut;
@@ -4166,6 +4398,10 @@ bool HDObjectBegin(ITEM_INFO* item, OBJECT_INFO* obj)
 			if (g_open_cut.node[i].drawn == BORROW_NODE)
 				g_open_mask &= ~(1u << g_open_cut.node[i].node);
 	}
+
+	// A composite's node lines, asked above, before any cutscene rule.
+	if (composite)
+		composite_take(composite, compositeSource);
 
 	/* The mesh swap.
 	 *

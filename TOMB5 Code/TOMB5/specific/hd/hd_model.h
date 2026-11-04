@@ -939,6 +939,14 @@ bool HDModelNodeCovered(int slot, int node);	// false -> nothing is drawn there
 void HDModelBorrowJoints(const float* bind, int node, const float* at,
 	float* out, int nodes);
 
+/* The same, for a composite's node line (hd_object.cpp): the node's
+ * vertices land as if they were measured against `anchor`, the bind of the
+ * actor's node (three floats), instead of the model's own bind[node]. The
+ * randomizer's armed scientist carries SWAT's hands on SWAT's tree, while
+ * the slot that binds SWAT.TRM in his levels has another tree. */
+void HDModelBorrowJointsAt(const float* bind, int node, const float* anchor,
+	const float* at, float* out, int nodes);
+
 /* Whether the model fits the skeleton that is in the slot.
  *
  * A .TRM's bone numbers are the mesh tree numbers of the model it was made

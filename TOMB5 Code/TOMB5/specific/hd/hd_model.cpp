@@ -5490,6 +5490,27 @@ void HDModelBorrowJoints(const float* bind, int node, const float* at,
 	}
 }
 
+void HDModelBorrowJointsAt(const float* bind, int node, const float* anchor,
+	const float* at, float* out, int nodes)
+{
+	if (!bind || !anchor || !at || node < 0 || node >= nodes)
+		return;
+
+	/* The draw takes `bind[node]` off every vertex of the node; the actor's
+	 * matrix wants `anchor` taken off. Moving `at` by the difference, in the
+	 * node's own axes, is the one change between the two. */
+	const float dx = bind[node * 3 + 0] - anchor[0];
+	const float dy = bind[node * 3 + 1] - anchor[1];
+	const float dz = bind[node * 3 + 2] - anchor[2];
+	float moved[16];
+
+	memcpy(moved, at, sizeof(moved));
+	moved[12] = at[12] + dx * at[0] + dy * at[4] + dz * at[8];
+	moved[13] = at[13] + dx * at[1] + dy * at[5] + dz * at[9];
+	moved[14] = at[14] + dx * at[2] + dy * at[6] + dz * at[10];
+	HDModelBorrowJoints(bind, node, moved, out, nodes);
+}
+
 int HDModelMaxBone(int slot)
 {
 	const Model* model = find(g_models, slot);

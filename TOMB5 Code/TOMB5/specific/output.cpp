@@ -1636,9 +1636,13 @@ void S_InitialisePolyList()
 	//
 	// The clear in S_OutputPolyList stays where it is: it keeps the mask,
 	// the recording overlay and the fade above the scene.
+	//
+	// Timed as PROF_CLEAR for a pause line, with -log alone (profile.h).
+	ProfBegin(PROF_CLEAR);
 	DXAttempt(App.dx.lpD3DDevice->Clear(1, &r,
 		(App.dx.Flags & DXF_ZBUFFER) ? (D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER) : D3DCLEAR_TARGET,
 		0, 1.0F, 0));
+	ProfEnd(PROF_CLEAR);
 
 	_BeginScene();
 	InitBuckets();

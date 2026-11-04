@@ -17,6 +17,7 @@
 #include "dxshell.h"
 #include "winmain.h"
 #include "3dmath.h"
+#include "profile.h"		// the spin and the BeginScene, timed (PROFLOG)
 
 void (*AddQuadSorted)(D3DTLVERTEX* v, short v0, short v1, short v2, short v3, TEXTURESTRUCT* tex, long double_sided);
 void (*AddTriSorted)(D3DTLVERTEX* v, short v0, short v1, short v2, TEXTURESTRUCT* tex, long double_sided);
@@ -141,13 +142,24 @@ void HWDrawPrimitive(D3DPRIMITIVETYPE type, void* vertices, long numVerts)
 
 HRESULT HWBeginScene()
 {
+	HRESULT hr;
+
 	if (App.dx.InScene)
 		Log("Already In Scene");
 
 	App.dx.InScene = 1;
 	App.dx.DoneBlit = 0;
+
+	/* The spin is the park's place (WM_ACTIVATE, winmain.cpp) and stays as
+	 * it is; the stamps around it and the BeginScene only time them for a
+	 * pause line (profile.h, ProfileNoteParked), with -log alone. */
+	ProfBegin(PROF_BEGIN_WAIT);
 	while (App.dx.WaitAtBeginScene) {};
-	return App.dx.lpD3DDevice->BeginScene();
+	ProfEnd(PROF_BEGIN_WAIT);
+	ProfBegin(PROF_BEGIN);
+	hr = App.dx.lpD3DDevice->BeginScene();
+	ProfEnd(PROF_BEGIN);
+	return hr;
 }
 
 HRESULT HWEndScene()

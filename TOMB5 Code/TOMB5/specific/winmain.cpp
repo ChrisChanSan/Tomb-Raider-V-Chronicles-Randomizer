@@ -40,6 +40,7 @@
 #include "replay.h"		// -record and -replay
 #include "high_pool.h"		// -high
 #include "pool_guard.h"		// the Asan build's report
+#include "profile.h"		// ProfileNoteParked - the park's length
 
 WINAPP App;
 long resChangeCounter;
@@ -827,6 +828,8 @@ static bool WinWakeGame(const char* by)
 		return false;
 
 	KillTimer(App.hWnd, WIN_PARK_TIMER);
+	// The pause line's `parked=`, handed over while the thread still sleeps.
+	ProfileNoteParked(GetTickCount() - park_since);
 	ResumeThread(MainThread.handle);
 	App.dx.WaitAtBeginScene = 0;
 	game_parked = 0;

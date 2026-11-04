@@ -378,6 +378,13 @@ level files, the same input, the same ticks.
 A person cannot play the same five minutes twice, so the 32-bit build
 records what the run takes from outside and both builds play it again:
 
+Since #321 the recorder is compiled only into test builds (section 10):
+`releasetest\PCtomb5_x64t.exe` and `releaseasan\PCtomb5_asan.exe`. There is
+no 32-bit test build; the shipping `PCtomb5.exe` and `PCtomb5_x64.exe`
+do not know `-record` or `-replay` and start as without them. The 32-bit
+steps below need a 32-bit build with `TOMB5_TEST_BUILD`, which no script
+makes today; the 64-bit steps take `PCtomb5_x64t.exe`.
+
 - `-record <file>` writes, once per call of the input function, what the
   keyboard, the mouse and the pad delivered, with a check of the game's
   state; per present the number of 1/60 s ticks the logic takes from it;
@@ -425,7 +432,7 @@ copy savegame\savegame.<m> x86_m.sav
 rem 3. play it again on the 64-bit build
 rmdir /s /q savegame
 xcopy /e /i /y savegame_before savegame
-PCtomb5_x64.exe -log -nofmv -replay run1.rec
+PCtomb5_x64t.exe -log -nofmv -replay run1.rec
 ren log.txt rep_x64.log
 copy savegame\savegame.<m> x64_m.sav
 
@@ -637,7 +644,7 @@ the game folder of section 8, with `run1.rec` and `rep_x64.log`:
 ```
 rmdir /s /q savegame
 xcopy /e /i /y savegame_before savegame
-PCtomb5_x64.exe -log -nofmv -high -replay run1.rec
+PCtomb5_x64t.exe -log -nofmv -high -replay run1.rec
 ren log.txt rep_x64_high.log
 python <repo>\Preparation\Tools\Diagnose\xdiff.py rep_x64.log rep_x64_high.log > xdiff_high.txt
 ```
@@ -664,13 +671,20 @@ aim, the ledge test, the weapons, the cameras and the drips) and her wet
 nodes are built again from the step's own pose after every blended picture
 (`game\draw.cpp`, `LaraJointsLive`). The proof is a replay whose pictures
 fall at other places between the steps than the recording's. It needs the
-recorder, which the 64-bit build carries:
+recorder, which only the test builds carry (#321): `be64.bat test` builds
+`releasetest\PCtomb5_x64t.exe`, the 64-bit engine at full speed, which
+records; `basan.bat` builds `releaseasan\PCtomb5_asan.exe`, which replays
+under AddressSanitizer (either can do both). Their first `-log` line ends
+in ` test build`. The shipping EXEs (`be.bat`, `be64.bat`) refuse nothing:
+they do not know `-record`, `-replay`, `-liveclock` or `-rngtrace` and
+start as without them - no `REPLAYLOG` line, no ` test build` at the end of
+the first line.
 
 1. Record a stretch with fights at *Frame rate: Display*, best with
    something shooting at Lara (the drones of ANDREA2):
-   `PCtomb5.exe -log -record run.rec`.
+   `PCtomb5_x64t.exe -log -record run.rec`.
 2. Replay it with the replaying machine's own clock in place of the
-   recorded sub-ticks: `PCtomb5.exe -log -replay run.rec -liveclock`
+   recorded sub-ticks: `PCtomb5_asan.exe -log -replay run.rec -liveclock`
    (the switch after the file: the word after `-replay` is the file). The
    recording's frame places are not read: the replaying machine draws as
    many frames in a tick as its own clock gives and blends each by that
@@ -683,7 +697,14 @@ recorder, which the 64-bit build carries:
    `clock=recorded` is a replay of the recording's own pictures, which
    proves nothing here.
 3. The log of the replay holds no `REPLAYLOG drift` line, and
-   `REPLAYLOG end` names the recording's last tick. A drift line names the
+   `REPLAYLOG end` names the recording's last tick. Played to the
+   recording's own exit, the end line is `REPLAYLOG end mode=replay
+   why=exit records=<n> tick=<t> left=<bytes> skipped_subticks=<n>`, after
+   the `GameClose` and `WinClose` lines and before the released devices
+   (since #321; before it the log closed in `GameClose` and the line was
+   never written). `why=file` says the game asked for a record after the
+   file's last one and went on with the devices; `why=desync` that a record
+   did not fit. A drift line names the
    tick where the replayed game left the recorded one. Under the live clock
    the ticks, the input and the generators are the recording's, so a drift
    means the logic read something back from a picture: a reader of the

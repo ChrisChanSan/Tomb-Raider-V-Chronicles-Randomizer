@@ -18753,6 +18753,103 @@ draw ended now lives on - by design.
 
 **Commits.** `fe236669`.
 
+### The recorder is a test build's (#321)
+2026-11-04
+
+**Why.** A shipped EXE reads no replay file and pays no diagnosis call. Until now every
+build knew `-record`, `-replay`, `-liveclock` and `-rngtrace`, carried the recorder's
+file code and STATELOG, and called `GetRandomControl` and `GetFreeSpark` as functions of
+their own (`__declspec(noinline)`, #316 and #317: the x64 release EXE went from 1405
+inlined copies of the generator to 1548 calls) - for the diagnosis alone.
+
+**Changed.** One define, `TOMB5_TEST_BUILD`, decides it. It is defined in one place,
+an `ItemDefinitionGroup` of `tomb5.vcxproj`, for two builds:
+
+- `Asan|x64` (`basan.bat`, `releaseasan\PCtomb5_asan.exe`), a test build by nature;
+- `Release|x64` with the msbuild property `Tomb5Test=true`, which `be64.bat test` sets:
+  the same engine as `be64.bat`, into `releasetest\PCtomb5_x64t.exe` with its objects in
+  `x64\ReleaseTest\`. A property and not a configuration of its own: a new configuration
+  would have to repeat every per-file setting of the project (`PrecompiledHeader`,
+  `LanguageStandard`), about seventy lines. Its own folder and its own file name, so a
+  copy into the game folder never passes for the shipping EXE; the FFmpeg DLLs go beside
+  it as beside `release64\`.
+
+`be.bat` (`release\PCtomb5.exe`) and the plain `be64.bat` (`release64\PCtomb5_x64.exe`)
+build the shipping EXEs, without the define. In them:
+
+- `specific/winmain.cpp` reads none of the four words: `WinCheckPathFlag` and the block
+  that reads `-record`, `-replay`, `-liveclock` and `-rngtrace` stand inside the define.
+  The words are not in the EXE; a shipping EXE given them refuses nothing and says
+  nothing, it simply does not know them. (`-ret` is AddrLine's switch, not the
+  engine's.)
+- `specific/replay.cpp` compiles to nothing. `specific/replay.h` gives the call sites
+  empty inline functions that hand their value back - `camera.number_frames =
+  ReplayFrames(S_DumpScreen())` stays the one line it was and returns its argument;
+  `ReplaySubTick` returns the sub-tick, the others do nothing. STATELOG, written only
+  by the recorder, goes with it.
+- The `RngTrace*` functions and their buffers in `specific/function_stubs.cpp` are
+  compiled only in a test build; `function_stubs.h` gives `RngTraceInputSeam` and
+  `RngTraceMark` as empty inlines. `RngTraceSwitch` (`specific/high_pool.cpp`) stays,
+  ModernTest links and checks it; nothing in the engine calls it, and the linker drops
+  it.
+- `GetRandomControl` and `GetFreeSpark` are what they were before #316 and #317: the
+  macro `TOMB5_NOINLINE_IN_TEST` (`function_stubs.h`) is `__declspec(noinline)` in a test
+  build and nothing in a shipping one, and the generator's flag test stands inside the
+  define. In a shipping build `SPARKLOG draw_alloc`'s `ret=` therefore names the caller's
+  caller.
+
+In a test build everything is as before, and the first line of a `-log` run says so
+after the time: `Logging enabled by -log. PCtomb5 built <date> <time> test build`. The
+stamp a recording's header carries (`ReplayOpen`'s argument) stays `PCtomb5 built <date>
+<time>`; the replay format is unchanged (version 2). No `-log` family changed.
+
+The four EXEs: `release\PCtomb5.exe` and `release64\PCtomb5_x64.exe` ship and carry no
+recorder; `releasetest\PCtomb5_x64t.exe` records and replays at full speed;
+`releaseasan\PCtomb5_asan.exe` records and replays under AddressSanitizer.
+There is no 32-bit test build: the comparison of the 32-bit and the 64-bit build in
+`Preparation/Verification.md`, section 8, needs one, and no script makes it today.
+
+**Checked.** ModernTest's group `test_build_rule`: the define once in the project and in
+no source file, `be64.bat test` alone setting the property, the four words only inside
+the define's blocks of `winmain.cpp`, `replay.cpp` empty without it, `replay.h`'s shipping
+path without file I/O, the call sites unchanged, `-rngtrace` inside the define, `noinline`
+only through the macro. In the EXEs (`grep -a -c`): `REPLAYLOG`, `RNGTRACE`, `STATELOG`
+and `-liveclock` 0 in both shipping EXEs, more than 0 in both test EXEs.
+
+**Commits.** `58f49bc4`.
+
+### The log closes after the recorder (#321)
+2026-11-04
+
+**Found.** No replay log had its end line. `GameClose` (`specific/gamemain.cpp`, the game
+thread's last step) closed `logF` and left the pointer standing. `WinClose` runs after it,
+on the window's thread at the end of `WinMain`, and calls `ReplayClose` first: its
+`REPLAYLOG end` line - `mode=record` after a recording, `mode=replay why=exit` after a
+replay the game left - went into a closed `FILE*`, and so did every line after it
+(`WinClose`, the released devices). Undefined behaviour that happened to write nothing;
+the Asan build did not see it, the CRT does not poison a closed `FILE`.
+
+**Changed.** `LogClose` (`specific/function_stubs.cpp`) closes the log once:
+`gLogEnabled` false first, then `fclose(logF)` and `logF = 0`. `WinMain` calls it right
+after each of its two `WinClose` calls (the end, and the setup dialog's cancel), so after
+the recorder's end line. `GameClose` no longer touches the log. A `Log()` after
+`LogClose` is the no-op of its first test; switching the log off first matters, because
+`LogText` opens `log.txt` again when `logF` is 0 - and would empty it. Not under the
+define: the log closes so in every build.
+
+The last lines of a run's normal exit are now `GameClose`, `WinClose`, the recorder's end
+line, then the released devices. The end line after a replay that the replayed input
+ended (the recording's own exit) reads `REPLAYLOG end mode=replay why=exit records=<n>
+tick=<t> left=<bytes> skipped_subticks=<n>`; `why=file` stands there only when the game
+asked for a record after the file's last one (the run went on with the devices).
+
+**Checked.** ModernTest's group `test_build_rule`: `fclose(logF)` once, in `LogClose`,
+with `logF = 0` after it, none in `GameClose` or `WinMain`, `WinClose` calling
+`ReplayClose` first, each `WinClose` in `WinMain` followed by `LogClose` and no
+`ReplayClose` after it.
+
+**Commits.** `31d9aebb`.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -19181,3 +19278,4 @@ entries above.
 | #318 | The weather owns its splash sparks |
 | #319 | -liveclock reads no frame places from the recording |
 | #320 | The draw ends no particle: bubbles, drips and far sparks live on in the logic |
+| #321 | The recorder is a test build's; The log closes after the recorder |

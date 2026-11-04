@@ -304,9 +304,10 @@ void WeatherRipplesStep()
  * frame's blend can be below 1, and trailing there would walk them back a
  * step and forward again on every tick.
  *
- * A splash is drawn as a line (no SF_DEF), so the sprite's far-plane end
- * in S_DrawDrawSparksNEW is never reached for one; it would not matter if
- * it were - nothing in the logic reads these. */
+ * A splash is drawn as a line (no SF_DEF), so the sprite's far-plane cull
+ * in S_DrawDrawSparksNEW (#320: it no longer ends a spark) is never reached
+ * for one; it would not matter if it were - nothing in the logic reads
+ * these. */
 long WeatherSparksDraw()
 {
 	SPARKS* sptr;

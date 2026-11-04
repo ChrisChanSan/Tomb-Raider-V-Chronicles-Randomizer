@@ -29207,12 +29207,12 @@ static void rngtrace_rule()
  * born in TriggerExplosionSparks, fired in UpdateSparks, ended by life, by
  * the fade or by GetFreeSpark's eviction, a light not found, a light index
  * below -1. Each is a Log call behind gLogEnabled and nothing else: the
- * engine's own statements stand as they were, and the draw's far-plane end
- * (specific\specificfx.cpp) still turns the spark off. Then the spark slots
- * the draw takes (#317c): GetFreeSpark's draw_alloc line inside a frame
- * that gives its draws back (InterpFrameSeedSaved), the rain's line before
- * its splash and its ripple (DoRain), and the level's line after RNGLOG
- * (LaraJointsLevelEnd). This group only reads the text. */
+ * engine's own statements stand as they were; the draw's far-plane branch
+ * (specific\specificfx.cpp) only culls since #320 (cull_rule). Then the
+ * spark slots the draw takes (#317c): GetFreeSpark's draw_alloc line inside
+ * a frame that gives its draws back (InterpFrameSeedSaved), the rain's line
+ * before its splash and its ripple (DoRain), and the level's line after
+ * RNGLOG (LaraJointsLevelEnd). This group only reads the text. */
 static void spark_life()
 {
 	char* fx = hd_switch_text("../../game/effect2.cpp");
@@ -29369,25 +29369,33 @@ static void spark_life()
 		"0;"), "spark life: the frame of the tick, 0 before its first", 0, 1);
 
 	// The level line after RNGLOG, its counters reset there; the weather
-	// pools' peaks at its end (#318), reset by their own clear.
+	// pools' peaks at its end (#318), reset by their own clear; the draw's
+	// culls at its very end (#320), reset with the rain's counters, the
+	// once-per-particle tables with them.
 	glass_body(sfx, "void SparkLogLevelEnd()", body, sizeof(body));
 	ok(!strcmp(body, "constlongallocs=SparkLogTakeDrawAllocs();if("
 		"gLogEnabled)Log(\"SPARKLOGleveldraw_allocs=%ldsplashes=%ldripples="
-		"%ld\"\"weather_peak=%ldweather_ripple_peak=%ld\",allocs,"
-		"spark_log_splashes,spark_log_ripples,WeatherSparksPeak(),"
-		"WeatherRipplesPeak());spark_log_splashes=0;spark_log_ripples=0;"),
+		"%ld\"\"weather_peak=%ldweather_ripple_peak=%ldculls=%ld\"\""
+		"bubble_culls=%lddrip_culls=%ld\",allocs,spark_log_splashes,"
+		"spark_log_ripples,WeatherSparksPeak(),WeatherRipplesPeak(),"
+		"spark_log_culls,spark_log_bubble_culls,spark_log_drip_culls);"
+		"spark_log_splashes=0;spark_log_ripples=0;spark_log_culls=0;"
+		"spark_log_bubble_culls=0;spark_log_drip_culls=0;spark_cull_next=0;"
+		"spark_cull_used=0;memset(drip_cull_set,0,sizeof(drip_cull_set));"
+		"memset(bubble_cull_why,0,sizeof(bubble_cull_why));"),
 		"spark life: the level line, its counters reset after it", 0, 1);
 	glass_body(draw, "void LaraJointsLevelEnd()", body, sizeof(body));
 	ok(strstr(body, "g_joints.serial=serial;InterpRngLevelEnd();"
 		"SparkLogLevelEnd();") != 0,
 		"spark life: the level line right after RNGLOG", 0, 1);
 
-	// The base's far-plane branch still ends the spark (no fix here).
+	// The far-plane branch culls and ends nothing (#320, cull_rule).
 	glass_body(sfx, "void S_DrawDrawSparksNEW(SPARKS* sptr, long "
 		"smallest_size, float* xyz)", body, sizeof(body));
-	ok(strstr(body, "if(xyz[2]>=f_mzfar)if(gLogEnabled)SparkLog(\"kill\","
-		"sptr,xyz[2]);sptr->On=0;}return;}") != 0,
-		"spark life: the far plane still turns the spark off", 0, 1);
+	ok(strstr(body, "if(xyz[2]>=f_mzfar&&gLogEnabled&&sptr->extras&7&&"
+		"SparkCullFirst(sptr))SparkLog(\"cull\",sptr,xyz[2]);return;}") &&
+		!strstr(body, "SparkLog(\"kill\""),
+		"spark life: the far plane culls, the spark lives on", 0, 1);
 
 	free(fx);
 	free(sfx);
@@ -29587,6 +29595,217 @@ static void weather_rule()
 	free(sfx);
 	free(wsp);
 	free(wsh);
+	free(t4);
+	free(fx);
+}
+
+/* How often `what` stands in the files `mask` of the engine's folder `sub`
+ * (below TOMB5\), summed; the files read into *files, -1 if none. */
+static long cull_rule_scan(const char* sub, const char* mask,
+	const char* what, long* files)
+{
+	char* exe = 0;
+	char dir[1024], pattern[1100], path[1200];
+	long n = 0;
+
+	*files = 0;
+
+	if (_get_pgmptr(&exe) || !exe)
+		return -1;
+
+	const char* cut = strrchr(exe, '\\');
+	const size_t len = cut ? (size_t)(cut - exe) + 1 : 0;
+
+	memcpy(dir, exe, len);
+	snprintf(dir + len, sizeof(dir) - len,
+		"..\\..\\..\\TOMB5 Code\\TOMB5\\%s\\", sub);
+	snprintf(pattern, sizeof(pattern), "%s%s", dir, mask);
+
+	struct _finddata_t fd;
+	const intptr_t h = _findfirst(pattern, &fd);
+
+	if (h == -1)
+		return -1;
+
+	do
+	{
+		if (fd.attrib & _A_SUBDIR)
+			continue;
+
+		snprintf(path, sizeof(path), "%s%s", dir, fd.name);
+
+		FILE* f = 0;
+
+		if (fopen_s(&f, path, "rb") || !f)
+			continue;
+
+		fseek(f, 0, SEEK_END);
+		const long size = ftell(f);
+		char* text = (char*)malloc((size_t)size + 1);
+
+		fseek(f, 0, SEEK_SET);
+
+		if (text)
+		{
+			text[fread(text, 1, (size_t)size, f)] = 0;
+			n += hd_switch_count(text, what);
+			free(text);
+		}
+
+		fclose(f);
+		(*files)++;
+	} while (!_findnext(h, &fd));
+
+	_findclose(h);
+	return n;
+}
+
+/* The draw decides only whether it draws a particle, never whether it
+ * lives (#320). A spark past the far plane (S_DrawDrawSparksNEW), a drip
+ * too far in view (DrawDrips) and a bubble out of the frame's reach
+ * (DrawBubbles: the box, too far, too near) are left undrawn and live on
+ * until the logic ends them: UpdateSparks by Life (freeing the light),
+ * UpdateDrips by Life, the floor or the water, UpdateBubbles at the floor,
+ * the ceiling or the surface. Before, the draw wrote On = 0 or size = 0
+ * there by the frame's camera, and the logic read it. In the text: no
+ * write of the alive fields of SPARKS, DRIP_STRUCT or BUBBLE_STRUCT
+ * (global\types.h) under specific\ but the weather pool's own step, the
+ * SPARKLOG cull lines at the three sites, each once per particle, and the
+ * logic's own ends as they stand. This group only reads text. */
+static void cull_rule()
+{
+	char* sfx = hd_switch_text("../specificfx.cpp");
+	char* wsp = hd_switch_text("../weather_sparks.cpp");
+	char* types = hd_switch_text("../../global/types.h");
+	char* t4 = hd_switch_text("../../game/tomb4fx.cpp");
+	char* fx = hd_switch_text("../../game/effect2.cpp");
+	static char body[262144];
+	static const char* writes[] = { "->On = 0;", ".On = 0;", "->On=0;",
+		".On=0;", "->size = 0;", ".size = 0;", "->size=0;", ".size=0;" };
+	long n, a, files, hd_files, all;
+
+	ok(sfx && wsp && types && t4 && fx, "cull rule: the five files", 0, 1);
+	ok(hd_switch_count(types, "struct SPARKS\r\n") +
+		hd_switch_count(types, "struct SPARKS\n") == 1 &&
+		hd_switch_count(types, "struct DRIP_STRUCT") == 1 &&
+		hd_switch_count(types, "struct BUBBLE_STRUCT") == 1,
+		"cull rule: SPARKS, DRIP_STRUCT, BUBBLE_STRUCT in types.h", 0, 1);
+
+	// Under specific\: the alive fields written only by the weather pool's
+	// own step (its splashes, a pool the logic never reads, #318).
+	all = 0;
+	files = 0;
+	hd_files = 0;
+
+	for (int i = 0; i < 8; i++)
+	{
+		long f1 = 0, f2 = 0, f3 = 0;
+
+		n = cull_rule_scan("specific", "*.cpp", writes[i], &f1);
+		n += cull_rule_scan("specific", "*.h", writes[i], &f2);
+		a = cull_rule_scan("specific\\hd", "*.*", writes[i], &f3);
+		all += n + a;
+		files = f1 + f2;
+		hd_files = f3;
+	}
+
+	glass_body(wsp, "void WeatherSparksStep()", body, sizeof(body));
+	n = hd_switch_count(body, "sptr->On=0;");
+	ok(files > 30 && hd_files > 30 && all == 2 && n == 2 &&
+		hd_switch_count(wsp, "On = 0;") == 2,
+		"cull rule: under specific\\ only the weather's step ends one", all,
+		2);
+	ok(hd_switch_count(sfx, "On = 0;") == 0 &&
+		hd_switch_count(sfx, "->size = 0;") == 0,
+		"cull rule: specificfx.cpp ends no spark, drip or bubble", 0, 1);
+
+	// The spark: the far plane's branch writes nothing, one line per chain.
+	glass_body(sfx, "void S_DrawDrawSparksNEW(SPARKS* sptr, long "
+		"smallest_size, float* xyz)", body, sizeof(body));
+	{
+		const char* at = strstr(body, "if(xyz[2]<=f_mznear||xyz[2]>=f_mzfar)");
+		const char* end = at ? strstr(at, "return;}") : 0;
+		const char* line = strstr(body, "if(xyz[2]>=f_mzfar&&gLogEnabled&&"
+			"sptr->extras&7&&SparkCullFirst(sptr))SparkLog(\"cull\",sptr,"
+			"xyz[2]);return;}");
+
+		ok(at && end && line && line > at && line < end + 8 &&
+			hd_switch_count(body, "On=") == 0,
+			"cull rule: the spark's branch only culls, one line a chain", 0,
+			1);
+	}
+
+	// The drip: undrawn, one line per drip.
+	glass_body(sfx, "void DrawDrips()", body, sizeof(body));
+	ok(hd_switch_count(body, "if(Z[0]>0x5000)if(gLogEnabled&&"
+		"DripCullFirst(i,drip))SparkLogOther(\"drip\",\"far\",i,drip->Life,"
+		"Z[0]);continue;}") == 1 && hd_switch_count(body, "On=") == 0,
+		"cull rule: the drip's branch only culls, one line a drip", 0, 1);
+
+	// The bubbles: the three branches step on, one line per reason.
+	glass_body(sfx, "void DrawBubbles()", body, sizeof(body));
+	n = hd_switch_count(body, "BubbleCullFirst((long)(bubble-Bubbles),"
+		"bubble,1))SparkLogOther(\"bubble\",\"box\",(long)(bubble-Bubbles),"
+		"bubble->size,0);bubble++;continue;}") +
+		hd_switch_count(body, "BubbleCullFirst((long)(bubble-Bubbles),"
+		"bubble,2))SparkLogOther(\"bubble\",\"far\",(long)(bubble-Bubbles),"
+		"bubble->size,Z[0]);bubble++;continue;}") +
+		hd_switch_count(body, "BubbleCullFirst((long)(bubble-Bubbles),"
+		"bubble,4))SparkLogOther(\"bubble\",\"near\",(long)(bubble-"
+		"Bubbles),bubble->size,Z[0]);bubble++;continue;}");
+	ok(n == 3 && hd_switch_count(body, "size=0") == 0 &&
+		hd_switch_count(body, "if(gLogEnabled&&") == 3,
+		"cull rule: the bubbles' three branches only cull", n, 3);
+
+	// The lines: kill renamed cull, nothing else of the text changed.
+	ok(hd_switch_count(sfx, "Log(\"SPARKLOG %s cull tick=%u frame=%ld "
+		"alpha=%.3f tween=%d why=%s \"") == 1 &&
+		hd_switch_count(sfx, "Log(\"SPARKLOG %s tick=%u frame=%ld alpha=%.3f "
+		"tween=%d z=%.0f zfar=%.0f \"") == 1 &&
+		hd_switch_count(sfx, "SparkLog(\"cull\"") == 1 &&
+		hd_switch_count(sfx, "\"kill\"") == 0 &&
+		hd_switch_count(sfx, "SPARKLOG %s kill") == 0,
+		"cull rule: the cull lines, no kill line left", 0, 1);
+
+	// Once per particle: the keys.
+	glass_body(sfx, "static bool SparkCullFirst(SPARKS* sptr)", body,
+		sizeof(body));
+	ok(strstr(body, "constushortb=(ushort)(GlobalCounter-(sptr->sLife-"
+		"sptr->Life));") && strstr(body, "spark_log_culls++;returntrue;"),
+		"cull rule: a spark by slot and birth tick, counted", 0, 1);
+	glass_body(sfx, "static bool DripCullFirst(long slot, DRIP_STRUCT* drip)",
+		body, sizeof(body));
+	ok(strstr(body, "constushortend=(ushort)(GlobalCounter+drip->Life);") &&
+		strstr(body, "spark_log_drip_culls++;returntrue;"),
+		"cull rule: a drip by slot and the tick its Life runs out", 0, 1);
+	glass_body(sfx, "static bool BubbleCullFirst(long slot, BUBBLE_STRUCT* "
+		"bubble, long bit)", body, sizeof(body));
+	ok(strstr(body, "if(!bubble_cull_why[slot]||bubble->dsize!="
+		"bubble_cull_dsize[slot]||grew<0||grew>(ushort)(now-"
+		"bubble_cull_tick[slot]))bubble_cull_why[slot]=0;") &&
+		strstr(body, "if(bubble_cull_why[slot]&bit)returnfalse;") &&
+		strstr(body, "spark_log_bubble_culls++;returntrue;"),
+		"cull rule: a bubble by slot, dsize and growth, per reason", 0, 1);
+
+	// The logic's own ends stand.
+	glass_body(t4, "void UpdateBubbles()", body, sizeof(body));
+	ok(hd_switch_count(body, "bubble->size=0;") == 3 &&
+		strstr(body, "SetupRipple(bubble->pos.x,room[bubble->room_number]."
+		"maxceiling,bubble->pos.z,(GetRandomControl()&0xF)+48,2);"
+		"bubble->size=0;continue;}") != 0,
+		"cull rule: UpdateBubbles' floor, surface and ceiling ends", 0, 1);
+	glass_body(t4, "void UpdateDrips()", body, sizeof(body));
+	ok(hd_switch_count(body, "drip->On=0;") == 3 &&
+		strstr(body, "drip->Life--;if(!drip->Life)drip->On=0;continue;}"),
+		"cull rule: UpdateDrips' Life, water and floor ends", 0, 1);
+	glass_body(fx, "void UpdateSparks()", body, sizeof(body));
+	ok(strstr(body, "if(sptr->Dynamic!=-1)spark_dynamics[sptr->Dynamic].On="
+		"0;sptr->On=0;continue;}") != 0,
+		"cull rule: UpdateSparks' Life end frees the light", 0, 1);
+
+	free(sfx);
+	free(wsp);
+	free(types);
 	free(t4);
 	free(fx);
 }
@@ -37958,6 +38177,7 @@ int main()
 	rngtrace_rule();
 	spark_life();
 	weather_rule();
+	cull_rule();
 	film_av();
 	collide_lists();
 	lara_joints();

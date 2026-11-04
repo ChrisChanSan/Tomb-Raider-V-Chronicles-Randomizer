@@ -1329,9 +1329,9 @@ void TriggerExplosionSmoke(long x, long y, long z, long uw)
 /* SPARKLOG (-log): the life of a spark that carries a chained explosion
  * (extras & 7) - its birth here, the pass of UpdateSparks that fires its
  * links, its end by life, by the fade or by an eviction in GetFreeSpark.
- * The draw's end is the kill line in specific\specificfx.cpp. UpdateSparks
- * sets spark_log_parent (the slot that fires) and spark_log_in_pass around
- * the chain call only and clears them after. next_spark is GetFreeSpark's
+ * The draw ends none (#320); its cull line is in specific\specificfx.cpp.
+ * UpdateSparks sets spark_log_parent (the slot that fires) and
+ * spark_log_in_pass around the chain call only and clears them after. next_spark is GetFreeSpark's
  * start, at file scope so the birth line can name it; read nowhere else.
  * Every line is behind gLogEnabled; nothing here changes a spark. */
 static long next_spark = 0;

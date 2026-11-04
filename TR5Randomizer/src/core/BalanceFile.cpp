@@ -20,6 +20,7 @@
 
 #include <cstdio>
 #include <cstring>
+#include <share.h>
 #include <vector>
 
 namespace
@@ -50,7 +51,10 @@ namespace
 
     bool readRaw(const std::wstring& path, std::string& content)
     {
-        FILE* f = _wfopen(path.c_str(), L"rb");
+        // _wfsopen with _SH_DENYNO is what _wfopen calls: the same open,
+        // without the warning of /sdl. Not _wfopen_s - that one would
+        // lock the file against other programs.
+        FILE* f = _wfsopen(path.c_str(), L"rb", _SH_DENYNO);
         if (!f) return false;
 
         char buffer[4096];
@@ -182,7 +186,7 @@ bool write(const std::wstring& gameDir, const Values& w, std::string* errorText)
         out += endings[i];
     }
 
-    FILE* f = _wfopen(path.c_str(), L"wb");
+    FILE* f = _wfsopen(path.c_str(), L"wb", _SH_DENYNO);   // as in readRaw
     if (!f)
     {
         if (errorText) *errorText = "Balance.txt cannot be written.";

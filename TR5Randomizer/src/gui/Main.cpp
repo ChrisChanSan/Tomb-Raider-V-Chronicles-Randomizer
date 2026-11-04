@@ -569,18 +569,6 @@ namespace
         std::wstring debugDir() const { return PathUtil::join(PathUtil::exeDir(), L"Debug Level"); }
     };
 
-// Where does the wanted file really lie?
-//
-// Picking the GAME FOLDER in the file dialog is the natural thing to do.
-// The level files, however, lie in the subfolder "data". Instead of
-// requiring a hint, the tool searches both places. Returned is the folder
-// that really contains the file, or empty.
-//
-// Case does not matter on Windows, so "Data" and "DATA" are covered too.
-// Lives in Tr3Source so the command line gets the same answer as the GUI.
-static std::wstring resolveFolder(const std::wstring& chosen, const wchar_t* file)
-{ return Tr3Source::resolveFolder(chosen, file); }
-
 // The resolved folders as they go to the core and the patch path - the
 // same two lookups the command line makes, so the Gold row also finds
 // The Lost Artifact inside the Remastered "3" folder (DATA\LA).

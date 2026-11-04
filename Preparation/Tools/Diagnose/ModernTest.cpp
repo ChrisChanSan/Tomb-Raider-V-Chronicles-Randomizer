@@ -28192,7 +28192,7 @@ static void pool_guard_rule()
 		"Release|x64 has", san, rel);
 	ok(hd_switch_count(proj, "<EnableASAN>true</EnableASAN>") == 1 &&
 		hd_switch_count(proj, "<PlatformToolset>v145</PlatformToolset>") ==
-		1 && hd_switch_count(proj, "<TargetName>PCtomb5_asan</TargetName>")
+		5 && hd_switch_count(proj, "<TargetName>PCtomb5_asan</TargetName>")
 		== 1 && hd_switch_count(proj,
 		"<OutDir>$(ProjectDir)..\\releaseasan\\</OutDir>") == 1,
 		"pool guard: the sanitizer, its toolset, its EXE", 0, 1);

@@ -64,9 +64,12 @@ installation.
 
 **Windows 10 or 11** — the build is tested on Windows 11, and Windows 10 is
 the first to carry the XAudio2 2.9 it is linked against — and your own
-*Tomb Raider Chronicles*. The engine is a 32-bit (x86) program on Direct3D 9
-and XAudio2, both part of Windows; it is marked large-address-aware, so on
-64-bit Windows it has the whole 4 GiB address space. For the HD art, the HQ
+*Tomb Raider Chronicles*. The engine is a 64-bit (x64) program on Direct3D 9
+and XAudio2, both part of Windows, so it needs 64-bit Windows and has no
+4 GiB limit of address space. Six DLLs lie beside `PCTomb5.exe` and travel
+with it: the Microsoft C++ runtime (`vcruntime140.dll`, `vcruntime140_1.dll`,
+`msvcp140.dll`) and the three FFmpeg DLLs that play the films; nothing has
+to be installed. For the HD art, the HQ
 sounds and the HD loading screens it also reads your own *Tomb Raider IV-VI
 Remastered* installation at run time, and the HD art needs a graphics card
 with shader model 3.0 (the full list is under **What the HD art asks of your
@@ -129,10 +132,10 @@ game (section 10 there); a file name may hold the word, since the switch counts 
 word of its own behind `-` or `/`. The 64-bit build
 also takes `-high`, a test switch that keeps what the run allocates after its
 start above 4 GB, so that a pointer cut to 32 bits fails at once (section 9
-there). The game's Bink library is 32-bit code, so the 64-bit build plays the
+there). The game's Bink library is 32-bit code, so the engine plays the
 films through three FFmpeg DLLs that lie beside its EXE (`avutil-61.dll`,
-`avcodec-63.dll`, `avformat-63.dll`, built by `be64.bat` into `release64\`
-with it); copy them along with the EXE. Without them it goes on without films,
+`avcodec-63.dll`, `avformat-63.dll`, copied by `be64.bat` into `release64\`
+with the C++ runtime's three); copy them along with the EXE. Without them it goes on without films,
 and `-log` says why in an `FMVLOG` line (section 11 there).
 
 The setup dialog also opens by itself the very first time the game is run.
@@ -4785,8 +4788,8 @@ body while the game stands still; the rooms, the inventory, her weapons and
 everything classic are untouched. The page cache never gives a page back
 inside a level, so before every change the game asks three questions — is
 there room in this level's **texture budget**, in the program's own **address
-space** (`PCtomb5.exe` is a 32 bit program: four gigabytes, whatever the card
-holds), and is there one free **block** big enough for a page. All three have
+space** (four gigabytes for the 32-bit comparison build; the shipped 64-bit
+`PCTomb5.exe` has far more), and is there one free **block** big enough for a page. All three have
 to say yes; otherwise the row under the list reads *applies at the next
 level*, and the footsteps wait with the body. A save and load, or the next
 level, starts a fresh cache and gives all of it back. With `-log` every level
@@ -5657,8 +5660,10 @@ randomizer uses as well. `Dear ImGui` is the *randomizer's* window and is
 compiled into `TR5Randomizer.exe`, not into the game. **discord-rpc** is in the
 source tree as upstream shipped it and is switched off at the source
 (`TOMB5_DISCORD_RPC 0`) — nothing of it is linked into either program, and its
-notice travels because the source does. All of them are named in
-`THIRD-PARTY.md`, and every licence text is in `Licenses\`.
+notice travels because the source does. The Microsoft C++ runtime is not
+compiled in: its three DLLs lie beside both programs, unchanged from the
+compiler's redist folder, as a system library in the GPL's sense. All of
+them are named in `THIRD-PARTY.md`, and every licence text is in `Licenses\`.
 
 **No Tomb Raider game data ships with any of it**, and none of *Tomb Raider
 IV-VI Remastered*'s either. Both games belong to their rights holders; you
@@ -5670,14 +5675,18 @@ loading screens draw on is read at run time out of your own installation.
 Open the engine's solution in Visual Studio with the C++ workload — in the
 release package it is `Source\TOMB5 engine\tomb5.sln`, in the repository
 `TOMB5 Code/tomb5.sln` (the package renames the folder so the two can be told
-apart). Configuration **Release**, platform **Win32 (x86)**. The result is
-`release\PCtomb5.exe`. The project builds with the **v142** toolset, "MSVC
+apart). Configuration **Release**, platform **x64**, the build the package
+ships; on the command line `Preparation\Tools\Diagnose\be64.bat`, which
+puts `release64\PCtomb5_x64.exe` (the package's `PCTomb5.exe`) and its six
+DLLs together. Platform **Win32 (x86)** gives `release\PCtomb5.exe`, the
+32-bit build (`be.bat`) that is kept to compare against and no longer
+ships. Both link the C++ runtime as DLLs (`/MD`). The project builds with the **v142** toolset, "MSVC
 v142 - VS 2019 C++ x64/x86 build tools": an individual component of the
 Visual Studio Installer on newer versions, and present in Visual Studio 2019
 itself.
 
-> **Pick Win32.** The x64 configurations are leftovers from the original
-> project and build a DLL, not a game.
+> **Pick x64 and Release.** Win32 builds the 32-bit comparison EXE, and
+> Asan|x64 the AddressSanitizer build for test runs (`basan.bat`).
 
 Or start from upstream at
 [github.com/Trxyebeep/TOMB5](https://github.com/Trxyebeep/TOMB5) and apply the

@@ -3,8 +3,9 @@ rem be64 - build the engine as a 64-bit program.
 rem
 rem The same engine as be.bat, compiled for x64: release64\PCtomb5_x64.exe
 rem beside release\PCtomb5.exe, never in its place - the two builds have
-rem their own output folders, so neither overwrites the other. The 32-bit
-rem build stays the one that ships; this one is checked against it.
+rem their own output folders, so neither overwrites the other. Since #324
+rem this is the build that ships, as PCTomb5.exe; the 32-bit one of be.bat
+rem is kept to compare against.
 rem
 rem The shader guard is be.bat's own ("be guard"): one list of shaders for
 rem both builds, and a stale .inc is rebuilt here exactly as there.
@@ -55,4 +56,28 @@ if errorlevel 1 (
 	exit /b 1
 )
 echo   FFmpeg DLLs copied to %OUT%\
+
+rem The C++ runtime (#324): the engine links it as DLLs (/MD), and the
+rem three it imports - vcruntime140.dll, vcruntime140_1.dll, msvcp140.dll -
+rem go beside the EXE from the compiler's own redist folder, the one
+rem vcvars64 names in VCToolsRedistDir. The folder's version is read, not
+rem written down here; a DLL that is not there stops the build.
+set "CRT="
+for /d %%D in ("%VCToolsRedistDir%x64\Microsoft.VC14?.CRT") do set "CRT=%%~fD"
+if not defined CRT (
+	echo be64: no Microsoft.VC14?.CRT folder in "%VCToolsRedistDir%x64"
+	exit /b 1
+)
+for %%F in (vcruntime140.dll vcruntime140_1.dll msvcp140.dll) do (
+	if not exist "%CRT%\%%F" (
+		echo be64: %%F not found in "%CRT%"
+		exit /b 1
+	)
+	copy /Y "%CRT%\%%F" "%OUT%\" >nul
+	if errorlevel 1 (
+		echo be64: %%F could not be copied to %OUT%\
+		exit /b 1
+	)
+)
+echo   C++ runtime DLLs copied to %OUT%\ from %CRT%
 exit /b 0

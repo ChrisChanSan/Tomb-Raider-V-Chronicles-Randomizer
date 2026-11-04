@@ -18904,6 +18904,48 @@ before `ResumeThread`.
 
 **Commits.** `4f70fc3d`.
 
+### The dynamic runtime, its DLLs beside the programs, and a 64-bit-only package (#324)
+2026-11-04
+
+**Found.** Beta_5.0 compiled the C++ runtime statically into every EXE (`/MT`,
+`<RuntimeLibrary>MultiThreaded</RuntimeLibrary>` in Release|Win32, Release|x64 and
+Asan|x64; the randomizer's `cl` lines without `/MD`). The import tables named Windows
+DLLs only. The package shipped the 32-bit engine as `PCTomb5.exe`.
+
+**Changed.** Every configuration of `tomb5.vcxproj` links the runtime as DLLs: Release
+and Asan `MultiThreadedDLL`, the two Debug configurations `MultiThreadedDebugDLL` (they
+named none and took that default; now it is written down). `b1.bat` and `b2.bat` carry
+`/MD`; `/guard:cf`, `/CETCOMPAT` and the libraries stay. Measured after the build, the
+64-bit engine, `Randomize.exe` and `TR5Randomizer.exe` each import `vcruntime140.dll`,
+`vcruntime140_1.dll` and `msvcp140.dll` of the Visual C++ runtime and nothing else of
+it; the `api-ms-win-crt-*` names beside them are Windows' Universal C runtime. Those
+three DLLs are the set: `be64.bat` (and its `test` way) and `basan.bat` copy them into
+`release64\`, `releasetest\` and `releaseasan\`, `b1.bat` and `b2.bat` into
+`TR5Randomizer\build\`, each from `%VCToolsRedistDir%x64\Microsoft.VC14?.CRT\` - the
+redist folder of the toolset `vcvars64.bat` sets up, its version read, not written -
+and each stops with the path when a DLL is missing. The engine's v142 objects run on
+that newer runtime, which is the order Microsoft's binary compatibility allows. The
+Asan build keeps its `clang_rt.asan_dynamic-x86_64.dll`. The DLLs stay out of git
+(`release64/`, `releasetest/`, `releaseasan/` and `TR5Randomizer/build/` are ignored).
+
+The package is 64-bit only: `Preparation/Tools/BuildRelease.ps1` packs `be64.bat`'s
+`PCtomb5_x64.exe` as `PCTomb5.exe`, the name the game and Steam start, beside it the
+three FFmpeg DLLs and the three runtime DLLs (from `VCToolsRedistDir`, or `-RedistDir`
+outside a vcvars64 shell), adds FFmpeg's `COPYING.LGPLv2.1` to `Licenses\`, and hashes
+the DLLs into `SHA256SUMS.txt` with the EXEs. `be.bat` still builds the 32-bit engine,
+with `/MD` like the rest, as the build to compare against (Verification.md section 8);
+its EXE no longer ships. `THIRD-PARTY.md` names the runtime DLLs, their version
+(14.51.36247.0 on the build machine), their source and the GPL's system-library
+reading.
+
+**Checked.** ModernTest's group `runtime_rule` (7 checks): every `<RuntimeLibrary>` of
+the project ends in `DLL`, the Release ones `MultiThreadedDLL`; `b1.bat` and `b2.bat`
+carry `/MD`; `be64.bat`, `basan.bat`, `b1.bat` and `b2.bat` copy the three DLLs from
+`VCToolsRedistDir`, and `be.bat` copies none; `BuildRelease.ps1` packs `release64`'s
+engine and the set, never the 32-bit EXE; the ledger has the entry; README.md no
+longer calls the engine a 32-bit program. The import tables before and after were read
+with a PE reader, not by running anything.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -19132,15 +19174,23 @@ modified, one moved out into `package/`, one removed.
   compiles Dear ImGui and its own code only; `BuildRelease.ps1` names stb_vorbis
   alone in the stb notice it ships. The build id stays 23: the GUI's picture places
   nothing (`3c9695a1`, `7f2d7e6f`).
+- **#324 - the C++ runtime as DLLs.** `build/b1.bat`, `build/b2.bat`: `cl` with `/MD`
+  instead of the default `/MT`, and after a good build the three runtime DLLs the EXEs
+  import (`vcruntime140.dll`, `vcruntime140_1.dll`, `msvcp140.dll`, measured in both
+  import tables) copied beside them from the compiler's redist folder
+  (`VCToolsRedistDir`). Both programs and the engine now share one runtime set in the
+  package, with no installer. No source file changed.
 
 ## 4. Building this yourself
 
 The published binary need not be trusted. Either:
 
 - build from this tree directly - open `tomb5.sln`, configuration `Release`,
-  platform `x86`; the result is `release/PCtomb5.exe`. `Release|x64` builds the
-  same sources (#143) and is there for whoever wants it; `x86` is the shipped
-  configuration and the one every measurement in this record was made on. The
+  platform `x64`; the result is `release64/PCtomb5_x64.exe`, the package's
+  `PCTomb5.exe` since #324 (`be64.bat` also puts the FFmpeg and C++ runtime DLLs
+  beside it). Platform `x86` builds the same sources into `release/PCtomb5.exe`,
+  the build shipped until Beta_5.0 and the one most measurements in this record
+  were made on, now the comparison build. The
   40 `TOMB5/specific/hd/hd_shader/*.inc` are `fxc` output of the eleven `.hlsl`
   beside them and are tracked, so nothing has to be regenerated to get a working
   binary - but after editing a shader, run
@@ -19154,7 +19204,9 @@ The published binary need not be trusted. Either:
   history has been rewritten before, and a written-down hash does not survive
   that.
 
-Unlike upstream, this build produces a **single self-contained executable**.
+Unlike upstream, this build produces a **single executable** with no DLL of the
+game's own; what lies beside it since #324 is Microsoft's C++ runtime and the
+films' FFmpeg, both third-party DLLs (`THIRD-PARTY.md`).
 Upstream ships `PCTomb5.exe` plus `tomb5.dll` - **the upstream TOMB5 project's
 own DLL, built from this very source tree's ancestor, and not the `tomb5.dll` of
 the Tomb Raider IV-VI Remaster, which this project never opens, links or reads**
@@ -19334,3 +19386,4 @@ entries above.
 | #320 | The draw ends no particle: bubbles, drips and far sparks live on in the logic |
 | #321 | The recorder is a test build's; The log closes after the recorder |
 | #322 | A stalled frame says where its time went |
+| #324 | The dynamic runtime, its DLLs beside the programs, a 64-bit-only package |

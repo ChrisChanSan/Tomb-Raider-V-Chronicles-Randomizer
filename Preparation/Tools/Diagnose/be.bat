@@ -1,6 +1,9 @@
 @echo off
 rem be - build the engine.
 rem
+rem The 32-bit build: since #324 its EXE no longer ships - be64.bat's does -
+rem and it is kept as the build to compare the 64-bit one against.
+rem
 rem Runs the shader guard first. The HD shaders have no runtime compiler
 rem behind them: their bytecode is checked in as .inc byte arrays beside the
 rem .hlsl they came from, and only bshader.bat regenerates it. Without a

@@ -41,4 +41,28 @@ if errorlevel 1 (
 	exit /b 1
 )
 echo   FFmpeg DLLs copied to releaseasan\
+
+rem The C++ runtime (#324): the engine links it as DLLs (/MD), and the
+rem three it imports - vcruntime140.dll, vcruntime140_1.dll, msvcp140.dll -
+rem go beside the EXE from the compiler's own redist folder, the one
+rem vcvars64 names in VCToolsRedistDir. The folder's version is read, not
+rem written down here; a DLL that is not there stops the build.
+set "CRT="
+for /d %%D in ("%VCToolsRedistDir%x64\Microsoft.VC14?.CRT") do set "CRT=%%~fD"
+if not defined CRT (
+	echo basan: no Microsoft.VC14?.CRT folder in "%VCToolsRedistDir%x64"
+	exit /b 1
+)
+for %%F in (vcruntime140.dll vcruntime140_1.dll msvcp140.dll) do (
+	if not exist "%CRT%\%%F" (
+		echo basan: %%F not found in "%CRT%"
+		exit /b 1
+	)
+	copy /Y "%CRT%\%%F" "releaseasan\" >nul
+	if errorlevel 1 (
+		echo basan: %%F could not be copied to releaseasan\
+		exit /b 1
+	)
+)
+echo   C++ runtime DLLs copied to releaseasan\ from %CRT%
 exit /b 0

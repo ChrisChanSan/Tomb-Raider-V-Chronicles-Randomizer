@@ -30152,6 +30152,94 @@ static char* test_build_block(const char* text, const char* from,
 	return out;
 }
 
+/* The C++ runtime as DLLs, beside the 64-bit programs (#324). Every
+ * configuration of tomb5.vcxproj links the runtime dynamically, the
+ * randomizer's two build scripts pass /MD, and the three DLLs the EXEs
+ * import come from the compiler's redist folder (VCToolsRedistDir) beside
+ * them - in be64.bat, basan.bat, b1.bat and b2.bat, not in be.bat, whose
+ * 32-bit EXE no longer ships. BuildRelease.ps1 packs release64's engine
+ * with the set and never the 32-bit one; the ledger names the DLLs and
+ * README.md no longer calls the engine a 32-bit program. Text only. */
+static void runtime_rule()
+{
+	static const char* const crt_dir =
+		"%VCToolsRedistDir%x64\\Microsoft.VC14?.CRT";
+	static const char* const crt_set =
+		"(vcruntime140.dll vcruntime140_1.dll msvcp140.dll)";
+	char* proj = hd_switch_text("../../../tomb5.vcxproj");
+	char* be = film_text("be.bat");
+	char* be64 = film_text("be64.bat");
+	char* basan = film_text("basan.bat");
+	char* b1 = film_text("../../../TR5Randomizer/build/b1.bat");
+	char* b2 = film_text("../../../TR5Randomizer/build/b2.bat");
+	char* pack = film_text("../BuildRelease.ps1");
+	char* ledger = film_text("../../../THIRD-PARTY.md");
+	char* readme = film_text("../../../README.md");
+	int all, dll, rel;
+
+	printf("The C++ runtime as DLLs beside the 64-bit programs\n");
+	ok(proj && be && be64 && basan && b1 && b2 && pack && ledger && readme,
+		"runtime rule: the nine files", 0, 1);
+
+	// The project: five configurations, each one's runtime a DLL.
+	all = hd_switch_count(proj, "<RuntimeLibrary>");
+	dll = hd_switch_count(proj, "DLL</RuntimeLibrary>");
+	rel = hd_switch_count(proj,
+		"<RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>");
+	ok(all == 5 && dll == all && rel == 3 && hd_switch_count(proj,
+		"<RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>") == 2,
+		"runtime rule: every RuntimeLibrary of the project ends in DLL",
+		dll, all);
+
+	// The randomizer's compiler lines.
+	ok(hd_switch_count(b1, "cl /nologo /EHsc /O2 /MD /guard:cf") == 1 &&
+		hd_switch_count(b2, "cl /nologo /EHsc /O2 /MD /guard:cf") == 1 &&
+		hd_switch_count(b1, "/MT") == 0 && hd_switch_count(b2, "/MT") == 0,
+		"runtime rule: b1.bat and b2.bat compile with /MD", 0, 1);
+
+	// The copy: from VCToolsRedistDir, the three DLLs, in four scripts.
+	ok(hd_switch_count(be64, crt_dir) == 1 &&
+		hd_switch_count(basan, crt_dir) == 1 &&
+		hd_switch_count(b1, crt_dir) == 1 &&
+		hd_switch_count(b2, crt_dir) == 1 &&
+		hd_switch_count(be64, crt_set) == 1 &&
+		hd_switch_count(basan, crt_set) == 1 &&
+		hd_switch_count(b1, crt_set) == 1 &&
+		hd_switch_count(b2, crt_set) == 1 &&
+		hd_switch_count(be, "VCToolsRedistDir") == 0,
+		"runtime rule: be64, basan, b1 and b2 copy the set, be does not",
+		0, 1);
+
+	// The package: release64's engine and the set, never the 32-bit EXE.
+	ok(hd_switch_count(pack, "$Root\\release64\\PCtomb5_x64.exe") == 1 &&
+		hd_switch_count(pack, "release\\PCtomb5.exe") == 0 &&
+		hd_switch_count(pack, "@('vcruntime140.dll', 'vcruntime140_1.dll', "
+		"'msvcp140.dll')") == 1 &&
+		hd_switch_count(pack, "$RedistDir = \"$env:VCToolsRedistDir\"")
+		== 1 &&
+		hd_switch_count(pack, "COPYING.LGPLv2.1") >= 1,
+		"runtime rule: BuildRelease.ps1 packs release64 and the set", 0, 1);
+
+	// The ledger and the README.
+	ok(hd_switch_count(ledger, "### Microsoft Visual C++ runtime - the DLLs "
+		"beside the 64-bit programs") == 1,
+		"runtime rule: THIRD-PARTY.md has the runtime's entry", 0, 1);
+	ok(hd_switch_count(readme, "is a 32-bit program") == 0 &&
+		hd_switch_count(readme, "is a 32 bit program") == 0 &&
+		hd_switch_count(readme, "`PCTomb5.exe` is a 64-bit program") == 1,
+		"runtime rule: README.md calls the engine a 64-bit program", 0, 1);
+
+	free(proj);
+	free(be);
+	free(be64);
+	free(basan);
+	free(b1);
+	free(b2);
+	free(pack);
+	free(ledger);
+	free(readme);
+}
+
 /* The recorder is a test build's (#321). TOMB5_TEST_BUILD, defined in one
  * place - tomb5.vcxproj, for Asan|x64 and for Release|x64 under be64.bat
  * test (Tomb5Test=true, releasetest\PCtomb5_x64t.exe) - compiles in
@@ -38521,6 +38609,7 @@ int main()
 	film_av();
 	test_build_rule();
 	pause_rule();
+	runtime_rule();
 	collide_lists();
 	lara_joints();
 	logic_leftovers();

@@ -28177,10 +28177,16 @@ static void pool_guard_rule()
 		hd_switch_count(guard, "#ifdef __SANITIZE_ADDRESS__") == 1,
 		"pool guard: 32 bytes of red zone, in the Asan build only", 0, 1);
 
+	// Less the test build's conditions (#321, test_build_rule): its own
+	// folder on Release|x64 and the define on both.
 	const long rel = hd_switch_count(proj,
-		"'$(Configuration)|$(Platform)'=='Release|x64'");
+		"'$(Configuration)|$(Platform)'=='Release|x64'") -
+		hd_switch_count(proj, "'$(Configuration)|$(Platform)'=='Release|x64'"
+		" And '$(Tomb5Test)'=='true'");
 	const long san = hd_switch_count(proj,
-		"'$(Configuration)|$(Platform)'=='Asan|x64'");
+		"'$(Configuration)|$(Platform)'=='Asan|x64'") -
+		hd_switch_count(proj, "'$(Configuration)|$(Platform)'=='Asan|x64'"
+		" Or (");
 
 	ok(rel > 4 && san == rel, "pool guard: Asan|x64 has every setting "
 		"Release|x64 has", san, rel);
@@ -29091,12 +29097,13 @@ static void rngtrace_rule()
 
 	// The generator: one test of a static flag, then the step as before.
 	glass_body(stubs, "long GetRandomControl()", body, sizeof(body));
-	ok(!strcmp(body, "if(rt_armed)RngTraceNote(_ReturnAddress());"
-		"rand_1=0x41C64E6D*rand_1+12345;return(rand_1>>10)&0x7FFF;") &&
-		hd_switch_count(stubs, "__declspec(noinline) long "
+	ok(!strcmp(body, "#ifdefTOMB5_TEST_BUILDif(rt_armed)RngTraceNote("
+		"_ReturnAddress());#endifrand_1=0x41C64E6D*rand_1+12345;return("
+		"rand_1>>10)&0x7FFF;") &&
+		hd_switch_count(stubs, "TOMB5_NOINLINE_IN_TEST long "
 		"GetRandomControl()") == 1,
-		"rngtrace: GetRandomControl tests one flag and is never inlined",
-		0, 1);
+		"rngtrace: GetRandomControl tests one flag and is never inlined "
+		"in a test build", 0, 1);
 	glass_body(stubs, "long GetRandomDraw()", body, sizeof(body));
 	ok(!strcmp(body, "rand_2=0x41C64E6D*rand_2+12345;return(rand_2>>10)&"
 		"0x7FFF;"), "rngtrace: the draw generator untouched", 0, 1);
@@ -29306,7 +29313,8 @@ static void spark_life()
 		strstr(body, "spark[free].Def=(uchar)objects[DEFAULT_SPRITES]."
 		"mesh_index;if(log_draw)SparkLogDrawAlloc(free,log_next,log_on,1,"
 		"_ReturnAddress());returnfree;") &&
-		hd_switch_count(fx, "__declspec(noinline) long GetFreeSpark()") == 1 &&
+		hd_switch_count(fx, "TOMB5_NOINLINE_IN_TEST long GetFreeSpark()") ==
+		1 &&
 		hd_switch_count(fx, "_ReturnAddress()") == 2,
 		"spark life: draw_alloc, tested before the search, said at both "
 		"returns", 0, 1);
@@ -30100,7 +30108,9 @@ static void film_av()
 
 	// The DLLs go beside the 64-bit EXEs; the 32-bit build has none.
 	ok(strstr(be64, "copy /Y \"vendor\\ffmpeg-min\\bin\\*.dll\" "
-		"\"release64\\\"") != 0 && strstr(basan, "copy /Y \"vendor\\"
+		"\"%OUT%\\\"") != 0 && strstr(be64, "set \"OUT=release64\"") &&
+		strstr(be64, "set \"OUT=releasetest\"") &&
+		strstr(basan, "copy /Y \"vendor\\"
 		"ffmpeg-min\\bin\\*.dll\" \"releaseasan\\\"") != 0 &&
 		hd_switch_count(be, "ffmpeg") == 0,
 		"film_av: be64 and basan copy the DLLs, be does not", 0, 1);
@@ -30118,6 +30128,211 @@ static void film_av()
 	free(sfmv);
 	free(sproj);
 	free(swin);
+}
+
+/* The text from `from` to the first `to` after it, or 0: a block of an
+ * engine file (test_build_rule). The caller frees it. */
+static char* test_build_block(const char* text, const char* from,
+	const char* to)
+{
+	const char* a = text ? strstr(text, from) : 0;
+	const char* z = a ? strstr(a + strlen(from), to) : 0;
+
+	if (!z)
+		return 0;
+
+	char* out = (char*)malloc((size_t)(z - a) + 1);
+
+	if (out)
+	{
+		memcpy(out, a, (size_t)(z - a));
+		out[z - a] = 0;
+	}
+
+	return out;
+}
+
+/* The recorder is a test build's (#321). TOMB5_TEST_BUILD, defined in one
+ * place - tomb5.vcxproj, for Asan|x64 and for Release|x64 under be64.bat
+ * test (Tomb5Test=true, releasetest\PCtomb5_x64t.exe) - compiles in
+ * -record, -replay, -liveclock and -rngtrace, the recorder's file and
+ * STATELOG; a shipping EXE has none of them: the switch words in winmain.cpp
+ * stand only inside the define's blocks, replay.cpp is empty without it,
+ * replay.h's shipping path is empty functions handing their value back, and
+ * GetRandomControl and GetFreeSpark are noinline through the macro alone.
+ * This group only reads text. */
+static void test_build_rule()
+{
+	char* proj = hd_switch_text("../../../tomb5.vcxproj");
+	char* be = film_text("be.bat");
+	char* be64 = film_text("be64.bat");
+	char* basan = film_text("basan.bat");
+	char* winmain = hd_switch_text("../winmain.cpp");
+	char* replay = hd_switch_text("../replay.cpp");
+	char* replayh = hd_switch_text("../replay.h");
+	char* stubs = hd_switch_text("../function_stubs.cpp");
+	char* stubsh = hd_switch_text("../function_stubs.h");
+	char* gamemain = hd_switch_text("../gamemain.cpp");
+	char* fx = hd_switch_text("../../game/effect2.cpp");
+	char* control = hd_switch_text("../../game/control.cpp");
+	static char body[262144];
+	long n, files;
+
+	ok(proj && be && be64 && basan && winmain && replay && replayh &&
+		stubs && stubsh && gamemain && fx && control,
+		"test build: the twelve files", 0, 1);
+
+	// The define: one group of the project, the two test configurations.
+	ok(hd_switch_count(proj, "TOMB5_TEST_BUILD;%(PreprocessorDefinitions)")
+		== 1 && hd_switch_count(proj, "<ItemDefinitionGroup Condition=\""
+		"'$(Configuration)|$(Platform)'=='Asan|x64' Or ('$(Configuration)|"
+		"$(Platform)'=='Release|x64' And '$(Tomb5Test)'=='true')\">") == 1 &&
+		hd_switch_count(proj, "<TargetName>PCtomb5_x64t</TargetName>") == 1 &&
+		hd_switch_count(proj, "<OutDir>$(ProjectDir)..\\releasetest\\"
+		"</OutDir>") == 1 && hd_switch_count(proj,
+		"<IntDir>$(Platform)\\ReleaseTest\\</IntDir>") == 1,
+		"test build: the define once, for Asan|x64 and Tomb5Test", 0, 1);
+
+	n = 0;
+	files = 0;
+
+	{
+		const char* subs[2] = { "specific", "game" };
+		const char* masks[2] = { "*.cpp", "*.h" };
+
+		for (int i = 0; i < 2; i++)
+			for (int j = 0; j < 2; j++)
+			{
+				long f = 0;
+
+				n += cull_rule_scan(subs[i], masks[j],
+					"#define TOMB5_TEST_BUILD", &f);
+				files += f;
+			}
+	}
+
+	ok(files > 100 && n == 0, "test build: no source file defines it", n,
+		0);
+	ok(strstr(be64, "if /i \"%~1\"==\"test\" (") != 0 &&
+		strstr(be64, "set \"TEST=/p:Tomb5Test=true\"") != 0 &&
+		strstr(be64, "/p:Platform=x64 %TEST% /v:minimal") != 0 &&
+		hd_switch_count(be, "Tomb5Test") == 0 &&
+		hd_switch_count(basan, "Tomb5Test") == 0,
+		"test build: be64.bat test alone sets Tomb5Test", 0, 1);
+
+	// winmain.cpp: the four words inside the define's blocks only.
+	{
+		char* path = test_build_block(winmain, "#ifdef TOMB5_TEST_BUILD\r\n"
+			"\r\n// -record <file> and -replay <file>",
+			"#endif\t// TOMB5_TEST_BUILD");
+		char* words = test_build_block(winmain, "#ifdef TOMB5_TEST_BUILD\r\n"
+			"\t/* -record <file> or -replay <file>",
+			"#endif\t// TOMB5_TEST_BUILD: a shipping EXE");
+		const char* w[4] = { "\"record\"", "\"replay\"", "\"liveclock\"",
+			"RngTraceSwitch(" };
+		long right = 0;
+
+		for (int i = 0; i < 4; i++)
+			right += hd_switch_count(words, w[i]) == 1 &&
+				hd_switch_count(winmain, w[i]) == 1;
+
+		ok(path && words && right == 4 &&
+			hd_switch_count(path, "static bool WinCheckPathFlag(") == 1 &&
+			hd_switch_count(winmain, "WinCheckPathFlag(") == 3 &&
+			hd_switch_count(words, "WinCheckPathFlag(") == 2 &&
+			hd_switch_count(words, "ReplayOpen(") == 2 &&
+			hd_switch_count(winmain, "ReplayOpen(") == 2 &&
+			hd_switch_count(winmain, "RngTraceArm(") == 1 &&
+			hd_switch_count(words, "RngTraceArm(") == 1,
+			"test build: -record, -replay, -liveclock, -rngtrace read "
+			"inside the define only", right, 4);
+		free(path);
+		free(words);
+	}
+
+	ok(strstr(winmain, "#ifdef TOMB5_TEST_BUILD\r\n#define WIN_BUILD_KIND"
+		"\t\" test build\"\r\n#else\r\n#define WIN_BUILD_KIND\t\"\"\r\n"
+		"#endif") != 0 && strstr(winmain, "Log(\"Logging enabled by -log. "
+		"PCtomb5 built \" __DATE__ \" \" __TIME__\r\n\t\t\tWIN_BUILD_KIND);")
+		!= 0 && hd_switch_count(winmain, "\"PCtomb5 built \" __DATE__ \" \" "
+		"__TIME__, liveClock);") == 2,
+		"test build: the first line says so after the time, the stamp "
+		"stays", 0, 1);
+
+	// replay.cpp is nothing without the define; replay.h's shipping path
+	// is empty functions, the given value back, no file.
+	{
+		const char* gate = strstr(replay, "#ifdef TOMB5_TEST_BUILD\r\n");
+		const char* first = strstr(replay, "static long g_mode");
+		const char* end = "\r\n#endif\t// TOMB5_TEST_BUILD\r\n";
+		const size_t rl = strlen(replay), el = strlen(end);
+		char* ship = test_build_block(replayh, "#else\r\n", "#endif");
+		const char* io[6] = { "FILE", "fopen", "fwrite", "fread", "Log(",
+			"malloc" };
+		long none = 0;
+
+		for (int i = 0; i < 6; i++)
+			none += hd_switch_count(ship, io[i]) == 0;
+
+		ok(gate && first && gate < first && rl > el &&
+			!strcmp(replay + rl - el, end) &&
+			hd_switch_count(replay, "#ifdef TOMB5_TEST_BUILD") == 1,
+			"test build: replay.cpp compiles to nothing without it", 0, 1);
+		ok(ship && none == 6 &&
+			strstr(ship, "inline long ReplayFrames(long frames) { return "
+			"frames; }") != 0 && strstr(ship, "inline double ReplaySubTick("
+			"double subtick) { return subtick; }") != 0 &&
+			hd_switch_count(ship, "inline void ") == 4 &&
+			hd_switch_count(control, "camera.number_frames = ReplayFrames("
+			"S_DumpScreen());") == 1,
+			"test build: replay.h's shipping path has no file I/O, the call "
+			"sites as they were", none, 6);
+		free(ship);
+	}
+
+	// -rngtrace's code inside the define; noinline only by the macro.
+	{
+		char* rt = test_build_block(stubs, "#ifdef TOMB5_TEST_BUILD\r\n\r\n"
+			"/* -rngtrace <from> <to>", "#endif\t// TOMB5_TEST_BUILD");
+		char* shiph = test_build_block(stubsh, "#else\r\n// A test build's "
+			"only, as the recorder", "#endif");
+
+		ok(rt && hd_switch_count(rt, "static __declspec(noinline) void "
+			"RngTraceNote(") == 1 && hd_switch_count(rt,
+			"bool RngTraceArm(long from, long to)") == 1 &&
+			hd_switch_count(rt, "void RngTraceInputSeam(long tick, long fmv)")
+			== 1 && hd_switch_count(rt, "void RngTraceMark(const char* name)")
+			== 1 && shiph && strstr(shiph, "inline void RngTraceInputSeam("
+			"long, long) {}") != 0 && strstr(shiph, "inline void "
+			"RngTraceMark(const char*) {}") != 0,
+			"test build: -rngtrace compiled in a test build only", 0, 1);
+		free(rt);
+		free(shiph);
+	}
+
+	ok(strstr(stubsh, "#ifdef TOMB5_TEST_BUILD\r\n#define "
+		"TOMB5_NOINLINE_IN_TEST\t__declspec(noinline)\r\n#else\r\n#define "
+		"TOMB5_NOINLINE_IN_TEST\r\n#endif") != 0 &&
+		hd_switch_count(stubs, "__declspec(noinline) long") == 0 &&
+		hd_switch_count(fx, "__declspec(noinline)") == 0 &&
+		hd_switch_count(stubs, "TOMB5_NOINLINE_IN_TEST long "
+		"GetRandomControl()") == 1 && hd_switch_count(fx,
+		"TOMB5_NOINLINE_IN_TEST long GetFreeSpark()") == 1,
+		"test build: GetRandomControl and GetFreeSpark noinline through the "
+		"macro alone", 0, 1);
+
+	free(proj);
+	free(be);
+	free(be64);
+	free(basan);
+	free(winmain);
+	free(replay);
+	free(replayh);
+	free(stubs);
+	free(stubsh);
+	free(gamemain);
+	free(fx);
+	free(control);
 }
 
 /* GetCollidedObjects' two lists in tsv_buffer (game\collide_lists.h): the
@@ -38179,6 +38394,7 @@ int main()
 	weather_rule();
 	cull_rule();
 	film_av();
+	test_build_rule();
 	collide_lists();
 	lara_joints();
 	logic_leftovers();

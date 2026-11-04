@@ -46,6 +46,13 @@ long resChangeCounter;
 // ROOMLIST's window events (game\draw.cpp), set below with -log only.
 extern volatile long RoomListWindowEvents;
 
+// The first -log line's end: a test build (the recorder's) names itself.
+#ifdef TOMB5_TEST_BUILD
+#define WIN_BUILD_KIND	" test build"
+#else
+#define WIN_BUILD_KIND	""
+#endif
+
 static COMMANDLINES commandlines[] =
 {
 	{ "SETUP", 0, &CLSetup },
@@ -96,6 +103,8 @@ static bool WinCheckLogFlag(LPSTR cmd)
 	return 0;
 }
 
+#ifdef TOMB5_TEST_BUILD
+
 // -record <file> and -replay <file> (specific\replay.cpp): the switch as a
 // whole word behind '-' or '/', then the file, in quotes when it holds a
 // blank. Read by hand like -log and before WinProcessCommandLine, which
@@ -139,6 +148,8 @@ static bool WinCheckPathFlag(LPSTR cmd, const char* word, char* out,
 
 	return 0;
 }
+
+#endif	// TOMB5_TEST_BUILD
 
 void ClearSurfaces()
 {
@@ -1564,9 +1575,13 @@ int __stdcall WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 	// The seed and the curation stamp belong here too, but the engine does
 	// not know them yet - they arrive with the level data, so the seams
 	// that need them have to print them themselves.
+	// A test build (TOMB5_TEST_BUILD, the recorder's) says so after the
+	// time; the replay file's stamp below stays without it.
 	if (gLogEnabled)
-		Log("Logging enabled by -log. PCtomb5 built " __DATE__ " " __TIME__);
+		Log("Logging enabled by -log. PCtomb5 built " __DATE__ " " __TIME__
+			WIN_BUILD_KIND);
 
+#ifdef TOMB5_TEST_BUILD
 	/* -record <file> or -replay <file>: the same inputs played again
 	 * (specific\replay.cpp). Opened before anything reads a device; the
 	 * file's header carries this build's stamp. -liveclock, read as -high
@@ -1601,6 +1616,7 @@ int __stdcall WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 			Log("RNGTRACE refused: -rngtrace takes two tick numbers, "
 				"from <= to, 0..65535");
 	}
+#endif	// TOMB5_TEST_BUILD: a shipping EXE does not know the four words
 
 	/* The crash seam, as early as the log: an exception nobody catches
 	 * writes its CRASH line into the log (with -log) or into crash.txt

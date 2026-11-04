@@ -28,9 +28,25 @@ void SeedRandomControl(long seed);
  * section boundary - its name, the calls before it, the generator's
  * state - in an open span, and does nothing otherwise. `name` must be a
  * string literal: it is kept until the span is written. */
+#ifdef TOMB5_TEST_BUILD
 bool RngTraceArm(long from, long to);
 void RngTraceInputSeam(long tick, long fmv);
 void RngTraceMark(const char* name);
+#else
+// A test build's only, as the recorder (replay.h): nothing in a shipping EXE.
+inline void RngTraceInputSeam(long, long) {}
+inline void RngTraceMark(const char*) {}
+#endif
+
+/* __declspec(noinline) in a test build, nothing in a shipping one: the
+ * functions a diagnosis names by return address (GetRandomControl for
+ * -rngtrace, GetFreeSpark for SPARKLOG draw_alloc) are calls of their own
+ * there, and inlined as before elsewhere. */
+#ifdef TOMB5_TEST_BUILD
+#define TOMB5_NOINLINE_IN_TEST	__declspec(noinline)
+#else
+#define TOMB5_NOINLINE_IN_TEST
+#endif
 
 /* Reads back the logic RNG's seed, for saving it across an interpolated
  * frame. The draw path calls GetRandomControl in several places - the star

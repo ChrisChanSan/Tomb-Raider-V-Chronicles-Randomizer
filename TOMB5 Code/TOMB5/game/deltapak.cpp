@@ -409,8 +409,8 @@ void andrea3_end()
 	item->frame_number = anims[objects[LARSON].anim_index].frame_base;
 	item->flags |= IFL_INVISIBLE;
 	item->status = ITEM_ACTIVE;
-	AddActiveItem(item - items);
-	EnableBaddieAI(item - items, 1);
+	AddActiveItem((short)(item - items));
+	EnableBaddieAI((short)(item - items), 1);
 	DelsHandyTeleportLara(55808, 0, 30208, 32768);
 }
 
@@ -425,8 +425,8 @@ void andrea3b_init()
 	cutseq_meshbits[4] = 0x80000F00;
 	item = find_a_fucking_item(LARSON);
 	item->status = ITEM_INVISIBLE;
-	RemoveActiveItem(item - items);
-	DisableBaddieAI(item - items);
+	RemoveActiveItem((short)(item - items));
+	DisableBaddieAI((short)(item - items));
 	item->flags |= IFL_INVISIBLE;
 	disable_horizon = 1;
 }
@@ -483,8 +483,8 @@ void andrea3b_end()
 		{
 			item->status = ITEM_ACTIVE;
 			item->flags |= IFL_INVISIBLE;
-			AddActiveItem(item - items);
-			EnableBaddieAI(item - items, 1);
+			AddActiveItem((short)(item - items));
+			EnableBaddieAI((short)(item - items), 1);
 		}
 	}
 
@@ -596,7 +596,7 @@ void cranecut_end()
 	ITEM_INFO* item;
 	
 	item = cutseq_restore_item(ANIMATING5);
-	RemoveActiveItem(item - items);
+	RemoveActiveItem((short)(item - items));
 	item->flags &= ~IFL_CODEBITS;
 	cutseq_restore_item(ANIMATING16);
 	cutseq_restore_item(WRECKING_BALL);
@@ -617,8 +617,8 @@ void richcut1_init()
 		if (item->object_number == SCIENTIST)
 		{
 			item->status = ITEM_INVISIBLE;
-			RemoveActiveItem(item - items);
-			DisableBaddieAI(item - items);
+			RemoveActiveItem((short)(item - items));
+			DisableBaddieAI((short)(item - items));
 			item->flags |= IFL_INVISIBLE;
 		}
 
@@ -645,7 +645,7 @@ void richcut1_control()
 	if (f == 840)
 	{
 		item = find_a_fucking_item(CLOSED_DOOR2);
-		AddActiveItem(item - items);
+		AddActiveItem((short)(item - items));
 		item->status = ITEM_INVISIBLE;
 		item->flags |= IFL_CODEBITS;
 	}
@@ -1130,8 +1130,8 @@ void andy10_init()
 	cutseq_meshbits[6] &= ~0x80000000;
 	item = find_a_fucking_item(GREEN_TEETH);
 	item->status = ITEM_INVISIBLE;
-	RemoveActiveItem(item - items);
-	DisableBaddieAI(item - items);
+	RemoveActiveItem((short)(item - items));
+	DisableBaddieAI((short)(item - items));
 	item->flags |= IFL_INVISIBLE;
 	lara.water_status = LW_UNDERWATER;
 	FlipMap(7);
@@ -1386,8 +1386,8 @@ void swampy_init()
 	if (item)
 	{
 		item->status = ITEM_INVISIBLE;
-		RemoveActiveItem(item - items);
-		DisableBaddieAI(item - items);
+		RemoveActiveItem((short)(item - items));
+		DisableBaddieAI((short)(item - items));
 		item->flags |= IFL_INVISIBLE;
 	}
 
@@ -1403,7 +1403,7 @@ void swampy_control()
 void swampy_end()
 {
 	SetCutNotPlayed(43);
-	AddActiveItem(find_a_fucking_item(GREEN_TEETH) - items);
+	AddActiveItem((short)(find_a_fucking_item(GREEN_TEETH) - items));
 	DelsHandyTeleportLara(42477, 12456, 55982, 28953);
 	lara.water_status = LW_UNDERWATER;
 	lara_item->pos.x_rot = -5278;
@@ -1421,7 +1421,7 @@ void hamgate_init()
 	ITEM_INFO* item; 
 	
 	item = find_a_fucking_item(DOOR_TYPE1);
-	AddActiveItem(item - items);
+	AddActiveItem((short)(item - items));
 	item->flags |= IFL_CODEBITS;
 	item->mesh_bits = 3;
 	item->status = ITEM_INVISIBLE;
@@ -2389,7 +2389,7 @@ ITEM_INFO* ResetCutanimate(long objnum)
 	item = find_a_fucking_item(objnum);
 	item->anim_number = objects[objnum].anim_index;
 	item->frame_number = anims[item->anim_number].frame_base;
-	RemoveActiveItem(item - items);
+	RemoveActiveItem((short)(item - items));
 	item->status = ITEM_INACTIVE;
 	item->flags &= ~IFL_CODEBITS;
 	return item;
@@ -2402,7 +2402,7 @@ void Cutanimate(long objnum)
 	item = find_a_fucking_item(objnum);
 	item->anim_number = objects[objnum].anim_index;
 	item->frame_number = anims[item->anim_number].frame_base;
-	AddActiveItem(item - items);
+	AddActiveItem((short)(item - items));
 	item->status = ITEM_ACTIVE;
 	item->flags |= IFL_CODEBITS;
 }
@@ -3698,7 +3698,7 @@ void do_cutseq_skipper_stuff()
 		if (GLOBAL_cutseq_frame < 840)
 		{
 			item = find_a_fucking_item(CLOSED_DOOR2);
-			AddActiveItem(item - items);
+			AddActiveItem((short)(item - items));
 			item->status = ITEM_INVISIBLE;
 			item->flags |= IFL_CODEBITS;
 		}

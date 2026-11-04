@@ -627,7 +627,7 @@ void DoGrenadeDamageOnBaddie(ITEM_INFO* baddie, ITEM_INFO* item)
 				if (baddie->hit_points <= 0)
 				{
 					savegame.Level.Kills++;
-					CreatureDie(baddie - items, 1);
+					CreatureDie((short)(baddie - items), 1);
 				}
 			}
 		}
@@ -742,7 +742,7 @@ void CrossbowHitSwitchType78(ITEM_INFO* item, ITEM_INFO* target, long MustHitLas
 		if (target->object_number == SWITCH_TYPE7)
 			ExplodeItemNode(target, objects[SWITCH_TYPE7].nmeshes - 1, 0, 64);
 
-		AddActiveItem(target - items);
+		AddActiveItem((short)(target - items));
 		target->flags |= IFL_CODEBITS | IFL_SWITCH_ONESHOT;
 		target->status = ITEM_ACTIVE;
 	}

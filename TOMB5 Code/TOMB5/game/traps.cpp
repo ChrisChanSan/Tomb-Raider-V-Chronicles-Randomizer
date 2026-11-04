@@ -195,8 +195,8 @@ void ControlExplosion(short item_number)
 						TriggerShockwave((PHD_VECTOR*) &target->pos, 0x1300030, 96, 0x18806000, 0);
 						target->pos.y_pos += 128;
 						ExplodeItemNode(target, 0, 0, 80);
-						SmashObject(target - items);
-						KillItem(target - items);
+						SmashObject((short)(target - items));
+						KillItem((short)(target - items));
 					}
 					else if (target->object_number != SWITCH_TYPE7 && target->object_number != SWITCH_TYPE8)
 					{

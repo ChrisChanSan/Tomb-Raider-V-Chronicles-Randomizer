@@ -218,7 +218,7 @@ void DoFlameTorch()
 		TriggerDynamic(pos.x, pos.y, pos.z, 12 - (GetRandomControl() & 1), (GetRandomControl() & 0x3F) + 192, (GetRandomControl() & 0x1F) + 96, 0);
 
 		if (!(wibble & 7))
-		   TriggerTorchFlame(lara_item - items, 0);
+		   TriggerTorchFlame((short)(lara_item - items), 0);
 
 		SoundEffect(SFX_LOOP_FOR_SMALL_FIRES, (PHD_3DPOS*)&pos, 0);
 		torchroom = lara_item->room_number;
@@ -336,7 +336,7 @@ void FlameTorchControl(short item_number)
 		if (itemlist[0])
 		{
 			if (!objects[itemlist[0]->object_number].intelligent)
-				ObjectCollision(itemlist[0] - items, item, &mycoll);
+				ObjectCollision((short)(itemlist[0] - items), item, &mycoll);
 		}
 		else
 		{

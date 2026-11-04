@@ -30364,6 +30364,53 @@ static void toolset_rule()
 	free(manual);
 }
 
+/* The engine builds without a warning (#328): the macro and unused-local
+ * warnings of tomb5.vcxproj are errors in each of the five configurations'
+ * own ClCompile, beside the five of #324, and global\types.h
+ * keeps ddraw.h's DD_OK and DD_FALSE where fmv.cpp includes it first. Read
+ * from the tree. */
+static void warning_rule()
+{
+	static const char* const configs[5] = { "Debug|Win32", "Release|Win32",
+		"Debug|x64", "Release|x64", "Asan|x64" };
+	static const char* const list = "<TreatSpecificWarningsAsErrors>"
+		"4311;4312;4302;4267;4477;4005;4101;"
+		"%(TreatSpecificWarningsAsErrors)</TreatSpecificWarningsAsErrors>";
+	char* proj = hd_switch_text("../../../tomb5.vcxproj");
+	char* types = hd_switch_text("../../global/types.h");
+	char head[256];
+	char what[128];
+
+	printf("The engine's warnings that are errors\n");
+
+	for (int i = 0; i < 5; i++)
+	{
+		const char* p;
+		const char* e;
+		int n = 0;
+
+		snprintf(head, sizeof(head), "<ItemDefinitionGroup Condition=\""
+			"'$(Configuration)|$(Platform)'=='%s'\">", configs[i]);
+		p = proj ? strstr(proj, head) : 0;
+		e = p ? strstr(p, "</ItemDefinitionGroup>") : 0;
+
+		for (const char* q = p; e && (q = strstr(q, list)) && q < e; q++)
+			n++;
+
+		snprintf(what, sizeof(what), "warning rule: %s treats the seven "
+			"warnings as errors", configs[i]);
+		ok(n == 1, what, n, 1);
+	}
+
+	ok(types && hd_switch_count(types, "#define DDENUMRET_OK") == 0 &&
+		hd_switch_count(types, "#ifndef DD_OK\r\n#define DD_OK 0\r\n"
+		"#endif\r\n#ifndef DD_FALSE\r\n#define DD_FALSE 1\r\n#endif\r\n") == 1,
+		"warning rule: types.h guards DD_OK and DD_FALSE, DDENUMRET_OK gone",
+		types ? hd_switch_count(types, "#ifndef DD_") : -1, 2);
+	free(proj);
+	free(types);
+}
+
 /* The recorder is a test build's (#321). TOMB5_TEST_BUILD, defined in one
  * place - tomb5.vcxproj, for Asan|x64 and for Release|x64 under be64.bat
  * test (Tomb5Test=true, releasetest\PCtomb5_x64t.exe) - compiles in
@@ -39021,6 +39068,7 @@ int main()
 	pause_rule();
 	runtime_rule();
 	toolset_rule();
+	warning_rule();
 	collide_lists();
 	lara_joints();
 	logic_leftovers();

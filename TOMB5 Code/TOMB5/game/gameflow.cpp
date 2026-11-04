@@ -2057,7 +2057,7 @@ static void PrepareLanguageBuffer(char* d)
 	{
 		s = &wad[off[i]];
 		e = &wad[off[i + 1]];
-		l = e - s - 1;
+		l = (long)(e - s - 1);
 
 		for (long j = 0; j < l; j++)
 			s[j] ^= 0xA5;

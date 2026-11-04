@@ -70,7 +70,6 @@ void DinoControl(short item_number)
     ITEM_INFO* item;
     CREATURE_INFO* rex;
     AI_INFO info;
-    long x, y, z;
     short angle;
 
     if (!CreatureActive(item_number))

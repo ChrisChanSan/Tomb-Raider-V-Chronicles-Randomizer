@@ -235,7 +235,7 @@ static INT_PTR CALLBACK SetupDlgProc(HWND dlg, UINT message, WPARAM wParam, LPAR
 
 			if (HIWORD(wParam) == CBN_SELCHANGE)
 			{
-				nDDDevice = SendMessage(GetDlgItem(dlg, IDC_GRAPHICS_ADAPTER), CB_GETCURSEL, 0, 0);
+				nDDDevice = (long)SendMessage(GetDlgItem(dlg, IDC_GRAPHICS_ADAPTER), CB_GETCURSEL, 0, 0);
 				InitD3DDevice(dlg, GetDlgItem(dlg, IDC_D3D));
 			}
 
@@ -280,7 +280,7 @@ bool SetupDialog()
 	long ret;
 
 	ShowCursor(1);
-	ret = DialogBox(App.hInstance, MAKEINTRESOURCE(IDD_SETUPDIALOG), 0, SetupDlgProc);
+	ret = (long)DialogBox(App.hInstance, MAKEINTRESOURCE(IDD_SETUPDIALOG), 0, SetupDlgProc);
 	ShowCursor(0);
 
 	if (ret == -1)

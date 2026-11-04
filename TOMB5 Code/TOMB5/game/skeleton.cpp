@@ -178,7 +178,8 @@ void TriggerSkeletonFire(ITEM_INFO* item)
 	sptr->Friction = 4;
 	sptr->Flags = SF_ATTACHEDNODE | SF_ITEM | SF_ROTATE | SF_DEF | SF_SCALE;
 	sptr->NodeNumber = 8;
-	sptr->FxObj = item - items;
+	// FxObj is 8 bits wide; item numbers above 255 wrap as they always did.
+	sptr->FxObj = (uchar)(item - items);
 	sptr->RotAng = GetRandomControl() & 0xFFF;
 	sptr->RotAdd = (GetRandomControl() & 0x3F) - 32;
 	sptr->MaxYvel = 0;

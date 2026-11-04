@@ -757,7 +757,7 @@ void InitialiseWreckingBall(short item_number)
 
 	item = &items[item_number];
 	item2 = find_a_fucking_item(ANIMATING16);
-	item->item_flags[3] = item2 - items;
+	item->item_flags[3] = (short)(item2 - items);
 
 	room_number = item->room_number;
 	floor = GetFloor(item->pos.x_pos, item->pos.y_pos, item->pos.z_pos, &room_number);
@@ -1125,8 +1125,8 @@ void InitialiseCutsceneRope(short item_number)
 	ITEM_INFO* rope;
 
 	rope = &items[item_number];
-	rope->item_flags[2] = find_a_fucking_item(ANIMATING4) - items;
-	rope->item_flags[3] = find_a_fucking_item(ANIMATING16_MIP) - items;
+	rope->item_flags[2] = (short)(find_a_fucking_item(ANIMATING4) - items);
+	rope->item_flags[3] = (short)(find_a_fucking_item(ANIMATING16_MIP) - items);
 	rope->flags |= IFL_CODEBITS;
 	AddActiveItem(item_number);
 	rope->status = ITEM_ACTIVE;
@@ -1139,7 +1139,7 @@ void InitialiseXRayMachine(short item_number)
 	item = &items[item_number];
 
 	if (item->trigger_flags == 222)
-		item->item_flags[0] = find_a_fucking_item(PUZZLE_HOLE1) - items;
+		item->item_flags[0] = (short)(find_a_fucking_item(PUZZLE_HOLE1) - items);
 }
 
 void InitialisePortalDoor(short item_number)
@@ -1242,7 +1242,7 @@ void InitialiseTeleporter(short item_number)
 	item = &items[item_number];
 
 	if (item->trigger_flags == 512)
-		item->item_flags[1] = find_a_fucking_item(PUZZLE_HOLE2) - items;
+		item->item_flags[1] = (short)(find_a_fucking_item(PUZZLE_HOLE2) - items);
 }
 
 void InitialiseGasCloud(short item_number)

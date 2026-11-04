@@ -106,10 +106,14 @@ typedef struct {
 // d3d9.h dropped this DX3-7 pointer typedef (D3D9 APIs just take "const D3DMATRIX*" directly).
 typedef D3DMATRIX* LPD3DMATRIX;
 
-// DirectDraw success/enum-continue sentinels (from ddraw.h, no longer included).
+// DirectDraw success sentinels (ddraw.h's values). Only fmv.cpp includes
+// ddraw.h, before this header; the guards keep its definitions there.
+#ifndef DD_OK
 #define DD_OK 0
+#endif
+#ifndef DD_FALSE
 #define DD_FALSE 1
-#define DDENUMRET_OK 0
+#endif
 
 // Color macros from the old d3dtypes.h, still used for plain ARGB packing/unpacking.
 #define RGBA_SETALPHA(rgba, x)	(((x) << 24) | ((rgba) & 0x00ffffff))

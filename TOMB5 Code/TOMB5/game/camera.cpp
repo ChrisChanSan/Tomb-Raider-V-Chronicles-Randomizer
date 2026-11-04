@@ -3608,7 +3608,7 @@ void FirstPersonCamera(ITEM_INFO* item)
 	//
 	// Who gets hidden is decided solely by the draw routine.
 	fpHeadHidden = 1;
-	AlterFOV(FIRST_PERSON_FOV);
+	AlterFOV((short)FIRST_PERSON_FOV);
 	fpFovSet = 1;
 
 	// Hold the eye clear of floor and ceiling.

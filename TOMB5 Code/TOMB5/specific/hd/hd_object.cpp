@@ -1177,7 +1177,7 @@ namespace
 
 		plan->stateSaid = state;
 
-		const long number = item - items;
+		const long number = (long)(item - items);
 		const char* by = state >= 0 ? HDSlotName(plan->guestDone[state]) : 0;
 		const char* want = state >= 0 ? plan->guestModel[state] : 0;
 		const bool have = state < 0 || plan->model[state] >= 0;
@@ -3834,7 +3834,7 @@ static bool baked_look_drawn(int host)
  * carries it then as it carries the slot's other items. */
 static bool item_run_added(const ITEM_INFO* item)
 {
-	const long number = item - items;
+	const long number = (long)(item - items);
 
 	return number >= 0 && number < level_items &&
 		HDMarkersItemAdded((int)number) &&

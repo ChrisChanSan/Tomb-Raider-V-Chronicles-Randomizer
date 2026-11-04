@@ -6,8 +6,8 @@ rem with /fsanitize=address, into releaseasan\PCtomb5_asan.exe. For test
 rem runs only - it never goes into a package (Preparation\Verification.md,
 rem section 9, says how to run it and how to read its report).
 rem
-rem The configuration is built with the newest toolset on the machine
-rem (v145), not with the v142 of the other four: the v142 sanitizer runtime
+rem The configuration is built with the v145 toolset, as the other four
+rem are since #326; it took v145 first because the v142 sanitizer runtime
 rem stops at its own start on Windows 11 ("ASan init calls itself!") before
 rem a line of the engine runs. v145 links the runtime as a DLL,
 rem clang_rt.asan_dynamic-x86_64.dll, which the EXE needs beside it; this

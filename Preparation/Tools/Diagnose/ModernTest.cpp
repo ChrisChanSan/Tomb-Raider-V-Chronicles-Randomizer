@@ -28192,7 +28192,7 @@ static void pool_guard_rule()
 		"Release|x64 has", san, rel);
 	ok(hd_switch_count(proj, "<EnableASAN>true</EnableASAN>") == 1 &&
 		hd_switch_count(proj, "<PlatformToolset>v145</PlatformToolset>") ==
-		1 && hd_switch_count(proj, "<TargetName>PCtomb5_asan</TargetName>")
+		5 && hd_switch_count(proj, "<TargetName>PCtomb5_asan</TargetName>")
 		== 1 && hd_switch_count(proj,
 		"<OutDir>$(ProjectDir)..\\releaseasan\\</OutDir>") == 1,
 		"pool guard: the sanitizer, its toolset, its EXE", 0, 1);
@@ -30238,6 +30238,130 @@ static void runtime_rule()
 	free(pack);
 	free(ledger);
 	free(readme);
+}
+
+/* The span of tomb5.vcxproj's Configuration PropertyGroup of one
+ * configuration, up to its </PropertyGroup>; 0 if it is not there. The
+ * caller frees it. */
+static char* toolset_group(const char* proj, const char* config)
+{
+	char head[256];
+	const char* p;
+	const char* e;
+	char* out;
+
+	snprintf(head, sizeof(head), "<PropertyGroup Condition=\""
+		"'$(Configuration)|$(Platform)'=='%s'\" Label=\"Configuration\">",
+		config);
+	p = proj ? strstr(proj, head) : 0;
+	e = p ? strstr(p, "</PropertyGroup>") : 0;
+
+	if (!e)
+		return 0;
+
+	out = (char*)malloc((size_t)(e - p) + 1);
+
+	if (out)
+	{
+		memcpy(out, p, (size_t)(e - p));
+		out[e - p] = 0;
+	}
+
+	return out;
+}
+
+/* The toolset and the build settings (#326): v145 in every configuration
+ * of tomb5.vcxproj, where four had the v142 of the upstream project; one
+ * C++17 for the whole project, in each configuration's ClCompile, and none
+ * per file; the upstream DLL project's TR4M_EXPORTS and _USRDLL gone;
+ * whole-program optimisation in both Release configurations and not in
+ * Asan; /CETCOMPAT in the three release-type link options. The
+ * randomizer's two build scripts compile at /W4 /sdl /permissive- with no
+ * /w left on the line, and neither README.md nor the engine manual names
+ * v142 any more. Text only. */
+static void toolset_rule()
+{
+	static const char* const configs[5] = { "Debug|Win32", "Release|Win32",
+		"Debug|x64", "Release|x64", "Asan|x64" };
+	static const char* const flags =
+		"/std:c++17 /W4 /sdl /permissive- /I";
+	char* proj = hd_switch_text("../../../tomb5.vcxproj");
+	char* b1 = film_text("../../../TR5Randomizer/build/b1.bat");
+	char* b2 = film_text("../../../TR5Randomizer/build/b2.bat");
+	char* readme = film_text("../../../README.md");
+	char* manual = film_text("../../../docs/Engine-Manual.md");
+	int v145 = 0, wpo = 0, groups = 0;
+
+	printf("The toolset and the build settings\n");
+	ok(proj && b1 && b2 && readme && manual,
+		"toolset rule: the five files", 0, 1);
+
+	// v145 in each configuration's own group, and nothing else.
+	for (int i = 0; i < 5; i++)
+	{
+		char* g = toolset_group(proj, configs[i]);
+		const int on = hd_switch_count(g,
+			"<WholeProgramOptimization>true</WholeProgramOptimization>");
+
+		groups += g != 0;
+		v145 += hd_switch_count(g, "<PlatformToolset>v145</PlatformToolset>")
+			== 1;
+		// Release|Win32 and Release|x64 optimise the whole program.
+		wpo += (i == 1 || i == 3) ? on == 1 : on == 0;
+		free(g);
+	}
+
+	ok(groups == 5 && v145 == 5 &&
+		hd_switch_count(proj, "<PlatformToolset>") == 5 &&
+		hd_switch_count(proj, "v142") == 0,
+		"toolset rule: PlatformToolset v145 in every configuration",
+		v145, 5);
+	ok(wpo == 5 && hd_switch_count(proj,
+		"<WholeProgramOptimization>false</WholeProgramOptimization>") == 1,
+		"toolset rule: whole-program optimisation in both Release, not "
+		"in Asan", wpo, 5);
+
+	// One language standard per configuration, none per file.
+	ok(hd_switch_count(proj, "<ConformanceMode>true</ConformanceMode>\r\n"
+		"      <LanguageStandard>stdcpp17</LanguageStandard>\r\n") == 5 &&
+		hd_switch_count(proj, "<LanguageStandard") == 5 &&
+		hd_switch_count(proj, "<LanguageStandard Condition=") == 0,
+		"toolset rule: one LanguageStandard per configuration, none per "
+		"file", hd_switch_count(proj, "<LanguageStandard"), 5);
+
+	// The upstream DLL project's two defines.
+	ok(hd_switch_count(proj, "TR4M_EXPORTS") == 0 &&
+		hd_switch_count(proj, "_USRDLL") == 0 &&
+		hd_switch_count(proj, "<PreprocessorDefinitions>WIN32;"
+		"_CRT_SECURE_NO_WARNINGS;") == 5,
+		"toolset rule: no TR4M_EXPORTS, no _USRDLL", 0, 0);
+
+	// The shadow stack in the release-type links.
+	ok(hd_switch_count(proj, "<AdditionalOptions>/guard:cf /CETCOMPAT "
+		"%(AdditionalOptions) /pdbaltpath:%_PDB%</AdditionalOptions>") == 3 &&
+		hd_switch_count(proj, "/CETCOMPAT") == 3,
+		"toolset rule: /CETCOMPAT in the release link options",
+		hd_switch_count(proj, "/CETCOMPAT"), 3);
+
+	// The randomizer's warning flags, and no /w to silence them.
+	ok(hd_switch_count(b1, flags) == 1 && hd_switch_count(b2, flags) == 1 &&
+		hd_switch_count(b1, "\" /w \"") == 0 &&
+		hd_switch_count(b2, "\" /w \"") == 0,
+		"toolset rule: b1.bat and b2.bat carry /W4 /sdl /permissive-", 0, 1);
+
+	// The documents.
+	ok(hd_switch_count(readme, "v142") == 0 &&
+		hd_switch_count(manual, "v142") == 0 &&
+		hd_switch_count(readme, "**v145** toolset") == 1 &&
+		hd_switch_count(manual, "**v145** toolset") == 1,
+		"toolset rule: README.md and the manual name v145, not v142",
+		hd_switch_count(readme, "v142"), 0);
+
+	free(proj);
+	free(b1);
+	free(b2);
+	free(readme);
+	free(manual);
 }
 
 /* The recorder is a test build's (#321). TOMB5_TEST_BUILD, defined in one
@@ -38805,6 +38929,7 @@ int main()
 	test_build_rule();
 	pause_rule();
 	runtime_rule();
+	toolset_rule();
 	collide_lists();
 	lara_joints();
 	logic_leftovers();

@@ -141,11 +141,11 @@ int main(int argc, char** argv)
         else if (s.rfind("outfits-off=", 0) == 0)
         {
             std::string cur;
-            for (size_t i = 12; i <= s.size(); ++i)
+            for (size_t j = 12; j <= s.size(); ++j)
             {
-                if (i == s.size() || s[i] == ',')
+                if (j == s.size() || s[j] == ',')
                 { if (!cur.empty()) outfitsOff.insert(cur); cur.clear(); }
-                else cur.push_back(s[i]);
+                else cur.push_back(s[j]);
             }
         }
         else if (s == "weapons") weapons = true;

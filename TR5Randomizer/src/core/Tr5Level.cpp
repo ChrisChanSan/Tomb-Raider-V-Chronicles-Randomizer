@@ -137,6 +137,13 @@ bool Tr5Level::findItems(std::string& error)
         return true;
     };
 
+    // mark() records where a block's count sits and where its data begins
+    // - AFTER i32 has read the count, p points exactly at the first data
+    // byte. Declared here, before the first STEP, because a goto may not
+    // jump over its initialisation (C2362 under /permissive-); it reads p
+    // only when it is called.
+    auto mark = [&](Block& b, int32_t count) { b.countAt = p - 4; b.dataAt = p; b.count = count; };
+
     int32_t n = 0;
     const char* where = "start";
 
@@ -162,11 +169,8 @@ bool Tr5Level::findItems(std::string& error)
     m_floorAt = p;
     STEP("floordata", skipN(n, 2));
 
-    // Write the block map for the model transfer along the way. mark()
-    // records where the count sits and where the data begins - AFTER i32
-    // has read the count, p points exactly at the first data byte.
-    auto mark = [&](Block& b, int32_t count) { b.countAt = p - 4; b.dataAt = p; b.count = count; };
-
+    // Write the block map for the model transfer along the way (mark(),
+    // declared above the first STEP).
     STEP("mesh data", i32(n));   mark(m_meshData, n);  STEP("mesh data", skipN(n, 2));
     STEP("mesh pointers", i32(n));  mark(m_meshPtrs, n);  STEP("mesh pointers", skipN(n, 4));
     STEP("animations", i32(n));  mark(m_anims, n);     STEP("animations", skipN(n, SZ_ANIM));
@@ -2156,7 +2160,7 @@ bool Tr5Level::wallWindow(int roomA, int sx, int sz, int roomB,
 bool Tr5Level::addViewWindow(int roomA, int sx, int sz,
                              int roomB, int nsxB, int nszB, std::string& error)
 {
-    constexpr size_t HDR = 208, SECTOR = 8, PORTAL = 32;
+    constexpr size_t SECTOR = 8, PORTAL = 32;
 
     // ONE plane for both windows of a horizontal portal.
     //
@@ -3053,8 +3057,6 @@ bool Tr5Level::makePortal(int room, int sx, int sz,
     // happens FIRST, before any reference into m_rooms is taken: creating a
     // window reparses the file, and every reference would dangle after it.
     {
-        const Tr5Room& pre = m_rooms[static_cast<size_t>(room)];
-
         // Per SECTOR, not per room pair. Two rooms may be joined at several
         // sectors and each opening needs its own window - Core's joby3 has
         // two between rooms 76 and 10. Asking only "is there a window to

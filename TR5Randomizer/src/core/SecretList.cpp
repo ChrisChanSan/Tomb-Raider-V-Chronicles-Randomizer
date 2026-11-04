@@ -371,7 +371,7 @@ namespace
             // regardless of the verb (the "(add" trap from SecretPlan.ps1).
             std::string mask = rest;
             for (std::sregex_iterator it(rest.begin(), rest.end(), reSpot), e; it != e; ++it)
-                for (size_t i = 0; i < it->length(); ++i)
+                for (size_t i = 0; i < static_cast<size_t>(it->length()); ++i)
                     mask[static_cast<size_t>(it->position()) + i] = ' ';
             const size_t pExtra = mask.find('(');
             const std::string front = (pExtra != std::string::npos) ? rest.substr(0, pExtra) : rest;
@@ -568,11 +568,12 @@ bool buildSecretPatch(const std::wstring& listPath, const std::string& levelName
             // 270->0x800. Odd angles round to the nearest quarter.
             const int deg = ((o.angleDeg % 360) + 360) % 360;
             const int quad = ((deg + 45) / 90) & 3;
+            const int dirBits = 1 << (quad + 8);
             JsonValue c = JsonValue::makeObject();
             c.set("room", JsonValue::makeInt(o.room));
             c.set("sectorX", JsonValue::makeInt(o.sx));
             c.set("sectorZ", JsonValue::makeInt(o.sz));
-            c.set("dirBits", JsonValue::makeInt(1 << (quad + 8)));
+            c.set("dirBits", JsonValue::makeInt(dirBits));
             climbs.push(c);
             continue;
         }

@@ -207,7 +207,7 @@ bool Rando::buildInput(const JsonValue& zoneExport,
         for (size_t a = 0; a < ap.size(); ++a)
         {
             int r = 0, x = 0, z = 0;
-            if (std::sscanf(ap[a].asString().c_str(), "%d,%d,%d", &r, &x, &z) == 3)
+            if (sscanf_s(ap[a].asString().c_str(), "%d,%d,%d", &r, &x, &z) == 3)
                 s.approach.push_back(secKey(r, x, z));
         }
 
@@ -292,7 +292,7 @@ bool Rando::buildInput(const JsonValue& zoneExport,
     for (size_t i = 0; i < kb.size(); ++i)
     {
         int r = 0, x = 0, z = 0;
-        if (std::sscanf(kb[i].asString().c_str(), "%d,%d,%d", &r, &x, &z) == 3)
+        if (sscanf_s(kb[i].asString().c_str(), "%d,%d,%d", &r, &x, &z) == 3)
             out.keyBarredSectors.insert(secKey(r, x, z));
     }
 
@@ -362,7 +362,7 @@ bool Rando::buildInput(const JsonValue& zoneExport,
             for (size_t q = 0; q < sl.size(); ++q)
             {
                 int r = 0, x = 0, z = 0;
-                if (std::sscanf(sl[q].asString().c_str(), "%d,%d,%d", &r, &x, &z) == 3)
+                if (sscanf_s(sl[q].asString().c_str(), "%d,%d,%d", &r, &x, &z) == 3)
                     out.typeNoSectors[type].insert(secKey(r, x, z));
             }
         }

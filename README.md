@@ -921,9 +921,8 @@ fresh clone builds; the single absolute path in each of them is the call to
 `C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\`.
 Another version, edition or drive means editing that one line in the script
 you are running, and nothing else. The engine project builds with the
-**v142** toolset, "MSVC v142 - VS 2019 C++ x64/x86 build tools": an
-individual component of the Visual Studio Installer on newer versions, and
-present in Visual Studio 2019 itself. Both programs link the C++ runtime as
+**v145** toolset, the one any current Visual Studio 2026 with the C++
+workload brings along. Both programs link the C++ runtime as
 DLLs (`/MD`); the build scripts copy the three the EXEs import from the
 compiler's redist folder (`VCToolsRedistDir` of `vcvars64.bat`) beside them.
 

@@ -5691,10 +5691,8 @@ ships; on the command line `Preparation\Tools\Diagnose\be64.bat`, which
 puts `release64\PCtomb5_x64.exe` (the package's `PCTomb5.exe`) and its six
 DLLs together. Platform **Win32 (x86)** gives `release\PCtomb5.exe`, the
 32-bit build (`be.bat`) that is kept to compare against and no longer
-ships. Both link the C++ runtime as DLLs (`/MD`). The project builds with the **v142** toolset, "MSVC
-v142 - VS 2019 C++ x64/x86 build tools": an individual component of the
-Visual Studio Installer on newer versions, and present in Visual Studio 2019
-itself.
+ships. Both link the C++ runtime as DLLs (`/MD`). The project builds with the **v145** toolset, the one
+any current Visual Studio 2026 with the C++ workload brings along.
 
 > **Pick x64 and Release.** Win32 builds the 32-bit comparison EXE, and
 > Asan|x64 the AddressSanitizer build for test runs (`basan.bat`).

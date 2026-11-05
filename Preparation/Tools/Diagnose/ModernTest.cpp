@@ -39144,6 +39144,118 @@ static void corpse_fade()
 	free(flow);
 }
 
+/* Under Modern a level camera that shows something is kept (#335). The pure
+ * rule is game\modern_camera.h's ModernLevelCameraWhy; game\camera.cpp's
+ * ModernLevelCamera feeds it from the engine and CalculateCamera reads the
+ * one answer for the target build, the shot's branch, the head turn and the
+ * ledge rule. Kept: a sniper camera, a camera whose trigger names a Target
+ * item that is not Lara, a camera a heavy trigger set. Discarded: a camera
+ * that only frames Lara, and the forced fixed camera, which names none. */
+static void level_camera_rule()
+{
+	char* cam = hd_switch_text("../../game/camera.cpp");
+	static char calc[65536], decide[4096];
+	long modern, fix, snp, type, num, tgt, n, odd;
+	const long F = MODERN_LEVCAM_FIXED, H = MODERN_LEVCAM_HEAVY_T;
+
+	printf("The level camera rule\n");
+
+	n = ModernLevelCameraWhy(1, 1, 0, F, 1, 1);
+	ok(n == MODERN_LEVCAM_TARGET && ModernLevelCameraKept(n) &&
+		!ModernLevelCameraDiscards(n),
+		"level camera: a Target item keeps a fixed camera", n,
+		MODERN_LEVCAM_TARGET);
+	n = ModernLevelCameraWhy(1, 1, 0, H, 1, 0);
+	ok(n == MODERN_LEVCAM_HEAVY && ModernLevelCameraKept(n),
+		"level camera: a heavy trigger keeps its camera", n,
+		MODERN_LEVCAM_HEAVY);
+	n = ModernLevelCameraWhy(1, 1, 0, H, 1, 1);
+	ok(n == MODERN_LEVCAM_TARGET && ModernLevelCameraKept(n),
+		"level camera: a heavy trigger with a Target reads target", n,
+		MODERN_LEVCAM_TARGET);
+	n = ModernLevelCameraWhy(1, 1, 0, F, 1, 0);
+	ok(n == MODERN_LEVCAM_LARA_FRAME && !ModernLevelCameraKept(n) &&
+		ModernLevelCameraDiscards(n),
+		"level camera: a camera that frames Lara is discarded", n,
+		MODERN_LEVCAM_LARA_FRAME);
+	n = ModernLevelCameraWhy(1, 1, 0, F, 0, 0) * 10 +
+		ModernLevelCameraWhy(1, 1, 0, F, 0, 1);
+	ok(n == MODERN_LEVCAM_LARA_FRAME * 11,
+		"level camera: the forced fixed camera names none and is discarded",
+		n, MODERN_LEVCAM_LARA_FRAME * 11);
+	n = ModernLevelCameraWhy(1, 1, 1, F, 1, 0) * 100 +
+		ModernLevelCameraWhy(1, 1, 1, H, 1, 1) * 10 +
+		ModernLevelCameraWhy(1, 1, 1, 0, 1, 0);
+	ok(n == MODERN_LEVCAM_SNIPER * 111 &&
+		ModernLevelCameraKept(MODERN_LEVCAM_SNIPER),
+		"level camera: the sniper camera is kept, on any pass", n,
+		MODERN_LEVCAM_SNIPER * 111);
+	n = ModernLevelCameraWhy(1, 1, 0, 0, 1, 1) * 10 +
+		ModernLevelCameraWhy(1, 1, 0, 0, 0, 1);
+	ok(n == MODERN_LEVCAM_LARA_FRAME * 11,
+		"level camera: a look or combat pass stays the discard's", n,
+		MODERN_LEVCAM_LARA_FRAME * 11);
+
+	/* Every input: classic (modern 0) and a chase pass answer NONE, which
+	 * neither keeps nor discards - nothing changes there; and under Modern
+	 * the discard is the old one (would_fix and not the sniper) less the
+	 * kept Target and heavy cameras, and nothing else. */
+	odd = 0;
+
+	for (modern = 0; modern < 2; modern++)
+		for (fix = 0; fix < 2; fix++)
+			for (snp = 0; snp < 2; snp++)
+				for (type = 0; type < 3; type++)
+					for (num = 0; num < 2; num++)
+						for (tgt = 0; tgt < 2; tgt++)
+						{
+							const long w = ModernLevelCameraWhy(modern, fix, snp,
+								type, num, tgt);
+							const long old = modern && fix && !snp;
+							const long keep = num && (type == H ||
+								(type == F && tgt));
+
+							if (!modern || !fix)
+								odd += w != MODERN_LEVCAM_NONE ||
+									ModernLevelCameraKept(w) ||
+									ModernLevelCameraDiscards(w);
+							else
+								odd += ModernLevelCameraDiscards(w) !=
+									(old && !keep);
+						}
+
+	ok(odd == 0, "level camera: classic untouched, the discard only shrinks",
+		odd, 0);
+
+	glass_body(cam, "void CalculateCamera()", calc, sizeof(calc));
+	glass_body(cam, "static long ModernLevelCamera(", decide, sizeof(decide));
+
+	ok(strstr(calc, "constlonglevelWhy=ModernLevelCamera(wouldFix,sniperCam);"
+		"constlonglevelKept=ModernLevelCameraKept(levelWhy);"
+		"constlongmodernDiscard=ModernLevelCameraDiscards(levelWhy);") != 0 &&
+		!strstr(calc, "ModernCameraActive()&&wouldFix&&!sniperCam"),
+		"level camera: CalculateCamera takes the one answer",
+		hd_switch_count(calc, "ModernLevelCamera("), 1);
+	ok(hd_switch_count(calc, "&&!modernDiscard)") == 2 &&
+		hd_switch_count(calc, "elseif(modernDiscard)") == 1 &&
+		hd_switch_count(calc, "if(modernDiscard)camera.speed=10;") == 1 &&
+		strstr(calc, "!fixed_camera&&!levelKept)?1:0;") != 0,
+		"level camera: target, head turn, branch and ledge read it",
+		hd_switch_count(calc, "modernDiscard)"), 4);
+	ok(strstr(decide, "ModernLevelCameraWhy(ModernCameraActive()?1:0,wouldFix,"
+		"sniperCam?1:0,type,camera.number>=0?1:0,(camera.item&&camera.item!="
+		"lara_item)?1:0);") != 0 &&
+		strstr(decide, "if(camera.type==FIXED_CAMERA)type=MODERN_LEVCAM_FIXED;"
+		"elseif(camera.type==HEAVY_CAMERA)type=MODERN_LEVCAM_HEAVY_T;") != 0,
+		"level camera: ModernLevelCamera reads type, number and item",
+		hd_switch_count(decide, "camera."), 5);
+	ok(strstr(calc, "if(gLogEnabled)ModernLevelCameraLog(levelWhy);") != 0,
+		"level camera: the CAMLOG level line sits behind -log",
+		hd_switch_count(calc, "ModernLevelCameraLog("), 1);
+
+	free(cam);
+}
+
 int main()
 {
 	printf("ModernTest - the arithmetic of the modern control\n");
@@ -39422,6 +39534,7 @@ int main()
 	narrowing_closed();
 	corpse_fade();
 	body_save();
+	level_camera_rule();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

@@ -5202,8 +5202,11 @@ particular angle, so an enemy standing next to one leaves it on its wall
 instead of carrying it off and dropping it on open floor, where it could not be
 picked up.
 
-**Corpses and models behave.** Larson does not stand dead forever outside
-Trajan's Markets. Larson and Pierre only flee where the level actually
+**Corpses and models behave.** Outside Trajan's Markets Larson dies lying
+down: his death animation would have him get up again, so it stops where he
+lies, and he becomes a body like any other enemy - no collision, faded or
+kept by the Corpses setting, kept by a savegame. Pierre's body is the same.
+Larson and Pierre only flee where the level actually
 contains the marker they run to — fleeing without one makes them immortal.
 Enemies do not switch to a low-detail distance model at range, because the
 engine takes whatever sits in the next model slot, which in a foreign level is
@@ -5308,7 +5311,7 @@ wrote it, and each seam answers a different question:
 | the wrong sound plays | `SFXLOG` — which sample really played, and which animation command asked for it |
 | an enemy is invisible | `SLOTLOG`, `SKIPLOG`, `MESHLOG`, `CLIPLOG` — four separate reasons: no free AI slot, the control skipped it, no mesh, clipped away |
 | …and if it was clipped | `CLIPDETAIL` — the actual window and the camera it was measured against |
-| an item is in the wrong place, or vanishes | `ITEMLOG` — slot, room, OCB and flags per item at load |
+| an item is in the wrong place, or vanishes | `ITEMLOG` — slot, room, OCB and flags per item at load; `corpse laid down` with slot, frame, `after_death` and room when Larson or Pierre becomes a body |
 | …and something moved it later | `ITEMWATCH` — who wrote which room number, and when |
 | the game crashes in the first moment after a savegame is loaded, or an enemy loses its target with the load | `SAVELOG` — at a load one line per enemy: `item=`, the four bytes the save holds (`stored=`), how they were read (`how=null`, by number `tag_item` and `tag_ai`, by distance for a save from an earlier build `legacy_ok` and `legacy_null`) and what its target is now (`enemy=item n`, `ai n` or `null`); a `SAVELOG general` line for the thing Lara is busy with (`side=`, `general=`, and `how=tag_num` for an item's number); `SAVELOG save pool` and `load pool` with the memory pool's start and where its items and AI slots lie, and `POOL base=` once at the start of the game - two logs show whether it moved |
 | an enemy carries an item off, or does not | `CARRYLOG` — at the level start, one line per pickup within a carrier's reach: the carrier, the item, its OCB and offset, whether it was carried or left on its wall, and the carrier's pass: `pass=search` for a search object, `pass=enemy` for an enemy - the search objects take what is in their reach first, so an enemy gets only what no search object holds |

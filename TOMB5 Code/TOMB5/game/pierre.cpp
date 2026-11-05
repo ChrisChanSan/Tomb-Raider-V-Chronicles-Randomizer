@@ -68,6 +68,45 @@ static long PierreCanFlee(ITEM_INFO* item, CREATURE_INFO* pierre)
 	return 0;
 }
 
+// The frame of Larson's death animation (+15, 208 frames at rate 2) he lies
+// on. The animation is a fall AND a rise: the root drops from 398 to 62
+// above the floor by frame 18 (key 9); frame 28 (key 14) is the lowest pose
+// of the whole piece, 187 high with the arms settled; from frame 60 he props
+// himself up, from frame 148 he gets up, from frame 180 he stands, and
+// frame 207 is a man standing taller than at the start - the animation then
+// holds that last frame (it continues with itself there). Outside Trajan
+// Markets that rise is all a player sees of a death, so the animation stops
+// on frame 28.
+#define LARSON_DEATH_DOWN	28
+
+// Lay a dead Larson or Pierre down as a corpse on the given frame: what
+// AnimateItem's command 4 and CreatureAnimation do for any other enemy -
+// after_death 1 if it is not running yet, ITEM_DEACTIVATED, CreatureDie (no
+// collision, off the active chain, AI slot freed, IFL_INVISIBLE |
+// IFL_CLEARBODY, the cargo dropped). From here on the corpse is a guard's:
+// the Corpses switch fades it or keeps it, the savegame keeps it as a body
+// (SaveBodyLies, savegame.cpp). The control never runs for it again, so the
+// cargo comes out once; the caller returns at once, as item->data is gone.
+static void PierreLayDown(short item_number, long frame)
+{
+	ITEM_INFO* item;
+
+	item = &items[item_number];
+	item->frame_number = (short)frame;
+
+	if (!item->after_death)
+		item->after_death = 1;
+
+	item->status = ITEM_DEACTIVATED;
+	CreatureDie(item_number, 0);
+
+	if (gLogEnabled)
+		Log("ITEMLOG %d: corpse laid down slot %d frame %d after_death %d"
+			" room %d", item_number, item->object_number,
+			item->frame_number - anims[item->anim_number].frame_base,
+			item->after_death, item->room_number);
+}
+
 void InitialisePierre(short item_number)
 {
 	ITEM_INFO* item;
@@ -158,6 +197,20 @@ void PierreControl(short item_number)
 			item->frame_number = anims[item->anim_number].frame_base;
 			item->current_anim_state = 5;
 		}
+		else if (item->object_number == LARSON && gfLevelId != LVL5_TRAJAN_MARKETS)
+		{
+			// Outside Trajan Markets he lies down and stays down: the
+			// animation is held on its lowest frame and he becomes a corpse
+			// like a guard. No heavy trigger test here - only Trajan
+			// Markets' scripted Larson stands on one (the cutscene's), and a
+			// randomized level can put a pool Larson's start on any heavy
+			// trigger. The >= takes a Larson a save left standing at the end.
+			if (item->frame_number >= anims[item->anim_number].frame_base + LARSON_DEATH_DOWN)
+			{
+				PierreLayDown(item_number, anims[item->anim_number].frame_base + LARSON_DEATH_DOWN);
+				return;
+			}
+		}
 		else if (item->object_number == LARSON && item->frame_number == anims[item->anim_number].frame_end)
 		{
 			room_number = item->item_flags[2] & 0xFF;
@@ -169,31 +222,21 @@ void PierreControl(short item_number)
 			GetHeight(floor, x, y, z);
 			TestTriggers(trigger_index, 1, 0);
 
-			// Let Larson fade out like any other enemy.
+			// Trajan Markets only (the branch above takes every other
+			// level). The heavy test reads the sector he started on
+			// (InitialiseCreature keeps it in item_flags[2] and draw_room):
+			// there the level's HEAVY trigger starts the cutscene that ends
+			// the fight, andrea3b_init (deltapak.cpp) sets him ITEM_INVISIBLE.
+			// His death animation carries no anim command 4 (KillItem) -
+			// seven PlaySound commands and nothing else - and ends with him
+			// standing again: a 208-frame piece for the camera, a fall and a
+			// rise. The animation holds its last frame, so this runs on
+			// every tick from here on.
 			//
-			// His death animation carries no anim command 4 (KillItem): it
-			// has seven PlaySound commands and nothing else. With the dog
-			// the command sits in the death animation and sets
-			// after_death = 1 (AnimateItem); from then on PrintObjects
-			// fades the corpse and removes it at 128.
-			//
-			// Larson lacks this because his corpse is cleared in exactly
-			// one place: in Trajan Markets the cutscene takes over at this
-			// animation's last frame, and andrea3b_init (deltapak.cpp) sets
-			// him to ITEM_INVISIBLE. In every other level - where he never
-			// dies in vanilla because he flees first - the corpse would
-			// remain. His death animation ends standing, after all: it is a
-			// 207-frame piece for the camera, not a fall.
-			//
-			// For the enemy pool he must be able to die everywhere, hence
-			// the push here that his animation does not bring. Andrea2
-			// stays untouched: there the cutscene hides him in the same
-			// moment, the fade never becomes visible.
-			//
-			// With the fade the cargo must come out too: carried items are
-			// otherwise released only by CreatureDie, and Larson never gets
-			// there - his death animation carries no command 4 that would
-			// lead there via ITEM_DEACTIVATED (AnimateItem).
+			// after_death = 1 starts the fade a command 4 would have
+			// started, and the cargo comes out with it: carried items are
+			// otherwise released only by CreatureDie. The cutscene hides him
+			// in the same moment; the fade never becomes visible.
 			if (!item->after_death)
 			{
 				DropBaddyPickups(item);
@@ -202,24 +245,22 @@ void PierreControl(short item_number)
 		}
 		else if (item->object_number == PIERRE && item->frame_number >= anims[item->anim_number].frame_end - 1)
 		{
-			// Pierre's death animation (+12) jumps back into a living
-			// animation (+8) at its end - he never used his generic death
-			// in vanilla, where he dies by cutscene (Colosseum). Without a
-			// latch the control would restart the death on the next tick,
-			// an Imp-like endless loop. Holding the anim just before its
-			// end avoids the jump: the pose stays down, and after_death
-			// fades it out and removes it at 128.
-			item->frame_number = anims[item->anim_number].frame_end - 1;
-
-			// Release the cargo: the latch one frame before the end is
-			// exactly why Pierre's own command 4 never fires anymore - and
-			// with it neither does CreatureDie, which would otherwise drop
-			// the carried items.
-			if (!item->after_death)
-			{
-				DropBaddyPickups(item);
-				item->after_death = 1;
-			}
+			// Pierre's death animation (+12, 95 frames at rate 3) kneels,
+			// falls on frame 78 to 84 and lies from there; he never used
+			// it in vanilla, where he dies by cutscene (Colosseum). The
+			// latch one frame before the end was set against a jump back
+			// into a living animation and an endless loop; the files
+			// measured for #340 (vanilla Andrea3, a pool copy) show the
+			// animation continuing with itself on its last frame and a
+			// command 4 at its end. The latch stays: the frame before the
+			// end lies as low as the last (176 high).
+			//
+			// The latch kept command 4 from ever firing, and with it
+			// CreatureDie: he had kept his collision, his AI slot and his
+			// place on the active chain, and the savegame did not know him
+			// as a body. He becomes a corpse here as Larson does above.
+			PierreLayDown(item_number, anims[item->anim_number].frame_end - 1);
+			return;
 		}
 	}
 	else

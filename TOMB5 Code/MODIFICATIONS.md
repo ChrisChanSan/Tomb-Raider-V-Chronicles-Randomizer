@@ -19170,6 +19170,68 @@ configuration and the guard.
 
 **Commits.** `499e8835`.
 
+### A spark follows its item above number 255 (#330)
+2026-11-05
+
+**Found.** A spark that follows an item or an effect keeps its number in `FxObj`, an
+8-bit field of `SPARKS` and `SMOKE_SPARKS` (`global/types.h`). `MAX_ITEMS` was raised to
+512 ("Twice as many items per level" above), so an item numbered above 255 wrapped there
+and the spark followed the item 256 numbers below it. Item counts of the 15 vanilla
+levels (`data/Backup`): rich2 248, joby3 244, rich3 225, joby5 216, rich1 211, joby2 177,
+andy2 158, andrea1 151, andrea2 150, andrea3 110, andy1 63, andy3 60, title 38, joby4 31,
+richcut2 2 - no vanilla level reaches 256, and with the old limit of 256 neither could an
+item made during play. The randomized levels as they lay in `data/` on this date: rich2
+305, joby3 303, rich3 275, joby5 270, rich1 265, the others below 256; 138 items above
+255 in the five. Among them four spark makers: rich2's hydra (item 296), joby5's hydra
+(268) and rich3's two Roman gods (266, 274), all added by the randomizer.
+
+The seven places that write `FxObj` and what a wrapped number did:
+
+- `effect2.cpp` `TriggerFireFlame`, fire riding an effect (`SF_FX`): never wrapped -
+  every caller passes -1, and there are 24 effects.
+- `flmtorch.cpp` `TriggerTorchFlame`, the torch's flame (`SF_ITEM`): Lara's torch (node
+  0) is placed by her own joint; a torch on the floor burned at another item.
+- `hydra.cpp` `TriggerHydraPowerupFlames`, the hydra's charging flames (`SF_ITEM`): at
+  another item, none at the hydra.
+- `joby.cpp` `TriggerCableSparks`, the electric cable's sparks (`SF_ITEM`): at another
+  item.
+- `minisub.cpp` `TriggerMinisubLight`, the attack sub's light (`SF_ITEM`): at another
+  item.
+- `romangod.cpp` `TriggerRomanGodMissileFlame`, the god's missile flame (`SF_FX`): never
+  wrapped, an effect number.
+- `romangod.cpp` `TriggerRomanGodPowerupFlames`, the god's charging flames (`SF_ITEM`):
+  at another item, none at the god.
+- `skeleton.cpp` `TriggerSkeletonFire`, the fire of an animating with OCB 222
+  (`SF_ITEM`): at another item; no level carries one.
+
+The draw (`specific/specificfx.cpp`) reads the number as `items[FxObj]` and walks that
+item's skeleton to the spark's node, so a wrapped flame stood near the wrong item - at
+rich2's item 40 (a door), joby5's item 12, rich3's items 10 and 18 - offset by bones that
+belong to other models. `DetatchSpark` (`game/effect2.cpp`), called when an item or an
+effect is killed, compares the number and found the wrapped spark only under the wrong
+item. The structs are not saved (`game/savegame.cpp` names neither them nor `spark`) and
+not read from level data.
+
+The other 8-bit fields that hold a number of the same kind: `RPickups[16]`
+(`game/pickup.cpp`), the item numbers of the regenerating pickups - no such pickup stands
+above 255 today, the randomizer adds none, but the field wrapped in the same way.
+`SPARKS::RoomNumber` holds a room (the most is andy2's 254 rooms), `NodeNumber` one of 16
+node offsets; `SMOKE_SPARKS::FxObj` is written and read nowhere. No other spark, smoke,
+blood, drip, bubble or shell field holds an item, effect or room number.
+
+**Changed.** `FxObj` is a `short` in both structs; the seven writes lose their `(uchar)`,
+`(short)` where the source is a `long` or a pointer difference; the reads stay. `SPARKS`
+grows from 52 to 56 bytes and `SMOKE_SPARKS` from 44 to 48 (the field's alignment);
+`spark[1024]`, `weather_splash[1024]` and `smoke_spark[32]` are sized and cleared with
+`sizeof`, and nothing else assumes the size. `RPickups` is a `short[16]`, its one write
+in `game/init.cpp` without the cast.
+
+**Checked.** ModernTest's group `spark_item_number` (9 checks): `FxObj` is a `short` in
+both structs, the seven files write it without a `uchar`, `RPickups` is a `short`. The
+logs of `be64.bat`, `be64.bat test`, `basan.bat` and `be.bat` hold no warning line.
+
+**Commits.** `81d4d2c3`.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -19638,3 +19700,4 @@ entries above.
 | #326 | The current toolset, one language standard, and the warnings the randomizer never saw |
 | #327 | A composite's borrowed nodes draw from their donor's HD model |
 | #328 | The engine builds without a warning |
+| #330 | A spark follows its item above number 255 |

@@ -38799,6 +38799,70 @@ static void composite_nodes()
 	free(model);
 }
 
+/* A spark follows its item above number 255 (#330): FxObj, the item or
+ * effect number a spark of SPARKS or SMOKE_SPARKS follows, is a short, the
+ * seven places that write it cast to no uchar, and RPickups, the item
+ * numbers of the regenerating pickups, is a short array too. MAX_ITEMS is
+ * 512, so an 8-bit number wrapped above 255. Read from the tree. */
+static void spark_item_number()
+{
+	static const char* const files[7] = { "effect2.cpp", "flmtorch.cpp",
+		"hydra.cpp", "joby.cpp", "minisub.cpp", "romangod.cpp",
+		"skeleton.cpp" };
+	static const char* const lines[7] = {
+		"sptr->FxObj = (short)body_part;",
+		"sptr->FxObj = item_number;",
+		"sptr->FxObj = item_number;",
+		"sptr->FxObj = item_number;",
+		"sptr->FxObj = item_number;",
+		"sptr->FxObj = (short)fxnum;",
+		"sptr->FxObj = (short)(item - items);" };
+	static const int wants[7] = { 1, 1, 1, 1, 1, 1, 1 };
+	char* types = hd_switch_text("../../global/types.h");
+	char* pick = hd_switch_text("../../game/pickup.cpp");
+	char* pickh = hd_switch_text("../../game/pickup.h");
+	char* init = hd_switch_text("../../game/init.cpp");
+	char name[64];
+	char what[128];
+
+	printf("A spark's item number\n");
+
+	ok(types && hd_switch_count(types, "\tuchar FxObj;") == 0 &&
+		hd_switch_count(types, "\tshort FxObj;") == 2,
+		"spark item number: FxObj is a short in SPARKS and SMOKE_SPARKS",
+		types ? hd_switch_count(types, "\tshort FxObj;") : -1, 2);
+
+	for (int i = 0; i < 7; i++)
+	{
+		char* t;
+		int n;
+
+		snprintf(name, sizeof(name), "../../game/%s", files[i]);
+		t = hd_switch_text(name);
+		n = t ? hd_switch_count(t, lines[i]) : -1;
+
+		if (i == 5 && t)
+			n += hd_switch_count(t, "sptr->FxObj = item_number;") - 1;
+
+		snprintf(what, sizeof(what), "spark item number: %s writes "
+			"FxObj without a uchar", files[i]);
+		ok(t && n == wants[i] &&
+			hd_switch_count(t, "FxObj = (uchar)") == 0, what, n, wants[i]);
+		free(t);
+	}
+
+	ok(pick && pickh && init &&
+		hd_switch_count(pick, "short RPickups[16];") == 1 &&
+		hd_switch_count(pickh, "extern short RPickups[16];") == 1 &&
+		hd_switch_count(init, "RPickups[NumRPickups++] = item_number;")
+		== 1,
+		"spark item number: RPickups holds short item numbers", 0, 1);
+	free(types);
+	free(pick);
+	free(pickh);
+	free(init);
+}
+
 int main()
 {
 	printf("ModernTest - the arithmetic of the modern control\n");
@@ -39073,6 +39137,7 @@ int main()
 	lara_joints();
 	logic_leftovers();
 	composite_nodes();
+	spark_item_number();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

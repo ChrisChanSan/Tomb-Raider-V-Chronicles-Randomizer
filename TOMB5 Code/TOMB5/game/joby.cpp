@@ -681,7 +681,7 @@ void TriggerCableSparks(long x, long z, short item_number, long node, long flare
 
 	sptr->Life = n;
 	sptr->sLife = n;
-	sptr->FxObj = (uchar)item_number;
+	sptr->FxObj = item_number;
 	sptr->TransType = 2;
 	sptr->Flags = SF_ATTACHEDNODE | SF_ITEM | SF_DEF | SF_SCALE;
 	sptr->NodeNumber = (uchar)node;

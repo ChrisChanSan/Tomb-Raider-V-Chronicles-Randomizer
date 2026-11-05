@@ -261,7 +261,7 @@ void TriggerTorchFlame(short item_number, long node)
 	sptr->Gravity = -16 - (GetRandomControl() & 0x1F);
 	sptr->NodeNumber = (uchar)node;
 	sptr->MaxYvel = -16 - (GetRandomControl() & 7);
-	sptr->FxObj = (uchar)item_number;
+	sptr->FxObj = item_number;
 	sptr->Scalar = 1;
 	size = (GetRandomControl() & 0x1F) + 80;
 	sptr->Size = (uchar)size;

@@ -1719,7 +1719,7 @@ void TriggerFireFlame(long x, long y, long z, long body_part, long type)
 	else
 	{
 		sptr->Flags = SF_FX | SF_ROTATE | SF_DEF | SF_SCALE;
-		sptr->FxObj = (uchar)body_part;
+		sptr->FxObj = (short)body_part;
 		sptr->Gravity = -32 - (GetRandomControl() & 0x3F);
 		sptr->MaxYvel = -24 - (GetRandomControl() & 7);
 	}

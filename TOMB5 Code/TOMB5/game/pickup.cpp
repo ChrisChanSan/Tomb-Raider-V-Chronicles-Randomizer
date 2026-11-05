@@ -38,7 +38,7 @@
 #include "lara.h"
 
 uchar NumRPickups;
-uchar RPickups[16];
+short RPickups[16];
 char KeyTriggerActive = 0;
 
 static short PuzzleBounds[12] = { 0, 0, -256, 256, 0, 0, -1820, 1820, -5460, 5460, -1820, 1820 };

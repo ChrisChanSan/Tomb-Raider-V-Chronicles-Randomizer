@@ -19541,6 +19541,108 @@ in the logs of `be64.bat`, `basan.bat`, `be64.bat test` and `be.bat`.
 
 **Commits.** see the appendix.
 
+### Under Modern a level camera that shows something is kept (#335)
+2026-11-05
+
+**Measured.** Under Modern every level camera but the sniper camera was discarded
+(`camera.cpp`, `CalculateCamera`: `modernDiscard = ModernCameraActive() && wouldFix &&
+!sniperCam`), so the camera cuts that show something away from Lara never came: in rich2
+the steel door falls on its heavy trigger and the dog comes through it with the sound
+and no picture, in joby2 the crane's switch moves the crane out of sight. The new tool
+`CamTriggers` (kept with the task, not in the tree) walks every sector's floordata as
+`_TestTriggers` does - the end bit of a Camera or Flyby command sits on its second word,
+which `Tr5Level::readChain` deliberately does not follow - over the fifteen vanilla
+`.trc` files: 258 Camera commands. 20 carry a Target command on the same trigger, the
+twenty pairs the old comment counted, but not all on floor tiles: 12 floor tiles
+(Andrea1 2, rich1 4, rich3 6), 4 switches (Andrea1 2, joby2 1, rich3 1), Andrea2's
+keyhole and rich2's 3 heavy triggers; every target is a `CAMERA_TARGET`. No heavy
+trigger names a camera without a Target. 51 commands name one of rich2's four sniper
+cameras (flags & 2). The other 187 frame Lara: no Target, so `FixedCamera` aims at her.
+Of these, 41 tiles also do something else - the flipeffects 48, 49 and 52 in Andrea1
+(`TL_2`, `TL_3`, `TL_6`, a line of Lara's played once), Andrea3's crumbling floor,
+andy1's bat and rat, andy3's animatings (room 156) and teleporter, rich1's bridges and
+doors, rich2's doors and flipmaps; they stay discarded, as the rule says. The skip of
+a Zip call (#282, #284) is not the cause: `twogun.cpp` and `zip_call_rule.h` name no
+`camera.` field, and neither the skip in `control.cpp` nor `spotcam.cpp` writes
+`camera.number` or `camera.item`.
+
+| level | Camera commands | kept | discarded |
+|---|---|---|---|
+| Andrea1 | 30 | 4 | 26 |
+| Andrea2 | 3 | 1 | 2 |
+| Andrea3 | 13 | 0 | 13 |
+| andy1 | 18 | 0 | 18 |
+| Andy2 | 13 | 0 | 13 |
+| andy3 | 16 | 0 | 16 |
+| joby2 | 1 | 1 | 0 |
+| joby3 | 9 | 0 | 9 |
+| joby5 | 9 | 0 | 9 |
+| rich1 | 29 | 4 | 25 |
+| rich2 | 108 | 54 (51 sniper) | 54 |
+| rich3 | 9 | 7 | 2 |
+
+joby4, richcut2 and del carry none.
+
+**Changed.** The rule is `ModernLevelCameraWhy` (`modern_camera.h`, inline, no engine
+header), fed once per pass by `ModernLevelCamera` (`camera.cpp`): under Modern, on a pass
+that is not a chase pass, a level camera is kept when it is the sniper camera, when a
+trigger named it (`camera.number >= 0`) and `camera.item` is an item that is not Lara
+on a FIXED or HEAVY camera (`TO_TARGET`), or when a trigger named it and the camera is
+HEAVY. Everything else is a frame of Lara and stays discarded: the lever and door
+cameras, and the forced fixed camera of the trapdoors and the turn switch, which names
+no camera. `modernDiscard` is the answer's "discarded"; the target build, the speed of
+10, the head turn and the branch to the orbit read it as before, and the ledge rule
+reads "kept" where it read the sniper. A kept camera runs as under the classic control:
+the shot built round the target item, `fixed_camera` 1 with its `SniperCount` and speed
+1, `FixedCamera` with its timer, and the reset that holds a heavy camera while its timer
+runs. With `tomb5.control_modern` off, or under first person (where
+`ModernCameraActive()` is false), the answer is NONE, which neither keeps nor discards:
+the passes are the ones before. First person keeps its own rule, all but the sniper
+camera discarded, because it is her eyes.
+
+**The orbit's hand-over.** As at the sniper camera: while the level camera runs the
+orbit does not tick, its stamp goes stale, `ModernCameraWorldYaw` declines and the
+movement reference is the measured view. A stick held through the cut keeps her course
+under the cut latch, `cut=1` on the tick the reference changes and `latch=1` while the
+course is held, until the stick is let go or turned more than 45 degrees; the same on
+the way back, where `ChaseCamera` meets `old_type` FIXED at speed 1 and the orbit
+takes the view back at the angle it had. The interpolator counts both as a camera cut
+(`fixed_camera` and the type leave the smooth family).
+
+**The three places.** rich2 room 34 (flip 153), sectors 5,3 and 5,4, a HEAVY trigger:
+Flipmap 5, CD 75, Camera 3 (flags 1, timer 2 s, one shot), Target 55, item 91 (the
+dog); the steel door 53 lies on 5,4 and sets it off when it falls. Kept. joby2 room 72,
+the switch 103: Target 53, Camera 0 (timer 4 s, one shot), item 52 `ANIMATING3` (the
+crane), Flipmap 0. Kept. Andrea1 room 42, sector 7,1: Camera 4 (flags 0, timer 0, in
+the same room) and flipeffect 49, `TL_3`, which plays CD track 23 once, a line of
+Lara's - no Target; the camera holds Lara while she stands on the tile. Discarded:
+under Modern the line plays and the view stays the orbit.
+
+**The rows the rule leaves out that show something** (no Target, so discarded today;
+each could be kept by a level fix that adds a Target): Andrea1 cameras 1, 4, 12 with
+Lara's spoken lines; Andrea3 cameras 0 and 1 over the crumbling floor of room 14; andy1
+camera 6 (the rat, timer 2 s) and 9 (a bat); andy3 camera 15 over the four animatings of
+room 156 and camera 16 at the teleporter; rich1 camera 2 over the bridges of room 7 and
+camera 1 at door 9; rich2 cameras 4, 7, 8, 12 at doors and the guard, 13-15 with flipmap 2
+switched off; and four with a CD track only (andy1 camera 2, rich1 camera 4, rich3
+camera 2, andy1 camera 9 with its bat). The full table is in the task's measurement.
+
+**The seam.** `CAMLOG level f= number= type=fixed|heavy target=<item>|lara kept=0|1
+why=target|heavy|sniper|lara_frame`, behind `-log`, once on the pass the answer, the
+camera, its type or its target changes, none while it holds.
+
+**Checked.** ModernTest's new group `level_camera_rule` (12 checks): kept for a target,
+kept for heavy, heavy with a target reads target, a frame of Lara discarded, the forced
+fixed camera discarded, the sniper kept on any pass, a look or combat pass the
+discard's, every input with the classic control and a chase pass NONE and the discard
+under Modern the old one less the kept cameras, and the wiring in `CalculateCamera`
+and `ModernLevelCamera`. ModernTest 17748 checks
+(17736 + 12), MenuTest 45043, InterpTest 754, LipsTest 272, none failed; no warning line
+in the logs of `be64.bat`, `basan.bat`, `be64.bat test` and `be.bat`. joby4, the level
+of the recorder's run, carries no Camera command, so no kept camera lies on its path.
+
+**Commits.** see the appendix.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -20014,3 +20116,4 @@ entries above.
 | #331 | The six suspect narrowings closed, and C4244 an error |
 | #332 | The corpse fade in HD, and the Corpses switch |
 | #333 | A lying body survives the savegame, format 3 |
+| #335 | Under Modern a level camera that shows something is kept |

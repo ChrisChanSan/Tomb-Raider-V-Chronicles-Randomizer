@@ -19361,6 +19361,107 @@ changed.
 
 **Commits.** see the appendix.
 
+### The corpse fade in HD, and the Corpses switch (#332)
+2026-11-05
+
+**Found.** A dead enemy fades out in the classic draw and pops away in HD. The count is
+the classic one: animation command 4 at the end of a death animation sets `after_death`
+to 1 (`control.cpp`), the cyborg (`hitman.cpp`), Larson and Pierre (`pierre.cpp`) and a
+body floating up (`box.cpp`) set it themselves; `StepAfterDeathFade` (`draw.cpp`) counts
+it up once per logic tick for a body its room drew and kills the item at 128.
+`PrintObjects` and the mirror's draw set `GlobalAlpha = 0xFE000000 * after_death`
+around the draw routine. That keeps the low byte of 254 * after_death in the top byte:
+256 - 2 * after_death, 254 at 1 and 2 at 127, one step less per tick, 4.2 seconds at
+thirty ticks. The classic inserters put it into every vertex and file the faces as draw
+type 7 (alpha test, SRCALPHA / INVSRCALPHA, depth written, sorted). Nothing under
+`specific/hd` read `GlobalAlpha` or `after_death`, so the HD body stood whole until
+`KillItem` took it.
+
+**Measured.** ModelProbe `-alpha` over ANDREA1's bound slots and the three creatures
+BLUE_GUARD (37), SAS (31) and LARSON (45): an HD creature is drawn by `HDModelDraw` in
+the opaque step (BLUE_GUARD 15 parts, SAS 15) and the alpha-test step (LARSON 2 of 16
+parts), both in the solid bracket (`HD_PASS_SOLID`) after the rooms; none of the three
+has a part in the additive step or the glass step (the glow bracket), and the census
+finds no glass range on any bound slot of the level. The same entries are drawn again
+by the marble mirror and the wet floors (`HDRenderMarbleDraw`, `HDRenderWaterWetModels`,
+both through `HDObjectFrameDraw`), and a mirror room's reflection is an entry of its own
+(`HDObjectReflection`). The projected shadow takes an item twice: cast into the second
+map when its blob gave way (`HDObjectBlobGivesWay`, depth only), and received by its
+own body (`HDObjectShadowReceiveFrame`, a second draw that darkens). Every draw of an
+item's model goes through `draw_model` in `hd_model.cpp`, which already sets
+`D3DRS_BLENDFACTOR` for the glass (`HDGlassOpacityByte`) on cards with
+`D3DPBLENDCAPS_BLENDFACTOR`. None of the passes touches the rooms' draw.
+
+**Changed.** The weight is the classic byte, `HDCorpseFadeByte` (`hd_object_rules.h`):
+256 - 2 * after_death for 2 to 127, and 255 - drawn as today - at 0, at 1 (where the
+classic is at 254), at 128 and over, and for anything with hit points left. The last
+keeps the skeleton as the HD path has always drawn it: its control writes
+`after_death` as a rise timer while it lives (`skeleton.cpp`, 125 far away,
+`sqrt(distance) >> 4` near). `HDObjectBegin` takes the byte per item, the mirror's
+reflection of it the same; `HDObjectEnd` stores it in the frame entry; Lara's pieces
+and the ring's items carry 255. `HDObjectFrameDraw` walks its list twice, the whole
+entries first and then the fading ones, so a body is laid over what the rooms and the
+other models have drawn, as the classic sorts it; the second walk is skipped when the
+first met none. `HDModelFade` hands the byte to `draw_model`, which for the opaque and
+the alpha-test step switches blending on with SRCBLEND BLENDFACTOR and DESTBLEND
+INVBLENDFACTOR, the depth still written as for draw type 7, adds the glow times the
+factor and weighs the glass factor by it; every state goes back as the step found it.
+No second copy of the geometry and no shader change. A card without the blend factor
+draws the body whole until it is killed, as before.
+
+The shadow: a fading body keeps its blob (`HDObjectBlobGivesWay` says no for it), and
+the classic blob fades with the count (`S_PrintShadow`, alpha 128 - after_death). The
+second map holds depth only, so a caster cannot be cast at a fraction without a shader
+change; the blob can. The receive draw leaves a fading entry out, because it would
+darken at full strength what the body lays over the room at a fraction.
+
+**The switch.** `tomb5.corpses`, default on, the row *Corpses* (on/off) right after
+*Cheats* on the tomb5 options tab, stored as `corpses` in the three places of
+`tomb5.cpp`, its word in the five languages in `CustomText`'s table. Off,
+`StepAfterDeathFade` refuses the step from 1 to 2: a body that has not begun to fade
+stays where it fell, whole on both paths, and is never killed by the count. A body
+already past 1 finishes its fade, so turning the switch off never leaves a body half
+seen; turning it on lets the bodies lying there fade from then on, since the tick reads
+it every time. The other effects are untouched: `CreatureDie` has already freed the AI
+slot and dropped what the enemy carried; the kill of an active item at 128 in the
+control loop (`control.cpp`) is reached by nothing with the switch off - only the count
+goes past 1, and the skeleton writes at most 125; the skeleton's timer is written by its
+control after the count every tick, so the count never shows; the cyborg counts his own
+frames before he sets 1 and then lies like any other body.
+
+What a body that stays costs: nothing it did not cost while it faded. The AI slot is
+free; a level item (every placed enemy) never returns to the free list, and only a
+spawned one would keep a slot of `items` that `KillItem` would have handed back. The
+tick's sweep is over every slot either way; the body's room draws it (classic or one
+HD entry) and marks its byte; `GetCollidedObjects` passes it at its first flag test
+(`IFL_CLEARBODY`, set by `CreatureDie`). A savegame keeps no such body: the save writes
+an item with `IFL_CLEARBODY` as killed and the load kills it, as in the original, so a
+level loaded back has none lying about in either setting.
+
+**The recorder.** The switch changes when `KillItem` runs, which changes the room lists
+and, for a spawned item, the free list; a recording made with one setting can drift
+when replayed with the other. The header (`specific/replay.cpp`) does not carry it in
+this change: with the default, on, every recording made so far stays valid, and a
+recording is to be replayed with the setting it was made with. STATELOG's count of
+fading bodies (`after_death` 1..127) also counts the bodies that stay.
+
+**Checked.** ModelProbe before and after this change, the same three creatures of
+ANDREA1: the same PNG, byte for byte (BLUE_GUARD ab02aa92, SAS cdd74ca0, LARSON
+92878b9a); a new `-fade <byte>` draws a slot at a point of its fade, and `-fade 255`
+writes the picture a run without it writes. ModernTest's new group `corpse_fade`
+(12 checks) holds the curve at every step and the cases at 255, the byte taken in
+`HDObjectBegin` and handed to `HDModelFade` in `HDObjectFrameDraw`, the receive and
+blob rules, the blend in `draw_model`, the field in `types.h`, the three registry
+places, the menu row after Cheats and its word, and the test in `StepAfterDeathFade`
+before its kill; caption_sites holds the new label, and the table's row count (136 to
+137) moves in the two groups that read it. `Preparation/extrastrings.txt` carries the
+word in its four sections. ModernTest 17723 checks (17711 + 12), MenuTest 45043 (the
+tomb5 options rows are not among what it counts), InterpTest 754, LipsTest 272, none
+failed; no warning line in the logs of `be64.bat`, `basan.bat`, `be64.bat test` and
+`be.bat`.
+
+**Commits.** see the appendix.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -19832,3 +19933,4 @@ entries above.
 | #329 | The hidden narrowings, and C4244 still a warning |
 | #330 | A spark follows its item above number 255 |
 | #331 | The six suspect narrowings closed, and C4244 an error |
+| #332 | The corpse fade in HD, and the Corpses switch |

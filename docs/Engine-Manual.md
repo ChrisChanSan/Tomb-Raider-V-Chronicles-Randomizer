@@ -828,14 +828,14 @@ sound sees it: the two volumes on the nearer end. The seven tabs:
 | Controls | *Key bindings*, *View*, *Modes*, Control type, Action, Control layout, Camera speed, Dead zone, Mouse sensitivity, Invert mouse, Targeting, Ammotype hotkeys | see below |
 | Graphics | *Display*, HD build, HD textures, Body physics, Reflections, Fog, Distance fog, Shimmer, Mono screen style, Shadow mode, PSX skies, Static lighting, UW Effect, Look transparency, Footprints — fifteen rows on two pages, eight and seven, turned with the arrows at the bottom | see **tomb5 options**; Body physics off; Reflections on; Shadow mode *Projected* (offered only while HD is on, see **The projected shadow**) |
 | HUD | Bar mode, Bar positions, Enemy bars, Ammo counter, Gameover menu, Loadbar style, Loading text | see **tomb5 options** |
-| tomb5 options | Cutscene skipper, Cheats, Level Select, Fix climb up delay, Flexible crawling, Crawl Tilting | see below |
+| tomb5 options | Cutscene skipper, Cheats, Corpses, Level Select, Fix climb up delay, Flexible crawling, Crawl Tilting | see below |
 | Special Features | the bonus gallery (title screen only) | all locked |
 | Credits | who this is built on | — |
 
 The tabs only sort the rows: every setting keeps its own variable, range,
 default and effect whichever tab it sits on. *Targeting*, which the original
 keeps on the Options page itself, sits on *Controls*. See **tomb5 options**
-below for the six settings on that tab, and the sections after it for the
+below for the seven settings on that tab, and the sections after it for the
 *Graphics* and *HUD* rows.
 
 **Credits** is a screen of its own, not one of the framework's pages, so it
@@ -857,10 +857,10 @@ stay as they are.
 run time from the player's own <strong>Tomb Raider IV-VI Remastered</strong>
 installation — none of it is included here.</em></p>
 
-Six settings the original never had, and that belong neither to *Graphics*
+Seven settings the original never had, and that belong neither to *Graphics*
 nor to *HUD* (see **The options menu** above):
 
-*Cutscene skipper* (off), *Cheats* (off), *Level Select* (off), *Fix climb up
+*Cutscene skipper* (off), *Cheats* (off), *Corpses* (on), *Level Select* (off), *Fix climb up
 delay* (on — removes the pause before Lara pulls herself up), *Flexible
 crawling* (on), *Crawl Tilting* (on).
 
@@ -929,6 +929,17 @@ Worth spelling out:
 - **Cheats** unlocks DOZY and five hotkey rows on the
   *Key bindings* page (below). The classic cheat words still need the Timex-TMX
   in hand (the inventory's watch; the data call its slot the compass).
+- **Corpses** decides what happens to a defeated enemy. *On*, the original's
+  way: once its death animation has ended the body fades out over about four
+  seconds and is then cleared away - in HD as in SD; the HD body fades with
+  the same curve, in a mirror too, and its shadow goes over to the round blob
+  the original fades with it. *Off*: the body stays where it fell, whole, for
+  as long as you stay in the level. The setting is read all the time, so
+  turning it on later lets the bodies lying around fade from then on; a body
+  already fading when it is turned off finishes. Whatever an enemy carried
+  is dropped either way. A savegame keeps no fallen enemy's body: loaded
+  back, the level has none lying about, in either setting, as in the
+  original.
 
 ### Cheats and the cheat hotkeys
 

@@ -5055,6 +5055,16 @@ wrong and exits rather than carry on with half a game in memory.
 > your first attempt to load one ends with a message box and a closed game —
 > nothing is destroyed, the file is untouched, but it cannot be loaded here.
 
+**Saves from Beta_5.0 and earlier do not load in this build.** The save now
+keeps every item's animation as a full number: a stealth cutscene hands a
+knocked-out guard a soldier's animation that lay too far away for the old
+single byte, and such a guard came back from a load playing another
+object's animation. The file is as large as before, so a mark at the start
+of the item data tells the formats apart; a save without it is refused with
+*"This savegame was written by an older version of the game. This version
+uses a newer savegame format and cannot load it."* and the game closes, as
+above.
+
 There was also a bug worth knowing about, because it is in the game you
 already own: saving during the key-insert animation lost the keyhole's state.
 The key was gone from the inventory, the keyhole came back "unused", and the
@@ -5064,9 +5074,10 @@ reload, that was probably why. Fixed here.
 An enemy's target and the thing Lara is busy with are kept in a save by
 number, not by their address: the game's memory lies somewhere else at every
 start, and an empty target kept as an address came back as a wild one, which
-crashed the game in the first moment after the load. Saves from earlier builds
-load as before; a target in them that no longer fits is dropped, and the enemy
-finds it again.
+crashed the game in the first moment after the load. Saves from the builds
+before that change loaded as before (until the format mark above refused
+them); a target in them that no longer fits is dropped, and the enemy finds it
+again.
 
 Keys count like puzzle items — a second key of the same type is kept
 instead of being thrown away, and the ring shows how many you carry; the save

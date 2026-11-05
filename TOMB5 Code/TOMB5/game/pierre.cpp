@@ -30,6 +30,22 @@ static BITE_INFO larson_gun = { -55, 200, 5, 14 };
 static BITE_INFO pierre_gun1 = { 60, 200, 0, 11 };
 static BITE_INFO pierre_gun2 = { -57, 200, 0, 14 };
 
+// Whether the level itself marked this Larson or Pierre: a non-zero OCB,
+// which InitialisePierre copies into item_flags[3] (and Trajan Markets'
+// first tick turns into 1). The vanilla specimens are the three Larsons of
+// Andrea1 and Trajan Markets; a pool Larson or Pierre has OCB 0, the
+// randomizer clears it when it swaps one in. GetAIPickups (setup.cpp) also
+// writes item_flags[3]: the OCB of an AI object he stands on at level
+// start, a vanilla enemy's marker when he took that enemy's place. It
+// keeps that pickup in TOSSPAD bits 8-12 (the ai_bits; InitialiseCreature
+// leaves them 0, bits 13-15 hold the angle) and SetupGame rebuilds it on
+// every load. No marked specimen stands on an AI object, so a mark next to
+// a pickup is the marker's, not the level's.
+static long PierreScripted(ITEM_INFO* item)
+{
+	return item->item_flags[3] && !(item->TOSSPAD & 0x1F00);
+}
+
 // Whether Larson/Pierre can flee from here. The flight from 40 HP runs via
 // ai_bits = AMBUSH to an AIAmbush marker with a matching OCB in the same
 // zone (FindAITargetObject, box.cpp) - there he despawns via reached_goal.
@@ -40,11 +56,19 @@ static BITE_INFO pierre_gun2 = { -57, 200, 0, 14 };
 // flight target the clamp no longer engages: he fights and dies like a
 // normal enemy (his death animation brings its own KillItem command). The
 // marker check mirrors FindAITargetObject's own: type, OCB, zone.
+//
+// Only a Larson or Pierre the level marked (PierreScripted) may flee. An
+// AIAmbush with OCB 0 matches every unmarked one: rich1 carries two, and
+// a pool Larson or Pierre in their zone would run off with his cargo. No
+// vanilla Larson or Pierre is unmarked, so vanilla loses nothing.
 static long PierreCanFlee(ITEM_INFO* item, CREATURE_INFO* pierre)
 {
 	AIOBJECT* aiObj;
 	ROOM_INFO* r;
 	short* zone;
+
+	if (!PierreScripted(item))
+		return 0;
 
 	zone = ground_zone[pierre->LOT.zone][flip_status];
 
@@ -172,6 +196,8 @@ void PierreControl(short item_number)
 		item->fired_weapon--;
 	}
 
+	// Only an item with an OCB comes in here: a pool Larson's is 0, so
+	// Trajan Markets' ambush start belongs to its scripted Larson alone.
 	if (item->trigger_flags)
 	{
 		if (gfLevelId == LVL5_TRAJAN_MARKETS)
@@ -197,14 +223,17 @@ void PierreControl(short item_number)
 			item->frame_number = anims[item->anim_number].frame_base;
 			item->current_anim_state = 5;
 		}
-		else if (item->object_number == LARSON && gfLevelId != LVL5_TRAJAN_MARKETS)
+		else if (item->object_number == LARSON &&
+			(gfLevelId != LVL5_TRAJAN_MARKETS || !PierreScripted(item)))
 		{
 			// Outside Trajan Markets he lies down and stays down: the
 			// animation is held on its lowest frame and he becomes a corpse
 			// like a guard. No heavy trigger test here - only Trajan
 			// Markets' scripted Larson stands on one (the cutscene's), and a
 			// randomized level can put a pool Larson's start on any heavy
-			// trigger. The >= takes a Larson a save left standing at the end.
+			// trigger. A pool Larson in Trajan Markets is no exception: the
+			// level's way is its marked Larson's alone (PierreScripted).
+			// The >= takes a Larson a save left standing at the end.
 			if (item->frame_number >= anims[item->anim_number].frame_base + LARSON_DEATH_DOWN)
 			{
 				PierreLayDown(item_number, anims[item->anim_number].frame_base + LARSON_DEATH_DOWN);
@@ -222,9 +251,10 @@ void PierreControl(short item_number)
 			GetHeight(floor, x, y, z);
 			TestTriggers(trigger_index, 1, 0);
 
-			// Trajan Markets only (the branch above takes every other
-			// level). The heavy test reads the sector he started on
-			// (InitialiseCreature keeps it in item_flags[2] and draw_room):
+			// Trajan Markets' marked Larson only (the branch above takes
+			// every other level and every other Larson). The heavy test
+			// reads the sector he started on (InitialiseCreature keeps it
+			// in item_flags[2] and draw_room):
 			// there the level's HEAVY trigger starts the cutscene that ends
 			// the fight, andrea3b_init (deltapak.cpp) sets him ITEM_INVISIBLE.
 			// His death animation carries no anim command 4 (KillItem) -
@@ -308,8 +338,11 @@ void PierreControl(short item_number)
 				item->goal_anim_state = 3;
 			else if (Targetable(item, &info))
 				item->goal_anim_state = 4;
-			else if (item->ai_bits & GUARD || gfLevelId == LVL5_TRAJAN_MARKETS || item->item_flags[3])
+			else if (item->ai_bits & GUARD || item->item_flags[3])
 			{
+				// Stand and turn toward Lara. Trajan Markets once sent every
+				// Larson here; its scripted one carries item_flags[3] 1 from
+				// his first tick, a pool one walks as in every other level.
 				pierre->maximum_turn = 0;
 				item->goal_anim_state = 1;
 
@@ -473,7 +506,11 @@ void PierreControl(short item_number)
 
 	if (pierre->reached_goal)
 	{
-		if (gfLevelId == LVL5_TRAJAN_MARKETS)
+		// The flight exit below is a marked specimen's alone. An unmarked
+		// one reaches a goal only through a marker he picked up at level
+		// start (GetAIPickups); he stops there as in Trajan Markets and
+		// fights instead of vanishing.
+		if (gfLevelId == LVL5_TRAJAN_MARKETS || !PierreScripted(item))
 		{
 			item->goal_anim_state = 1;
 			item->required_anim_state = 1;

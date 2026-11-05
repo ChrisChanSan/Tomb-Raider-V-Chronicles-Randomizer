@@ -19973,6 +19973,80 @@ list, defaults line and the paragraph of the switch use the new name.
 
 **Commits.** see the appendix.
 
+### Trajan Markets' ways belong to its scripted Larson alone (#343)
+
+#340 laid a dead Larson down outside Trajan Markets. Inside it a pool Larson still took
+the level's own ways, and the randomizer puts one there often: `PierreControl`
+(`game/pierre.cpp`) read `gfLevelId == LVL5_TRAJAN_MARKETS` four times, and two of
+those reads caught every Larson in the level. The death branch kept him standing at
+the last frame of the animation, with his collision and no `CreatureDie`, and ran the
+heavy test on his start sector on every tick. The idle sent him to stand and turn on
+the spot instead of walking. The other two reads were safe already: the ambush start
+(`item_flags[3] = 1`, `ai_bits = AMBUSH`) sits inside `if (item->trigger_flags)`,
+which an item with OCB 0 never enters, and the stop at a reached goal needs `ai_bits`.
+
+**The mark.** `InitialisePierre` copies a non-zero OCB into `item_flags[3]`, and
+Trajan Markets' first tick turns it into 1. The game has exactly three such Larsons
+(Andrea1 34 OCB 1, 35 OCB 2, Andrea2 76 OCB 1) and no Pierre item at all; Pierre
+appears only in a cutscene. A pool Larson or Pierre has OCB 0. But `GetAIPickups`
+(`setup.cpp`, run in `SetupGame` after the items are initialised and before a
+savegame is restored) writes `item_flags[3]` too: the OCB of an AI object within 512
+units in the same room, the bit for it in `ai_bits`, and the pickup in `TOSSPAD`
+bits 8-12 (`InitialiseCreature` leaves those 0; bits 13-15 hold the angle). A pool
+enemy swapped onto a vanilla enemy's spot can stand on that enemy's marker. In the run
+measured, rich3's Pierre 155 stands on an AI_AMBUSH with OCB 50 and reads
+`item_flags[3]` 50. None of the three marked Larsons stands near an AI object, since
+their markers lie in other rooms. So `PierreScripted(item)` is
+`item_flags[3] && !(TOSSPAD & 0x1F00)`: the level's OCB, and no AI pickup. `TOSSPAD`
+is not saved, but `SetupGame` builds it again on every load.
+
+**The gates.** The death branch now lays a Larson down at frame 28 when
+`gfLevelId != LVL5_TRAJAN_MARKETS || !PierreScripted(item)`, so a pool Larson in
+Trajan Markets dies like everywhere else: he lies down, has no collision and runs no
+heavy test or cutscene. The idle drops its level read and keeps
+`ai_bits & GUARD || item_flags[3]`. The scripted Larson carries `item_flags[3]` 1 from
+his first tick, so his turn on the spot does not change. A pool Larson walks as in any
+other level, and one that picked up a marker stands as he would anywhere. The ambush
+start is unchanged and gated by the OCB. For the scripted Larson every condition gives
+what it gave before, tick for tick, because his mark is 1 and he has no pickup.
+
+**The AI_AMBUSH census** (the AI block behind the items, all 15 vanilla levels; the
+zone is BASIC_ZONE, the one Larson and Pierre use): Andrea1 room 89 OCB 1 and room
+169 OCB 2 (the zones of 34 and 35), Andrea2 room 116 OCB 1 (76's zone), rich1 room 63
+two with **OCB 0**, room 44 and 15 OCB 5, room 32 and 35 OCB 30, rich3 room 127 two
+with OCB 50. Every other level has none. The two OCB 0 markers in rich1 share one
+zone with 13 rooms (2, 23, 26-28, 30, 39-41, 63, 65, 67, 164). A pool Larson or Pierre
+in any of them matched them (`trigger_flags 0 == item_flags[3] 0`): the 40-HP clamp
+held, he ran to the marker, and the flight exit took him out of the level. That is the
+hole the flee rule closes.
+
+**The flee answer.** `PierreCanFlee` returns 0 at once unless `PierreScripted(item)`:
+the 40-HP clamp and the flight are now only for a marked specimen. An unmarked one
+could still reach a goal through a marker he picked up at level start, and the flight
+exit (`DropBaddyPickups`, `KillItem`) would have taken him away. Rich3's Pierre 155
+ran to the second OCB-50 marker at once and vanished. The reached-goal block now
+stops an unmarked one as Trajan Markets stops its Larson: `goal_anim_state` 1,
+`ai_bits` 0. He fights instead of vanishing. No vanilla Larson or Pierre is unmarked,
+so vanilla loses nothing: Andrea1's two still flee to their markers, Andrea2's 76
+keeps his run, his stop and his cutscene. No AI marker was added and no OCB changed.
+
+**Not changed.** A pool Larson or Pierre that picked up an AMBUSH marker which no
+other marker of the same OCB in his zone answers still runs at Lara with `ai_bits`
+AMBUSH and does not aim, as before. That marker is consumed at level start. This is
+the engine's AI-pickup behaviour for any enemy, and outside this task.
+
+**Checked.** ModernTest group `larson_trajan_rule` (9 checks) reads `pierre.cpp`,
+`box.cpp` and `setup.cpp`: the mark's body, the `TOSSPAD` layout (pickup bits 8-12 from
+`GetAIPickups`, the angle 13-15 from `InitialiseCreature`), `PierreCanFlee`'s early
+return, the clamp still asking it, the ambush start unchanged, the death branch's new
+condition, the idle without the level read, the reached-goal stop, and three level
+reads left. `larson_death_rule` follows the death branch's new text. ModernTest
+17785 checks (17776 + 9), also built with `TOMB5_TEST_BUILD`, MenuTest 45043,
+InterpTest 754, LipsTest 272, none failed; no `warning C` line in `be64.bat`,
+`basan.bat` and `be64.bat test`. Not run in the game here.
+
+**Commits.** see the appendix.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -20452,3 +20526,4 @@ entries above.
 | #339 | The 64-bit engine is PCtomb5.exe, the 32-bit one PCtomb5_x86.exe |
 | #340 | Larson dies lying down outside Trajan Markets |
 | #341 | The Corpses row is called Corpse fade |
+| #343 | Trajan Markets' ways belong to its scripted Larson alone |

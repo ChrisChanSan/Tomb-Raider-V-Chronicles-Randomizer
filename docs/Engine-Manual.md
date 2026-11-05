@@ -5206,7 +5206,9 @@ picked up.
 down: his death animation would have him get up again, so it stops where he
 lies, and he becomes a body like any other enemy - no collision, faded or
 kept by the Corpses setting, kept by a savegame. Pierre's body is the same.
-Larson and Pierre only flee where the level actually
+In Trajan's Markets only the level's own Larson stands for his cutscene; a
+Larson the randomizer put there dies lying down like anywhere else.
+Larson and Pierre only flee where the level itself placed them and actually
 contains the marker they run to — fleeing without one makes them immortal.
 Enemies do not switch to a low-detail distance model at range, because the
 engine takes whatever sits in the next model slot, which in a foreign level is

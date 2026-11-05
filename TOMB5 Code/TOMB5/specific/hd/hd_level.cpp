@@ -4221,7 +4221,7 @@ static void BuildRoomVis()
 	HDVisLevelInput(&rooms[0], (int)rooms.size(),
 		faces.empty() ? 0 : &faces[0], (int)faces.size(),
 		portals.empty() ? 0 : &portals[0], (int)portals.size(),
-		links.empty() ? 0 : &links[0], (int)links.size());
+		links.empty() ? 0 : &links[0], (int)links.size(), g_stem);
 
 	/* And the static meshes, for the art that lies on them
 	 * (HDVisStaticCovers): no face for a static no slot of 0 to 69 names,
@@ -9482,11 +9482,12 @@ static int SurfaceRoom()
  *         guest_tris= wide= ms= twin= wide_bare= edge= statics_held=
  *         statics_ms= enclosed= hull_guests= hollow_hidden= guests_hanging=
  *         openings_state= sky_groups= sky_tris= sky_pairs= sky_copies=
- *         hull_sky= sky_closed=
+ *         hull_sky= sky_closed= sky_far= sky_shared=
  *   HDLOG visguest level=<stem> room= group= tris= box= refused=hanging
  *   HDLOG visopening level=<stem> room= face= behind= refused=flipstate
  *   HDLOG vissky level=<stem> room= group= tris= over_sky= over_closed=
- *         beyond= box=
+ *         beyond= box= near=
+ *   HDLOG vissky level=<stem> room= group= near= refused=far|shared
  *   HDLOG vissky level=<stem> group= tris= copy_of= refused=copy
  *   HDLOG vissky level=<stem> group= tris= refused=closed
  *
@@ -9519,7 +9520,12 @@ static int SurfaceRoom()
  * air over a closed room's roof, counted apart, and the box of the first
  * two; one per group left out as a copy, with the sky group it copies;
  * and sky_closed the groups with art in the sky whose room is not under
- * the sky, left out, one line each. */
+ * the sky, left out, one line each; sky_far the pairs whose box stood
+ * near the room but none of whose triangles in the sky do, sky_shared
+ * those whose group's room shares the room's inside with no link
+ * (hd_vis.h, skyNear and skyShared), each with a vissky line of the
+ * room, the group and its triangles near the room (near=, also at the
+ * end of a taken pair's line). */
 
 static int VisContents(int roomIndex)
 {
@@ -9609,13 +9615,14 @@ bool HDVisWalkOn()
 			"wide_bare=%.2f edge=%.5f statics_held=%d statics_ms=%.0f "
 			"enclosed=%d hull_guests=%d hollow_hidden=%d guests_hanging=%d "
 			"openings_state=%d sky_groups=%d sky_tris=%lld sky_pairs=%d "
-			"sky_copies=%d hull_sky=%d sky_closed=%d",
+			"sky_copies=%d hull_sky=%d sky_closed=%d sky_far=%d sky_shared=%d",
 			g_stem, t->rooms, t->artRooms, t->wallFaces, t->bareFaces,
 			t->voidFaces, t->guestPairs, t->guestTris, t->widePortals, t->ms,
 			t->openingsTwin, p.wideBare, p.edge, t->staticsHeld, t->staticMs,
 			t->roomsEnclosed, g_vis_hull_guests, hollow_hidden,
 			t->guestsHanging, t->openingsState, t->skyGroups, t->skyArtTris,
-			t->skyPairs, t->skyCopies, g_vis_hull_sky, t->skyClosed);
+			t->skyPairs, t->skyCopies, g_vis_hull_sky, t->skyClosed,
+			t->skyRefusedFar, t->skyRefusedShared);
 
 		// The guests the sky's rule refused (HDVisRefused), one line each.
 		for (const HDVisRefused& one : t->hanging)
@@ -9637,14 +9644,27 @@ bool HDVisWalkOn()
 				const HDVisGuest& one =
 					t->sky[(size_t)(t->skyFirst[(size_t)r] + k)];
 				const size_t g = (size_t)one.group;
+				int nearTris = -1;
+
+				for (const HDVisSkyAsked& asked : t->skyAsked)
+					if (asked.room == r && asked.group == one.group)
+						nearTris = asked.nearTris;
 
 				Log("HDLOG vissky level=%s room=%d group=%d tris=%d "
 					"over_sky=%d over_closed=%d beyond=%d "
-					"box=%.0f..%.0f,%.0f..%.0f,%.0f..%.0f", g_stem, r,
+					"box=%.0f..%.0f,%.0f..%.0f,%.0f..%.0f near=%d", g_stem, r,
 					one.group, one.tris, t->skyOverSky[g], t->skyOverClosed[g],
 					t->skyBeyond[g], one.lo[0], one.hi[0], one.lo[1],
-					one.hi[1], one.lo[2], one.hi[2]);
+					one.hi[1], one.lo[2], one.hi[2], nearTris);
 			}
+
+		// The pairs the art near the room refused (hd_vis.h, skyNear and
+		// skyShared), one line each.
+		for (const HDVisSkyAsked& asked : t->skyAsked)
+			if (asked.refused)
+				Log("HDLOG vissky level=%s room=%d group=%d near=%d "
+					"refused=%s", g_stem, asked.room, asked.group,
+					asked.nearTris, asked.refused == 1 ? "far" : "shared");
 
 		for (size_t g = 0; g < t->skyCopyOf.size(); g++)
 			if (t->skyCopyOf[g] >= 0)

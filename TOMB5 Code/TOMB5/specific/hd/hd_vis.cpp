@@ -68,7 +68,18 @@
  *   skyArt 1       the sky table - see the sky groups below
  *   skyReach 1024  a sector, the width of a room's wall ring: the skyline
  *                  past the east wall of ANDREA2's courtyard (room 223)
- *                  stands 889 units off its floor plan */
+ *                  stands 889 units off its floor plan
+ *   skyNear 0      the box of #286. At 1, a triangle - the reach read
+ *                  literally, of the art and not of its box -, 64 of the
+ *                  501 pairs of the fifteen levels have no triangle
+ *                  within the reach: ANDREA3's shaft over the cave (room
+ *                  128, groups 67 and 92) and room 116 over the arena's
+ *                  archway (group 92) among them, and ANDY3's rooms 8, 9,
+ *                  39 and 95 with group 106, whose walk on lists the leaf
+ *                  canopy over rooms 8 and 9 (up to 83,680 pixels of 960 x
+ *                  540 gone). So 1 is ANDREA3's alone (HDVisLevelParams)
+ *   skyShared 0    at 1 one pair of the 501: ANDREA3's room 115, whose
+ *                  inside holds the gallery room 92 with no link */
 HDVisParams HDVisDefaults()
 {
 	HDVisParams p;
@@ -88,6 +99,8 @@ HDVisParams HDVisDefaults()
 	p.staticShare = 0.5;
 	p.skyArt = 1;
 	p.skyReach = 1024.0;
+	p.skyNear = 0;
+	p.skyShared = 0;
 	return p;
 }
 
@@ -184,6 +197,8 @@ namespace
 	struct SkyPoint
 	{
 		float c[3];
+		// The triangle's corners' extent in x and in z (the sky's reach).
+		float x0, x1, z0, z1;
 	};
 
 	const double kCopySlack = 2.0;
@@ -600,8 +615,19 @@ bool HDVisBuild(const trf::remaster::Trg& trg, const HDVisRoom* rooms,
 					else if (open)
 					{
 						GuestAcc& a = skyAcc[(size_t)g];
-						const SkyPoint point = { { (float)cw[0], (float)cw[1],
-							(float)cw[2] } };
+						SkyPoint point = { { (float)cw[0], (float)cw[1],
+							(float)cw[2] }, 1e30f, -1e30f, 1e30f, -1e30f };
+
+						for (int c = 0; c < 3; c++)
+						{
+							const float wx = v[c][0] + origin[0];
+							const float wz = v[c][2] + origin[2];
+
+							point.x0 = wx < point.x0 ? wx : point.x0;
+							point.x1 = wx > point.x1 ? wx : point.x1;
+							point.z0 = wz < point.z0 ? wz : point.z0;
+							point.z1 = wz > point.z1 ? wz : point.z1;
+						}
 
 						a.tris++;
 						skyPoints[(size_t)g].push_back(point);
@@ -913,7 +939,14 @@ bool HDVisBuild(const trf::remaster::Trg& trg, const HDVisRoom* rooms,
 	 * but its own and its twin's, whose art there stands over its floor plan
 	 * or within skyReach of it: what stands in the sky is seen from wherever
 	 * the sky is, and the walk lists it by its box inside the window the
-	 * room is seen in. */
+	 * room is seen in. Where the level's row asks it (skyNear, skyShared,
+	 * HDVisLevelParams), of the triangles and not of the box alone: a
+	 * skyline's box spans the level, and ANDREA3's group 92, round the
+	 * arena, touched the shaft over a cave and drew its tiers through the
+	 * rock; and not the group of a room standing in this room's inside with
+	 * no link: taken, it draws that room's inside whole in the air -
+	 * ANDREA3's gallery 92 inside room 115, a box with its enemy over the
+	 * arena. Every pair the box takes is asked and noted either way. */
 	if (params.skyArt)
 	{
 		std::vector<int> order;
@@ -1028,6 +1061,56 @@ bool HDVisBuild(const trf::remaster::Trg& trg, const HDVisRoom* rooms,
 					(double)art.hi[2] < (double)room.z - reach ||
 					(double)art.lo[2] >
 					(double)(room.z + ((long)room.zs << 10)) + reach)))
+					continue;
+
+				/* The box answer took it; now the art itself. Near: the
+				 * group's triangles in the sky whose centroids stand over
+				 * the floor plan or within the reach of it. Shared: the
+				 * group's room standing in this room's inside, inner grids
+				 * and heights crossing, with no link between the two. */
+				HDVisSkyAsked asked = { h, g, 0, 0, 0 };
+				const double nx0 = (double)room.x - reach;
+				const double nx1 = (double)(room.x +
+					((long)room.xs << 10)) + reach;
+				const double nz0 = (double)room.z - reach;
+				const double nz1 = (double)(room.z +
+					((long)room.zs << 10)) + reach;
+
+				for (const SkyPoint& p : skyPoints[(size_t)g])
+					if (reach < 0.0 || ((double)p.x1 >= nx0 &&
+						(double)p.x0 <= nx1 && (double)p.z1 >= nz0 &&
+						(double)p.z0 <= nz1))
+						asked.nearTris++;
+
+				const HDVisRoom& other = rooms[g];
+				const long ax0 = room.x + 1024, bx0 = other.x + 1024;
+				const long ax1 = room.x + ((long)(room.xs - 1) << 10);
+				const long bx1 = other.x + ((long)(other.xs - 1) << 10);
+				const long az0 = room.z + 1024, bz0 = other.z + 1024;
+				const long az1 = room.z + ((long)(room.zs - 1) << 10);
+				const long bz1 = other.z + ((long)(other.zs - 1) << 10);
+				const bool shared = (ax0 > bx0 ? ax0 : bx0) <
+					(ax1 < bx1 ? ax1 : bx1) &&
+					(az0 > bz0 ? az0 : bz0) < (az1 < bz1 ? az1 : bz1) &&
+					(room.top > other.top ? room.top : other.top) <
+					(room.bottom < other.bottom ? room.bottom : other.bottom)
+					&& !linked(h, g);
+
+				asked.shared = shared ? 1 : 0;
+
+				if (params.skyNear > 0 && asked.nearTris < params.skyNear)
+					asked.refused = 1;
+				else if (params.skyShared && shared)
+					asked.refused = 2;
+
+				t.skyAsked.push_back(asked);
+
+				if (asked.refused == 1)
+					t.skyRefusedFar++;
+				else if (asked.refused == 2)
+					t.skyRefusedShared++;
+
+				if (asked.refused)
 					continue;
 
 				HDVisGuest one;
@@ -1535,13 +1618,16 @@ namespace
 	bool g_armed = false;
 	HDVisTables g_tables;
 	bool g_built = false;
+	// The level's parameters, its row of the sky answer (HDVisLevelParams).
+	HDVisParams g_in_params = HDVisDefaults();
 }
 
 void HDVisLevelInput(const HDVisRoom* rooms, int roomCount,
 	const HDCoverFace* faces, int faceCount, const HDVisPortal* portals,
-	int portalCount, const int* links, int linkCount)
+	int portalCount, const int* links, int linkCount, const char* stem)
 {
 	HDVisLevelClear();
+	g_in_params = HDVisLevelParams(stem);
 
 	if (!rooms || roomCount <= 0)
 		return;
@@ -1590,7 +1676,7 @@ void HDVisLevelBuild(const trf::remaster::Trg& trg, const int* yShift,
 		g_in_faces.empty() ? 0 : &g_in_faces[0], (int)g_in_faces.size(),
 		g_in_portals.empty() ? 0 : &g_in_portals[0],
 		(int)g_in_portals.size(), g_in_links.empty() ? 0 : &g_in_links[0],
-		(int)g_in_links.size(), HDVisDefaults(), &g_tables, &shifts[0]);
+		(int)g_in_links.size(), g_in_params, &g_tables, &shifts[0]);
 
 	if (g_built && !g_in_statics.empty())
 	{

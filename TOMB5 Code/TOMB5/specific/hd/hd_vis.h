@@ -190,13 +190,30 @@ struct HDVisStatic
  *              takes as a sky group each group of a room under the sky
  *              with guestTris triangles or more in the sky - in the open
  *              air (HDVisInOpenAir) over a room under the sky or past the
- *              level's rooms - whose box there stands over its floor plan
- *              or within skyReach of it, but a group whose triangles there
+ *              level's rooms - whose art there stands over its floor plan
+ *              or within skyReach of it (skyNear, skyShared), but a group
+ *              whose triangles there
  *              are, all but fewer than guestTris, copies of another sky
  *              group's (centroids within two units)
  *   skyReach   how far beside a room's floor plan, in x and z, the box
  *              of a sky group's art may stand for the room to take it;
- *              below 0 every room under the sky takes every sky group */
+ *              below 0 every room under the sky takes every sky group
+ *   skyNear    how many of a sky group's triangles in the sky must stand,
+ *              by their corners, over a room's floor plan or within
+ *              skyReach of it for the room to take the group; 0, the
+ *              default, asks the box alone. The box of a skyline spans the
+ *              level: ANDREA3's group 92 runs 37,000 units round the arena
+ *              and touched the floor plan of the shaft over a cave with
+ *              none of its triangles near it
+ *   skyShared  1: a room under the sky does not take the group of a room
+ *              whose inside shares its own - inner grids and heights
+ *              crossing - with no link between them: that room is a
+ *              second space in its air, drawn whole with the group, not
+ *              its sky (ANDREA3's gallery room 92 inside room 115); 0,
+ *              the default, takes it
+ * Both stay 0 but for the levels of the table below (HDVisLevelParams):
+ * on every level they would also take the leaf canopy off ANDY3's rooms 8
+ * and 9, which the box answer lists there. */
 struct HDVisParams
 {
 	double reach;
@@ -214,9 +231,68 @@ struct HDVisParams
 	double staticShare;
 	int skyArt;
 	double skyReach;
+	int skyNear;
+	int skyShared;
+};
+
+/* A (room, group) pair the sky table asked (HDVisTables::skyAsked): the
+ * room under the sky, the sky group, how many of the group's triangles in
+ * the sky stand over the room's floor plan or within skyReach of it,
+ * whether the group's room shares the room's inside with no link, and
+ * the answer - 0 taken, 1 too few near it (skyNear), 2 the group's room
+ * shares the room's inside with no link (skyShared). Only the pairs whose
+ * box answer took them are asked. */
+struct HDVisSkyAsked
+{
+	int room;
+	int group;
+	int nearTris;
+	int shared;
+	int refused;
 };
 
 HDVisParams HDVisDefaults();
+
+/* The level-bound sky answer: per level, by its file's stem, the skyNear
+ * and skyShared it is built with, as hd_life_rules.h holds the water's life
+ * per level. A level not in the table keeps HDVisDefaults' answer. */
+struct HDVisLevelRow
+{
+	const char* stem;
+	int skyNear;
+	int skyShared;
+};
+
+static const HDVisLevelRow kHDVisLevelRows[] =
+{
+	// #334: the colosseum's tiers through the caves, the gallery box over
+	// the arena (hd_vis.cpp, the sky groups).
+	{ "ANDREA3", 1, 1 },
+};
+
+/* HDVisDefaults with the row of the level whose stem is `stem` (any case),
+ * none for a null or unknown stem. */
+inline HDVisParams HDVisLevelParams(const char* stem)
+{
+	HDVisParams p = HDVisDefaults();
+
+	for (const HDVisLevelRow& row : kHDVisLevelRows)
+	{
+		int i = 0;
+
+		while (stem && row.stem[i] && stem[i] &&
+			(row.stem[i] | 32) == (stem[i] | 32))
+			i++;
+
+		if (stem && !row.stem[i] && !stem[i])
+		{
+			p.skyNear = row.skyNear;
+			p.skyShared = row.skyShared;
+		}
+	}
+
+	return p;
+}
 
 struct HDVisTables
 {
@@ -304,6 +380,11 @@ struct HDVisTables
 	int skyPairs = 0;			// the (room, group) pairs of the sky table
 	int skyCopies = 0;			// the groups left out as copies
 	int skyClosed = 0;			// the groups left out, rooms not under it
+	/* Every pair the box answer took, with the near count and the answer
+	 * of skyNear and skyShared (HDVisSkyAsked), and how many each refused. */
+	std::vector<HDVisSkyAsked> skyAsked;
+	int skyRefusedFar = 0;
+	int skyRefusedShared = 0;
 	long long samples = 0, samplesCovered = 0;
 	double ms = 0.0;
 };
@@ -389,7 +470,7 @@ bool HDVisBuild(const trf::remaster::Trg& trg, const HDVisRoom* rooms,
  * built with the path). HDVisLevelClear drops both. */
 void HDVisLevelInput(const HDVisRoom* rooms, int roomCount,
 	const HDCoverFace* faces, int faceCount, const HDVisPortal* portals,
-	int portalCount, const int* links, int linkCount);
+	int portalCount, const int* links, int linkCount, const char* stem = 0);
 /* The static meshes, handed in after HDVisLevelInput (which drops them) and
  * asked by HDVisLevelBuild after the three tables (HDVisStaticCovers). */
 void HDVisLevelStatics(const HDVisStatic* statics, int staticCount,

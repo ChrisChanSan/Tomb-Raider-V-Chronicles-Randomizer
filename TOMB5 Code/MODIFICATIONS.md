@@ -19541,6 +19541,93 @@ in the logs of `be64.bat`, `basan.bat`, `be64.bat test` and `be.bat`.
 
 **Commits.** see the appendix.
 
+### ANDREA3's sky table asks the art near a room, not its box (#334)
+2026-11-05
+
+**What.** On the visibility path (`hd_vis` 1) the sky table of #286 can now ask, per pair
+the box of a sky group's art takes, the art itself: a room under the sky takes the group
+only when one triangle or more of its art in the sky stands, by its corners, over the
+room's floor plan or within `skyReach` of it (`skyNear`), and not when the group's room
+stands inside the room's own inside - their inner grids and heights crossing - with no
+link between the two (`skyShared`). Both are off by default, the box answer of #286 on
+every level, and on for ANDREA3 alone, by its row in the level-bound table
+`kHDVisLevelRows` (`specific/hd/hd_vis.h`, `HDVisLevelParams`), the way `hd_life_rules.h`
+holds the water's life per level. In ANDREA3 the colosseum's tiers and the city past the
+level are no longer drawn through the rock of the caves under the arena (rooms 31 and 37
+and the corridors 40, 41, 44, 47 and 117), and the gallery box with its guard no longer
+floats over the arena (room 108) and its neighbour 15; the tiers round the arena and
+through the four archways stay. The general rule stays available by parameter: `skyNear` 1
+and `skyShared` 1 in `HDVisParams`, or a row in the table. With `-log` the `HDLOG level=
+vis=1` line ends in `sky_far= sky_shared=`, a taken pair's `HDLOG vissky` line in `near=`,
+the triangles near the room, and each pair left out has a `HDLOG vissky level= room=
+group= near=` line ending in `refused=far` or `refused=shared`. TrgProbe `-vistable`
+builds with the level's row, ends its level line in the same two counts and prints a
+`skyask room= group= near= shared=` line per pair the box took, with the refusal;
+RoomProbe's `-vis: tables` line ends in the counts and the two settings with a `-vis:
+vissky` line per refusal; both take `-visskynear <n>` and `-visskyshared 0|1` over the
+row. ModernTest checks the rule and the row on rooms built by hand.
+
+**Why.** Measured with TrgProbe and RoomProbe at the places of the pictures and in the
+play log's walk (`VISLOG`): every ghost was a sky group. Room 128 is a thin room under the
+sky over the stalactite cave 31, its one portal the light shafts; the walk lists it
+through them from the caves, and it took group 92 (11,580 triangles in the sky: the tiers
+round the arena, x 29,832..66,751, z 37,637..53,129) and group 67 (30,601, the city to the
+west) because their boxes came within 773 and 933 units of its floor plan - with no
+triangle of either within a sector of it. A sky group is drawn whole, so the tiers stood
+in the caves wherever the shafts were seen: in 42 of the log's `VISLOG` lines, eyes in
+rooms 31, 37, 40, 41, 44, 47 and 117. Over the arena room 115, above archway 16, took
+group 92 with 151 triangles near it, and room 116, above archway 17, with none; group 92
+is also room 92's own art, a gallery whose box stands inside room 115's with no portal
+between them - its only door leads to room 25 -, so its inside, the fence and the guard
+hung in the air, and the walk went on from it into rooms 25 and 127: 42 `VISLOG` lines of
+the log, eyes in 108 and 15. Arena 108's neighbours are 15, 107, 27 and 16; room 92 is
+none of them. `hd_reach` 0 changes nothing here, 128, 115 and 116 being the classic
+walk's; `-vissky 0` clears all of it and with it every sky pair of the fifteen levels. Why
+ANDREA3 alone: on every level the rule refuses 64 of the 501 pairs as far, among them
+ANDY3's rooms 8, 9, 39 and 95 with group 106, the belt of trees north of the mill. Swept
+from a grid of eyes, rooms 8 and 9 lost group 106 in 749 of 2,160 and 1,037 of 2,160
+walks, and with it the walk on into rooms 105 and 104; drawn, the leaf canopy over rooms 8
+and 9 went - 83,680 and 61,394 pixels of 960 x 540 from room 8, 40,628 from room 9. That
+loss is a hole, so the rule is bound to the level that needs it.
+
+**How.** `HDVisBuild` (`specific/hd/hd_vis.cpp`) keeps each sky triangle's corner extent
+in x and z beside its centroid (`SkyPoint`) and asks each pair the box takes for the
+triangles whose extent touches the floor plan widened by the reach and for the shared
+inside; every pair asked is noted with its count and answer (`HDVisTables::skyAsked`,
+`skyRefusedFar`, `skyRefusedShared`), and the two answers refuse only where
+`HDVisParams::skyNear` and `skyShared` say so (`specific/hd/hd_vis.h`). `HDVisLevelInput`
+takes the level's stem from `hd_level.cpp` and builds with `HDVisLevelParams`: the
+defaults and the level's row, compared in any case. `hd_level.cpp` writes the seams; the
+walk and `game/draw.cpp` are not touched, `VISLOG` keeps its letters. The `.hdm` sidecar
+is not the place: the randomizer writes it per run and a vanilla installation has none;
+the level-fix ledger repairs the classic `.TRC` in the randomizer. The reading of the
+shared inside - two rooms whose inner grids cross with no link are two spaces - is after
+TROne's inner worlds (GPLv3, Todesengel1931); no code was taken, and TROne has no answer
+of its own for this level. `hd_vis` 0 and `hd_build` 0 are unchanged by construction.
+
+**Decisions.** One triangle and not eight: the reach read as #286's record words it.
+ANDREA3 refuses four of its eleven pairs: 128 with 67 and with 92 and 116 with 92 as far,
+115 with 92 as shared; it keeps 66, 69, 91 and 126 with 67 and 122, 125 and 127 with 92.
+The fifteen levels' pairs go from 501 to 497. A table row and not a level number in the
+logic: the rule is general and the table says where it runs.
+
+**Checked.** ModernTest's new group `ghost_rule` (14 checks): the defaults off, ANDREA3's
+row in either case, no row for ANDY3, a missing stem or a near name; by default a cave's
+shaft takes sky art whose box covers its floor plan with no triangle near, with the row it
+is refused; art over the floor plan and within the reach beside it taken; a room in the
+inside with no link refused, taken with `skyShared` 0, with a floor link and below the
+floor. The tables of the fourteen other levels equal those of before line for line,
+ANDREA3's differ by its four pairs. #236's 72 probe images md5-equal; #269's seven proof
+places and 88 card views md5-equal, the lists equal; #283's RICH1 GA, GB and GC unchanged
+(RICH1 has no sky pair); #286's courtyard unchanged, ANDREA2's tables being those of
+before. The walk with the base and with this build from ANDY3's rooms 8 and 9, 2,160
+frames each: no list differs, and the canopy pictures are pixel-equal. RoomProbe at the
+places of the pictures: the ghosts gone; the four archways at their middle, four yaws
+each: rooms 28 and 55 unchanged, rooms 16 and 17 lose only the floating gallery.
+ModernTest 17750 checks (17736 + 14), MenuTest 45043, InterpTest 754, LipsTest 272, none
+failed; no warning line in the logs of `be64.bat`, `basan.bat`, `be64.bat test`, `be.bat`,
+`btrg.bat` and `broom.bat`.
+
 ### Under Modern a level camera that shows something is kept (#335)
 2026-11-05
 
@@ -20116,4 +20203,5 @@ entries above.
 | #331 | The six suspect narrowings closed, and C4244 an error |
 | #332 | The corpse fade in HD, and the Corpses switch |
 | #333 | A lying body survives the savegame, format 3 |
+| #334 | ANDREA3's sky table asks the art near a room, not its box |
 | #335 | Under Modern a level camera that shows something is kept |

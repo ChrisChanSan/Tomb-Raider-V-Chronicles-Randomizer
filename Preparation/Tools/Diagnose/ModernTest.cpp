@@ -15971,6 +15971,188 @@ static void vis_sky_art()
 		HDVisInOpenAir(&rooms[0], 5, 2, over, 128.0) ? 1 : 0, 1);
 }
 
+/* #334: the sky table asks the art, not its box. vis_sky_art's rooms, and
+ * group 2's art put as clusters of eight small triangles each at world
+ * points, group 2's room at origin (gx, gz). */
+static void ghost_scene(trf::remaster::Trg& trg, float gx, float gz,
+	const float (*at)[3], int clusters)
+{
+	trg = trf::remaster::Trg();
+	trg.groups.resize(5);
+
+	trf::remaster::TrgPart part;
+
+	part.pass[0].start = (uint32_t)trg.indices.size();
+
+	for (int n = 0; n < clusters; n++)
+		for (int k = 0; k < 8; k++)
+		{
+			const float a[3] = { at[n][0], at[n][1], at[n][2] + k * 16.0f };
+			const float b[3] = { at[n][0] + 8.0f, at[n][1],
+				at[n][2] + k * 16.0f };
+			const float c[3] = { at[n][0], at[n][1] - 8.0f,
+				at[n][2] + 8.0f + k * 16.0f };
+
+			vis_tri(trg, gx, 0, gz, a, b, c);
+		}
+
+	part.pass[0].count = (uint32_t)trg.indices.size() - part.pass[0].start;
+	trg.groups[2].parts.push_back(part);
+}
+
+static void ghost_rule()
+{
+	std::vector<HDVisRoom> rooms(5);
+	const long x[5] = { 0, 6144, 0, 0, 0 };
+	const long z[5] = { 0, 0, 12288, 24576, 18432 };
+	const int xs[5] = { 6, 6, 4, 6, 4 };
+
+	for (int r = 0; r < 5; r++)
+	{
+		HDVisRoom& one = rooms[(size_t)r];
+
+		std::memset(&one, 0, sizeof(one));
+		one.x = x[r];
+		one.z = z[r];
+		one.xs = one.zs = xs[r];
+		one.top = -4096;
+		one.bottom = 0;
+		one.flags = r == 1 ? 0 : 8;
+		one.twin = -1;
+		one.flip = -1;
+	}
+
+	trf::remaster::Trg trg;
+	HDVisTables t;
+	const HDVisParams off = HDVisDefaults();
+	const HDVisParams p = HDVisLevelParams("ANDREA3");
+	const HDVisParams other = HDVisLevelParams("ANDY3");
+	const HDVisParams lower = HDVisLevelParams("andrea3");
+	const HDVisParams none = HDVisLevelParams(0);
+
+	ok(off.skyNear == 0 && off.skyShared == 0,
+		"ghost: off by default, the box of #286", off.skyNear, 0);
+	ok(p.skyNear == 1 && p.skyShared == 1 && lower.skyNear == 1 &&
+		lower.skyShared == 1,
+		"ghost: ANDREA3's row, in any case, one triangle near, no shared",
+		p.skyNear, 1);
+	ok(other.skyNear == 0 && other.skyShared == 0 && none.skyNear == 0 &&
+		none.skyShared == 0 && HDVisLevelParams("ANDREA").skyNear == 0 &&
+		HDVisLevelParams("ANDREA33").skyNear == 0,
+		"ghost: ANDY3, no stem and a near name keep the default",
+		other.skyNear, 0);
+
+	// The default answers as #286 did: the box takes the shaft's pair.
+	const float far2[2][3] = { { -14000.0f, -3000.0f, 3000.0f },
+		{ 26000.0f, -3000.0f, 3000.0f } };
+
+	ghost_scene(trg, 0.0f, 12288.0f, far2, 2);
+	HDVisBuild(trg, &rooms[0], 5, 0, 0, 0, 0, 0, 0, off, &t);
+	ok(t.skyCount[0] == 1 && t.skyRefusedFar == 0 && t.skyAsked.size() >= 1,
+		"ghost: by default S takes the far art, the pair noted, not refused",
+		t.skyCount[0], 1);
+
+	/* 1. The cave's shaft: S under the sky, the sky art in two clusters
+	 * past the level's rooms, west and east of S, its box over S's floor
+	 * plan and no triangle within a sector of it - ANDREA3's group 92
+	 * beside room 128. */
+	const float wide[2][3] = { { -14000.0f, -3000.0f, 3000.0f },
+		{ 26000.0f, -3000.0f, 3000.0f } };
+
+	ghost_scene(trg, 0.0f, 12288.0f, wide, 2);
+	HDVisBuild(trg, &rooms[0], 5, 0, 0, 0, 0, 0, 0, p, &t);
+	ok(t.skyTris[2] == 16 && t.skyBeyond[2] == 16 && t.skyGroups == 1,
+		"ghost: the two clusters stand in the sky past the rooms",
+		t.skyBeyond[2], 16);
+	ok(t.skyCount[0] == 0 && t.skyRefusedFar >= 1,
+		"ghost: S, its floor plan inside the box, has no triangle near",
+		t.skyCount[0], 0);
+
+	bool asked = false;
+
+	for (const HDVisSkyAsked& one : t.skyAsked)
+		if (one.room == 0 && one.group == 2)
+			asked = one.nearTris == 0 && one.refused == 1;
+
+	ok(asked, "ghost: S's pair is asked, near=0, refused far", asked ? 1 : 0,
+		1);
+
+	HDVisParams box = p;
+
+	box.skyNear = 0;
+	HDVisBuild(trg, &rooms[0], 5, 0, 0, 0, 0, 0, 0, box, &t);
+	ok(t.skyCount[0] == 1 && t.skyRefusedFar == 0,
+		"ghost: with skyNear 0 the box alone takes it, as before",
+		t.skyCount[0], 1);
+
+	// 2. One cluster over S's floor plan beside the far one: taken.
+	const float over[2][3] = { { 3000.0f, -6000.0f, 3000.0f },
+		{ 26000.0f, -3000.0f, 3000.0f } };
+
+	ghost_scene(trg, 0.0f, 12288.0f, over, 2);
+	HDVisBuild(trg, &rooms[0], 5, 0, 0, 0, 0, 0, 0, p, &t);
+	asked = false;
+
+	for (const HDVisSkyAsked& one : t.skyAsked)
+		if (one.room == 0 && one.group == 2)
+			asked = one.nearTris == 8 && one.refused == 0;
+
+	ok(t.skyCount[0] == 1 && asked,
+		"ghost: with eight triangles over S, S takes the group",
+		t.skyCount[0], 1);
+
+	// One cluster a sector less a unit past S's west wall: near, taken.
+	const float beside[1][3] = { { -1000.0f, -3000.0f, 3000.0f } };
+
+	ghost_scene(trg, 0.0f, 12288.0f, beside, 1);
+	HDVisBuild(trg, &rooms[0], 5, 0, 0, 0, 0, 0, 0, p, &t);
+	ok(t.skyCount[0] == 1,
+		"ghost: art within the reach beside the floor plan is taken",
+		t.skyCount[0], 1);
+
+	/* 3. G's room standing in S's inside with no link: its sky art over S
+	 * is near, and still refused - taken, it draws G's inside in S's air
+	 * (ANDREA3's gallery 92 in room 115). */
+	rooms[2].x = 0;
+	rooms[2].z = 0;
+	rooms[2].top = -3072;
+	rooms[2].bottom = -1024;
+
+	const float above[1][3] = { { 3000.0f, -6000.0f, 3000.0f } };
+
+	ghost_scene(trg, 0.0f, 0.0f, above, 1);
+	HDVisBuild(trg, &rooms[0], 5, 0, 0, 0, 0, 0, 0, p, &t);
+	ok(t.skyTris[2] == 8 && t.skyCount[0] == 0 && t.skyRefusedShared == 1,
+		"ghost: a room inside S's inside, no link: its group refused",
+		t.skyRefusedShared, 1);
+
+	HDVisParams apart = p;
+
+	apart.skyShared = 0;
+	HDVisBuild(trg, &rooms[0], 5, 0, 0, 0, 0, 0, 0, apart, &t);
+	ok(t.skyCount[0] == 1,
+		"ghost: with skyShared 0 S takes it, as before", t.skyCount[0], 1);
+
+	// The same with a floor link from S to G: one space, taken.
+	const int links[1] = { 2 };
+
+	rooms[0].firstLink = 0;
+	rooms[0].linkCount = 1;
+	HDVisBuild(trg, &rooms[0], 5, 0, 0, 0, 0, links, 1, p, &t);
+	ok(t.skyCount[0] == 1 && t.skyRefusedShared == 0,
+		"ghost: linked with S, the room inside it is no second space",
+		t.skyCount[0], 1);
+
+	// Below S's floor: the heights do not cross, nothing shared.
+	rooms[0].linkCount = 0;
+	rooms[2].top = 1024;
+	rooms[2].bottom = 3072;
+	HDVisBuild(trg, &rooms[0], 5, 0, 0, 0, 0, 0, 0, p, &t);
+	ok(t.skyRefusedShared == 0,
+		"ghost: a room under S's floor shares no inside with it",
+		t.skyRefusedShared, 0);
+}
+
 /* The art of a static carried to another placement of its slot
  * (hd_artcopy.h) on a level of two rooms built by hand, RICH2's stairwell
  * cut down: room 0 drawn by its own art, x and z 0..6144, y -1536..0, and
@@ -39348,6 +39530,7 @@ int main()
 	vis_hanging();
 	vis_flip_state();
 	vis_sky_art();
+	ghost_rule();
 	vis_plane();
 	vis_wall();
 	vis_hidden_room();

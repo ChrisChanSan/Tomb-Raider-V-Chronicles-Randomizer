@@ -19208,9 +19208,10 @@ check keeps the rooms below that, and Andy2 has 254. C4244 therefore stays out o
 `TreatSpecificWarningsAsErrors`, and ModernTest's `warning_rule` is unchanged.
 
 **Checked.** The `.text` section of the 64-bit and the 32-bit release EXE, each built
-from the commit before and from this one in the same folder: the same bytes. The measurement
-build leaves exactly the six SUSPECT places. The logs of `be64.bat`, `basan.bat`,
-`be64.bat test` and `be.bat` hold no warning line; `b1.bat` and `b2.bat` build.
+from the commit before and from this one in the same folder: the same bytes. The
+measurement build leaves exactly the six SUSPECT places. The logs of `be64.bat`,
+`basan.bat`, `be64.bat test` and `be.bat` hold no warning line; `b1.bat` and `b2.bat`
+build.
 
 **Commits.** see the appendix.
 

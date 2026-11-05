@@ -6140,14 +6140,15 @@ namespace walkoff
 				"reach=%.0f bare_share=%.2f guest_tris_min=%d sources=%d "
 				"twin=%d wide_bare=%.2f edge=%.5f mirror=%d enclosed=%d "
 				"openings_state=%d sky_groups=%d sky_tris=%lld sky_pairs=%d "
-				"sky_copies=%d sky_closed=%d\n",
+				"sky_copies=%d sky_closed=%d sky_far=%d sky_shared=%d\n",
 				t.rooms, t.artRooms, t.wallFaces, t.bareFaces, t.voidFaces,
 				t.guestPairs, t.guestTris, t.widePortals, t.ms,
 				g_vis_params.reach, g_vis_params.bare, g_vis_params.guestTris,
 				g_vis_sources, t.openingsTwin, g_vis_params.wideBare,
 				g_vis_params.edge, t.wideMirrored, t.roomsEnclosed,
 				t.openingsState, t.skyGroups, t.skyArtTris, t.skyPairs,
-				t.skyCopies, t.skyClosed);
+				t.skyCopies, t.skyClosed, t.skyRefusedFar,
+				t.skyRefusedShared);
 
 			/* The openings the flipmaps' states refused, as the engine's
 			 * HDLOG visopening lines name them. */
@@ -6171,6 +6172,13 @@ namespace walkoff
 						one.lo[0], one.hi[0], one.lo[1], one.hi[1], one.lo[2],
 						one.hi[2]);
 				}
+
+			// The pairs the art near the room refused (skyNear, skyShared).
+			for (const HDVisSkyAsked& asked : t.skyAsked)
+				if (asked.refused)
+					printf("-vis: vissky room=%d group=%d near=%d refused=%s\n",
+						asked.room, asked.group, asked.nearTris,
+						asked.refused == 1 ? "far" : "shared");
 
 			for (size_t g = 0; g < t.skyCopyOf.size(); g++)
 				if (t.skyCopyOf[g] >= 0)
@@ -18863,7 +18871,12 @@ static void SpringBlocks(const char* stem, std::vector<HDSpringBlock>& out,
  *   -visskyreach <u>  how far beside a room's floor plan a sky group's art
  *                     may stand for the room to take it (skyReach), -1
  *                     every room under the sky
- *   -visyshift 0|1    1 builds the tables with the groups' y shifts, as
+ *   -visskynear <n>   how many of a sky group's triangles must stand near
+ *                     the room for it to take the group (skyNear, 1); 0
+ *                     asks the box alone, as before #334
+ *   -visskyshared 0|1 1, the default, refuses the group of a room sharing
+ *                     the room's inside with no link (skyShared)
+ *   -visyshift 0|1   1 builds the tables with the groups' y shifts, as
  *                     the engine's build does; 0, the default, with the
  *                     art as the file stores it, as before
  *   -gpu <n>          the frame's solid room draws timed n times on the GPU
@@ -18911,6 +18924,10 @@ static bool VisArg(int argc, char** argv, int* at)
 		walkoff::g_vis_params.skyArt = atoi(argv[*at + 1]);
 	else if (!strcmp(a, "-visskyreach"))
 		walkoff::g_vis_params.skyReach = atof(argv[*at + 1]);
+	else if (!strcmp(a, "-visskynear"))
+		walkoff::g_vis_params.skyNear = atoi(argv[*at + 1]);
+	else if (!strcmp(a, "-visskyshared"))
+		walkoff::g_vis_params.skyShared = atoi(argv[*at + 1]);
 	else if (!strcmp(a, "-visyshift"))
 		walkoff::g_vis_yshift = atoi(argv[*at + 1]) != 0;
 	else if (!strcmp(a, "-visnoguest"))

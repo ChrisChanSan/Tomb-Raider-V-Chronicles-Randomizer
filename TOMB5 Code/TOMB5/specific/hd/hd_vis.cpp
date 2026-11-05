@@ -68,7 +68,16 @@
  *   skyArt 1       the sky table - see the sky groups below
  *   skyReach 1024  a sector, the width of a room's wall ring: the skyline
  *                  past the east wall of ANDREA2's courtyard (room 223)
- *                  stands 889 units off its floor plan */
+ *                  stands 889 units off its floor plan
+ *   skyNear 1      a triangle: the reach read literally, of the art and
+ *                  not of its box. Of the 501 pairs the box took on the
+ *                  fifteen levels 64 have no triangle within the reach -
+ *                  ANDREA3's shaft over the cave (room 128, groups 67 and
+ *                  92) and room 116 over the arena's archway (group 92)
+ *                  among them -, 27 more fewer than eight; ANDREA2's
+ *                  courtyard (room 223) keeps its three with 84, 84, 603
+ *   skyShared 1    one pair of the 501: ANDREA3's room 115, whose inside
+ *                  holds the gallery room 92 with no link between them */
 HDVisParams HDVisDefaults()
 {
 	HDVisParams p;
@@ -88,6 +97,8 @@ HDVisParams HDVisDefaults()
 	p.staticShare = 0.5;
 	p.skyArt = 1;
 	p.skyReach = 1024.0;
+	p.skyNear = 1;
+	p.skyShared = 1;
 	return p;
 }
 
@@ -184,6 +195,8 @@ namespace
 	struct SkyPoint
 	{
 		float c[3];
+		// The triangle's corners' extent in x and in z (the sky's reach).
+		float x0, x1, z0, z1;
 	};
 
 	const double kCopySlack = 2.0;
@@ -600,8 +613,19 @@ bool HDVisBuild(const trf::remaster::Trg& trg, const HDVisRoom* rooms,
 					else if (open)
 					{
 						GuestAcc& a = skyAcc[(size_t)g];
-						const SkyPoint point = { { (float)cw[0], (float)cw[1],
-							(float)cw[2] } };
+						SkyPoint point = { { (float)cw[0], (float)cw[1],
+							(float)cw[2] }, 1e30f, -1e30f, 1e30f, -1e30f };
+
+						for (int c = 0; c < 3; c++)
+						{
+							const float wx = v[c][0] + origin[0];
+							const float wz = v[c][2] + origin[2];
+
+							point.x0 = wx < point.x0 ? wx : point.x0;
+							point.x1 = wx > point.x1 ? wx : point.x1;
+							point.z0 = wz < point.z0 ? wz : point.z0;
+							point.z1 = wz > point.z1 ? wz : point.z1;
+						}
 
 						a.tris++;
 						skyPoints[(size_t)g].push_back(point);
@@ -913,7 +937,13 @@ bool HDVisBuild(const trf::remaster::Trg& trg, const HDVisRoom* rooms,
 	 * but its own and its twin's, whose art there stands over its floor plan
 	 * or within skyReach of it: what stands in the sky is seen from wherever
 	 * the sky is, and the walk lists it by its box inside the window the
-	 * room is seen in. */
+	 * room is seen in. Asked of the triangles (skyNear), not of the box
+	 * alone: a skyline's box spans the level, and ANDREA3's group 92, round
+	 * the arena, touched the shaft over a cave and drew its tiers through
+	 * the rock. And not the group of a room standing in this room's inside
+	 * with no link (skyShared): taken, it draws that room's inside whole in
+	 * the air - ANDREA3's gallery 92 inside room 115, a box with its enemy
+	 * over the arena. */
 	if (params.skyArt)
 	{
 		std::vector<int> order;
@@ -1028,6 +1058,56 @@ bool HDVisBuild(const trf::remaster::Trg& trg, const HDVisRoom* rooms,
 					(double)art.hi[2] < (double)room.z - reach ||
 					(double)art.lo[2] >
 					(double)(room.z + ((long)room.zs << 10)) + reach)))
+					continue;
+
+				/* The box answer took it; now the art itself. Near: the
+				 * group's triangles in the sky whose centroids stand over
+				 * the floor plan or within the reach of it. Shared: the
+				 * group's room standing in this room's inside, inner grids
+				 * and heights crossing, with no link between the two. */
+				HDVisSkyAsked asked = { h, g, 0, 0, 0 };
+				const double nx0 = (double)room.x - reach;
+				const double nx1 = (double)(room.x +
+					((long)room.xs << 10)) + reach;
+				const double nz0 = (double)room.z - reach;
+				const double nz1 = (double)(room.z +
+					((long)room.zs << 10)) + reach;
+
+				for (const SkyPoint& p : skyPoints[(size_t)g])
+					if (reach < 0.0 || ((double)p.x1 >= nx0 &&
+						(double)p.x0 <= nx1 && (double)p.z1 >= nz0 &&
+						(double)p.z0 <= nz1))
+						asked.nearTris++;
+
+				const HDVisRoom& other = rooms[g];
+				const long ax0 = room.x + 1024, bx0 = other.x + 1024;
+				const long ax1 = room.x + ((long)(room.xs - 1) << 10);
+				const long bx1 = other.x + ((long)(other.xs - 1) << 10);
+				const long az0 = room.z + 1024, bz0 = other.z + 1024;
+				const long az1 = room.z + ((long)(room.zs - 1) << 10);
+				const long bz1 = other.z + ((long)(other.zs - 1) << 10);
+				const bool shared = (ax0 > bx0 ? ax0 : bx0) <
+					(ax1 < bx1 ? ax1 : bx1) &&
+					(az0 > bz0 ? az0 : bz0) < (az1 < bz1 ? az1 : bz1) &&
+					(room.top > other.top ? room.top : other.top) <
+					(room.bottom < other.bottom ? room.bottom : other.bottom)
+					&& !linked(h, g);
+
+				asked.shared = shared ? 1 : 0;
+
+				if (params.skyNear > 0 && asked.nearTris < params.skyNear)
+					asked.refused = 1;
+				else if (params.skyShared && shared)
+					asked.refused = 2;
+
+				t.skyAsked.push_back(asked);
+
+				if (asked.refused == 1)
+					t.skyRefusedFar++;
+				else if (asked.refused == 2)
+					t.skyRefusedShared++;
+
+				if (asked.refused)
 					continue;
 
 				HDVisGuest one;

@@ -19277,7 +19277,7 @@ logs of `be64.bat`, `be64.bat test`, `basan.bat` and `be.bat` hold no warning li
 
 **Commits.** `81d4d2c3`.
 
-### The six suspect narrowings closed, C4244 still a warning (#331)
+### The six suspect narrowings closed, and C4244 an error (#331)
 2026-11-05
 
 **Measured.** Over the 15 vanilla levels in `data/Backup` and the randomized ones in
@@ -19339,17 +19339,22 @@ closes; it used to stop at 256, the size of `flipped[]`, which let room 255 vani
 `OutsideRoomTable`'s "empty". The save's room byte is bounded by the same check. The
 write into the table casts with that check named.
 
-C4244 stays out of `TreatSpecificWarningsAsErrors`. With it in, `/we4244` turns the
-warning's level-4 form into an error even inside `#pragma warning(push, 0)`: 74
-places of `tomb5/libs/stb/stb_vorbis.c` (included by `audio.cpp`) and the four of
-`vendor/ffmpeg-min`'s `libavutil/common.h` (included by `fmv_av.cpp`) stop every
-build. Neither is the engine's code; quieting them needs a pragma, `/wd` or an
-external include path, none of which this change makes.
+C4244 is in `TreatSpecificWarningsAsErrors` of all five configurations
+(4311;4312;4302;4267;4477;4005;4101;4244). `/we4244` turns the warning's level-4
+form into an error even inside `#pragma warning(push, 0)`, and two pieces of
+vendored code carry it: 74 places of `tomb5/libs/stb/stb_vorbis.c` (included by
+`audio.cpp` inside its `push, 0` block) and four of `vendor/ffmpeg-min`'s
+`libavutil/common.h` (reached through the FFmpeg headers `fmv_av.cpp` includes).
+The one exception is for them: `#pragma warning(disable: 4244)` inside the
+`push, 0` block around the stb include in `audio.cpp`, and inside a `push, 0` /
+`pop` pair put around the FFmpeg includes of `fmv_av.cpp` (there was none), each
+with a line saying the code is vendored. No `/wd`, no external include path, no
+per-file setting, and no such pragma around any of the engine's own code.
 
 **Checked.** A measurement build with `CL=-w14244` names none of the engine's own
 places: none in the 32-bit build, and in the 64-bit build only the four lines of
 `vendor/ffmpeg-min`'s `libavutil/common.h` that #329's measurement showed as well.
-ModernTest's `warning_rule` is unchanged; the new group `narrowing_closed`
+ModernTest's `warning_rule` expects the eight numbers; the new group `narrowing_closed`
 (5 checks) holds the `uchar` rows and their 0xFF tests, the `short` anim, the mark
 written and checked, and the room check. The `.text` comparison does not apply: types
 changed.
@@ -19826,4 +19831,4 @@ entries above.
 | #328 | The engine builds without a warning |
 | #329 | The hidden narrowings, and C4244 still a warning |
 | #330 | A spark follows its item above number 255 |
-| #331 | The six suspect narrowings closed, C4244 still a warning |
+| #331 | The six suspect narrowings closed, and C4244 an error |

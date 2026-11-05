@@ -70,7 +70,8 @@ Since #328 the engine's builds are free of warnings as well: `grep -c
 "warning C"` gives 0 on the logs of `be64.bat`, `basan.bat`, `be64.bat test`
 and `be.bat`, and those logs are the proof. #329 cast the level-4 form of
 C4244 as well, except six places whose value nothing bounded; #331 settled
-those six, so a measurement build with
+those six and made C4244 an error (the vendored stb_vorbis and FFmpeg
+includes excepted by a pragma), so a measurement build with
 `CL=-w14244` names none in the engine's own files (the four lines of
 `vendor/ffmpeg-min`'s `libavutil/common.h` in the 64-bit build are not ours
 and stood there for #329 too).

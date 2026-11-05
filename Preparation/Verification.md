@@ -389,7 +389,7 @@ assumed: the re-extracted files came back byte-identical.
 
 ## 8. Does the 64-bit build play the same game?
 
-The 64-bit build (`release64\PCtomb5_x64.exe`, `be64.bat`) must play
+The 64-bit build (`release64\PCtomb5.exe`, `be64.bat`) must play
 exactly the game the 32-bit one plays. A pointer cut to 32 bits, a struct
 laid out wider or a list running into its neighbour does not show at once;
 it shows as a line of the `-log` seams that differs. So the same game is
@@ -397,16 +397,17 @@ played on both builds and their logs are compared line by line: the same
 level files, the same input, the same ticks.
 
 Since #324 the 64-bit build is the one that ships, as `PCTomb5.exe`; the
-32-bit build of `be.bat` (`release\PCtomb5.exe`) is no longer in the
-package and stays only as the comparison build of this section.
+32-bit build of `be.bat` (`release\PCtomb5_x86.exe`, built on request) is
+no longer in the package and stays only as the comparison build of this
+section.
 
 A person cannot play the same five minutes twice, so the 32-bit build
 records what the run takes from outside and both builds play it again:
 
 Since #321 the recorder is compiled only into test builds (section 10):
 `releasetest\PCtomb5_x64t.exe` and `releaseasan\PCtomb5_asan.exe`. There is
-no 32-bit test build; `PCtomb5.exe` of `be.bat` and the shipping
-`PCtomb5_x64.exe` do not know `-record` or `-replay` and start as without
+no 32-bit test build; `PCtomb5_x86.exe` of `be.bat` and the shipping
+`PCtomb5.exe` do not know `-record` or `-replay` and start as without
 them. The 32-bit steps below need a 32-bit build with
 `TOMB5_TEST_BUILD`, which no script makes today; the 64-bit steps take
 `PCtomb5_x64t.exe`.
@@ -436,22 +437,22 @@ savegame folder as it was when the recording began (a replay loads what
 the recording loaded). Films are left out with `-nofmv`: the 64-bit build
 has none, and the 32-bit one must not play them either.
 
-**The run.** In a Command Prompt in the game folder, with `PCtomb5.exe`
-and `PCtomb5_x64.exe` (and their `.pdb`) side by side, `<repo>` the clone:
+**The run.** In a Command Prompt in the game folder, with `PCtomb5_x86.exe`
+and `PCtomb5_x64t.exe` (and their `.pdb`) side by side, `<repo>` the clone:
 
 ```
 rem 0. once: keep the savegames as they are now
 xcopy /e /i /y savegame savegame_before
 
 rem 1. record on the 32-bit build
-PCtomb5.exe -log -nofmv -record run1.rec
+PCtomb5_x86.exe -log -nofmv -record run1.rec
 ren log.txt rec_x86.log
 copy savegame\savegame.<m> rec_m.sav
 
 rem 2. play it again on the 32-bit build
 rmdir /s /q savegame
 xcopy /e /i /y savegame_before savegame
-PCtomb5.exe -log -nofmv -replay run1.rec
+PCtomb5_x86.exe -log -nofmv -replay run1.rec
 ren log.txt rep_x86.log
 copy savegame\savegame.<m> x86_m.sav
 
@@ -494,7 +495,7 @@ was read - `how=tag_item`, `how=tag_ai`, `how=tag_num` or `how=null` - and
 a `SAVELOG save ... kind=outside` line names a pointer the rule could not
 name and wrote as null; send that line if one appears.
 The reverse: write slot `<n>` with the 64-bit build, record `run2.rec` on
-`PCtomb5_x64.exe`, play it again on both builds (steps 2 and 3 with
+`PCtomb5_x64t.exe`, play it again on both builds (steps 2 and 3 with
 `run2.rec`) and compare the two `<m>` files the same way.
 
 A save written by a build before this rule holds those pointers as
@@ -901,7 +902,7 @@ films through three FFmpeg DLLs beside its EXE (`specific\fmv_av.cpp`,
    the picture must look as the film does, no colour cast, not upside
    down, and the three test pixels it prints are black, white and red.
 2. The game. Copy `release64\` with the three DLLs into the game folder
-   and start `PCtomb5_x64.exe -log`. Watch the intro: the sound in time
+   and start `PCtomb5.exe -log`. Watch the intro: the sound in time
    with the picture at the start and still after a minute (the lips, a
    door, a shot). Skip it once with each of the three keys - Escape
    (`IN_OPTION`), the draw key (`IN_DRAW`) and Enter or Cross

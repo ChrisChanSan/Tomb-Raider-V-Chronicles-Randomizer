@@ -928,19 +928,20 @@ compiler's redist folder (`VCToolsRedistDir` of `vcvars64.bat`) beside them.
 
 - **Engine:** `Preparation\Tools\Diagnose\be64.bat` is the shipping build:
   `TOMB5 Code\tomb5.vcxproj`, x64, Release, into
-  `release64\PCtomb5_x64.exe` (the package names it `PCTomb5.exe`), with the
+  `release64\PCtomb5.exe` (the package writes it `PCTomb5.exe`), with the
   FFmpeg and C++ runtime DLLs copied beside it. It first checks every
   compiled HD shader (`.inc`) against its `.hlsl` and rebuilds one that is
   out of step; a build from the Visual Studio window skips that check.
   `be.bat` beside it builds the same engine as a 32-bit program (Win32,
-  Release) into `release\PCtomb5.exe` - the comparison build, not shipped.
+  Release) into `release\PCtomb5_x86.exe` - the comparison build, built on
+  request and not shipped.
 - **Randomizer:** `TR5Randomizer\build\b1.bat` (command line) and
   `b2.bat` (GUI).
 - **Package:** `Preparation\Tools\BuildRelease.ps1` assembles the shippable
   folder, 64-bit only: `be64.bat`'s engine as `PCTomb5.exe`,
   `TR5Randomizer.exe`, the three FFmpeg DLLs, the three C++ runtime DLLs from
   `VCToolsRedistDir` (or `-RedistDir`), the data, the source code and the
-  licenses. The 32-bit `release\PCtomb5.exe` never goes in.
+  licenses. The 32-bit `release\PCtomb5_x86.exe` never goes in.
 
 ## Thanks and origin
 

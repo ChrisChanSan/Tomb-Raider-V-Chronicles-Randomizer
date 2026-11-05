@@ -30396,7 +30396,9 @@ static void runtime_rule()
 		0, 1);
 
 	// The package: release64's engine and the set, never the 32-bit EXE.
-	ok(hd_switch_count(pack, "$Root\\release64\\PCtomb5_x64.exe") == 1 &&
+	ok(hd_switch_count(pack,
+		"$EngineExe = \"$Root\\release64\\PCtomb5.exe\"") == 1 &&
+		hd_switch_count(pack, "PCtomb5_x64.exe") == 0 &&
 		hd_switch_count(pack, "release\\PCtomb5.exe") == 0 &&
 		hd_switch_count(pack, "@('vcruntime140.dll', 'vcruntime140_1.dll', "
 		"'msvcp140.dll')") == 1 &&
@@ -30404,6 +30406,35 @@ static void runtime_rule()
 		== 1 &&
 		hd_switch_count(pack, "COPYING.LGPLv2.1") >= 1,
 		"runtime rule: BuildRelease.ps1 packs release64 and the set", 0, 1);
+
+	// The names (#339): the 64-bit engine is PCtomb5.exe itself, the
+	// 32-bit comparison build PCtomb5_x86.exe in its own folder.
+	ok(hd_switch_count(proj, "'Debug|Win32'\">\r\n"
+		"    <LinkIncremental>true</LinkIncremental>\r\n"
+		"    <OutDir>$(ProjectDir)..\\release\\</OutDir>\r\n"
+		"    <IntDir>$(Platform)\\$(Configuration)\\</IntDir>\r\n"
+		"    <LibraryPath>$(ProjectDir)TOMB5\\tomb5\\libs\\discordRPC;"
+		"$(LibraryPath)</LibraryPath>\r\n"
+		"    <TargetName>PCtomb5_x86</TargetName>") == 1 &&
+		hd_switch_count(proj, "'Release|Win32'\">\r\n"
+		"    <LinkIncremental>false</LinkIncremental>\r\n"
+		"    <OutDir>$(ProjectDir)..\\release\\</OutDir>\r\n"
+		"    <IntDir>$(Platform)\\$(Configuration)\\</IntDir>\r\n"
+		"    <LibraryPath>$(ProjectDir)TOMB5\\tomb5\\libs\\discordRPC;"
+		"$(LibraryPath)</LibraryPath>\r\n"
+		"    <TargetName>PCtomb5_x86</TargetName>") == 1 &&
+		hd_switch_count(proj, "'Debug|x64'\">\r\n"
+		"    <LinkIncremental>true</LinkIncremental>\r\n"
+		"    <OutDir>$(ProjectDir)..\\release64\\</OutDir>\r\n"
+		"    <IntDir>$(Platform)\\$(Configuration)\\</IntDir>\r\n"
+		"    <TargetName>PCtomb5</TargetName>") == 1 &&
+		hd_switch_count(proj, "'Release|x64'\">\r\n"
+		"    <LinkIncremental>false</LinkIncremental>\r\n"
+		"    <OutDir>$(ProjectDir)..\\release64\\</OutDir>\r\n"
+		"    <IntDir>$(Platform)\\$(Configuration)\\</IntDir>\r\n"
+		"    <TargetName>PCtomb5</TargetName>") == 1 &&
+		hd_switch_count(proj, "<TargetName>PCtomb5_x64</TargetName>") == 0,
+		"exe name rule: x64 builds PCtomb5, Win32 PCtomb5_x86", 0, 1);
 
 	// The ledger and the README.
 	ok(hd_switch_count(ledger, "### Microsoft Visual C++ runtime - the DLLs "

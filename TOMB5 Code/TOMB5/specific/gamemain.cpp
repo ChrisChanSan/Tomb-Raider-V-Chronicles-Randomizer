@@ -277,6 +277,7 @@ unsigned int __stdcall GameMain(void* ptr)
 
 		RPC_Init();
 		init_tomb5_stuff();
+		ReplaySettings();	// the recorder's header: tomb5.corpses
 		/* The first point in startup where the keyboard scheme can be
 		 * seated. LoadSettings() (winmain.cpp) reads both key sets from the
 		 * registry early in WinMain, but init_tomb5_stuff() just above is

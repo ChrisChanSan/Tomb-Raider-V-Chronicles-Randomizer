@@ -49,8 +49,16 @@ bool  savegame_checksum_ok;	// built in S_LoadGame, see there
  * behind them. The file's size did not change when the animation went from
  * a byte to a short, so the size check cannot tell an older save; the mark
  * can. An older save holds FmvSceneTriggered there, which nothing sets any
- * more (fmv.cpp), so it reads 0. A new mark for every change of the block. */
-#define SAVE_FORMAT_MARK	0x02355653	// "SV5" and format 2
+ * more (fmv.cpp), so it reads 0. A new mark for every change of the block.
+ * Format 2: the animation as a short (#331). Format 3: a body that lies
+ * there is written whole (SAVE_PACKED_BODY below, #333). */
+#define SAVE_FORMAT_MARK	0x03355653	// "SV5" and format 3
+
+/* The item block's word for a body that lies there: both the "killed" bit
+ * (0x2000) and the "written" bit (0x8000). Format 2 never wrote the two
+ * together - the killed branch writes 0x2000 alone, the other branch never
+ * sets 0x2000 - so the pair is free for it. */
+#define SAVE_PACKED_BODY	0xA000
 
 // The 22 bytes a save writes of a creature end with the four of its enemy's
 // field, which save_pointer_rule.h fills - a long, whatever the width of the
@@ -360,6 +368,172 @@ void RestoreLaraData(long FullSave)
 	load_tomb5_data();
 }
 
+/* A dead enemy that lies there (#333). CreatureDie (box.cpp) sets
+ * IFL_CLEARBODY on it, takes it off the active chain, frees its AI slot and
+ * drops what it carried, but leaves it in its room's item list, where the
+ * room draws it while `after_death` counts 1..127 (draw.cpp's
+ * StepAfterDeathFade kills it at 128; the Corpses switch off holds it at 1).
+ * Format 2 wrote it as killed and the load ran KillItem on it: the body was
+ * gone after a load in either setting. A killed item carries the same flag,
+ * but KillItem has taken it out of its room's list, and an enemy shredded by
+ * CreatureDie(.., 1) can keep the count it had (the skeleton's rise timer):
+ * the list is what tells the two apart. Neither the writer nor the reader
+ * looks at the switch: a body saved fading goes on fading after a load with
+ * the switch on, and lies there with it off, as it would have in play. */
+static bool SaveBodyLies(short item_number)
+{
+	ITEM_INFO* item = &items[item_number];
+
+	if (!(item->flags & IFL_CLEARBODY) || item->after_death < 1 ||
+		item->after_death > 127 || item->room_number < 0 ||
+		item->room_number >= number_rooms)
+		return false;
+
+	for (short n = room[item->room_number].item_number; n != NO_ITEM;
+		n = items[n].next_item)
+	{
+		if (n == item_number)
+			return true;
+	}
+
+	return false;
+}
+
+/* The flag bits and the bit fields, packed as the long the other items'
+ * branch writes (without its creature bit: CreatureDie freed the data). */
+static ulong SaveBodyFlags(ITEM_INFO* item)
+{
+	ulong flags = (ushort)item->flags;
+
+	flags |= item->active << 16;
+	flags |= item->status << 17;
+	flags |= item->gravity_status << 19;
+	flags |= item->hit_status << 20;
+	flags |= item->collidable << 21;
+	flags |= item->looked_at << 22;
+	flags |= item->dynamic_light << 23;
+	flags |= item->poisoned << 24;
+	flags |= item->ai_bits << 25;
+	flags |= item->really_active << 30;
+	return flags;
+}
+
+/* After SAVE_PACKED_BODY: everything the body is drawn and tested by, at
+ * full width, whatever the object's save_* switches say (a body needs them
+ * all; 56 bytes). */
+static void SaveBody(ITEM_INFO* item, OBJECT_INFO* obj)
+{
+	ulong flags;
+	short rel;
+	uchar byte;
+
+	WriteSG(&item->pos.x_pos, sizeof(long));
+	WriteSG(&item->pos.y_pos, sizeof(long));
+	WriteSG(&item->pos.z_pos, sizeof(long));
+	WriteSG(&item->room_number, sizeof(short));
+	WriteSG(&item->pos.x_rot, sizeof(short));
+	WriteSG(&item->pos.y_rot, sizeof(short));
+	WriteSG(&item->pos.z_rot, sizeof(short));
+	byte = (uchar)item->current_anim_state;
+	WriteSG(&byte, sizeof(uchar));
+	byte = (uchar)item->goal_anim_state;
+	WriteSG(&byte, sizeof(uchar));
+	byte = (uchar)item->required_anim_state;
+	WriteSG(&byte, sizeof(uchar));
+	rel = item->anim_number - obj->anim_index;	// as format 2's short
+	WriteSG(&rel, sizeof(short));
+	WriteSG(&item->frame_number, sizeof(short));
+	byte = (uchar)item->after_death;	// 1..127 (SaveBodyLies): a byte
+	WriteSG(&byte, sizeof(uchar));
+	WriteSG(&item->hit_points, sizeof(short));
+	flags = SaveBodyFlags(item);
+	WriteSG(&flags, sizeof(ulong));
+	WriteSG(item->item_flags, 4 * sizeof(short));
+	WriteSG(&item->timer, sizeof(short));
+	WriteSG(&item->trigger_flags, sizeof(short));
+	WriteSG(&item->carried_item, sizeof(short));
+	WriteSG(&item->mesh_bits, sizeof(ulong));
+	WriteSG(&item->meshswap_meshbits, sizeof(ulong));
+
+	if (gLogEnabled)
+		Log("SAVELOG body save item=%d after_death=%d room=%d",
+			(int)(item - items), (int)item->after_death,
+			(int)item->room_number);
+}
+
+/* SaveBody's fields back onto the item the level load set up. The body
+ * stays off the active chain (InitialiseItem may have put a triggered enemy
+ * there) and gets no AI slot: no EnableBaddieAI, no CreatureDie, so the
+ * pickups it dropped before the save are not dropped again (they are items
+ * of their own, written in their own place). Its room's list keeps it, as
+ * CreatureDie left it. */
+static void RestoreBody(short item_number, ITEM_INFO* item, OBJECT_INFO* obj)
+{
+	FLOOR_INFO* floor;
+	ulong flags;
+	short rel, room_number;
+	uchar byte;
+
+	ReadSG(&item->pos.x_pos, sizeof(long));
+	ReadSG(&item->pos.y_pos, sizeof(long));
+	ReadSG(&item->pos.z_pos, sizeof(long));
+	ReadSG(&room_number, sizeof(short));
+	ReadSG(&item->pos.x_rot, sizeof(short));
+	ReadSG(&item->pos.y_rot, sizeof(short));
+	ReadSG(&item->pos.z_rot, sizeof(short));
+	ReadSG(&byte, sizeof(uchar));
+	item->current_anim_state = byte;
+	ReadSG(&byte, sizeof(uchar));
+	item->goal_anim_state = byte;
+	ReadSG(&byte, sizeof(uchar));
+	item->required_anim_state = byte;
+	ReadSG(&rel, sizeof(short));
+	item->anim_number = obj->anim_index + rel;
+	ReadSG(&item->frame_number, sizeof(short));
+	ReadSG(&byte, sizeof(uchar));
+	item->after_death = byte;
+	ReadSG(&item->hit_points, sizeof(short));
+	ReadSG(&flags, sizeof(ulong));
+	ReadSG(item->item_flags, 4 * sizeof(short));
+	ReadSG(&item->timer, sizeof(short));
+	ReadSG(&item->trigger_flags, sizeof(short));
+	ReadSG(&item->carried_item, sizeof(short));
+	ReadSG(&item->mesh_bits, sizeof(ulong));
+	ReadSG(&item->meshswap_meshbits, sizeof(ulong));
+
+	if (item->room_number != room_number)
+		ItemNewRoom(item_number, room_number);
+
+	RemoveActiveItem(item_number);	// returns at once if not on it
+	item->flags = (short)flags;
+	item->active = 0;
+	item->status = (flags >> 17) & 3;
+	item->gravity_status = (flags >> 19) & 1;
+	item->hit_status = (flags >> 20) & 1;
+	item->collidable = 0;			// as CreatureDie left it
+	item->looked_at = (flags >> 22) & 1;
+	item->dynamic_light = (flags >> 23) & 1;
+	item->poisoned = (flags >> 24) & 1;
+	item->ai_bits = (flags >> 25) & 31;
+	item->really_active = (flags >> 30) & 1;
+	item->speed = 0;
+	item->fallspeed = 0;
+	item->data = 0;				// as DisableBaddieAI left it
+
+	if (obj->shadow_size)
+	{
+		floor = GetFloor(item->pos.x_pos, item->pos.y_pos, item->pos.z_pos,
+			&room_number);
+		item->floor = GetHeight(floor, item->pos.x_pos, item->pos.y_pos,
+			item->pos.z_pos);
+	}
+
+	if (gLogEnabled)
+		Log("SAVELOG body load item=%d after_death=%d room=%d",
+			(int)item_number, (int)item->after_death,
+			(int)item->room_number);
+}
+
 void SaveLevelData(long FullSave)
 {
 	ITEM_INFO* item;
@@ -458,8 +632,17 @@ void SaveLevelData(long FullSave)
 
 		if (item->flags & -0x8000)
 		{
-			packed = 0x2000;
-			WriteSG(&packed, sizeof(ushort));
+			if (SaveBodyLies((short)i))
+			{
+				packed = SAVE_PACKED_BODY;
+				WriteSG(&packed, sizeof(ushort));
+				SaveBody(item, obj);
+			}
+			else
+			{
+				packed = 0x2000;
+				WriteSG(&packed, sizeof(ushort));
+			}
 		}
 		else
 		{
@@ -943,7 +1126,9 @@ void RestoreLevelData(long FullSave)
 		obj = &objects[item->object_number];
 		ReadSG(&packed, sizeof(ushort));
 
-		if (packed & 0x2000)
+		if ((packed & SAVE_PACKED_BODY) == SAVE_PACKED_BODY)
+			RestoreBody((short)i, item, obj);
+		else if (packed & 0x2000)
 		{
 			KillItem((short)i);
 			item->status = ITEM_DEACTIVATED;

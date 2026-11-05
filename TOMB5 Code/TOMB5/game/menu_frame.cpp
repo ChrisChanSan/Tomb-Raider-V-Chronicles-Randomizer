@@ -1728,7 +1728,7 @@ static const menu_row menu_rows_tomb5[] =
 {
 	MENU_VALUE("Cutscene skipper", MenuValCutsceneSkipper, MenuStepCutsceneSkipper, MENU_SAVE_TOMB5),
 	MENU_VALUE("Cheats", MenuValCheats, MenuStepCheats, MENU_SAVE_TOMB5),
-	MENU_VALUE("Corpses", MenuValCorpses, MenuStepCorpses, MENU_SAVE_TOMB5),
+	MENU_VALUE("Corpse fade", MenuValCorpses, MenuStepCorpses, MENU_SAVE_TOMB5),
 	// One literal for the two places this option is named: the title
 	// screen's own row has said "Level Select", and a second spelling
 	// would have been a second CustomText key for one setting.

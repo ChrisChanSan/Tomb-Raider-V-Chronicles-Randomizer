@@ -13008,7 +13008,8 @@ static const caption_site caption_sites[] =
 	{ "Cutscene skipper", CC_LABEL, CF_FRAME,
 		"MENU_VALUE(\"Cutscene skipper\"," },
 	{ "Cheats", CC_LABEL, CF_FRAME, "MENU_VALUE(\"Cheats\"," },
-	{ "Corpses", CC_LABEL, CF_FRAME, "MENU_VALUE(\"Corpses\"," },
+	{ "Corpse fade", CC_LABEL, CF_FRAME,
+		"MENU_VALUE(\"Corpse fade\"," },
 	{ "Bar mode", CC_LABEL, CF_FRAME, "MENU_VALUE(\"Bar mode\"," },
 	{ "Bar positions", CC_LABEL, CF_FRAME, "MENU_VALUE(\"Bar positions\"," },
 	{ "Enemy bars", CC_LABEL, CF_FRAME, "MENU_VALUE(\"Enemy bars\"," },
@@ -39816,16 +39817,17 @@ static void corpse_fade()
 		"corpses switch: default, read and write under \"corpses\"",
 		t5 ? hd_switch_count(t5, "\"corpses\"") : -1, 3);
 	ok(menu && hd_switch_count(menu, "MENU_VALUE(\"Cheats\", MenuValCheats, "
-		"MenuStepCheats, MENU_SAVE_TOMB5),\r\n\tMENU_VALUE(\"Corpses\", "
+		"MenuStepCheats, MENU_SAVE_TOMB5),\r\n\tMENU_VALUE(\"Corpse fade\", "
 		"MenuValCorpses, MenuStepCorpses, MENU_SAVE_TOMB5),") == 1 &&
 		hd_switch_count(menu, "CustomText(tomb5.corpses ? \"on\" : \"off\")") == 1 &&
 		hd_switch_count(menu, "tomb5.corpses = !tomb5.corpses;") == 1,
 		"corpses switch: the options row right after Cheats",
-		menu ? hd_switch_count(menu, "MENU_VALUE(\"Corpses\"") : -1, 1);
-	ok(flow && hd_switch_count(flow, "{ \"Corpses\", \"Cadavres\", \"Leichen\", "
-		"\"Cadaveri\", \"Cad\\xE1veres\" },") == 1,
+		menu ? hd_switch_count(menu, "MENU_VALUE(\"Corpse fade\"") : -1, 1);
+	ok(flow && hd_switch_count(flow, "{ \"Corpse fade\", \"Fondu des cadavres\", "
+		"\"Leichen ausblenden\",\r\n\t\t\t\"Sparizione cadaveri\", "
+		"\"Fundido cad\\xE1veres\" },") == 1,
 		"corpses switch: the row's word in five languages",
-		flow ? hd_switch_count(flow, "\"Corpses\"") : -1, 1);
+		flow ? hd_switch_count(flow, "\"Corpse fade\"") : -1, 1);
 
 	// The count asks it, inside StepAfterDeathFade, before its kill.
 	const char* step = draw ? strstr(draw, "void StepAfterDeathFade()") : 0;

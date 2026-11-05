@@ -16028,7 +16028,11 @@ static void ghost_rule()
 	trf::remaster::Trg trg;
 	HDVisTables t;
 	const HDVisParams off = HDVisDefaults();
-	const HDVisParams p = HDVisLevelParams("ANDREA3");
+	HDVisParams p = HDVisLevelParams("ANDREA3");
+
+	// #344: ANDREA3 is linked now; these hand-built rooms stand apart, so the
+	// rule is left off here and checked in flyby_room_rule.
+	p.skyLinked = 0;
 	const HDVisParams other = HDVisLevelParams("ANDY3");
 	const HDVisParams lower = HDVisLevelParams("andrea3");
 	const HDVisParams none = HDVisLevelParams(0);
@@ -16196,11 +16200,11 @@ static void flyby_room_rule()
 
 	ok(p.skyLinked == 0 && HDVisLevelParams("ANDY3").skyLinked == 1 &&
 		HDVisLevelParams("andy3").skyLinked == 1 &&
-		HDVisLevelParams("ANDREA3").skyLinked == 0 &&
+		HDVisLevelParams("ANDREA3").skyLinked == 1 &&
 		HDVisLevelParams("TITLE").skyLinked == 1 &&
 		HDVisLevelParams("title").skyShared == 0 &&
 		HDVisLevelParams(0).skyLinked == 0,
-		"flyby room: off by default, on by ANDY3's and TITLE's rows",
+		"flyby room: off by default, on by the rows of ANDY3, TITLE, ANDREA3",
 		HDVisLevelParams("ANDY3").skyLinked, 1);
 
 	// #344: TITLE has a row of its own: linked on, no near, no shared.

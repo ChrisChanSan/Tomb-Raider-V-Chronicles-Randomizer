@@ -2684,8 +2684,9 @@ static void DrawWaterCards()
 	const bool running = st.floor >= 0 && st.floorWet > 0.0f &&
 		st.floorWet < 0.999f;
 
-	if (!gLogEnabled || (!st.cards && !st.rings && st.wet <= 0.0f &&
-		!st.tanks && !running) || GlobalCounter / 30 == logged)
+	if (!LogFam_SPLASHLOG || !gLogEnabled || (!st.cards && !st.rings &&
+		st.wet <= 0.0f && !st.tanks && !running) ||
+		GlobalCounter / 30 == logged)
 		return;
 
 	logged = GlobalCounter / 30;
@@ -2867,7 +2868,8 @@ static void BuildWaterSheets()
 	for (int a = 0; HDRenderWaterArtLine(a, g_stem, line, sizeof(line)); a++)
 		Log("%s", line);
 
-	for (int w = 0; HDRenderWaterWetLine(w, g_stem, line, sizeof(line)); w++)
+	for (int w = 0; LogFam_SPLASHLOG &&
+		HDRenderWaterWetLine(w, g_stem, line, sizeof(line)); w++)
 		Log("%s", line);
 }
 

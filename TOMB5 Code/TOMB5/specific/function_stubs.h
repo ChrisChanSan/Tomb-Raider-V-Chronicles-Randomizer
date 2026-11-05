@@ -12,6 +12,7 @@
  */
 #pragma once
 #include "../global/types.h"
+#include "log_families.h"	// the families a test build alone carries
 
 void init_game_malloc();
 void* game_malloc(long size);
@@ -40,8 +41,8 @@ inline void RngTraceMark(const char*) {}
 
 /* __declspec(noinline) in a test build, nothing in a shipping one: the
  * functions a diagnosis names by return address (GetRandomControl for
- * -rngtrace, GetFreeSpark for SPARKLOG draw_alloc) are calls of their own
- * there, and inlined as before elsewhere. */
+ * -rngtrace, GetFreeSpark for SPARKLOG draw_alloc, phd_atan for ATANLOG)
+ * are calls of their own there, and inlined as before elsewhere. */
 #ifdef TOMB5_TEST_BUILD
 #define TOMB5_NOINLINE_IN_TEST	__declspec(noinline)
 #else
@@ -81,7 +82,8 @@ inline unsigned int LogAddr(const void* p)
 // -log: Log() writes nothing until this is set. Diagnostic seams that have
 // to build something before they can log (walking a list, formatting a
 // name) must test it themselves at the call site - the gate inside Log()
-// only saves the writing, not the preparing.
+// only saves the writing, not the preparing. A family a test build alone
+// carries tests its LogFam_ name first (log_families.h).
 extern bool gLogEnabled;
 
 extern FILE* logF;

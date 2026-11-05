@@ -546,12 +546,12 @@ namespace
 			}
 		}
 
-		if (gLogEnabled && (!g_face.seen || kind != g_face.kind))
+		if (LogFam_LIPLOG && gLogEnabled && (!g_face.seen || kind != g_face.kind))
 			Log("LIPLOG f=%d lara face=%s was=%s slot=%d frame=%d why=%s",
 				(int)now, face_word(kind), face_word(g_face.kind), slot, shown, why);
 
 		/* A blink: once a tick, on the frame it starts. */
-		if (gLogEnabled && kind == FACE_LOOP && !dead &&
+		if (LogFam_LIPLOG && gLogEnabled && kind == FACE_LOOP && !dead &&
 			(!g_face.blinkSeen || g_face.blinkAt != now))
 		{
 			const float lid = HDModelLipsBlink(slot, false, shown);
@@ -676,7 +676,7 @@ namespace
 	void swap_log(unsigned int shown, const char* drawn, bool composite,
 		unsigned int borrowed)
 	{
-		if (!gLogEnabled || !meshes)
+		if (!LogFam_SWAPLOG || !LogFam_HIDELOG || !gLogEnabled || !meshes)
 			return;
 
 		/* The level as the HD build names it. A level drawn classic has no
@@ -992,7 +992,7 @@ namespace
 	void xray_log(bool on, const char* fields, const char* drawn,
 		const char* tone)
 	{
-		if (!gLogEnabled || (!on && !g_xray_on))
+		if (!LogFam_XRAYLOG || !gLogEnabled || (!on && !g_xray_on))
 			return;
 
 		char now[384];
@@ -2472,7 +2472,7 @@ void HDLaraDrawFrame(long mirror)
 	 * for LM_ node n (game\delstuff.h, LM_HIPS bit 0, LM_HEAD bit 14);
 	 * sheets 1 where the level's sheets are built; tween 1 while the tween
 	 * runs (see "the tween"). */
-	if (gLogEnabled && !mirror && inWaterRoom &&
+	if (LogFam_LARALOG && gLogEnabled && !mirror && inWaterRoom &&
 		(int)(GlobalCounter / 30) != g_amb_logged_second)
 	{
 		float best[3] = { 0.0f, 0.0f, 0.0f };
@@ -2707,7 +2707,7 @@ void HDLaraDrawFrame(long mirror)
 	/* The X-ray look's line, on its edges (XRAYLOG). With the flag on and no
 	 * block of its own the outfit is the X-ray body, worn - and an outfit
 	 * that is the X-ray body holds the look with the flag off as well. */
-	if (!mirror && gLogEnabled)
+	if (!mirror && LogFam_XRAYLOG && gLogEnabled)
 	{
 		char fields[288];
 		char tone[48];
@@ -3085,7 +3085,8 @@ void HDLaraClassicLog(int variant, long holsters)
 	char name[16];
 	char drawn[40];
 
-	if (!gLogEnabled)
+	if (!(LogFam_SWAPLOG || LogFam_HIDELOG || LogFam_XRAYLOG) ||
+		!gLogEnabled)
 		return;
 
 	std::snprintf(name, sizeof(name), "DrawLara__%d", variant);

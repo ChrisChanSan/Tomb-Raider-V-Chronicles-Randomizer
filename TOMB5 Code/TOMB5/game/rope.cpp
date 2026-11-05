@@ -581,7 +581,7 @@ void AlignLaraToRope(ITEM_INFO* l)
 	u.x = (x - x1) << 16;
 	u.y = (y - y1) << 16;
 	u.z = (z - z1) << 16;
-	ulen = gLogEnabled ? RopeLogLength(x - x1, y - y1, z - z1) : 0;
+	ulen = LogFam_ROPELOG && gLogEnabled ? RopeLogLength(x - x1, y - y1, z - z1) : 0;
 	Normalise(&u);
 	u.x >>= 2;
 	u.y >>= 2;
@@ -604,13 +604,13 @@ void AlignLaraToRope(ITEM_INFO* l)
 	v.x = (n2.x + v2.x) << 16;
 	v.y = (n2.y + v2.y) << 16;
 	v.z = (n2.z + v2.z) << 16;
-	vlen = gLogEnabled ? RopeLogLength(n2.x + v2.x, n2.y + v2.y, n2.z + v2.z) : 0;
+	vlen = LogFam_ROPELOG && gLogEnabled ? RopeLogLength(n2.x + v2.x, n2.y + v2.y, n2.z + v2.z) : 0;
 	Normalise(&v);
 	v.x >>= 2;
 	v.y >>= 2;
 	v.z >>= 2;
 	mCrossProduct(&u, &v, &n);
-	nlen = gLogEnabled ? RopeLogLength(n.x, n.y, n.z) : 0;
+	nlen = LogFam_ROPELOG && gLogEnabled ? RopeLogLength(n.x, n.y, n.z) : 0;
 	n.x <<= 16;
 	n.y <<= 16;
 	n.z <<= 16;
@@ -642,7 +642,7 @@ void AlignLaraToRope(ITEM_INFO* l)
 	l->pos.y_rot = xyz[1];
 	l->pos.z_rot = xyz[2];
 
-	if (gLogEnabled)
+	if (LogFam_ROPELOG && gLogEnabled)
 		RopeLog(l, ropeangle, frame, ulen, vlen, nlen);
 }
 

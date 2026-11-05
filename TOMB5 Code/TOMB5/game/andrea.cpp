@@ -332,15 +332,17 @@ void ControlRaisingCog(short item_number)
 	{
 		// The pull turned the code bits off: on again for the next one.
 		item->flags |= IFL_CODEBITS;
-		Log("COGLOG item=%d lift=%d at=%d pulls_pending=%ld %s", item_number,
-			before.lifts + 1, before.at, kept,
-			(tick & COG_KEPT) ? "kept" : "dropped");
+		if (LogFam_COGLOG)
+			Log("COGLOG item=%d lift=%d at=%d pulls_pending=%ld %s", item_number,
+				before.lifts + 1, before.at, kept,
+				(tick & COG_KEPT) ? "kept" : "dropped");
 	}
 
 	if (tick & COG_DONE)
 	{
-		Log("COGLOG item=%d lift=%d at=%d pulls_pending=%ld done",
-			item_number, cog.lifts, before.at, kept);
+		if (LogFam_COGLOG)
+			Log("COGLOG item=%d lift=%d at=%d pulls_pending=%ld done",
+				item_number, cog.lifts, before.at, kept);
 
 		if (tick & COG_ENGAGE)
 		{
@@ -380,9 +382,10 @@ void ControlRaisingCog(short item_number)
 	{
 		InitialiseSpotCam(9);
 		bUseSpotCam = 1;
-		Log("COGLOG item=%d lift=%d at=0 pulls_pending=%d %s", item_number,
-			cog.lifts + 1, cog.pending,
-			(tick & COG_FROM_PENDING) ? "started from pending" : "begin");
+		if (LogFam_COGLOG)
+			Log("COGLOG item=%d lift=%d at=0 pulls_pending=%d %s", item_number,
+				cog.lifts + 1, cog.pending,
+				(tick & COG_FROM_PENDING) ? "started from pending" : "begin");
 	}
 
 	if (tick & COG_RISE)

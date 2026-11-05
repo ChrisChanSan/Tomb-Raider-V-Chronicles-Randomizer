@@ -1487,14 +1487,14 @@ void DoRain()
 					{
 						if (room[room_number].flags & ROOM_UNDERWATER && (i & 7) == 7)
 						{
-							if (gLogEnabled)
+							if (LogFam_SPARKLOG && gLogEnabled)
 								SparkLogRain("ripple", rptr, room_number);
 
 							WeatherRipple(rptr->x, GetWaterHeight(rptr->x, rptr->y, rptr->z, room_number), rptr->z);
 						}
 						else
 						{
-							if (gLogEnabled)
+							if (LogFam_SPARKLOG && gLogEnabled)
 								SparkLogRain("splash", rptr, room_number);
 
 							WeatherSplash(rptr->x, GetHeight(floor, rptr->x, rptr->y, rptr->z), rptr->z);
@@ -2284,7 +2284,7 @@ void SparkLogLevelEnd()
 {
 	const long allocs = SparkLogTakeDrawAllocs();
 
-	if (gLogEnabled)
+	if (LogFam_SPARKLOG && gLogEnabled)
 		Log("SPARKLOG level draw_allocs=%ld splashes=%ld ripples=%ld "
 			"weather_peak=%ld weather_ripple_peak=%ld culls=%ld "
 			"bubble_culls=%ld drip_culls=%ld", allocs, spark_log_splashes,
@@ -2465,7 +2465,7 @@ void S_DrawSparks()
 	const float pa = InterpParticleAlpha();
 	long moved = 0;
 
-	if (gLogEnabled)
+	if (LogFam_SPARKLOG && gLogEnabled)
 		SparkLogFrame();
 
 	smallest_size = 0;	//uninitialized
@@ -2611,8 +2611,8 @@ void S_DrawDrawSparksNEW(SPARKS* sptr, long smallest_size, float* xyz)
 		 * chained explosion (extras & 7) and its draws of the logic
 		 * generator went off or not by where the frames fell (#317, #320).
 		 * A spark carrying a chain gets one SPARKLOG line. */
-		if (xyz[2] >= f_mzfar && gLogEnabled && sptr->extras & 7 &&
-			SparkCullFirst(sptr))
+		if (xyz[2] >= f_mzfar && LogFam_SPARKLOG && gLogEnabled &&
+			sptr->extras & 7 && SparkCullFirst(sptr))
 			SparkLog("cull", sptr, xyz[2]);
 
 		return;
@@ -3512,7 +3512,7 @@ void DrawDrips()
 		 * and its draws of the logic generator (#320). */
 		if (Z[0] > 0x5000)
 		{
-			if (gLogEnabled && DripCullFirst(i, drip))
+			if (LogFam_SPARKLOG && gLogEnabled && DripCullFirst(i, drip))
 				SparkLogOther("drip", "far", i, drip->Life, Z[0]);
 
 			continue;
@@ -3803,7 +3803,7 @@ void DrawBubbles()
 		 * its draw of the logic generator less (#320). */
 		if (dx < -0x5000 || dx > 0x5000 || dy < -0x5000 || dy > 0x5000 || dz < -0x5000 || dz > 0x5000)
 		{
-			if (gLogEnabled &&
+			if (LogFam_SPARKLOG && gLogEnabled &&
 				BubbleCullFirst((long)(bubble - Bubbles), bubble, 1))
 				SparkLogOther("bubble", "box", (long)(bubble - Bubbles),
 					bubble->size, 0);
@@ -3831,7 +3831,7 @@ void DrawBubbles()
 
 		if (Z[0] > 0x5000)
 		{
-			if (gLogEnabled &&
+			if (LogFam_SPARKLOG && gLogEnabled &&
 				BubbleCullFirst((long)(bubble - Bubbles), bubble, 2))
 				SparkLogOther("bubble", "far", (long)(bubble - Bubbles),
 					bubble->size, Z[0]);
@@ -3847,7 +3847,7 @@ void DrawBubbles()
 		 * now, or the walk would test this one to the end. */
 		if (size > 128)
 		{
-			if (gLogEnabled &&
+			if (LogFam_SPARKLOG && gLogEnabled &&
 				BubbleCullFirst((long)(bubble - Bubbles), bubble, 4))
 				SparkLogOther("bubble", "near", (long)(bubble - Bubbles),
 					bubble->size, Z[0]);

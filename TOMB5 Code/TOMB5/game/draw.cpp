@@ -521,10 +521,10 @@ void LaraJointsBuild(long draw)
 
 	g_joints.blended = draw && InterpFrameBlended();
 
-	if (draw && InterpIsTweenFrame())
+	if (LogFam_JOINTLOG && draw && InterpIsTweenFrame())
 		g_joints.tweens++;
 
-	if (g_joints.blended)
+	if (LogFam_JOINTLOG && g_joints.blended)
 		g_joints.blends++;
 }
 
@@ -542,7 +542,8 @@ void LaraJointsLive()
 		return;
 
 	LaraJointsBuild(0);
-	g_joints.passes++;
+	if (LogFam_JOINTLOG)
+		g_joints.passes++;
 }
 
 /* JOINTLOG, one line at the end of each level and of the title, with -log:
@@ -554,7 +555,7 @@ void LaraJointsLevelEnd()
 {
 	const unsigned long serial = InterpTickSerial();
 
-	if (gLogEnabled)
+	if (LogFam_JOINTLOG && gLogEnabled)
 		Log("JOINTLOG passes=%ld ticks=%lu tween_frames=%ld blended_frames=%ld",
 			g_joints.passes, serial - g_joints.serial, g_joints.tweens,
 			g_joints.blends);
@@ -589,7 +590,7 @@ long DrawPhaseGame()
 
 	InterpBeginFrame(alpha);
 
-	if (gLogEnabled)
+	if (LogFam_POISONLOG && gLogEnabled)
 		PoisonLogFrame(alpha);
 
 	ProfBegin(PROF_GATHER);
@@ -2180,7 +2181,7 @@ static void VisEndWalk(short walkRoom)
 	static DWORD last = 0;
 	static short lastRoom = -1;
 
-	if (!g_vis_walk || !gLogEnabled)
+	if (!LogFam_VISLOG || !g_vis_walk || !gLogEnabled)
 		return;
 
 	const DWORD now = GetTickCount();
@@ -2219,10 +2220,10 @@ static void NoteRoomWalk(short logicRoom, short walkRoom)
 	if (!gLogEnabled)
 		return;
 
-	if (InterpIsTweenFrame())
+	if (LogFam_ROOMWALK && InterpIsTweenFrame())
 		g_walkTweens++;
 
-	if (walkRoom != logicRoom)
+	if (LogFam_ROOMWALK && walkRoom != logicRoom)
 		g_walkCorrections++;
 
 	RoomWalkNote& note = g_walkNote[2];
@@ -2321,7 +2322,7 @@ static void NoteRoomWalk(short logicRoom, short walkRoom)
 	/* The middle frame is the one judged, and only while the three really
 	 * are three consecutive frames of one level - a level change, a savegame
 	 * or a menu leaves a note behind that is no neighbour of anything. */
-	if (g_walkHeld >= 3 &&
+	if (LogFam_ROOMFLASH && g_walkHeld >= 3 &&
 		g_walkNote[0].level == g_walkNote[2].level &&
 		g_walkNote[1].level == g_walkNote[2].level &&
 		g_walkNote[1].serial == g_walkNote[0].serial + 1 &&
@@ -2416,7 +2417,7 @@ static void NoteRoomWalk(short logicRoom, short walkRoom)
 	 * art more than 936 units outside its own room's box anywhere within
 	 * 8,000 units of it, so the tower is ordinary art of some room and not
 	 * something hung far outside one; this line names the room. */
-	if (gLogEnabled && g_walkHeld >= 2 &&
+	if (LogFam_ROOMPOP && gLogEnabled && g_walkHeld >= 2 &&
 		g_walkNote[1].level == g_walkNote[2].level &&
 		g_walkNote[2].serial == g_walkNote[1].serial + 1)
 	{
@@ -2475,7 +2476,7 @@ static void NoteRoomWalk(short logicRoom, short walkRoom)
 			if (!WalkHolds(now, was.rooms[i]) && r < (int)sizeof(removed) - 8)
 				r += sprintf(&removed[r], r ? ",%d" : "%d", (int)was.rooms[i]);
 
-		if ((a || r) && g_listLines < kListLines)
+		if (LogFam_ROOMLIST && (a || r) && g_listLines < kListLines)
 		{
 			g_listLines++;
 			Log("ROOMLIST frame=%u tween=%d cam_room=%d walk_room=%d "
@@ -2518,18 +2519,19 @@ static void NoteRoomWalk(short logicRoom, short walkRoom)
 			 * timer, or the window event. `reach` is whether the walk
 			 * carried its second rectangle - an HD level with the setting
 			 * hd_reach on - so that a replay walks the same way. */
-			Log("ROOMLIST frame=%u the whole list, %d room(s), "
-				"eye=(%d,%d,%d) target=(%d,%d,%d) target_room=%d cam=%d/%d "
-				"fixed=%d number=%d reach_only=%d trimmed=%d budget=%d why=%s"
-				" reach=%d",
-				now.serial, now.count, (int)now.wx, (int)now.wy, (int)now.wz,
-				(int)now.tx, (int)now.ty, (int)now.tz, (int)now.troom,
-				now.camtype, now.camold, now.camfixed, now.camnumber,
-				now.reach_only, now.trimmed, (int)kReachBudget,
-				event == 1 ? "inactive" : event == 2 ? "active" : "timer",
-				g_reach_on ? 1 : 0);
+			if (LogFam_ROOMLIST)
+				Log("ROOMLIST frame=%u the whole list, %d room(s), "
+					"eye=(%d,%d,%d) target=(%d,%d,%d) target_room=%d cam=%d/%d "
+					"fixed=%d number=%d reach_only=%d trimmed=%d budget=%d why=%s"
+					" reach=%d",
+					now.serial, now.count, (int)now.wx, (int)now.wy, (int)now.wz,
+					(int)now.tx, (int)now.ty, (int)now.tz, (int)now.troom,
+					now.camtype, now.camold, now.camfixed, now.camnumber,
+					now.reach_only, now.trimmed, (int)kReachBudget,
+					event == 1 ? "inactive" : event == 2 ? "active" : "timer",
+					g_reach_on ? 1 : 0);
 
-			for (int i = 0; i < now.count; i++)
+			for (int i = 0; LogFam_ROOMLIST && i < now.count; i++)
 			{
 				const short which = now.rooms[i];
 				const ROOM_INFO* rr;
@@ -2582,7 +2584,8 @@ static void NoteRoomWalk(short logicRoom, short walkRoom)
 	// counter ticks thirty times a second at every fps_mode.
 	if ((unsigned short)(GlobalCounter - g_walkLineAt) >= 30 || !g_walkLineEver)
 	{
-		if (g_walkLineEver && (g_walkTweens || g_walkFlashes || g_walkPops))
+		if (LogFam_ROOMWALK && g_walkLineEver &&
+			(g_walkTweens || g_walkFlashes || g_walkPops))
 			Log("ROOMWALK tween corrections=%d of %d tween frames, "
 				"flashes=%d, far rooms joined=%d", g_walkCorrections,
 				g_walkTweens, g_walkFlashes, g_walkPops);
@@ -2597,7 +2600,8 @@ static void NoteRoomWalk(short logicRoom, short walkRoom)
 		 * first. What those rooms cost is on the FPSLOG line of the same
 		 * second, which carries hd_rooms / hd_items / hd_draws as the maxima
 		 * over it (specific\hd\hd_level.cpp). */
-		if (g_walkLineEver && g_reach_on && g_walkRoomsFrames)
+		if (LogFam_ROOMWALK && g_walkLineEver && g_reach_on &&
+			g_walkRoomsFrames)
 			Log("ROOMWALK reach rooms added=%d of %d (mean %.1f of %.1f, max "
 				"%d classic %d reach %d), budget=%d trimmed=%d no_art=%d "
 				"cap hit=%d carried=%d",
@@ -2609,7 +2613,7 @@ static void NoteRoomWalk(short logicRoom, short walkRoom)
 				(int)g_walkCarriedSum);
 
 		// The backstop of GetRoomBounds; this line must never appear.
-		if (g_walkLineEver && g_walkRunaway)
+		if (LogFam_ROOMWALK && g_walkLineEver && g_walkRunaway)
 			Log("ROOMWALK runaway=%d walks cut by the backstop", g_walkRunaway);
 
 		g_walkLineAt = GlobalCounter;
@@ -2785,12 +2789,12 @@ void DrawRooms(short current_room)
 
 	// CAMLOG's draw line, for a frame the drawn-eye rule acted on. NoteRoomWalk
 	// has just stepped the serial, so this is the frame= ROOMLIST prints.
-	if (gLogEnabled)
+	if (LogFam_CAMLOG && gLogEnabled)
 		InterpLogEyeFix(g_walkSerial - 1, walk_room, number_draw_rooms,
 			(logic_room->flags & ROOM_OUTSIDE) ? 1 : 0,
 			(gfLevelId != LVL5_TITLE && outside > 0 && !InterpSkyWithheld()) ? 1 : 0);
 
-	if (gLogEnabled)
+	if (LogFam_ROPELOG && gLogEnabled)
 		RopeDrawLog();
 
 	if (objects[LARA].loaded && !(lara_item->flags & IFL_INVISIBLE))
@@ -4618,6 +4622,9 @@ static void SetRoomBoundsReach(short* door, long rn, ROOM_INFO* actualRoom)
  * the first time this walk keeps the source that queued it. */
 static void VisNote(long rn, int why, char before)
 {
+	if (!LogFam_VISLOG)
+		return;
+
 	if (rn < 0 || rn >= 256 || (before & 3) || !(room[rn].bound_active & 2) ||
 		g_vis_why[rn] != 0xff)
 		return;
@@ -4845,7 +4852,8 @@ static void VisExtend(ROOM_INFO* r)
 	const int ng = HDVisRoomGuests((int)here, &guests);
 	const int no = HDVisRoomOpenings((int)here, &openings);
 
-	g_vis_dequeues++;
+	if (LogFam_VISLOG)
+		g_vis_dequeues++;
 	VisNearPortals(r);
 
 	for (int k = 0; k < ng; k++)

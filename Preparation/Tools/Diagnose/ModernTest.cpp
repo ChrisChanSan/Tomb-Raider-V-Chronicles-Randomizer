@@ -16024,11 +16024,33 @@ static void ghost_rule()
 
 	trf::remaster::Trg trg;
 	HDVisTables t;
-	const HDVisParams p = HDVisDefaults();
+	const HDVisParams off = HDVisDefaults();
+	const HDVisParams p = HDVisLevelParams("ANDREA3");
+	const HDVisParams other = HDVisLevelParams("ANDY3");
+	const HDVisParams lower = HDVisLevelParams("andrea3");
+	const HDVisParams none = HDVisLevelParams(0);
 
-	ok(p.skyNear == 1 && p.skyShared == 1,
-		"ghost: on by default, one triangle near, no shared inside",
+	ok(off.skyNear == 0 && off.skyShared == 0,
+		"ghost: off by default, the box of #286", off.skyNear, 0);
+	ok(p.skyNear == 1 && p.skyShared == 1 && lower.skyNear == 1 &&
+		lower.skyShared == 1,
+		"ghost: ANDREA3's row, in any case, one triangle near, no shared",
 		p.skyNear, 1);
+	ok(other.skyNear == 0 && other.skyShared == 0 && none.skyNear == 0 &&
+		none.skyShared == 0 && HDVisLevelParams("ANDREA").skyNear == 0 &&
+		HDVisLevelParams("ANDREA33").skyNear == 0,
+		"ghost: ANDY3, no stem and a near name keep the default",
+		other.skyNear, 0);
+
+	// The default answers as #286 did: the box takes the shaft's pair.
+	const float far2[2][3] = { { -14000.0f, -3000.0f, 3000.0f },
+		{ 26000.0f, -3000.0f, 3000.0f } };
+
+	ghost_scene(trg, 0.0f, 12288.0f, far2, 2);
+	HDVisBuild(trg, &rooms[0], 5, 0, 0, 0, 0, 0, 0, off, &t);
+	ok(t.skyCount[0] == 1 && t.skyRefusedFar == 0 && t.skyAsked.size() >= 1,
+		"ghost: by default S takes the far art, the pair noted, not refused",
+		t.skyCount[0], 1);
 
 	/* 1. The cave's shaft: S under the sky, the sky art in two clusters
 	 * past the level's rooms, west and east of S, its box over S's floor

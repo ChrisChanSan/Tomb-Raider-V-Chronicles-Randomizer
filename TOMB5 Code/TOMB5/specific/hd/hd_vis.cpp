@@ -69,15 +69,17 @@
  *   skyReach 1024  a sector, the width of a room's wall ring: the skyline
  *                  past the east wall of ANDREA2's courtyard (room 223)
  *                  stands 889 units off its floor plan
- *   skyNear 1      a triangle: the reach read literally, of the art and
- *                  not of its box. Of the 501 pairs the box took on the
- *                  fifteen levels 64 have no triangle within the reach -
- *                  ANDREA3's shaft over the cave (room 128, groups 67 and
- *                  92) and room 116 over the arena's archway (group 92)
- *                  among them -, 27 more fewer than eight; ANDREA2's
- *                  courtyard (room 223) keeps its three with 84, 84, 603
- *   skyShared 1    one pair of the 501: ANDREA3's room 115, whose inside
- *                  holds the gallery room 92 with no link between them */
+ *   skyNear 0      the box of #286. At 1, a triangle - the reach read
+ *                  literally, of the art and not of its box -, 64 of the
+ *                  501 pairs of the fifteen levels have no triangle
+ *                  within the reach: ANDREA3's shaft over the cave (room
+ *                  128, groups 67 and 92) and room 116 over the arena's
+ *                  archway (group 92) among them, and ANDY3's rooms 8, 9,
+ *                  39 and 95 with group 106, whose walk on lists the leaf
+ *                  canopy over rooms 8 and 9 (up to 83,680 pixels of 960 x
+ *                  540 gone). So 1 is ANDREA3's alone (HDVisLevelParams)
+ *   skyShared 0    at 1 one pair of the 501: ANDREA3's room 115, whose
+ *                  inside holds the gallery room 92 with no link */
 HDVisParams HDVisDefaults()
 {
 	HDVisParams p;
@@ -97,8 +99,8 @@ HDVisParams HDVisDefaults()
 	p.staticShare = 0.5;
 	p.skyArt = 1;
 	p.skyReach = 1024.0;
-	p.skyNear = 1;
-	p.skyShared = 1;
+	p.skyNear = 0;
+	p.skyShared = 0;
 	return p;
 }
 
@@ -937,13 +939,14 @@ bool HDVisBuild(const trf::remaster::Trg& trg, const HDVisRoom* rooms,
 	 * but its own and its twin's, whose art there stands over its floor plan
 	 * or within skyReach of it: what stands in the sky is seen from wherever
 	 * the sky is, and the walk lists it by its box inside the window the
-	 * room is seen in. Asked of the triangles (skyNear), not of the box
-	 * alone: a skyline's box spans the level, and ANDREA3's group 92, round
-	 * the arena, touched the shaft over a cave and drew its tiers through
-	 * the rock. And not the group of a room standing in this room's inside
-	 * with no link (skyShared): taken, it draws that room's inside whole in
-	 * the air - ANDREA3's gallery 92 inside room 115, a box with its enemy
-	 * over the arena. */
+	 * room is seen in. Where the level's row asks it (skyNear, skyShared,
+	 * HDVisLevelParams), of the triangles and not of the box alone: a
+	 * skyline's box spans the level, and ANDREA3's group 92, round the
+	 * arena, touched the shaft over a cave and drew its tiers through the
+	 * rock; and not the group of a room standing in this room's inside with
+	 * no link: taken, it draws that room's inside whole in the air -
+	 * ANDREA3's gallery 92 inside room 115, a box with its enemy over the
+	 * arena. Every pair the box takes is asked and noted either way. */
 	if (params.skyArt)
 	{
 		std::vector<int> order;
@@ -1615,13 +1618,16 @@ namespace
 	bool g_armed = false;
 	HDVisTables g_tables;
 	bool g_built = false;
+	// The level's parameters, its row of the sky answer (HDVisLevelParams).
+	HDVisParams g_in_params = HDVisDefaults();
 }
 
 void HDVisLevelInput(const HDVisRoom* rooms, int roomCount,
 	const HDCoverFace* faces, int faceCount, const HDVisPortal* portals,
-	int portalCount, const int* links, int linkCount)
+	int portalCount, const int* links, int linkCount, const char* stem)
 {
 	HDVisLevelClear();
+	g_in_params = HDVisLevelParams(stem);
 
 	if (!rooms || roomCount <= 0)
 		return;
@@ -1670,7 +1676,7 @@ void HDVisLevelBuild(const trf::remaster::Trg& trg, const int* yShift,
 		g_in_faces.empty() ? 0 : &g_in_faces[0], (int)g_in_faces.size(),
 		g_in_portals.empty() ? 0 : &g_in_portals[0],
 		(int)g_in_portals.size(), g_in_links.empty() ? 0 : &g_in_links[0],
-		(int)g_in_links.size(), HDVisDefaults(), &g_tables, &shifts[0]);
+		(int)g_in_links.size(), g_in_params, &g_tables, &shifts[0]);
 
 	if (g_built && !g_in_statics.empty())
 	{

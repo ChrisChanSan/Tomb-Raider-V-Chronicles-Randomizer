@@ -97,7 +97,8 @@ namespace
 	bool g_sky_reach_set = false;
 	double g_sky_reach = 0.0;
 	/* -visskynear <n> / -visskyshared 0|1: the sky table's two refusals
-	 * (HDVisParams::skyNear, skyShared), -1 for the default. */
+	 * (HDVisParams::skyNear, skyShared), -1 for the level's row
+	 * (HDVisLevelParams). */
 	int g_sky_near = -1;
 	int g_sky_shared = -1;
 
@@ -4681,7 +4682,7 @@ namespace
 
 		VisInputFromLevel(level, rooms, faces, portals, links);
 
-		HDVisParams base = HDVisDefaults();
+		HDVisParams base = HDVisLevelParams(stem.c_str());
 		HDVisTables t;
 
 		if (g_sky_reach_set)

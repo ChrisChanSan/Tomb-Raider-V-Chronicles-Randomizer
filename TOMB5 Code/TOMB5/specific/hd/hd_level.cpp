@@ -4221,7 +4221,7 @@ static void BuildRoomVis()
 	HDVisLevelInput(&rooms[0], (int)rooms.size(),
 		faces.empty() ? 0 : &faces[0], (int)faces.size(),
 		portals.empty() ? 0 : &portals[0], (int)portals.size(),
-		links.empty() ? 0 : &links[0], (int)links.size());
+		links.empty() ? 0 : &links[0], (int)links.size(), g_stem);
 
 	/* And the static meshes, for the art that lies on them
 	 * (HDVisStaticCovers): no face for a static no slot of 0 to 69 names,

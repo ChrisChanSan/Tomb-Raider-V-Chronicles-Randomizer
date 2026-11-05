@@ -937,9 +937,9 @@ Worth spelling out:
   as long as you stay in the level. The setting is read all the time, so
   turning it on later lets the bodies lying around fade from then on; a body
   already fading when it is turned off finishes. Whatever an enemy carried
-  is dropped either way. A savegame keeps no fallen enemy's body: loaded
-  back, the level has none lying about, in either setting, as in the
-  original.
+  is dropped either way. A savegame keeps a body that lies there where it
+  was: loaded back with *Off* it still lies there, with *On* it goes on
+  fading from where it was saved (the original lost every body at a load).
 
 ### Cheats and the cheat hotkeys
 
@@ -5074,7 +5074,9 @@ object's animation. The file is as large as before, so a mark at the start
 of the item data tells the formats apart; a save without it is refused with
 *"This savegame was written by an older version of the game. This version
 uses a newer savegame format and cannot load it."* and the game closes, as
-above.
+above. The format grew once more since (format 3): a defeated enemy's body
+that lies there is kept in the save, so **saves from the builds before this
+one are refused the same way**.
 
 There was also a bug worth knowing about, because it is in the game you
 already own: saving during the key-insert animation lost the keyhole's state.

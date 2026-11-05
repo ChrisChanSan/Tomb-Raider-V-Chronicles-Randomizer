@@ -21,9 +21,9 @@
  * so a 32-bit and a 64-bit build write the same bytes for the same values.
  *
  * The file: a header of REPLAY_HEADER_SIZE bytes - "TR5R", the version
- * byte, the recording build's pointer width in bits, two zero bytes and the
- * build's stamp, zero padded - then the records, each a type byte and its
- * fields:
+ * byte, the recording build's pointer width in bits, the Corpses switch
+ * (REPLAY_CORPSES_AT), a zero byte and the build's stamp, zero padded - then
+ * the records, each a type byte and its fields:
  *
  *   'L' a level start: level, control seed, draw seed, the tick counter,
  *       the frame counter, the frame-rate mode (six int32)
@@ -43,11 +43,17 @@
  *       next tick reads Lara's joints as that frame left them.
  *
  * Version 2 added 'A' and the input record's check; a file of version 1
- * is refused.
+ * is refused. Version 3 added the Corpses switch at REPLAY_CORPSES_AT
+ * (tomb5.corpses, 1 on, 0 off): it decides when a dead body's KillItem
+ * runs, which moves the room lists and, for a spawned item, the free list,
+ * so a recording plays back with the setting it was made with. A file of
+ * version 2 is read as before, as corpses on, the only setting there was.
  */
 
-#define REPLAY_VERSION		2
+#define REPLAY_VERSION		3
+#define REPLAY_VERSION_OLDEST	2	// still read: corpses on
 #define REPLAY_HEADER_SIZE	48
+#define REPLAY_CORPSES_AT	6	// was a zero byte up to version 2
 #define REPLAY_STAMP_SIZE	40
 #define REPLAY_KEYS		256
 #define REPLAY_RECORD_MAX	(1 + 2 + 2 + 2 * REPLAY_KEYS + 12 + 1 + 32)
@@ -131,14 +137,15 @@ inline int32_t ReplayGet32(const uint8_t* p)
 }
 
 /* The header into `out` (REPLAY_HEADER_SIZE bytes); `stamp` is cut to
- * REPLAY_STAMP_SIZE - 1 characters. */
+ * REPLAY_STAMP_SIZE - 1 characters; `corpses` is the Corpses switch. */
 inline size_t ReplayHeaderWrite(uint8_t* out, int pointer_bits,
-	const char* stamp)
+	const char* stamp, int corpses)
 {
 	memset(out, 0, REPLAY_HEADER_SIZE);
 	memcpy(out, "TR5R", 4);
 	out[4] = REPLAY_VERSION;
 	out[5] = (uint8_t)pointer_bits;
+	out[REPLAY_CORPSES_AT] = corpses ? 1 : 0;
 
 	if (stamp)
 	{
@@ -153,14 +160,17 @@ inline size_t ReplayHeaderWrite(uint8_t* out, int pointer_bits,
 	return REPLAY_HEADER_SIZE;
 }
 
-/* 1 for a header this build reads, 0 for a short file or another magic,
- * -1 for another version. The version, the width and the stamp (with its
- * terminating zero, REPLAY_STAMP_SIZE bytes) are given back either way. */
+/* 1 for a header this build reads (versions REPLAY_VERSION_OLDEST to
+ * REPLAY_VERSION), 0 for a short file or another magic, -1 for another
+ * version. The version, the width, the Corpses switch (1 for version 2) and
+ * the stamp (with its terminating zero, REPLAY_STAMP_SIZE bytes) are given
+ * back either way. */
 inline int ReplayHeaderRead(const uint8_t* in, size_t size, int* version,
-	int* pointer_bits, char* stamp)
+	int* pointer_bits, int* corpses, char* stamp)
 {
 	*version = 0;
 	*pointer_bits = 0;
+	*corpses = 1;
 	stamp[0] = 0;
 
 	if (size < REPLAY_HEADER_SIZE || memcmp(in, "TR5R", 4))
@@ -168,9 +178,14 @@ inline int ReplayHeaderRead(const uint8_t* in, size_t size, int* version,
 
 	*version = in[4];
 	*pointer_bits = in[5];
+
+	if (in[4] >= 3)
+		*corpses = in[REPLAY_CORPSES_AT] ? 1 : 0;
+
 	memcpy(stamp, in + 8, REPLAY_STAMP_SIZE - 1);
 	stamp[REPLAY_STAMP_SIZE - 1] = 0;
-	return in[4] == REPLAY_VERSION ? 1 : -1;
+	return in[4] >= REPLAY_VERSION_OLDEST && in[4] <= REPLAY_VERSION ? 1 :
+		-1;
 }
 
 /* One record into `out` (at least REPLAY_RECORD_MAX bytes); its length, or

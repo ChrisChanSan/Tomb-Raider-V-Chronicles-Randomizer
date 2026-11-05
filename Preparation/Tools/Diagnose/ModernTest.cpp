@@ -28583,40 +28583,41 @@ static void replay_rule()
 	uint8_t head[REPLAY_HEADER_SIZE];
 	char stamp[REPLAY_STAMP_SIZE];
 	ReplayRecord a, b;
-	int version, bits;
+	int version, bits, corpses;
 	size_t n;
 
 	// The header.
-	ok(ReplayHeaderWrite(head, 64, "PCtomb5 built Nov  2 2026 21:00:00") ==
-		REPLAY_HEADER_SIZE && !memcmp(head, "TR5R", 4) && head[4] == 2 &&
-		head[5] == 64 && head[6] == 0 && head[7] == 0,
-		"replay: the header's magic, version byte 2 and pointer width",
-		head[4], 2);
+	ok(ReplayHeaderWrite(head, 64, "PCtomb5 built Nov  2 2026 21:00:00", 1) ==
+		REPLAY_HEADER_SIZE && !memcmp(head, "TR5R", 4) && head[4] == 3 &&
+		head[5] == 64 && head[6] == 1 && head[7] == 0,
+		"replay: the header's magic, version byte 3, pointer width, Corpses",
+		head[4], 3);
 	const int read = ReplayHeaderRead(head, sizeof(head), &version, &bits,
-		stamp);
+		&corpses, stamp);
 
 	ok(read == 1 && version == REPLAY_VERSION && bits == 64 &&
 		!strcmp(stamp, "PCtomb5 built Nov  2 2026 21:00:00"),
 		"replay: the header read back, the stamp whole", bits, 64);
 	ReplayHeaderWrite(head, 32, "0123456789012345678901234567890123456789"
-		"0123456789");
-	ok(ReplayHeaderRead(head, sizeof(head), &version, &bits, stamp) == 1 &&
-		strlen(stamp) == REPLAY_STAMP_SIZE - 1 && bits == 32,
+		"0123456789", 1);
+	ok(ReplayHeaderRead(head, sizeof(head), &version, &bits, &corpses,
+		stamp) == 1 && strlen(stamp) == REPLAY_STAMP_SIZE - 1 && bits == 32,
 		"replay: a long stamp cut to 39 characters", (long)strlen(stamp),
 		REPLAY_STAMP_SIZE - 1);
 	head[4] = 1;
-	ok(ReplayHeaderRead(head, sizeof(head), &version, &bits, stamp) == -1 &&
-		version == 1, "replay: a file of version 1 is refused, named",
-		version, 1);
-	head[4] = 3;
-	ok(ReplayHeaderRead(head, sizeof(head), &version, &bits, stamp) == -1,
-		"replay: and a later version", version, 3);
+	ok(ReplayHeaderRead(head, sizeof(head), &version, &bits, &corpses,
+		stamp) == -1 && version == 1,
+		"replay: a file of version 1 is refused, named", version, 1);
+	head[4] = 4;
+	ok(ReplayHeaderRead(head, sizeof(head), &version, &bits, &corpses,
+		stamp) == -1, "replay: and a later version", version, 4);
 	head[4] = REPLAY_VERSION;
-	ok(ReplayHeaderRead(head, sizeof(head) - 1, &version, &bits, stamp) ==
-		0 && ReplayHeaderRead((const uint8_t*)"TR5X0000000000000000000000000"
+	ok(ReplayHeaderRead(head, sizeof(head) - 1, &version, &bits, &corpses,
+		stamp) == 0 && ReplayHeaderRead((const uint8_t*)
+		"TR5X0000000000000000000000000"
 		"0000000000000000000000", REPLAY_HEADER_SIZE, &version, &bits,
-		stamp) == 0, "replay: a short file and another magic are no header",
-		0, 0);
+		&corpses, stamp) == 0,
+		"replay: a short file and another magic are no header", 0, 0);
 
 	// A level start.
 	memset(&a, 0, sizeof(a));
@@ -30546,7 +30547,7 @@ static void test_build_rule()
 			strstr(ship, "inline long ReplayFrames(long frames) { return "
 			"frames; }") != 0 && strstr(ship, "inline double ReplaySubTick("
 			"double subtick) { return subtick; }") != 0 &&
-			hd_switch_count(ship, "inline void ") == 4 &&
+			hd_switch_count(ship, "inline void ") == 5 &&
 			hd_switch_count(control, "camera.number_frames = ReplayFrames("
 			"S_DumpScreen());") == 1,
 			"test build: replay.h's shipping path has no file I/O, the call "
@@ -38929,6 +38930,115 @@ static void narrowing_closed()
 	free(setup);
 }
 
+/* A lying body survives the savegame (#333): format 3. The writer sends a
+ * body that lies there (IFL_CLEARBODY, after_death 1..127, still in its
+ * room's list) down a branch of its own and the reader puts it back off
+ * the active chain, with no AI slot; the recorder's header carries the
+ * Corpses switch from version 3 on, and reads a version 2 header as on. */
+static void body_save()
+{
+	char* save = hd_switch_text("../../game/savegame.cpp");
+	char* rep = hd_switch_text("../replay.cpp");
+	char* reph = hd_switch_text("../replay.h");
+	char* gm = hd_switch_text("../gamemain.cpp");
+	static char w[65536], r[65536], lies[4096], sb[4096], rb[8192];
+	static char set[4096], stop[2048];
+	uint8_t head[REPLAY_HEADER_SIZE];
+	char stamp[REPLAY_STAMP_SIZE];
+	int version, bits, corpses;
+
+	printf("The body in the savegame\n");
+
+	glass_body(save, "void SaveLevelData(", w, sizeof(w));
+	glass_body(save, "void RestoreLevelData(", r, sizeof(r));
+	glass_body(save, "static bool SaveBodyLies(", lies, sizeof(lies));
+	glass_body(save, "static void SaveBody(", sb, sizeof(sb));
+	glass_body(save, "static void RestoreBody(", rb, sizeof(rb));
+
+	ok(save && hd_switch_count(save, "#define SAVE_FORMAT_MARK\t0x03355653") ==
+		1 && hd_switch_count(save, "0x02355653") == 0 &&
+		hd_switch_count(save, "#define SAVE_PACKED_BODY\t0xA000") == 1,
+		"body save: the mark is format 3, the body's word 0xA000",
+		save ? hd_switch_count(save, "0x03355653") : -1, 1);
+	// glass_body keeps the closing braces and drops the opening ones.
+	ok(strstr(w, "if(item->flags&-0x8000)if(SaveBodyLies((short)i))packed="
+		"SAVE_PACKED_BODY;WriteSG(&packed,sizeof(ushort));SaveBody(item,obj);"
+		"}elsepacked=0x2000;WriteSG(&packed,sizeof(ushort));}}") != 0,
+		"body save: the writer's killed branch sends a lying body its own way",
+		hd_switch_count(w, "SaveBody("), 1);
+	ok(strstr(lies, "if(!(item->flags&IFL_CLEARBODY)||item->after_death<1||"
+		"item->after_death>127||") != 0 &&
+		strstr(lies, "room[item->room_number].item_number;n!=NO_ITEM;n=items"
+		"[n].next_item)") != 0 && strstr(lies, "if(n==item_number)return"
+		"true;") != 0 && !strstr(lies, "tomb5.corpses"),
+		"body save: a body is IFL_CLEARBODY, 1..127 and in its room's list",
+		hd_switch_count(lies, "item_number"), 2);
+	ok(strstr(sb, "byte=(uchar)item->after_death;") != 0 &&
+		strstr(sb, "WriteSG(&byte,sizeof(uchar));WriteSG(&item->hit_points,"
+		"sizeof(short));") != 0 && strstr(rb, "ReadSG(&byte,sizeof(uchar));"
+		"item->after_death=byte;") != 0,
+		"body save: after_death written and read as a byte",
+		hd_switch_count(rb, "item->after_death=byte;"), 1);
+	ok(hd_switch_count(sb, "WriteSG(") == 21 &&
+		hd_switch_count(rb, "ReadSG(") == 21 &&
+		!strstr(sb, "tomb5.corpses") && !strstr(rb, "tomb5.corpses"),
+		"body save: 21 fields out and 21 back, the switch read by neither",
+		hd_switch_count(rb, "ReadSG("), 21);
+	ok(strstr(r, "if((packed&SAVE_PACKED_BODY)==SAVE_PACKED_BODY)RestoreBody("
+		"(short)i,item,obj);elseif(packed&0x2000)KillItem((short)i);") != 0,
+		"body save: the reader asks for the body before the killed bit",
+		hd_switch_count(r, "RestoreBody("), 1);
+	ok(rb[0] && !strstr(rb, "AddActiveItem(") &&
+		!strstr(rb, "EnableBaddieAI(") && !strstr(rb, "CreatureDie(") &&
+		!strstr(rb, "DropBaddyPickups(") && !strstr(rb, "KillItem(") &&
+		strstr(rb, "RemoveActiveItem(item_number);") &&
+		strstr(rb, "item->flags=(short)flags;item->active=0;") != 0 &&
+		strstr(rb, "item->collidable=0;") != 0 &&
+		strstr(rb, "item->data=0;") != 0,
+		"body save: the body back off the active chain, no AI slot, no drop",
+		hd_switch_count(rb, "AddActiveItem"), 0);
+
+	// The recorder's header: version 3, the Corpses byte, version 2 as on.
+	ok(REPLAY_VERSION == 3 && REPLAY_VERSION_OLDEST == 2 &&
+		REPLAY_CORPSES_AT == 6 && REPLAY_HEADER_SIZE == 48,
+		"body save: recorder version 3, the Corpses byte at 6, 48 bytes",
+		REPLAY_VERSION, 3);
+	ReplayHeaderWrite(head, 64, "x", 0);
+	const int off = ReplayHeaderRead(head, sizeof(head), &version, &bits,
+		&corpses, stamp);
+	ok(off == 1 && head[6] == 0 && corpses == 0,
+		"body save: a header written with Corpses off reads off", corpses, 0);
+	ReplayHeaderWrite(head, 64, "x", 1);
+	ok(head[6] == 1 && ReplayHeaderRead(head, sizeof(head), &version, &bits,
+		&corpses, stamp) == 1 && corpses == 1,
+		"body save: and with it on reads on", corpses, 1);
+	head[4] = 2;
+	head[6] = 0;
+	ok(ReplayHeaderRead(head, sizeof(head), &version, &bits, &corpses,
+		stamp) == 1 && version == 2 && corpses == 1,
+		"body save: a version 2 header opens, as Corpses on", corpses, 1);
+
+	glass_body(rep, "void ReplaySettings()", set, sizeof(set));
+	glass_body(rep, "static void ReplayStop(", stop, sizeof(stop));
+	ok(strstr(set, "fseek(g_file,REPLAY_CORPSES_AT,SEEK_SET);fputc(corpses,"
+		"g_file);") != 0 && strstr(set, "g_corpses_player=tomb5.corpses?1:0;"
+		"g_corpses_held=true;tomb5.corpses=g_corpses_rec!=0;") != 0 &&
+		strstr(stop, "tomb5.corpses=g_corpses_player!=0;") != 0 &&
+		rep && hd_switch_count(rep, "&g_corpses_rec, rec_stamp);") == 1,
+		"body save: -record writes the switch, -replay sets and gives it back",
+		hd_switch_count(set, "tomb5.corpses"), 3);
+	ok(gm && reph && hd_switch_count(gm, "init_tomb5_stuff();\r\n\t\t"
+		"ReplaySettings();") == 1 &&
+		hd_switch_count(reph, "inline void ReplaySettings() {}") == 1,
+		"body save: ReplaySettings right after init_tomb5_stuff, none shipped",
+		gm ? hd_switch_count(gm, "ReplaySettings();") : -1, 1);
+
+	free(save);
+	free(rep);
+	free(reph);
+	free(gm);
+}
+
 /* The corpse fade in HD and the Corpses switch (#332). The byte the HD path
  * weighs a dead body with is the classic's GlobalAlpha byte, 256 - 2 *
  * after_death, and 255 for whatever is no body on its way out; the object
@@ -39311,6 +39421,7 @@ int main()
 	spark_item_number();
 	narrowing_closed();
 	corpse_fade();
+	body_save();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

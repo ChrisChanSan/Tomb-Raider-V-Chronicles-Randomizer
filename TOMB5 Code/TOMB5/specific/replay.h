@@ -34,6 +34,9 @@ void ReplayOpen(long mode, const char* path, const char* stamp,
 	bool live_clock);
 void ReplayClose();
 
+// The header's tomb5 settings, after init_tomb5_stuff (replay.cpp).
+void ReplaySettings();
+
 /* The one input point (S_UpdateInput, specific\input.cpp), after the
  * keyboard, the mouse and the pad are read and before anything is built
  * from them. `fmv` is a film's own loop, which is left out of the file: a
@@ -61,6 +64,7 @@ void ReplaySlot(char kind, long slot);
 
 // The shipping build: no file, no line, the given value back.
 inline void ReplayClose() {}
+inline void ReplaySettings() {}
 inline void ReplayInputSeam(char*, long*, long*, long*, long*, long) {}
 inline long ReplayFrames(long frames) { return frames; }
 inline double ReplaySubTick(double subtick) { return subtick; }

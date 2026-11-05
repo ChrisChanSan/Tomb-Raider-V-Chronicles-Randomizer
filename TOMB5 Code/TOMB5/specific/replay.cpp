@@ -21,6 +21,7 @@
 #include "../game/gameflow.h"	// gfLevelId
 #include "../game/lara.h"		// lara_item - the input record's check
 #include "../game/items.h"		// next_item_active - STATELOG
+#include "../tomb5/tomb5.h"		// tomb5.corpses - the header's switch
 
 // A test build's only (replay.h); the shipping EXEs have none of it.
 #ifdef TOMB5_TEST_BUILD
@@ -67,6 +68,9 @@ static long g_subticks_skipped = 0;	// -liveclock: not in g_records
 static long g_inputs = 0;
 static bool g_drift_said = false;
 static bool g_live_clock = false;	// -replay with -liveclock
+static int g_corpses_rec = 1;		// -replay: the header's Corpses switch
+static int g_corpses_player = 1;	// -replay: the setting it stands in for
+static bool g_corpses_held = false;	// ReplaySettings set the header's
 
 /* The game's state as an input call finds it, mixed into one number: the
  * logic generator's seed and Lara's place, turn and life. -record writes it
@@ -150,6 +154,15 @@ static void ReplayStop(const char* why)
 		g_data = 0;
 	}
 
+	// The setting of the one who plays comes back with the end of the
+	// replay, whatever ends it (ReplaySettings).
+	if (g_corpses_held)
+	{
+		tomb5.corpses = g_corpses_player != 0;
+		g_corpses_held = false;
+		Log("REPLAYLOG settings restored corpses=%d", g_corpses_player);
+	}
+
 	g_mode = REPLAY_OFF;
 }
 
@@ -229,7 +242,8 @@ void ReplayOpen(long mode, const char* path, const char* stamp,
 			return;
 		}
 
-		ReplayHeaderWrite(head, (int)(sizeof(void*) * 8), stamp);
+		// The Corpses byte is set by ReplaySettings, once it is read.
+		ReplayHeaderWrite(head, (int)(sizeof(void*) * 8), stamp, 1);
 		fwrite(head, 1, sizeof(head), g_file);
 		g_mode = REPLAY_RECORD;
 		Log("REPLAYLOG open mode=record file=%s version=%d bits=%d", path,
@@ -256,7 +270,7 @@ void ReplayOpen(long mode, const char* path, const char* stamp,
 	fclose(f);
 
 	const int head_ok = ReplayHeaderRead(g_data, g_size, &version, &bits,
-		rec_stamp);
+		&g_corpses_rec, rec_stamp);
 
 	if (head_ok != 1)
 	{
@@ -273,6 +287,35 @@ void ReplayOpen(long mode, const char* path, const char* stamp,
 	Log("REPLAYLOG open mode=replay file=%s version=%d bits=%d recorded=%s "
 		"clock=%s", path, version, bits, rec_stamp, live_clock ? "live" :
 		"recorded");
+}
+
+/* The tomb5 settings the header carries, once init_tomb5_stuff
+ * (gamemain.cpp) has read them from the registry - after ReplayOpen, which
+ * runs before any device is read (winmain.cpp). -record writes the Corpses
+ * switch into the header's byte; -replay sets it from the header for the
+ * run, and ReplayStop gives the setting back at the end. Turned in the
+ * options menu while recording, the switch is not followed; a replay that
+ * opens the options and leaves them stores the recording's setting. */
+void ReplaySettings()
+{
+	if (g_mode == REPLAY_RECORD && g_file)
+	{
+		const long at = ftell(g_file);
+		const int corpses = tomb5.corpses ? 1 : 0;
+
+		fseek(g_file, REPLAY_CORPSES_AT, SEEK_SET);
+		fputc(corpses, g_file);
+		fseek(g_file, at, SEEK_SET);
+		Log("REPLAYLOG settings mode=record corpses=%d", corpses);
+	}
+	else if (g_mode == REPLAY_PLAY)
+	{
+		g_corpses_player = tomb5.corpses ? 1 : 0;
+		g_corpses_held = true;
+		tomb5.corpses = g_corpses_rec != 0;
+		Log("REPLAYLOG settings mode=replay corpses=%d player=%d",
+			g_corpses_rec, g_corpses_player);
+	}
 }
 
 void ReplayClose()

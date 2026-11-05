@@ -75,6 +75,13 @@ includes excepted by a pragma), so a measurement build with
 `CL=-w14244` names none in the engine's own files (the four lines of
 `vendor/ffmpeg-min`'s `libavutil/common.h` in the 64-bit build are not ours
 and stood there for #329 too).
+Since #338 the 44 `-log` families of `specific\log_families.h` are a test
+build's alone, and the proof is in the bytes: counted as the word with a
+space behind it (`CAMLOG `, not inside `CLIPLOG `), each of the 44 stands 0
+times in `release64\PCtomb5_x64.exe` and `release\PCtomb5.exe` and as before
+in the two test EXEs, and the 40 named release families as before in all
+four - in Python, `len(re.findall(rb'(?<![A-Z])CAMLOG ', data))` per word
+over each EXE's bytes.
 
 **Exercise the risky path on purpose.** A run that never touches the changed
 code proves nothing. When the change was to the TR3 cache keys, the test had

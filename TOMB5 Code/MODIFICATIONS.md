@@ -19730,6 +19730,119 @@ of the recorder's run, carries no Camera command, so no kept camera lies on its 
 
 **Commits.** see the appendix.
 
+### The log families a test build alone carries (#338)
+2026-11-05
+
+**Why.** A shipped EXE writes with `-log` what explains a player's report - loading,
+sound, the graphics device, the window, a crash, the mods, the randomizer's enemies and
+items - and not the development traces of the frames between two ticks, the room walk,
+the camera and the controls, which run to thousands of lines a minute and are read by
+nobody but us. #321 listed every family; each was given one of two places.
+
+**The two lists.** A test build alone (`releasetest\PCtomb5_x64t.exe`, `be64.bat test`;
+`releaseasan\PCtomb5_asan.exe`, `basan.bat`), 44 families: `ARMLOG`, `ASANLOG`,
+`BRAWLLOG`, `BRIDGELOG`, `CAMLOG`, `COGLOG`, `COMBATLOG`, `DOORLOG`, `DRONELOG`,
+`HAIRLOG`, `HIDELOG`, `HIGHLOG`, `INTERPLOG`, `INVLOG`, `JOINTLOG`, `KEYFARLOG`,
+`KEYLOG`, `KEYSEAMLOG`, `LARALOG`, `LIPLOG`, `MODELOG`, `MODERNLOG`, `MOUSELOG`,
+`PADLOG`, `POISONLOG`, `REPLAYLOG`, `RNGLOG`, `ROPELOG`, `SPARKLOG`, `SPLASHLOG`,
+`SPRINGLOG`, `STATELOG`, `SWAPLOG`, `TICKLOG`, `TURNLOG`, `VISLOG`, `XRAYLOG`, `ZIPLOG`,
+`RNGTRACE`, `ROOMLIST`, `ROOMWALK`, `ROOMFLASH`, `ROOMPOP`, `ZIPSKIP`. Every build
+behind `-log`, as before: `ATANLOG`, `CARRYLOG`, `CHEATLOG`, `CLIPLOG`, `CUTLOG`,
+`DXLOG`, `FLYLOG`, `FMVLOG`, `FPSLOG`, `GLOSSLOG`, `HDLOG` (all 216 sites), `HOLDLOG`,
+`ITEMLOG`, `LEDGELOG`, `LIFELOG`, `LOADLOG`, `MENULOG`, `MESHLOG`, `MODLOG`, `OBJLOG`,
+`PROFLOG`, `SAVELOG`, `SFXLOG`, `SKINLOG`, `SKIPLOG`, `SLOTLOG`, `WATERLOG`, `WINLOG`,
+`ALTERFOV`, `FPHEAD`, `SKINREACH`, `LOADFRAME`, `CLIPDETAIL`, `SKIPLATCH`, `HANG`,
+`LOADBIND`, `WARMUP`, `FLYEND`, `FEET`, `CRASH`, and the lines without a family (the
+first line with the build stamp, `POOL`, `OUT OF MEMORY`, the `__FUNCTION__` lines,
+`FileOpen` and `FileClose`, the window messages, the screen modes). Nothing is deleted.
+
+**The mechanism.** `specific/log_families.h`, included by `function_stubs.h` beside
+`gLogEnabled`: `kLogTestBuild` is `true` with `TOMB5_TEST_BUILD` and `false` without it,
+and each of the 44 is `constexpr bool LogFam_<NAME> = kLogTestBuild;`. Every site of
+those families tests its name before `gLogEnabled` - `if (LogFam_CAMLOG &&
+gLogEnabled)`, `if (!LogFam_ARMLOG || !gLogEnabled) return;` - and a helper that only
+builds a line is gated where it is called. In a shipping build the condition is a
+constant false: the compiler drops the block, the helper and the string, and the line
+stays readable in the source as it was. One mechanism for every form the sites have (a
+plain `Log`, a `gLogEnabled` block, a helper, a line builder), and no `#ifdef` at a call
+site: the expression is still parsed, so a local or a static helper that serves only the
+line leaves no unused warning behind. #321's empty inline stand-ins would have evaluated
+the arguments still and needed a declaration switch per helper. 136 gates in 22 files;
+108 string sites of the 44, of which 28 stood inside a define already (`REPLAYLOG`,
+`STATELOG`, `RNGTRACE` since #321, `ASANLOG` under `__SANITIZE_ADDRESS__`, two `HIGHLOG`
+lines with `-high`). The line builders `HDRenderWaterWetLine` (`SPLASHLOG ... wet`) and
+`HDSpringLogLine` (`SPRINGLOG`) stay as they are - RoomProbe prints their lines - and
+their one engine call is gated. `COGLOG`'s three lines were plain `Log` calls; they gain
+their `if (LogFam_COGLOG)`. No line of the 40 release families changed.
+
+**The counters that went with their line.** Counted until now without `-log` and now
+only in a test build: `DOORLOG`'s moves, frames and tween frames (`ProcessClosedDoors`;
+the tween frame's early return stays, it is the logic's), `JOINTLOG`'s passes, tween and
+blended frames (`g_joints.blended`, which `LaraJointsLive` reads, stays), `VISLOG`'s
+source per room (`VisNote`) and dequeues, and `POISONLOG`'s two view-builder flags.
+Behind `-log` already and now behind the family too: every `INTERPLOG`, `TICKLOG`,
+`INVLOG`, `RNGLOG` (the distance walk per frame), `CAMLOG` (the tick's want, sight line,
+ideal, clearance and push), `ARMLOG`, `SPARKLOG` (the count of the slots, the cull
+marks) and `ROOMWALK` counter. Kept, because a release family or the logic reads it:
+`NoteRoomWalk`'s note runs with `-log` as before - it hands `HDLOG reachart` its
+rectangles (`HDFrameNoteReach`) and the window event's dump (`HDFrameNoteDump`) - and
+only the `ROOMLIST`, `ROOMFLASH`, `ROOMPOP` and `ROOMWALK` lines and their own counts in
+it are gated; the second's room sums of the `ROOMWALK reach` line still add with `-log`.
+A few stores stay ungated where a gate would cost more lines than it saves: the chase
+camera's pick for `ROPELOG draw`, the chain spark's parent, `GetFreeSpark`'s start slot,
+the lips' event list of the model (emptied every frame), the splash statistics.
+`CutseqNoteFrame` belongs to `CUTLOG` and is unchanged.
+
+**-high.** The switch and its two `HIGHLOG` lines, the 32-bit refusal among them, stand
+inside `#ifdef TOMB5_TEST_BUILD` in `WinMain`, after the crash seam as before; in
+`init_game_malloc` a shipping build's `high` is 0, so its pool is the heap's and the
+`HIGHLOG reserved=` line goes too. A shipping EXE does not know the word, like
+`-record`, `-replay`, `-liveclock` and `-rngtrace`. `high_pool.cpp` stays (ModernTest
+links it); nothing in a shipping engine calls its switch reader.
+
+**The noinline.** `phd_atan` is `TOMB5_NOINLINE_IN_TEST`, the macro of #321: a call of
+its own in a test build, inlined as before #303 in a shipping one. `ATANLOG` stays in
+every build; in a shipping EXE its `caller=` names the caller's caller, as `SPARKLOG
+draw_alloc`'s `ret=` did after #321.
+
+**The byte proof.** Each of the 84 named words counted in the EXE's bytes as the word
+with a blank after it and no capital before it (`LIPLOG ` stands inside `CLIPLOG ` too),
+before (9c39149d) and after:
+
+| | release64 x64 | release (32-bit) | releasetest x64t | releaseasan |
+|---|---|---|---|---|
+| the 44, before | 81 | 81 | 104 | 108 |
+| the 44, after | 0 | 0 | 104 | 108 |
+| the 40, before | 433 | 408 | 433 | 434 |
+| the 40, after | 433 | 408 | 433 | 434 |
+| size before | 4,758,016 | 4,169,216 | 4,749,824 | 8,208,384 |
+| size after | 4,702,208 | 4,123,136 | 4,750,336 | 8,208,384 |
+| `.text` before | 2,877,361 | 2,406,283 | 2,867,041 | 4,845,793 |
+| `.text` after | 2,834,993 | 2,374,075 | 2,867,201 | 4,845,793 |
+
+Every one of the 44 stands 0 times in both shipping EXEs, each of the 40 as often as
+before in all four; the two test EXEs hold the 44 as before. The test builds' game logic
+is the same by construction (every gate is true there; the x64 test EXE's `.text` moved
+by 160 bytes of code placement, its words and its logic as before, which a replay of a
+recording on it shows); the shipping builds lose code by construction - 42,368 bytes of
+`.text` in the 64-bit EXE, 32,208 in the 32-bit one, 55,808 and 46,080 bytes of file -
+and nothing else changes in them: the gates fall only on lines, on counters that feed
+only a line, and on `-high` (the word `high` is gone from both shipping EXEs, as
+`liveclock` is).
+
+**Checked.** ModernTest's new group `log_family_rule` (7 checks): the header's 44 names
+and its two values (ModernTest built once more with `TOMB5_TEST_BUILD`: the same checks
+pass with every name true), no release family a `LogFam_`, every `"WORD ` string of the
+44 in the engine's files inside a test block, after its `LogFam_` in its own function or
+in a helper whose every call is so gated, the 40 written as they were, `-high` and
+`HIGHLOG` inside the define, `phd_atan` noinline through the macro alone. The checks of
+`spark_life`, `cull_rule`, `lara_joints`, `leftovers` and `level_camera_rule` read the
+gated text. ModernTest 17769 checks (17762 + 7), MenuTest 45043, InterpTest 754,
+LipsTest 272, none failed; no warning line in the logs of `be64.bat`, `basan.bat`,
+`be64.bat test` and `be.bat`.
+
+**Commits.** see the appendix.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -20205,3 +20318,4 @@ entries above.
 | #333 | A lying body survives the savegame, format 3 |
 | #334 | ANDREA3's sky table asks the art near a room, not its box |
 | #335 | Under Modern a level camera that shows something is kept |
+| #338 | The log families a test build alone carries |

@@ -20124,6 +20124,51 @@ InterpTest 754, LipsTest 272, none failed; no `warning C` line in `be64.bat`,
 
 **Commits.** see the appendix.
 
+### The title's night backdrop stays in its own scene (#344)
+2026-11-05
+
+**What.** The rule of #342 (`skyLinked`: a sky pair is refused when the group's room lies
+in another part of the portal graph than the room under the sky) is switched on for two
+more levels by their rows in `kHDVisLevelRows` (`specific/hd/hd_vis.h`): `{ "TITLE", 0, 0,
+1 }` and ANDREA3's row, `{ "ANDREA3", 1, 1, 1 }`, which keeps the near and shared refusals
+of #334 and adds the linked one. Nothing else in the engine changes. With `-log` each pair
+so left out has a `HDLOG vissky level= room= group= near= refused=unlinked` line.
+
+**TITLE.** Group 54 is the night backdrop of the other title scene: 28,697 triangles, a
+dark blue wall, in graph part 16. The sky table's box answer gave it to the garden rooms
+6, 9 and 11 (part 0), which drew it over the garden's wall and beside the trees from the
+title flyby's cameras 3, 4 and 9 in room 6. The three pairs 6/54, 9/54 and 11/54 are
+refused as `unlinked`; the scene itself still shows it from its own rooms (34 and 35 keep
+`sky=54`).
+
+**ANDREA3.** The lids of rooms 122 and 125 took group 92, the colosseum's tiers and the
+gallery, into the rooms 36 and 60 below them (twins), where a beam of the gallery, a slab
+of stone and arches of the tiers stood in the room, up to 237,306 pixels. They were
+reproduced in play and judged ghosts. The pairs 122/92 and 125/92 are refused as
+`unlinked`; 115/92 stays `shared` and 128/92 stays `far`, as #334 left them.
+
+**Proof.** TrgProbe `-vistable -visroom all`, the row against `-visskylinked 0`: TITLE's
+table differs in the three `skyask` lines (`refused=unlinked`), `sky_pairs` 17 -> 14,
+`sky_unlinked` 0 -> 3 and the three `sky=54` lines of rooms 6, 9 and 11; ANDREA3's in the
+two `skyask` lines, the two `sky=92` lines of 122 and 125, `sky_pairs` 7 -> 5 and
+`sky_unlinked` 0 -> 2. The other 13 levels' tables equal #342's census line for line (ms
+aside), ANDY3's with its own row. RoomProbe at the title flyby's cameras 3, 4 and 9 in
+room 6, four yaws each: the pixels apart between `-visskylinked 0` and the row are 45,989,
+7,305, 42,445, 50,504, 38,490, 18,439 and 701 in the seven frames that show the wall, 0 in
+the other five - the numbers #342 measured for the rule; the walk lists lose 54, 33 and
+35. In ANDREA3, at the eyes of #342's sweep in rooms 36 and 60 the frames differ by up to
+8,597 and 235,090 pixels; the places of #334 (rooms 31, 37, 108 and the archways 16, 17,
+28 and 55, four yaws each) are 0 pixels apart.
+
+**Checked.** ModernTest `flyby_room_rule` reads the rows of ANDY3, TITLE and ANDREA3 with
+`skyLinked` 1 and a check that TITLE's row exists with `skyNear` and `skyShared` 0; the
+`ghost` group's hand-built rooms keep the rule off. ModernTest 17792 checks (17791 + 1),
+MenuTest 45043, InterpTest 754, LipsTest 272, none failed; no `warning C` line in
+`be64.bat`, `basan.bat`, `be64.bat test`, `btrg.bat` and `broom.bat`. Not run in the game
+here.
+
+**Commits.** see the appendix.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -20605,3 +20650,4 @@ entries above.
 | #341 | The Corpses row is called Corpse fade |
 | #342 | ANDY3's flyby island is sky art only for the rooms linked to it |
 | #343 | Trajan Markets' ways belong to its scripted Larson alone |
+| #344 | The title's night backdrop stays in its own scene |

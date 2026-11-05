@@ -842,7 +842,7 @@ sound sees it: the two volumes on the nearer end. The seven tabs:
 | Controls | *Key bindings*, *View*, *Modes*, Control type, Action, Control layout, Camera speed, Dead zone, Mouse sensitivity, Invert mouse, Targeting, Ammotype hotkeys | see below |
 | Graphics | *Display*, HD build, HD textures, Body physics, Reflections, Fog, Distance fog, Shimmer, Mono screen style, Shadow mode, PSX skies, Static lighting, UW Effect, Look transparency, Footprints — fifteen rows on two pages, eight and seven, turned with the arrows at the bottom | see **tomb5 options**; Body physics off; Reflections on; Shadow mode *Projected* (offered only while HD is on, see **The projected shadow**) |
 | HUD | Bar mode, Bar positions, Enemy bars, Ammo counter, Gameover menu, Loadbar style, Loading text | see **tomb5 options** |
-| tomb5 options | Cutscene skipper, Cheats, Corpses, Level Select, Fix climb up delay, Flexible crawling, Crawl Tilting | see below |
+| tomb5 options | Cutscene skipper, Cheats, Corpse fade, Level Select, Fix climb up delay, Flexible crawling, Crawl Tilting | see below |
 | Special Features | the bonus gallery (title screen only) | all locked |
 | Credits | who this is built on | — |
 
@@ -874,7 +874,7 @@ installation — none of it is included here.</em></p>
 Seven settings the original never had, and that belong neither to *Graphics*
 nor to *HUD* (see **The options menu** above):
 
-*Cutscene skipper* (off), *Cheats* (off), *Corpses* (on), *Level Select* (off), *Fix climb up
+*Cutscene skipper* (off), *Cheats* (off), *Corpse fade* (on), *Level Select* (off), *Fix climb up
 delay* (on — removes the pause before Lara pulls herself up), *Flexible
 crawling* (on), *Crawl Tilting* (on).
 
@@ -943,7 +943,8 @@ Worth spelling out:
 - **Cheats** unlocks DOZY and five hotkey rows on the
   *Key bindings* page (below). The classic cheat words still need the Timex-TMX
   in hand (the inventory's watch; the data call its slot the compass).
-- **Corpses** decides what happens to a defeated enemy. *On*, the original's
+- **Corpse fade** (German *Leichen ausblenden*) decides what happens to a
+  defeated enemy. *On*, the original's
   way: once its death animation has ended the body fades out over about four
   seconds and is then cleared away - in HD as in SD; the HD body fades with
   the same curve, in a mirror too, and its shadow goes over to the round blob

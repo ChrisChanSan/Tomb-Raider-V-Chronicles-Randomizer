@@ -68,7 +68,10 @@ printout identical. The source levels must be untouched ones - a level the
 randomizer has written is refused as "not the vanilla level".
 Since #328 the engine's builds are free of warnings as well: `grep -c
 "warning C"` gives 0 on the logs of `be64.bat`, `basan.bat`, `be64.bat test`
-and `be.bat`, and those logs are the proof.
+and `be.bat`, and those logs are the proof. #329 cast the level-4 form of
+C4244 as well, except six places whose value nothing bounds; a measurement
+build with `CL=-w14244` must still name exactly those six (laraskin.cpp
+four times, savegame.cpp, setup.cpp) until they are settled.
 
 **Exercise the risky path on purpose.** A run that never touches the changed
 code proves nothing. When the change was to the TR3 cache keys, the test had

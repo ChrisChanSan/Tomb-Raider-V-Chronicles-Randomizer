@@ -19170,6 +19170,50 @@ configuration and the guard.
 
 **Commits.** `499e8835`.
 
+### The hidden narrowings, and C4244 still a warning (#329)
+2026-11-05
+
+**Found.** #328 left C4244 out of the error list because `/we4244` also switches on the
+warning's level-4 form, which Level3 never shows: an `int` result of arithmetic, an
+`abs()` or an enum stored in a `char`, `short` or their unsigned kin, or handed to a
+`short` parameter. Raised to a visible warning (`CL=-w14244`, a measurement build only)
+it names 97 places in the 64-bit and the 32-bit build alike - the 96 of #328's first try
+and one in `hd_render.cpp` that the template form of the message ("`_Ty`") hid from it.
+
+**Changed.** Each place was given a verdict from the range its code allows before
+anything was cast. 86 are SAFE: item and effect numbers below `level_items`,
+`MAX_ITEMS` or the 24 effects, skin joints below 14, joint vertices below the 128 of
+`vertBuf`, enum constants (Lara's spasm anims, the holster slots, a raptor state),
+colours of 8-bit inputs, values clamped where they are made (the suit's fallspeed, the
+turn rate, the teleporter's glow). 24 of them are bounded by the level data and the
+format rather than by a check: the spark sprites `DEFAULT_SPRITES` + 11..17 in an 8-bit
+`Def` (the sequence starts at sprite 4 in all 17 files of the game folder), the level's
+LaraType (3..5 there) in the `char LaraDrawType`, box numbers (11 bits in `FLOOR_INFO`)
+and a pulley's pull count. Five are WRAP and say so in one comment line: debris
+`r = rgb << 3` and `g = (rgb >> 5) << 3` keep a 5-bit channel of the 15-bit colour by
+the cut, debris `XRot`/`YRot` are 8-bit spin angles (drawn as `XRot << 8`), and the
+trap's `x_rot -=` turns a 16-bit angle through 0x10000. These 91 places cast to the type
+the value was already converted to; no field, variable or parameter changed its type.
+
+Six are SUSPECT and are left as they were. `laraskin.cpp` stores a vertex number of the
+mesh above or below a joint in `char SkinVertNums` four times; the mesh allows 0..254
+(`nVerts & 0xFF`), and 128 and more turn negative, which the reader in `output.cpp`
+takes for the row's end - a body mesh with more than 128 vertices at a seam would lose
+its seam there. `savegame.cpp` writes a non-Lara item's anim as one byte relative to its
+object's `anim_index` and reads it back as a signed `char`: exact for -128..127 only,
+which an object with more animations, or an item running another object's set
+(`deltapak.cpp` gives SAS and BLUE_GUARD items SWAT's anim 11), leaves. `setup.cpp`
+writes the room number into the 8-bit `OutsideRoomTable`, whose 255 means "empty"; no
+check keeps the rooms below that, and Andy2 has 254. C4244 therefore stays out of
+`TreatSpecificWarningsAsErrors`, and ModernTest's `warning_rule` is unchanged.
+
+**Checked.** The `.text` section of the 64-bit and the 32-bit release EXE, each built
+from the commit before and from this one in the same folder: the same bytes. The measurement
+build leaves exactly the six SUSPECT places. The logs of `be64.bat`, `basan.bat`,
+`be64.bat test` and `be.bat` hold no warning line; `b1.bat` and `b2.bat` build.
+
+**Commits.** see the appendix.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -19638,3 +19682,4 @@ entries above.
 | #326 | The current toolset, one language standard, and the warnings the randomizer never saw |
 | #327 | A composite's borrowed nodes draw from their donor's HD model |
 | #328 | The engine builds without a warning |
+| #329 | The hidden narrowings, and C4244 still a warning |

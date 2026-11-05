@@ -19462,6 +19462,85 @@ failed; no warning line in the logs of `be64.bat`, `basan.bat`, `be64.bat test` 
 
 **Commits.** see the appendix.
 
+### A lying body survives the savegame, format 3 (#333)
+2026-11-05
+
+**Measured.** A dead enemy that lies there is the one `CreatureDie` (`box.cpp`) leaves:
+`hit_points` -16384, `collidable` 0, off the active chain (`RemoveActiveItem`), its AI
+slot freed (`DisableBaddieAI`, `data` 0), `IFL_INVISIBLE | IFL_CLEARBODY` set and its
+cargo dropped, still in its room's item list, with `after_death` at 1 (command 4 of its
+death animation, or the cyborg's own) or counting on to 127. The save writer's item loop
+tests `item->flags & -0x8000`, which is `IFL_CLEARBODY`, before anything else and wrote
+such a body as the two bytes `0x2000`, "killed"; the reader answers `0x2000` with
+`KillItem`, `ITEM_DEACTIVATED` and `IFL_INVISIBLE`. `KillItem` (`items.cpp`) detaches
+the item's sparks (`DetatchSpark`), clears `active` and `really_active`, takes it off
+the active chain and out of its room's list, drops it as Lara's target and, for a level
+item, sets `IFL_CLEARBODY` (a spawned one goes back to the free list; the writer walks
+only the level items, so a spawned body never reached the save). So after a load the
+body was gone and its place in its room's list free, in either setting of the Corpses
+switch - unlike a level played on with the switch off, where the body keeps its place.
+A killed item carries the same flag, and an enemy that `CreatureDie(.., 1)` shreds goes
+through `KillItem` with whatever count it had (the skeleton's rise timer reaches 125):
+only the room's list tells the body from the killed item. Nothing else needs a body's
+state at a load: the HD path weighs it by `after_death` and `hit_points`
+(`HDCorpseFadeByte`), sparks are not in the save, and `ItemNewRooms` is the control
+loop's list of deferred moves and kills, empty at a load. Three bodies stay outside:
+Larson and Pierre set `after_death` themselves and stay on the active chain without
+`IFL_CLEARBODY`, and the body that floats up (`box.cpp`) has no `IFL_CLEARBODY`; they
+take the other branch as before, which keeps no count.
+
+**Changed.** `SAVE_FORMAT_MARK` is `0x03355653`, format 3; a format-2 save is refused
+with the message of #331. `SaveBodyLies` (`savegame.cpp`) names a body: `IFL_CLEARBODY`,
+`after_death` 1..127 and the item found in its room's list. Such a body is written under
+the word `SAVE_PACKED_BODY` (`0xA000`, the killed and the written bit together, which
+format 2 never wrote) by `SaveBody`, 56 bytes at full width whatever the object's
+`save_*` switches say: the position as three longs, the room, the three rotations, the
+current, goal and required states, the animation as the short relative to the object
+(#331), the frame, `after_death` as a byte (1..127 fits), `hit_points`, the flags with
+the bit fields packed as the other branch packs them, the four `item_flags`, `timer`,
+`trigger_flags`, `carried_item`, `mesh_bits` and `meshswap_meshbits`. `RestoreBody`
+reads them back onto the item the level load set up, moves it to its room with
+`ItemNewRoom` if that differs, takes it off the active chain (`InitialiseItem` puts a
+triggered enemy there), clears `active`, sets `collidable` and `data` to 0 and asks for
+the floor as the other branch does. No `AddActiveItem`, no `EnableBaddieAI`, no
+`CreatureDie`: the AI slot stays free, and the cargo, saved as items of its own, is not
+dropped a second time. Every other item takes the two branches as before, word for
+word: the new test sits inside the killed branch, so a level without a lying body
+writes the bytes a format-2 save of the same state holds, but for the mark (compared on
+the writer's code path; no second build saved the same state). SAVELOG has a line per
+body written and read, with `-log`. The buffer: a save of the run so far uses about
+1.9 KB of its 28980 bytes, so a hundred bodies add 5.6 KB.
+
+The switch: neither writer nor reader reads it. A body saved while it fades goes on
+fading after a load with the switch on; with it off, a body at 1 lies there and one past
+1 finishes, as in play. `FullSave`'s list of flares and torches and the `SMASH_OBJECT`
+case are untouched.
+
+**The recorder.** `REPLAY_VERSION` 3 (`replay_format.h`): byte 6 of the header,
+`REPLAY_CORPSES_AT`, a zero byte up to version 2, holds the Corpses switch;
+`REPLAY_HEADER_SIZE` stays 48 and the records are those of version 2. `ReplayHeaderRead`
+accepts versions 2 and 3 and gives a version-2 file corpses on, the only setting there
+was. `ReplayOpen` runs before `init_tomb5_stuff` has read the settings, so the new
+`ReplaySettings`, called right after it (`gamemain.cpp`), writes the byte into the
+header under `-record` and, under `-replay`, sets `tomb5.corpses` from the header and
+keeps the player's setting, which `ReplayStop` gives back at the end of the replay,
+whatever ends it. REPLAYLOG says the switch in a `settings` line; the open line still
+names the version. The release build has no recorder and an empty `ReplaySettings`.
+Turned in the options menu while recording, the switch is not followed.
+
+**Checked.** ModernTest's new group `body_save` (13 checks): the mark and the word, the
+writer's branch, `SaveBodyLies`, `after_death` as a byte both ways, 21 fields out and 21
+back, the reader's test before the killed bit, no `AddActiveItem`, `EnableBaddieAI`,
+`CreatureDie`, `DropBaddyPickups` or `KillItem` in `RestoreBody`, the recorder's version,
+the byte written and read off and on, a version-2 header read as on, `ReplaySettings`
+and `ReplayStop`, the call after `init_tomb5_stuff` and the empty one shipped. The
+recorder's header checks read version 3 and the byte, and test_build_rule counts five
+empty functions on the shipping path of `replay.h`, not four. ModernTest 17736 checks
+(17723 + 13), MenuTest 45043, InterpTest 754, LipsTest 272, none failed; no warning line
+in the logs of `be64.bat`, `basan.bat`, `be64.bat test` and `be.bat`.
+
+**Commits.** see the appendix.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -19934,3 +20013,4 @@ entries above.
 | #330 | A spark follows its item above number 255 |
 | #331 | The six suspect narrowings closed, and C4244 an error |
 | #332 | The corpse fade in HD, and the Corpses switch |
+| #333 | A lying body survives the savegame, format 3 |

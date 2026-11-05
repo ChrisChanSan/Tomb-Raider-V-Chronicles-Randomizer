@@ -39993,8 +39993,8 @@ static void larson_death_rule()
 		"larson death: an ITEMLOG line behind -log names the corpse",
 		hd_switch_count(lay, "ITEMLOG"), 1);
 
-	rule = strstr(ctl, "elseif(item->object_number==LARSON&&gfLevelId!="
-		"LVL5_TRAJAN_MARKETS)");
+	rule = strstr(ctl, "elseif(item->object_number==LARSON&&(gfLevelId!="
+		"LVL5_TRAJAN_MARKETS||!PierreScripted(item)))");
 	heavy = strstr(ctl, "TestTriggers(trigger_index,1,0);");
 	ok(rule && strstr(rule, "if(item->frame_number>=anims[item->anim_number]"
 		".frame_base+LARSON_DEATH_DOWN)PierreLayDown(item_number,anims["
@@ -40015,6 +40015,82 @@ static void larson_death_rule()
 		"larson death: Pierre's latch lays him down too, cargo calls unchanged",
 		hd_switch_count(ctl, "PierreLayDown("), 2);
 
+	free(src);
+}
+
+/* Trajan Markets' ways belong to its scripted Larson alone (#343). The mark
+ * is the level's OCB in item_flags[3] without an AI pickup in TOSSPAD bits
+ * 8-12; the stand-and-heavy-test death and the stop at a reached goal take
+ * it, the idle reads item_flags[3] alone, and the flight needs it: an
+ * unmarked Larson or Pierre never flees. Read from the tree. */
+static void larson_trajan_rule()
+{
+	char* src = hd_switch_text("../../game/pierre.cpp");
+	char* boxs = hd_switch_text("../../game/box.cpp");
+	char* setup = hd_switch_text("../../game/setup.cpp");
+	static char mark[1024], flee[4096], ctl[32768], init[2048], pick[4096];
+	int bits = 1;
+
+	printf("Trajan Markets' ways and Larson's mark\n");
+
+	glass_body(src, "static long PierreScripted(", mark, sizeof(mark));
+	glass_body(src, "static long PierreCanFlee(", flee, sizeof(flee));
+	glass_body(src, "void PierreControl(", ctl, sizeof(ctl));
+	glass_body(boxs, "void InitialiseCreature(", init, sizeof(init));
+	glass_body(setup, "void GetAIPickups()", pick, sizeof(pick));
+
+	ok(strcmp(mark, "returnitem->item_flags[3]&&!(item->TOSSPAD&0x1F00);")
+		== 0, "larson trajan: the mark is the OCB without an AI pickup",
+		hd_switch_count(mark, "TOSSPAD"), 1);
+
+	/* The pickup bits: 1 << (AI object - AI_GUARD) for the five below
+	 * AI_PATROL2, shifted by 8; the angle keeps bits 13-15. */
+	for (int k = 0; k < 5; k++)
+		if (!(((1 << k) << 8) & 0x1F00))
+			bits = 0;
+
+	ok(bits && !(0xE000 & 0x1F00) && strstr(init,
+		"item->TOSSPAD=item->pos.y_rot&0xE000;") != 0 && strstr(pick,
+		"item->ai_bits|=1<<(aiObj->object_number-AI_GUARD);item->item_flags"
+		"[3]=aiObj->trigger_flags;") != 0 && strstr(pick, "item->TOSSPAD|="
+		"item->ai_bits<<8|(item->item_flags[3]&0xFF);") != 0 && strstr(pick,
+		"aiObj->object_number<AI_PATROL2") != 0,
+		"larson trajan: TOSSPAD bits 8-12 hold the pickup, 13-15 the angle",
+		hd_switch_count(pick, "TOSSPAD"), 1);
+
+	ok(strncmp(flee, "AIOBJECT*aiObj;ROOM_INFO*r;short*zone;if(!PierreScripted("
+		"item))return0;zone=ground_zone", 87) == 0,
+		"larson trajan: an unmarked Larson or Pierre never flees",
+		hd_switch_count(flee, "PierreScripted("), 1);
+	ok(strstr(ctl, "if(item->hit_points<=40&&!(item->flags&IFL_INVISIBLE)&&"
+		"PierreCanFlee(item,pierre))") != 0,
+		"larson trajan: the 40-HP clamp still asks the flee rule",
+		hd_switch_count(ctl, "PierreCanFlee("), 1);
+
+	ok(strstr(ctl, "if(item->trigger_flags)if(gfLevelId==LVL5_TRAJAN_MARKETS)"
+		"item->item_flags[3]=1;item->ai_bits=AMBUSH;}elseitem->ai_bits=GUARD;"
+		"item->trigger_flags=0;}") != 0,
+		"larson trajan: the ambush start needs an OCB (unchanged)",
+		hd_switch_count(ctl, "item->item_flags[3]=1;"), 1);
+	ok(strstr(ctl, "elseif(item->object_number==LARSON&&(gfLevelId!="
+		"LVL5_TRAJAN_MARKETS||!PierreScripted(item)))") != 0,
+		"larson trajan: an unmarked Larson there lies down at frame 28",
+		hd_switch_count(ctl, "PierreScripted("), 3);
+	ok(strstr(ctl, "elseif(item->ai_bits&GUARD||item->item_flags[3])") != 0,
+		"larson trajan: the stand-guard idle reads the mark, not the level",
+		hd_switch_count(ctl, "item->item_flags[3])"), 1);
+	ok(strstr(ctl, "if(pierre->reached_goal)//") != 0 && strstr(ctl,
+		"if(gfLevelId==LVL5_TRAJAN_MARKETS||!PierreScripted(item))item->"
+		"goal_anim_state=1;item->required_anim_state=1;item->trigger_flags=0;"
+		"item->ai_bits=0;pierre->reached_goal=0;}else//") != 0,
+		"larson trajan: an unmarked one stops at a goal, never vanishes",
+		hd_switch_count(ctl, "KillItem("), 1);
+	ok(hd_switch_count(ctl, "LVL5_TRAJAN_MARKETS") == 3,
+		"larson trajan: three level reads left (start, death, goal)",
+		hd_switch_count(ctl, "LVL5_TRAJAN_MARKETS"), 3);
+
+	free(setup);
+	free(boxs);
 	free(src);
 }
 
@@ -40300,6 +40376,7 @@ int main()
 	body_save();
 	level_camera_rule();
 	larson_death_rule();
+	larson_trajan_rule();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

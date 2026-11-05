@@ -714,11 +714,13 @@ void ProcessClosedDoors()
 
 	if (InterpIsTweenFrame())
 	{
-		g_doorTweens++;
+		if (LogFam_DOORLOG)
+			g_doorTweens++;
 		return;
 	}
 
-	g_doorFrames++;
+	if (LogFam_DOORLOG)
+		g_doorFrames++;
 
 	for (int i = 0; i < 32; i++)
 	{		
@@ -739,7 +741,8 @@ void ProcessClosedDoors()
 				ItemNewRoom((short)(item - items), item->draw_room);
 				item->room_number = room_number;
 				item->InDrawRoom = 1;
-				g_doorMoves++;
+				if (LogFam_DOORLOG)
+					g_doorMoves++;
 			}
 		}
 		else if (item->InDrawRoom)
@@ -747,7 +750,8 @@ void ProcessClosedDoors()
 			item->room_number = item->draw_room;
 			ItemNewRoom((short)(item - items), room_number);
 			item->InDrawRoom = 0;
-			g_doorMoves++;
+			if (LogFam_DOORLOG)
+				g_doorMoves++;
 		}
 	}
 }
@@ -758,7 +762,7 @@ void ProcessClosedDoors()
  * counts every frame DrawRooms walked. */
 void ClosedDoorsLevelEnd()
 {
-	if (gLogEnabled)
+	if (LogFam_DOORLOG && gLogEnabled)
 		Log("DOORLOG moves=%ld frames=%ld skipped_tween=%ld", g_doorMoves,
 			g_doorFrames, g_doorTweens);
 

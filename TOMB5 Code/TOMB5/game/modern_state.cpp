@@ -237,7 +237,7 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 		 * `swim_rate` and `swim_pitch_rate` are the live cfg's air_turn_rate,
 		 * swim_turn_rate and swim_pitch_rate. Every value is read from the live
 		 * cfg rather than the header, so a hand edit of the registry shows up. */
-		if (gLogEnabled)
+		if (LogFam_MODERNLOG && gLogEnabled)
 		{
 			/* The orbit's twelve, from the live cfg game\camera.cpp seats rather
 			 * than the enum in game\modern_camera.h: cam_return /
@@ -682,7 +682,7 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 	 *
 	 * New fields are appended at the end, so the older ones keep their
 	 * places. */
-	if (gLogEnabled)
+	if (LogFam_MODERNLOG && gLogEnabled)
 	{
 		/* The orbit's eight, read back from game\camera.cpp, which owns the
 		 * one instance. cam_off/cam_pitch/cam_ret/cam_world/clip/carry and

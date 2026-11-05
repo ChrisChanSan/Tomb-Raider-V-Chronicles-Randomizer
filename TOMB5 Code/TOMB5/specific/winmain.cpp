@@ -510,7 +510,7 @@ static void WinMouseCapture()
 	InterlockedExchange(&mouse_dy, 0);
 	mouse_abs_seeded = 0;
 
-	if (gLogEnabled)
+	if (LogFam_MOUSELOG && gLogEnabled)
 		Log("MOUSELOG capture=%s active=%ld modern=%ld fmv=%ld free=%ld",
 			on ? "on" : "off", mouse_active, modern, fmv, mouse_free);
 }
@@ -1628,8 +1628,10 @@ int __stdcall WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 	CrashSeamInstall(CrashLogLine, !gLogEnabled, "PCtomb5");
 	AsanSeamInstall(CrashLogLine);	// the Asan build only (pool_guard.h)
 
+#ifdef TOMB5_TEST_BUILD
 	/* -high (high_pool.h): every free region below 4 GB reserved before the
-	 * pool and the first level are allocated. */
+	 * pool and the first level are allocated. A test build's only (#338),
+	 * with its HIGHLOG lines: a shipping EXE does not know the word. */
 	if (HighSwitchGiven(lpCmdLine))
 	{
 		HighReserve high;
@@ -1641,6 +1643,7 @@ int __stdcall WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 		else
 			Log("HIGHLOG refused: a 32-bit build has nothing above 4 GB");
 	}
+#endif	// TOMB5_TEST_BUILD: nor -high
 
 	/* Where the mods folder's notes go: hd_mods.cpp is engine-free - the
 	 * diagnostic tools link the very same file - so it does not know Log()

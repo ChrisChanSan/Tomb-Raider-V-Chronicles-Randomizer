@@ -46,7 +46,7 @@ static BITE_INFO fist = { 4, 72, 15, 13 };
 static void BrawlLog(short item_number, const char* state, long dist,
 	bool ahead, long frame, bool touch, bool reach, bool hit)
 {
-	if (!gLogEnabled)
+	if (!LogFam_BRAWLLOG || !gLogEnabled)
 		return;
 
 	Log("BRAWLLOG item=%d tick=%d state=%s dist=%ld ahead=%d frame=%ld "

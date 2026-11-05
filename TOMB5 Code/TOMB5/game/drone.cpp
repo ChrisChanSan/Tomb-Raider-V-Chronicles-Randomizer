@@ -93,7 +93,7 @@ static bool DroneStep(ITEM_INFO* item, long dx, long dz)
 static void DroneLog(short item_number, unsigned tick, int state, long dist,
 	bool los, bool fire, const char* shot, long dmg)
 {
-	if (!gLogEnabled)
+	if (!LogFam_DRONELOG || !gLogEnabled)
 		return;
 
 	if (shot)

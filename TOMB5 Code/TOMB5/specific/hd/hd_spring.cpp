@@ -2396,8 +2396,8 @@ void HDSpringLevelBegin(const char* stem)
 
 	char line[256];
 
-	for (int i = -1; gLogEnabled && HDSpringLogLine(i, line, sizeof(line));
-		i++)
+	for (int i = -1; LogFam_SPRINGLOG && gLogEnabled &&
+		HDSpringLogLine(i, line, sizeof(line)); i++)
 		Log("%s", line);
 }
 

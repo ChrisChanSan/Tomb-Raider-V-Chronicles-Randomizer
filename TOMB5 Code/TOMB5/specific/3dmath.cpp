@@ -593,12 +593,14 @@ static bool poisonLogTickCamera = false;
 
 void PoisonLogRebuild(bool on)
 {
-	poisonLogRebuild = on;
+	if (LogFam_POISONLOG)
+		poisonLogRebuild = on;
 }
 
 void PoisonLogTickCamera(bool on)
 {
-	poisonLogTickCamera = on;
+	if (LogFam_POISONLOG)
+		poisonLogTickCamera = on;
 }
 
 /* The view line. `scalar` is aGenerateW2V's own vector after its scale
@@ -764,7 +766,7 @@ static void aGenerateW2V(PHD_3DPOS* viewPos)
 		}
 	}
 
-	if (gLogEnabled)
+	if (LogFam_POISONLOG && gLogEnabled)
 		PoisonLogView(&scalar);
 
 	aW2VMx[M03] = (float)viewPos->x_pos;
@@ -980,8 +982,10 @@ static void AtanSeam(long x, long y, void* caller)
 		(unsigned int)((uintptr_t)caller - (uintptr_t)GetModuleHandle(0)));
 }
 
-// Never inlined, so that _ReturnAddress names the caller.
-__declspec(noinline) long phd_atan(long x, long y)
+/* Not inlined in a test build (TOMB5_NOINLINE_IN_TEST, #338), so that
+ * _ReturnAddress names the caller there; a shipping build inlines it, and
+ * ATANLOG's caller= then names the caller's caller. */
+TOMB5_NOINLINE_IN_TEST long phd_atan(long x, long y)
 {
 	const long x0 = x, y0 = y;
 

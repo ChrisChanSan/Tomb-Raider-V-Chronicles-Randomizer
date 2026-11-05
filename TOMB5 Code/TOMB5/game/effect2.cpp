@@ -1417,7 +1417,7 @@ void TriggerExplosionSparks(long x, long y, long z, long extras, long dynamic, l
 	do
 	{
 		// Where GetFreeSpark starts and how full the slots are, before it.
-		if (gLogEnabled)
+		if (LogFam_SPARKLOG && gLogEnabled)
 		{
 			log_next = next_spark;
 			log_on = SparkLogCountOn();
@@ -1481,7 +1481,7 @@ void TriggerExplosionSparks(long x, long y, long z, long extras, long dynamic, l
 
 			if (i == 8)
 			{
-				if (gLogEnabled)
+				if (LogFam_SPARKLOG && gLogEnabled)
 					Log("SPARKLOG light tick=%u slot=%d dyn=%ld",
 						(unsigned)GlobalCounter, (int)(sptr - spark), dynamic);
 
@@ -1534,7 +1534,7 @@ void TriggerExplosionSparks(long x, long y, long z, long extras, long dynamic, l
 		sptr->Size <<= scalar;
 		sptr->MaxYvel = 0;
 
-		if (gLogEnabled)
+		if (LogFam_SPARKLOG && gLogEnabled)
 			Log("SPARKLOG born tick=%u slot=%d chain=%d fires_at=%d life=%d "
 				"dyn=%d next=%ld on=%ld evicted=%d parent=%ld in_pass=%ld",
 				(unsigned)GlobalCounter, (int)(sptr - spark),
@@ -1841,7 +1841,7 @@ TOMB5_NOINLINE_IN_TEST long GetFreeSpark()
 	bool log_draw;
 
 	// SPARKLOG draw_alloc: inside a frame that gives its draws back.
-	log_draw = gLogEnabled && InterpFrameSeedSaved();
+	log_draw = LogFam_SPARKLOG && gLogEnabled && InterpFrameSeedSaved();
 	log_next = next_spark;
 	log_on = log_draw ? SparkLogCountOn() : 0;
 
@@ -1892,7 +1892,7 @@ TOMB5_NOINLINE_IN_TEST long GetFreeSpark()
 	}
 
 	// A chain spark taken while it is on; next is the caller's start.
-	if (gLogEnabled && spark[free].On && spark[free].extras & 7)
+	if (LogFam_SPARKLOG && gLogEnabled && spark[free].On && spark[free].extras & 7)
 		Log("SPARKLOG end tick=%u slot=%ld why=evict age=%d chain=%d "
 			"fires_at=%d life=%d min_life=%ld next=%ld",
 			(unsigned)GlobalCounter, free,
@@ -1969,7 +1969,7 @@ void UpdateSparks()
 
 		if (!sptr->Life)
 		{
-			if (gLogEnabled && sptr->extras & 7)
+			if (LogFam_SPARKLOG && gLogEnabled && sptr->extras & 7)
 				SparkLogEnd(i, "life");
 
 			if (sptr->Dynamic != -1)
@@ -1995,7 +1995,7 @@ void UpdateSparks()
 
 			if (sptr->R < 8 && sptr->G < 8 && sptr->B < 8)
 			{
-				if (gLogEnabled && sptr->extras & 7)
+				if (LogFam_SPARKLOG && gLogEnabled && sptr->extras & 7)
 					SparkLogEnd(i, "fade");
 
 				sptr->On = 0;
@@ -2017,7 +2017,7 @@ void UpdateSparks()
 
 		if (sptr->sLife - sptr->Life == sptr->extras >> 3 && sptr->extras & 7)
 		{
-			if (gLogEnabled)
+			if (LogFam_SPARKLOG && gLogEnabled)
 				Log("SPARKLOG fire tick=%u slot=%d age=%d chain=%d fires_at=%d "
 					"dyn=%d", (unsigned)GlobalCounter, i,
 					(int)sptr->sLife - (int)sptr->Life, (int)(sptr->extras & 7),
@@ -2102,7 +2102,7 @@ void UpdateSparks()
 			continue;
 
 		// Only said, not guarded: below -1 the index leaves the 8 lights.
-		if (gLogEnabled && sptr->Dynamic < 0)
+		if (LogFam_SPARKLOG && gLogEnabled && sptr->Dynamic < 0)
 			Log("SPARKLOG light_index tick=%u slot=%d dyn=%d",
 				(unsigned)GlobalCounter, i, (int)sptr->Dynamic);
 

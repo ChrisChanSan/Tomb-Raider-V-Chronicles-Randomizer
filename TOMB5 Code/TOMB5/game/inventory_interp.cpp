@@ -127,7 +127,7 @@ namespace
 
 	void NoteKind(int kind)
 	{
-		if (gLogEnabled)
+		if (LogFam_INVLOG && gLogEnabled)
 			g_secKinds |= 1UL << kind;
 	}
 
@@ -141,7 +141,7 @@ namespace
 	 * gLogEnabled, so without -log nothing here moves. */
 	void NoteFrame()
 	{
-		if (!gLogEnabled)
+		if (!LogFam_INVLOG || !gLogEnabled)
 			return;
 
 		g_secFrames++;
@@ -221,7 +221,7 @@ namespace
 
 	void LogSecond()
 	{
-		if (!gLogEnabled || g_secFrames <= 0)
+		if (!LogFam_INVLOG || !gLogEnabled || g_secFrames <= 0)
 			return;
 
 		char kinds[128];
@@ -311,7 +311,7 @@ void InvInterpOpen(const InvInterpSource* src, const char* why)
 	g_secKinds = 0;
 	g_secCuts = 0;
 
-	if (gLogEnabled)
+	if (LogFam_INVLOG && gLogEnabled)
 		Log("INVLOG open level=%d why=%s fps_mode=%d min_ticks=%d budget=%.1f",
 			(int)gfLevelId, why ? why : "?", (int)ActiveFpsMode(),
 			(int)InvFrameMinTicks(), RingSlotMs());
@@ -319,7 +319,7 @@ void InvInterpOpen(const InvInterpSource* src, const char* why)
 
 void InvInterpClose()
 {
-	if (gLogEnabled)
+	if (LogFam_INVLOG && gLogEnabled)
 	{
 		LogSecond();
 		Log("INVLOG close level=%d frames=%d steps=%d",
@@ -423,7 +423,7 @@ void InvInterpPresent(long ticks)
 
 void InvInterpCut(const char* why)
 {
-	if (gLogEnabled && g_open)
+	if (LogFam_INVLOG && gLogEnabled && g_open)
 	{
 		g_secCuts++;
 		Log("INVLOG cut level=%d at=%ds why=%s steps=%d",

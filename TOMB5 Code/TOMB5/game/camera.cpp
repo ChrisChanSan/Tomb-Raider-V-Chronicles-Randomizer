@@ -286,7 +286,7 @@ static long modern_cam_clear_wall;
 
 static void CamTickWant(const GAME_VECTOR* want)
 {
-	if (!gLogEnabled)
+	if (!LogFam_CAMLOG || !gLogEnabled)
 		return;
 
 	cam_tick.want = *want;
@@ -295,7 +295,7 @@ static void CamTickWant(const GAME_VECTOR* want)
 
 static void CamTickLos(const GAME_VECTOR* los, long ray)
 {
-	if (!gLogEnabled)
+	if (!LogFam_CAMLOG || !gLogEnabled)
 		return;
 
 	cam_tick.los = *los;
@@ -308,7 +308,7 @@ static void CamTickLos(const GAME_VECTOR* los, long ray)
 
 static void CamTickIdeal(const GAME_VECTOR* ideal)
 {
-	if (!gLogEnabled)
+	if (!LogFam_CAMLOG || !gLogEnabled)
 		return;
 
 	cam_tick.ideal = *ideal;
@@ -1560,7 +1560,7 @@ void CalculateCamera()
 	const long levelKept = ModernLevelCameraKept(levelWhy);
 	const long modernDiscard = ModernLevelCameraDiscards(levelWhy);
 
-	if (gLogEnabled)
+	if (LogFam_CAMLOG && gLogEnabled)
 		ModernLevelCameraLog(levelWhy);
 
 	// The Camera command also writes camera.speed (control.cpp's TO_CAMERA:
@@ -1877,7 +1877,7 @@ void CalculateCamera()
 	if (gLogEnabled && ledgePhase != LEDGE_CAMERA_NONE)
 		ModernCameraLedgeLog(ledgePhase);
 
-	if (gLogEnabled)
+	if (LogFam_CAMLOG && gLogEnabled)
 		CameraTickLog();
 }
 
@@ -2928,7 +2928,7 @@ static void ModernCameraClearWall()
 		camera.pos.room_number = room;
 	}
 
-	if (gLogEnabled)
+	if (LogFam_CAMLOG && gLogEnabled)
 		cam_tick.clear = moved;
 }
 
@@ -2948,7 +2948,7 @@ static void ModernCameraNotePush(long x, long y, long z)
 	if (moved)
 		modern_cam_pushed = 1;
 
-	if (gLogEnabled)
+	if (LogFam_CAMLOG && gLogEnabled)
 		cam_tick.diag = moved;
 }
 

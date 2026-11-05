@@ -428,7 +428,7 @@ void ApplyJoyScheme()
 
 	/* PADLOG repair: which role the Modifier kept off its default and which
 	 * one went back to it - the two moves that are not a plain repair. */
-	if (gLogEnabled)
+	if (LogFam_PADLOG && gLogEnabled)
 		for (int i = 0; i < JOY_ROLES; i++)
 		{
 			if ((yielded >> i) & 1)
@@ -545,7 +545,7 @@ void ApplyJoySplit()
 	if (joy_scheme_seated >= 0)
 		ApplyJoyScheme();
 
-	if (gLogEnabled)
+	if (LogFam_KEYLOG && gLogEnabled)
 		Log("KEYLOG split=%s seated", split ? "separate" : "onekey");
 }
 
@@ -740,7 +740,7 @@ void ApplyKeyScheme()
 	key_scheme_seated = KeySchemeSeat(layout[1], layout[3], (int)key_scheme_seated, (int)modern);
 	CheckKeyConflicts();
 
-	if (gLogEnabled)
+	if (LogFam_KEYLOG && gLogEnabled)
 		Log("KEYLOG scheme=%s seated", modern ? "modern" : "tank");
 }
 
@@ -1433,7 +1433,7 @@ long S_UpdateInput()
 	 * nothing but still pays out owed counts logs as well, with dx=0 dy=0 and
 	 * the step it turned. The capture's own line, on every change of it, comes
 	 * from specific\winmain.cpp. */
-	if (gLogEnabled)
+	if (LogFam_MOUSELOG && gLogEnabled)
 	{
 		static long mouse_buttons_logged = 0;
 
@@ -1693,7 +1693,7 @@ long S_UpdateInput()
 	 * `out` is the pair the classic assembly was handed; `aim` is 1 when the
 	 * look key is aiming a weapon, the binoculars or the lasersight - why a
 	 * tank tick can show sector=0 with the stick still pushed. */
-	if (gLogEnabled && modern_tank)
+	if (LogFam_MODERNLOG && gLogEnabled && modern_tank)
 		Log("MODERNLOG f=%ld src=tank mode=tank stick=%ld/%ld sector=%ld out=%ld/%ld aim=%ld",
 			(long)GlobalCounter, move_x, move_y, tank_sector, tank_x, tank_y, modern_tank_aim);
 
@@ -1725,7 +1725,7 @@ long S_UpdateInput()
 	 * bindings of the Secondary role. A run without -log never reaches it. */
 	static long action_bits_logged = -1;
 
-	if (gLogEnabled && action_bits != action_bits_logged)
+	if (LogFam_KEYLOG && gLogEnabled && action_bits != action_bits_logged)
 	{
 		action_bits_logged = action_bits;
 		Log("KEYLOG action=%s bits=0x%lX second=%ld/%ld", tomb5.action_split ? "separate" : "onekey",
@@ -1741,7 +1741,8 @@ long S_UpdateInput()
 	static long modifier_logged = -2;
 	static long chord_logged = -1;
 
-	if (gLogEnabled && (jLayout[JOY_ROLE_MODIFIER] != modifier_logged || jChord != chord_logged))
+	if (LogFam_PADLOG && gLogEnabled &&
+		(jLayout[JOY_ROLE_MODIFIER] != modifier_logged || jChord != chord_logged))
 	{
 		modifier_logged = jLayout[JOY_ROLE_MODIFIER];
 		chord_logged = jChord;
@@ -2241,7 +2242,7 @@ long S_UpdateInput()
 		 * `sprint`/`duck` the latch states, `drop` the sprint and duck drop
 		 * terms, `mode` the two row options, `grab` as below. -1 so the first
 		 * line of a session is always written. */
-		if (gLogEnabled)
+		if (LogFam_MODELOG && gLogEnabled)
 		{
 			static long mode_logged = -1;
 			/* `grab` is the family and not a latch bit, because that is what
@@ -2335,7 +2336,7 @@ long S_UpdateInput()
 		 * an FMV, the inventory - the key's own IN_DRAW is still in the word and
 		 * still consumed (game\flmtorch.cpp throws the burning torch on it,
 		 * specific\fmv.cpp skips a video on it), so it is printed as it is. */
-		if (gLogEnabled)
+		if (LogFam_COMBATLOG && gLogEnabled)
 		{
 			static long combat_last_state = -1;
 			const long draw = (linput & IN_DRAW) != 0;

@@ -871,7 +871,7 @@ void HairControl(long in_cutscene, long pigtail, short* cutscenething)
 	 *
 	 * Stays in for good, like every other diagnostic seam. Two lines a
 	 * frame at most, and only with -log. */
-	if (!gLogEnabled)
+	if (!LogFam_HAIRLOG || !gLogEnabled)
 		return;
 
 	long root_step = -1, tip_step = -1;

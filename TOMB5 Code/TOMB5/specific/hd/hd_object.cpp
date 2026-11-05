@@ -5424,7 +5424,7 @@ void HDObjectFrameDraw(const void* projection, int bulbs, unsigned int passes)
 	 * them. The record is emptied whether or not it was written. */
 	if (HDModelLipsEventCount())
 	{
-		if (gLogEnabled)
+		if (LogFam_LIPLOG && gLogEnabled)
 		{
 			const char* lang = "EN";
 

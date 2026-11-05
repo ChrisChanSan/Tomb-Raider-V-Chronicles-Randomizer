@@ -59,7 +59,7 @@ static void ZipLog(short item_number, int step)
 {
 	ITEM_INFO* item;
 
-	if (!gLogEnabled)
+	if (!LogFam_ZIPLOG || !gLogEnabled)
 		return;
 
 	item = &items[item_number];
@@ -175,7 +175,7 @@ static char zip_confirm_held;
  * pad. Its ZIPLOG line "ended by skip" follows. */
 static void ZipSkipLog(short item_number, int how)
 {
-	if (!gLogEnabled)
+	if (!LogFam_ZIPSKIP || !gLogEnabled)
 		return;
 
 	Log("ZIPSKIP item=%d stage=%d tick=%d how=%s scene=0", item_number,

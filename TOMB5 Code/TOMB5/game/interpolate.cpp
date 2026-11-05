@@ -712,17 +712,17 @@ namespace
 		{
 			cut = true;
 
-			if (gLogEnabled)
+			if (LogFam_INTERPLOG && gLogEnabled)
 				g_cutType++;
 		}
-		else if (typeMoved && gLogEnabled)
+		else if (typeMoved && LogFam_INTERPLOG && gLogEnabled)
 			g_cutHandover++;
 
 		if (InterpSpotCut(g_prevCam.spot != 0, LevelCamHolds()))
 		{
 			cut = true;
 
-			if (gLogEnabled)
+			if (LogFam_INTERPLOG && gLogEnabled)
 				g_cutSpot++;
 		}
 
@@ -731,7 +731,7 @@ namespace
 		{
 			cut = true;
 
-			if (gLogEnabled)
+			if (LogFam_INTERPLOG && gLogEnabled)
 				g_cutEye++;
 		}
 
@@ -742,7 +742,7 @@ namespace
 		{
 			cut = true;
 
-			if (gLogEnabled)
+			if (LogFam_INTERPLOG && gLogEnabled)
 				g_cutAim++;
 		}
 
@@ -923,7 +923,7 @@ namespace
 	 *                range stands still, everywhere else and at fps_mode 0. */
 	void LogSecond()
 	{
-		if (gLogEnabled && g_secFrames > 0)
+		if (LogFam_INTERPLOG && gLogEnabled && g_secFrames > 0)
 			Log("INTERPLOG level=%d at=%ds frames=%d tween=%d "
 				"alpha=%.2f/%.2f/%.2f "
 				"lara_step=%.1f items=%.1f snaps=%d (teleport=%d roomjump=%d "
@@ -963,7 +963,7 @@ namespace
 		 * and a 60 fps run of the same scene must print the same line: a
 		 * number that doubles is an unguarded counter, one that halves is a
 		 * guard that also stopped a tick frame. -log only. */
-		if (gLogEnabled && g_secFrames > 0)
+		if (LogFam_TICKLOG && gLogEnabled && g_secFrames > 0)
 			Log("TICKLOG level=%d at=%ds fade=%d screenfade=%d weather=%d "
 				"legend=%d after_death=%d",
 				(int)gfLevelId, g_at,
@@ -975,7 +975,7 @@ namespace
 		 * acted on, by what it did, and the furthest it moved an eye. Only a
 		 * second with at least one; the per-frame lines (InterpLogEyeFix) say
 		 * where. */
-		if (gLogEnabled && g_eyeFlagged > 0)
+		if (LogFam_CAMLOG && gLogEnabled && g_eyeFlagged > 0)
 			Log("CAMLOG sum flagged=%d prevroom=%d chord=%d tick=%d nosky=%d max_moved=%ld",
 				g_eyeFlagged, g_eyeCount[MODERN_EYE_FIX_PREVROOM],
 				g_eyeCount[MODERN_EYE_FIX_CHORD], g_eyeCount[MODERN_EYE_FIX_TICK],
@@ -1358,7 +1358,7 @@ void InterpLogEyeFix(unsigned int frame, short walkRoom, long rooms, long outsid
 	char kind[32];
 	static const char* const names[] = { "none", "prevroom", "chord", "tick", "nosky" };
 
-	if (!gLogEnabled || !g_applied || g_eye.fix == MODERN_EYE_FIX_NONE)
+	if (!LogFam_CAMLOG || !gLogEnabled || !g_applied || g_eye.fix == MODERN_EYE_FIX_NONE)
 		return;
 
 	CameraEyeTest(g_eyeBlend[0], g_eyeBlend[1], g_eyeBlend[2], camera.pos.room_number, &t);
@@ -1426,7 +1426,7 @@ unsigned long InterpTickSerial()
 
 void InterpNoteStep(int kind)
 {
-	if (gLogEnabled && kind >= 0 && kind < INTERP_STEP_COUNT)
+	if (LogFam_TICKLOG && gLogEnabled && kind >= 0 && kind < INTERP_STEP_COUNT)
 		g_step[kind]++;
 }
 
@@ -1441,7 +1441,7 @@ float InterpParticleAlpha()
 
 void InterpNoteParticles(int kind, int n)
 {
-	if (!gLogEnabled || n <= 0 || kind < 0 || kind >= INTERP_PART_COUNT)
+	if (!LogFam_INTERPLOG || !gLogEnabled || n <= 0 || kind < 0 || kind >= INTERP_PART_COUNT)
 		return;
 
 	g_secParticles += n;
@@ -1528,7 +1528,7 @@ void InterpBeginFrame(float alpha)
 	 *                DrawPhaseGame and InterpEndFrame restores after it. */
 	if (alpha >= 1.0F || !items || !g_prevCam.valid)
 	{
-		if (gLogEnabled)
+		if (LogFam_INTERPLOG && gLogEnabled)
 		{
 			NoteFrameAlpha(alpha);
 			NoteDrawnLara();
@@ -1543,7 +1543,7 @@ void InterpBeginFrame(float alpha)
 
 		if (live)
 		{
-			if (gLogEnabled)
+			if (LogFam_INTERPLOG && gLogEnabled)
 			{
 				NoteFrameAlpha(alpha);
 
@@ -1582,7 +1582,7 @@ void InterpBeginFrame(float alpha)
 
 	if (CameraCut() || cutseqCut)
 	{
-		if (gLogEnabled)
+		if (LogFam_INTERPLOG && gLogEnabled)
 		{
 			NoteFrameAlpha(alpha);
 			g_snapCamCut++;
@@ -1606,7 +1606,8 @@ void InterpBeginFrame(float alpha)
 	/* The cutscene actors, written before anything is drawn: Lara's
 	 * matrices (frigup_lara) and the other actors (DrawCutSeqActors) are
 	 * built from these tables inside DrawPhaseGame. */
-	if (GLOBAL_playing_cutseq && CutseqApply(alpha) && gLogEnabled)
+	if (GLOBAL_playing_cutseq && CutseqApply(alpha) && LogFam_INTERPLOG &&
+		gLogEnabled)
 		g_snapCutscene++;
 
 	for (int i = 0; i < MAX_ITEMS; i++)
@@ -1617,7 +1618,7 @@ void InterpBeginFrame(float alpha)
 
 		if (why != SNAP_NONE)
 		{
-			if (gLogEnabled)
+			if (LogFam_INTERPLOG && gLogEnabled)
 				CountSnap(why);
 
 			continue;
@@ -1886,7 +1887,7 @@ void InterpBeginFrame(float alpha)
 
 		g_skyWithheld = g_eye.fix == MODERN_EYE_FIX_NOSKY;
 
-		if (gLogEnabled && g_eye.fix != MODERN_EYE_FIX_NONE)
+		if (LogFam_CAMLOG && gLogEnabled && g_eye.fix != MODERN_EYE_FIX_NONE)
 		{
 			const long moved = EyeMoved();
 
@@ -1946,7 +1947,7 @@ void InterpBeginFrame(float alpha)
 		}
 	}
 
-	if (gLogEnabled)
+	if (LogFam_INTERPLOG && gLogEnabled)
 	{
 		NoteFrameAlpha(alpha);
 		g_secTween++;
@@ -2008,7 +2009,7 @@ static void NoteGiveBack()
  * (from LaraJointsLevelEnd, game\draw.cpp, right after JOINTLOG). */
 void InterpRngLevelEnd()
 {
-	if (gLogEnabled)
+	if (LogFam_RNGLOG && gLogEnabled)
 		Log("RNGLOG frames=%ld given_back=%ld undone=%ld kept_frames=%ld "
 			"kept_draws=%ld heights=%ld over=%ld", g_rngFrames, g_rngBack,
 			g_rngUndone, g_rngKept, g_rngKeptDraws, g_rngHeights, g_rngOver);
@@ -2105,7 +2106,7 @@ void InterpEndFrame()
 	 * position and GetHeight's globals as the last frame drawn at a tick's
 	 * own state left them, or the last tick when no frame was (fps_mode 2).
 	 * RNGLOG counts first. */
-	if (gLogEnabled)
+	if (LogFam_RNGLOG && gLogEnabled)
 		NoteGiveBack();
 
 	if (g_seedSaved)
@@ -2126,7 +2127,7 @@ void InterpEndFrame()
 	{
 		AlterFOV(g_zoomClassic);
 
-		if (gLogEnabled)
+		if (LogFam_INTERPLOG && gLogEnabled)
 			g_secZoom++;
 	}
 
@@ -2146,7 +2147,7 @@ void InterpEndFrame()
 	/* One INTERPLOG line per logic second: GlobalCounter steps thirty times
 	 * a second in every mode and stands still in the inventory, so lines
 	 * compare directly between 30 and 60 fps runs. */
-	if (gLogEnabled && (unsigned short)(GlobalCounter - g_secCounter) >= 30)
+	if (LogFam_INTERPLOG && gLogEnabled && (unsigned short)(GlobalCounter - g_secCounter) >= 30)
 		LogSecond();
 }
 
@@ -2220,7 +2221,7 @@ void InterpInvalidate(const char* why)
 	 * and at worst one step (1/60 s) is dropped rather than repeated. */
 	g_steppedSerial = g_tickSerial;
 
-	if (gLogEnabled)
+	if (LogFam_INTERPLOG && gLogEnabled)
 	{
 		LogSecond();
 		Log("INTERPLOG level=%d invalidated: %s", (int)gfLevelId, why ? why : "?");
@@ -2251,7 +2252,7 @@ float InterpPoseTime(const ITEM_INFO* item, short* prevAnim, short* prevFrame)
 
 void InterpNotePose(const ITEM_INFO* item)
 {
-	if (!gLogEnabled)
+	if (!LogFam_INTERPLOG || !gLogEnabled)
 		return;
 
 	/* Lara is built more than once per frame (world matrices, joint set, a
@@ -2271,13 +2272,13 @@ void InterpNotePose(const ITEM_INFO* item)
 
 void InterpNotePoseSkip()
 {
-	if (gLogEnabled)
+	if (LogFam_INTERPLOG && gLogEnabled)
 		g_secPoseSkip++;
 }
 
 void InterpNotePoseFar()
 {
-	if (gLogEnabled)
+	if (LogFam_INTERPLOG && gLogEnabled)
 		g_secPoseFar++;
 }
 
@@ -2286,7 +2287,7 @@ void InterpNotePoseFar()
  * a frame finds g_laraPosed clear. */
 void InterpNotePoseBack()
 {
-	if (gLogEnabled && !g_laraPosed)
+	if (LogFam_INTERPLOG && gLogEnabled && !g_laraPosed)
 		g_secPoseBack++;
 }
 
@@ -2367,7 +2368,7 @@ bool InterpRootNow(const ITEM_INFO* item, short* const frm[], long frac, float b
 	out[1] = blended[1];
 	out[2] = blended[2];
 
-	if (gLogEnabled)
+	if (LogFam_INTERPLOG && gLogEnabled)
 	{
 		/* Lara is built two or three times per drawn frame (view set, joint
 		 * set, a mirror) with the same root; counted once per frame, as in
@@ -2428,7 +2429,7 @@ bool InterpRootNow(const ITEM_INFO* item, short* const frm[], long frac, float b
 void InterpNoteLaraStretch(const float* matrices, const long* bone, int nodes,
 	int animNumber, int frameNumber)
 {
-	if (!gLogEnabled || !matrices || !bone || nodes < 2)
+	if (!LogFam_INTERPLOG || !gLogEnabled || !matrices || !bone || nodes < 2)
 		return;
 
 	const int mapped = (int)(sizeof(lara_lmx_of_node) / sizeof(lara_lmx_of_node[0]));
@@ -2499,7 +2500,7 @@ void InterpNoteKeyFar(const ITEM_INFO* item, const short* frame0, const short* f
 	static unsigned short lastCounter = 0;
 	static short lastFrame = 0;
 
-	if (!gLogEnabled || !item || !anims || !frame0 || !frame1)
+	if (!LogFam_KEYFARLOG || !gLogEnabled || !item || !anims || !frame0 || !frame1)
 		return;
 
 	if (seen && lastCounter == GlobalCounter && lastFrame == item->frame_number)
@@ -2565,7 +2566,8 @@ void InterpNoteKeySeam(const ITEM_INFO* item, long pair, const short* frame0, co
 	static unsigned short lastCounter = 0;
 	static short lastFrame = 0;
 
-	if (!gLogEnabled || !item || !anims || !frame0 || !frame1 || !bone || nodes < 1 || nodes > 32)
+	if (!LogFam_KEYSEAMLOG || !gLogEnabled || !item || !anims || !frame0 ||
+		!frame1 || !bone || nodes < 1 || nodes > 32)
 		return;
 
 	if (seen && lastCounter == GlobalCounter && lastFrame == item->frame_number)
@@ -2606,7 +2608,7 @@ void InterpNoteTurn(const ITEM_INFO* item, long flip, long pair)
 	static bool seen = false;
 	static unsigned short lastCounter = 0;
 
-	if (!gLogEnabled || !item)
+	if (!LogFam_TURNLOG || !gLogEnabled || !item)
 		return;
 
 	if (seen && lastCounter == GlobalCounter)
@@ -2638,7 +2640,7 @@ void InterpNoteBridge(const ITEM_INFO* item, short prevAnim, short prevFrame, co
 	static bool seen = false;
 	static unsigned short lastCounter = 0;
 
-	if (!gLogEnabled || !item || !from || !to)
+	if (!LogFam_BRIDGELOG || !gLogEnabled || !item || !from || !to)
 		return;
 
 	if (!g_laraPosed)
@@ -2801,7 +2803,7 @@ bool InterpArmPrev(int which, InterpArmPose* prev, float* alpha)
  * asks both arms. */
 void InterpNoteArm(bool blended)
 {
-	if (!gLogEnabled)
+	if (!LogFam_ARMLOG || !gLogEnabled)
 		return;
 
 	if (blended)
@@ -2840,7 +2842,7 @@ namespace
 
 void InterpArmLogPath(long frac, float blend, bool still, bool hd)
 {
-	if (!gLogEnabled)
+	if (!LogFam_ARMLOG || !gLogEnabled)
 		return;
 
 	g_armLog.frac = frac;
@@ -2859,7 +2861,7 @@ void InterpArmLogPath(long frac, float blend, bool still, bool hd)
 void InterpArmLogNote(int gun, bool okR, bool okL, float alphaR, float alphaL,
 	short prevR, short prevL)
 {
-	if (!gLogEnabled)
+	if (!LogFam_ARMLOG || !gLogEnabled)
 		return;
 
 	g_armLog.gun = gun;
@@ -2873,7 +2875,7 @@ void InterpArmLogNote(int gun, bool okR, bool okL, float alphaR, float alphaL,
 
 void InterpArmLogFrame()
 {
-	if (!gLogEnabled)
+	if (!LogFam_ARMLOG || !gLogEnabled)
 		return;
 
 	/* The draw's own test for `gun`: a weapon counts while it is in her
@@ -2943,6 +2945,6 @@ void InterpArmLogFrame()
 
 void InterpNotePoseHD()
 {
-	if (gLogEnabled)
+	if (LogFam_INTERPLOG && gLogEnabled)
 		g_secPoseHD++;
 }

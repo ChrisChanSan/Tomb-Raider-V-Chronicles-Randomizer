@@ -178,6 +178,8 @@
 #include "../../../TOMB5 Code/TOMB5/game/collide_lists.h"
 // The films' picture conversion of the 64-bit build (film_av).
 #include "../../../TOMB5 Code/TOMB5/specific/yuv_rgb.h"
+// The -log families a test build alone carries (log_family_rule).
+#include "../../../TOMB5 Code/TOMB5/specific/log_families.h"
 #include <io.h>
 #include <new>
 #include <vector>
@@ -28625,8 +28627,9 @@ static void x64_layout()
 	glass_body(math, "long phd_atan(long x, long y)", body, sizeof(body));
 	ok(strstr(body, "constlongx0=x,y0=y;if(AtanClamp(&x,&y))AtanSeam(x0,y0,"
 		"_ReturnAddress());returnAtanMath(x,y);") &&
-		hd_switch_count(math, "__declspec(noinline) long phd_atan(") == 1,
-		"x64 layout: phd_atan clamps LONG_MIN, logs its caller, not inlined",
+		hd_switch_count(math, "TOMB5_NOINLINE_IN_TEST long phd_atan(") == 1,
+		"x64 layout: phd_atan clamps LONG_MIN, logs its caller, noinline in "
+		"a test build",
 		0, 1);
 	glass_body(math, "static void AtanSeam(long x, long y, void* caller)",
 		body, sizeof(body));
@@ -29422,10 +29425,10 @@ static void spark_life()
 		"long extras, long dynamic, long uw, short room_number)", body,
 		sizeof(body));
 	{
-		const char* pre = strstr(body, "if(gLogEnabled)log_next=next_spark;"
+		const char* pre = strstr(body, "if(LogFam_SPARKLOG&&gLogEnabled)log_next=next_spark;"
 			"log_on=SparkLogCountOn();}sptr=&spark[GetFreeSpark()];"
 			"sptr->On=1;");
-		const char* born = strstr(body, "sptr->MaxYvel=0;if(gLogEnabled)Log("
+		const char* born = strstr(body, "sptr->MaxYvel=0;if(LogFam_SPARKLOG&&gLogEnabled)Log("
 			"\"SPARKLOGborntick=%uslot=%dchain=%dfires_at=%dlife=%d\"\"dyn=%d"
 			"next=%ldon=%ldevicted=%dparent=%ldin_pass=%ld\",");
 		const char* swap = strstr(body, "if(uw==2)");
@@ -29435,7 +29438,7 @@ static void spark_life()
 			"spark_log_in_pass);") != 0,
 			"spark life: born, one line per spark after its set-up", 0, 1);
 	}
-	ok(strstr(body, "if(i==8)if(gLogEnabled)Log(\"SPARKLOGlighttick=%u"
+	ok(strstr(body, "if(i==8)if(LogFam_SPARKLOG&&gLogEnabled)Log(\"SPARKLOGlighttick=%u"
 		"slot=%ddyn=%ld\",(unsigned)GlobalCounter,(int)(sptr-spark),"
 		"dynamic);sptr->Dynamic=-1;}") != 0,
 		"spark life: light, said where no light is free, -1 kept", 0, 1);
@@ -29446,7 +29449,7 @@ static void spark_life()
 	// Fire, and the parent and the flag around the links only.
 	glass_body(fx, "void UpdateSparks()", body, sizeof(body));
 	{
-		const char* fire = strstr(body, "extras&7)if(gLogEnabled)Log(\""
+		const char* fire = strstr(body, "extras&7)if(LogFam_SPARKLOG&&gLogEnabled)Log(\""
 			"SPARKLOGfiretick=%uslot=%dage=%dchain=%dfires_at=%d\"\"dyn=%d\","
 			"(unsigned)GlobalCounter,i,");
 		const char* set = strstr(body, "spark_log_parent=i;"
@@ -29459,15 +29462,15 @@ static void spark_life()
 			"spark life: fire, before the links; parent set around them", 0,
 			1);
 	}
-	ok(strstr(body, "if(!sptr->Life)if(gLogEnabled&&sptr->extras&7)"
+	ok(strstr(body, "if(!sptr->Life)if(LogFam_SPARKLOG&&gLogEnabled&&sptr->extras&7)"
 		"SparkLogEnd(i,\"life\");if(sptr->Dynamic!=-1)spark_dynamics["
 		"sptr->Dynamic].On=0;sptr->On=0;continue;}") != 0,
 		"spark life: end by life, then the original end", 0, 1);
-	ok(strstr(body, "if(sptr->R<8&&sptr->G<8&&sptr->B<8)if(gLogEnabled&&"
+	ok(strstr(body, "if(sptr->R<8&&sptr->G<8&&sptr->B<8)if(LogFam_SPARKLOG&&gLogEnabled&&"
 		"sptr->extras&7)SparkLogEnd(i,\"fade\");sptr->On=0;continue;}") != 0,
 		"spark life: end by the fade, then the original end", 0, 1);
 	ok(strstr(body, "if(!sptr->On||sptr->Dynamic==-1)continue;") &&
-		strstr(body, "if(gLogEnabled&&sptr->Dynamic<0)Log(\""
+		strstr(body, "if(LogFam_SPARKLOG&&gLogEnabled&&sptr->Dynamic<0)Log(\""
 		"SPARKLOGlight_indextick=%uslot=%ddyn=%d\",(unsigned)GlobalCounter,i,"
 		"(int)sptr->Dynamic);dynamic=&spark_dynamics[sptr->Dynamic];") != 0,
 		"spark life: light_index is a Log call only, the index as it was", 0,
@@ -29476,7 +29479,7 @@ static void spark_life()
 	// Evict: said before GetFreeSpark moves its start; the start at file
 	// scope, the function's own static gone.
 	glass_body(fx, "long GetFreeSpark()", body, sizeof(body));
-	ok(strstr(body, "if(gLogEnabled&&spark[free].On&&spark[free].extras&7)"
+	ok(strstr(body, "if(LogFam_SPARKLOG&&gLogEnabled&&spark[free].On&&spark[free].extras&7)"
 		"Log(\"SPARKLOGendtick=%uslot=%ldwhy=evictage=%dchain=%d\"\""
 		"fires_at=%dlife=%dmin_life=%ldnext=%ld\",") &&
 		strstr(body, "(int)spark[free].Life,min_life,next_spark);next_spark="
@@ -29491,7 +29494,7 @@ static void spark_life()
 	// draw_alloc: the test and the count before the search, one line at
 	// each of the two returns, the caller's address from GetFreeSpark
 	// itself, never inlined.
-	ok(strstr(body, "log_draw=gLogEnabled&&InterpFrameSeedSaved();"
+	ok(strstr(body, "log_draw=LogFam_SPARKLOG&&gLogEnabled&&InterpFrameSeedSaved();"
 		"log_next=next_spark;log_on=log_draw?SparkLogCountOn():0;"
 		"free=next_spark;sptr=&spark[next_spark];for(lp=0;lp<1024;lp++)") &&
 		strstr(body, "spark[free].Def=(uchar)objects[DEFAULT_SPRITES]."
@@ -29545,9 +29548,9 @@ static void spark_life()
 	// were; the frame as S_DrawSparks counted it.
 	glass_body(sfx, "void DoRain()", body, sizeof(body));
 	ok(strstr(body, "if(room[room_number].flags&ROOM_UNDERWATER&&(i&7)==7)"
-		"if(gLogEnabled)SparkLogRain(\"ripple\",rptr,room_number);"
+		"if(LogFam_SPARKLOG&&gLogEnabled)SparkLogRain(\"ripple\",rptr,room_number);"
 		"WeatherRipple(rptr->x,GetWaterHeight(rptr->x,rptr->y,rptr->z,"
-		"room_number),rptr->z);}elseif(gLogEnabled)SparkLogRain("
+		"room_number),rptr->z);}elseif(LogFam_SPARKLOG&&gLogEnabled)SparkLogRain("
 		"\"splash\",rptr,room_number);WeatherSplash(rptr->x,GetHeight("
 		"floor,rptr->x,rptr->y,rptr->z),rptr->z);}rptr->x=0;continue;}") &&
 		hd_switch_count(sfx, "SparkLogRain(\"") == 2,
@@ -29566,7 +29569,7 @@ static void spark_life()
 	// once-per-particle tables with them.
 	glass_body(sfx, "void SparkLogLevelEnd()", body, sizeof(body));
 	ok(!strcmp(body, "constlongallocs=SparkLogTakeDrawAllocs();if("
-		"gLogEnabled)Log(\"SPARKLOGleveldraw_allocs=%ldsplashes=%ldripples="
+		"LogFam_SPARKLOG&&gLogEnabled)Log(\"SPARKLOGleveldraw_allocs=%ldsplashes=%ldripples="
 		"%ld\"\"weather_peak=%ldweather_ripple_peak=%ldculls=%ld\"\""
 		"bubble_culls=%lddrip_culls=%ld\",allocs,spark_log_splashes,"
 		"spark_log_ripples,WeatherSparksPeak(),WeatherRipplesPeak(),"
@@ -29584,7 +29587,7 @@ static void spark_life()
 	// The far-plane branch culls and ends nothing (#320, cull_rule).
 	glass_body(sfx, "void S_DrawDrawSparksNEW(SPARKS* sptr, long "
 		"smallest_size, float* xyz)", body, sizeof(body));
-	ok(strstr(body, "if(xyz[2]>=f_mzfar&&gLogEnabled&&sptr->extras&7&&"
+	ok(strstr(body, "if(xyz[2]>=f_mzfar&&LogFam_SPARKLOG&&gLogEnabled&&sptr->extras&7&&"
 		"SparkCullFirst(sptr))SparkLog(\"cull\",sptr,xyz[2]);return;}") &&
 		!strstr(body, "SparkLog(\"kill\""),
 		"spark life: the far plane culls, the spark lives on", 0, 1);
@@ -29917,7 +29920,7 @@ static void cull_rule()
 	{
 		const char* at = strstr(body, "if(xyz[2]<=f_mznear||xyz[2]>=f_mzfar)");
 		const char* end = at ? strstr(at, "return;}") : 0;
-		const char* line = strstr(body, "if(xyz[2]>=f_mzfar&&gLogEnabled&&"
+		const char* line = strstr(body, "if(xyz[2]>=f_mzfar&&LogFam_SPARKLOG&&gLogEnabled&&"
 			"sptr->extras&7&&SparkCullFirst(sptr))SparkLog(\"cull\",sptr,"
 			"xyz[2]);return;}");
 
@@ -29929,7 +29932,7 @@ static void cull_rule()
 
 	// The drip: undrawn, one line per drip.
 	glass_body(sfx, "void DrawDrips()", body, sizeof(body));
-	ok(hd_switch_count(body, "if(Z[0]>0x5000)if(gLogEnabled&&"
+	ok(hd_switch_count(body, "if(Z[0]>0x5000)if(LogFam_SPARKLOG&&gLogEnabled&&"
 		"DripCullFirst(i,drip))SparkLogOther(\"drip\",\"far\",i,drip->Life,"
 		"Z[0]);continue;}") == 1 && hd_switch_count(body, "On=") == 0,
 		"cull rule: the drip's branch only culls, one line a drip", 0, 1);
@@ -29946,7 +29949,7 @@ static void cull_rule()
 		"bubble,4))SparkLogOther(\"bubble\",\"near\",(long)(bubble-"
 		"Bubbles),bubble->size,Z[0]);bubble++;continue;}");
 	ok(n == 3 && hd_switch_count(body, "size=0") == 0 &&
-		hd_switch_count(body, "if(gLogEnabled&&") == 3,
+		hd_switch_count(body, "if(LogFam_SPARKLOG&&gLogEnabled&&") == 3,
 		"cull rule: the bubbles' three branches only cull", n, 3);
 
 	// The lines: kill renamed cull, nothing else of the text changed.
@@ -30802,6 +30805,494 @@ static void test_build_rule()
 	free(gamemain);
 	free(fx);
 	free(control);
+}
+
+/* The -log families a test build alone carries (#338). log_families.h names
+ * the 44: each LogFam_ is kLogTestBuild, true with TOMB5_TEST_BUILD and
+ * false without it, and every site tests it. The engine's files under
+ * game\, specific\ and specific\hd\ are read and every "WORD  string of a
+ * family is found: a test-build family's site stands inside an #ifdef
+ * TOMB5_TEST_BUILD (or __SANITIZE_ADDRESS__) block, or its function names
+ * LogFam_WORD before it, or its function is a helper of the line whose
+ * every call is gated so; a release family's name is never a LogFam_.
+ * The byte proof - none of the 44 words in a shipping EXE - is the build
+ * script's (Preparation/Verification.md). And -high is a test build's,
+ * phd_atan noinline through the macro alone. This group only reads text. */
+static const char* const log_test_words[44] = { "ARMLOG", "ASANLOG",
+	"BRAWLLOG", "BRIDGELOG", "CAMLOG", "COGLOG", "COMBATLOG", "DOORLOG",
+	"DRONELOG", "HAIRLOG", "HIDELOG", "HIGHLOG", "INTERPLOG", "INVLOG",
+	"JOINTLOG", "KEYFARLOG", "KEYLOG", "KEYSEAMLOG", "LARALOG", "LIPLOG",
+	"MODELOG", "MODERNLOG", "MOUSELOG", "PADLOG", "POISONLOG", "REPLAYLOG",
+	"RNGLOG", "ROPELOG", "SPARKLOG", "SPLASHLOG", "SPRINGLOG", "STATELOG",
+	"SWAPLOG", "TICKLOG", "TURNLOG", "VISLOG", "XRAYLOG", "ZIPLOG",
+	"RNGTRACE", "ROOMLIST", "ROOMWALK", "ROOMFLASH", "ROOMPOP", "ZIPSKIP" };
+static const char* const log_release_words[40] = { "ATANLOG", "CARRYLOG",
+	"CHEATLOG", "CLIPLOG", "CUTLOG", "DXLOG", "FLYLOG", "FMVLOG", "FPSLOG",
+	"GLOSSLOG", "HDLOG", "HOLDLOG", "ITEMLOG", "LEDGELOG", "LIFELOG",
+	"LOADLOG", "MENULOG", "MESHLOG", "MODLOG", "OBJLOG", "PROFLOG",
+	"SAVELOG", "SFXLOG", "SKINLOG", "SKIPLOG", "SLOTLOG", "WATERLOG",
+	"WINLOG", "ALTERFOV", "FPHEAD", "SKINREACH", "LOADFRAME", "CLIPDETAIL",
+	"SKIPLATCH", "HANG", "LOADBIND", "WARMUP", "FLYEND", "FEET", "CRASH" };
+
+struct LogFamFile
+{
+	char name[64];
+	char* text;
+	long blocks;		// the test blocks: [from[i], to[i])
+	long from[64];
+	long to[64];
+};
+
+static LogFamFile log_fam_files[512];
+static long log_fam_count = 0;
+
+// `what` in [a, z), or 0.
+static const char* log_fam_find(const char* a, const char* z,
+	const char* what)
+{
+	const size_t n = strlen(what);
+
+	for (const char* p = a; p + n <= z; p++)
+		if (!memcmp(p, what, n))
+			return p;
+
+	return 0;
+}
+
+// The last `what` in [a, z), or 0.
+static const char* log_fam_last(const char* a, const char* z,
+	const char* what)
+{
+	const size_t n = strlen(what);
+
+	for (const char* p = z - n; p >= a; p--)
+		if (!memcmp(p, what, n))
+			return p;
+
+	return 0;
+}
+
+/* The #ifdef TOMB5_TEST_BUILD and #ifdef __SANITIZE_ADDRESS__ blocks of a
+ * file, to their #else or #endif, any other #if nested in between. */
+static void log_fam_blocks(LogFamFile* f)
+{
+	bool test[64];
+	long at[64];
+	int depth = 0;
+	const char* t = f->text;
+
+	f->blocks = 0;
+
+	for (const char* line = t; *line; )
+	{
+		const char* end = strchr(line, '\n');
+		const char* s = line;
+
+		if (!end)
+			end = line + strlen(line);
+
+		while (s < end && (*s == ' ' || *s == '\t'))
+			s++;
+
+		const bool isIf = !strncmp(s, "#if", 3);
+		const bool isElse = !strncmp(s, "#else", 5) ||
+			!strncmp(s, "#elif", 5);
+		const bool isEnd = !strncmp(s, "#endif", 6);
+
+		if (isIf && depth < 64)
+		{
+			test[depth] = !strncmp(s, "#ifdef", 6) &&
+				(log_fam_find(s, end, "TOMB5_TEST_BUILD") ||
+				log_fam_find(s, end, "__SANITIZE_ADDRESS__"));
+			at[depth++] = (long)(line - t);
+		}
+		else if ((isElse || isEnd) && depth > 0)
+		{
+			if (test[depth - 1] && f->blocks < 64)
+			{
+				f->from[f->blocks] = at[depth - 1];
+				f->to[f->blocks++] = (long)(line - t);
+			}
+
+			if (isElse)
+			{
+				test[depth - 1] = false;
+				at[depth - 1] = (long)(line - t);
+			}
+			else
+				depth--;
+		}
+
+		line = *end ? end + 1 : end;
+	}
+}
+
+static void log_fam_load(const char* sub, const char* mask)
+{
+	char* exe = 0;
+	char dir[1024], pattern[1100], path[1200];
+
+	if (_get_pgmptr(&exe) || !exe)
+		return;
+
+	const char* cut = strrchr(exe, '\\');
+	const size_t len = cut ? (size_t)(cut - exe) + 1 : 0;
+
+	memcpy(dir, exe, len);
+	snprintf(dir + len, sizeof(dir) - len,
+		"..\\..\\..\\TOMB5 Code\\TOMB5\\%s\\", sub);
+	snprintf(pattern, sizeof(pattern), "%s%s", dir, mask);
+
+	struct _finddata_t fd;
+	const intptr_t h = _findfirst(pattern, &fd);
+
+	if (h == -1)
+		return;
+
+	do
+	{
+		FILE* f = 0;
+
+		snprintf(path, sizeof(path), "%s%s", dir, fd.name);
+
+		if ((fd.attrib & _A_SUBDIR) || log_fam_count >= 512 ||
+			fopen_s(&f, path, "rb") || !f)
+			continue;
+
+		fseek(f, 0, SEEK_END);
+		const long size = ftell(f);
+		LogFamFile* lf = &log_fam_files[log_fam_count];
+
+		fseek(f, 0, SEEK_SET);
+		lf->text = (char*)malloc((size_t)size + 1);
+
+		if (lf->text)
+		{
+			lf->text[fread(lf->text, 1, (size_t)size, f)] = 0;
+			snprintf(lf->name, sizeof(lf->name), "%s\\%s", sub, fd.name);
+			log_fam_blocks(lf);
+			log_fam_count++;
+		}
+
+		fclose(f);
+	} while (!_findnext(h, &fd));
+
+	_findclose(h);
+}
+
+static bool log_fam_ident(char c)
+{
+	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+		(c >= '0' && c <= '9') || c == '_';
+}
+
+static bool log_fam_in_block(const LogFamFile* f, const char* p)
+{
+	const long at = (long)(p - f->text);
+
+	for (long i = 0; i < f->blocks; i++)
+		if (at >= f->from[i] && at < f->to[i])
+			return true;
+
+	return false;
+}
+
+// LogFam_<word> in the function before `p`: from the last '{' at column 0.
+static bool log_fam_named(const LogFamFile* f, const char* p,
+	const char* word)
+{
+	char name[64];
+	const char* fs = log_fam_last(f->text, p, "\n{");
+
+	snprintf(name, sizeof(name), "LogFam_%s", word);
+	return log_fam_find(fs ? fs : f->text, p, name) != 0;
+}
+
+/* The site's function is a helper of the line: its name, from its
+ * signature, called at least once in the engine and every call standing in
+ * a test block or after LogFam_<word> in its own function. Declarations,
+ * the definition and comments do not count as calls. */
+static bool log_fam_helper(const LogFamFile* f, const char* p,
+	const char* word)
+{
+	const char* fs = log_fam_last(f->text, p, "\n{");
+
+	if (!fs)
+		return false;
+
+	const char* a = f->text;
+	const char* marks[3] = { "*/", "}", ";" };
+
+	for (int i = 0; i < 3; i++)
+	{
+		const char* m = log_fam_last(f->text, fs, marks[i]);
+
+		if (m && m > a)
+			a = m;
+	}
+
+	char name[96];
+	size_t n = 0;
+
+	for (const char* s = a; s < fs && !n; s++)
+		if (*s == '(')
+		{
+			const char* b = s;
+
+			while (b > a && log_fam_ident(b[-1]))
+				b--;
+
+			n = (size_t)(s - b);
+
+			if (n && n < sizeof(name) - 1)
+			{
+				memcpy(name, b, n);
+				name[n++] = '(';
+				name[n] = 0;
+			}
+			else
+				n = 0;
+		}
+
+	if (!n)
+		return false;
+
+	long calls = 0;
+
+	for (long i = 0; i < log_fam_count; i++)
+	{
+		const LogFamFile* g = &log_fam_files[i];
+
+		for (const char* c = strstr(g->text, name); c;
+			c = strstr(c + 1, name))
+		{
+			if (c > g->text && log_fam_ident(c[-1]))
+				continue;
+
+			const char* ls = c;
+
+			while (ls > g->text && ls[-1] != '\n')
+				ls--;
+
+			const char* t = ls;
+
+			while (t < c && (*t == ' ' || *t == '\t'))
+				t++;
+
+			const char* e = c;
+
+			while (e > ls && (e[-1] == ' ' || e[-1] == '\t'))
+				e--;
+
+			const char* types[4] = { "void", "long", "bool", "int" };
+			bool decl = false;
+
+			for (int k = 0; k < 4; k++)
+			{
+				const size_t tl = strlen(types[k]);
+
+				decl |= e < c && (size_t)(e - ls) >= tl &&
+					!memcmp(e - tl, types[k], tl);
+			}
+
+			if (decl || *t == '*' || (t[0] == '/' && t[1] == '*') ||
+				log_fam_find(ls, c, "//"))
+				continue;
+
+			calls++;
+
+			if (!log_fam_in_block(g, c) && !log_fam_named(g, c, word))
+				return false;
+		}
+	}
+
+	return calls > 0;
+}
+
+// The sites of `word`: how many, and how many of them gated.
+static void log_fam_sites(const char* word, long* sites, long* gated,
+	long* named)
+{
+	char what[64];
+
+	snprintf(what, sizeof(what), "\"%s ", word);
+	*sites = 0;
+	*gated = 0;
+	*named = 0;
+
+	for (long i = 0; i < log_fam_count; i++)
+	{
+		const LogFamFile* f = &log_fam_files[i];
+
+		for (const char* p = strstr(f->text, what); p;
+			p = strstr(p + 1, what))
+		{
+			const bool n = log_fam_named(f, p, word);
+
+			(*sites)++;
+			*named += n;
+			*gated += log_fam_in_block(f, p) || n ||
+				log_fam_helper(f, p, word);
+		}
+	}
+}
+
+static void log_family_rule()
+{
+	char* fam = hd_switch_text("../log_families.h");
+	char* stubs = hd_switch_text("../function_stubs.cpp");
+	char* stubsh = hd_switch_text("../function_stubs.h");
+	char* winmain = hd_switch_text("../winmain.cpp");
+	char* math = hd_switch_text("../3dmath.cpp");
+	char name[96];
+	long right, n, files;
+
+	printf("The -log families a test build alone carries\n");
+	ok(fam && stubs && stubsh && winmain && math,
+		"log families: the five files", 0, 1);
+
+	// The header: the two values, the 44 names, nothing else.
+#ifdef TOMB5_TEST_BUILD
+	const bool testBuild = true;
+#else
+	const bool testBuild = false;
+#endif
+	const bool values[44] = { LogFam_ARMLOG, LogFam_ASANLOG,
+		LogFam_BRAWLLOG, LogFam_BRIDGELOG, LogFam_CAMLOG, LogFam_COGLOG,
+		LogFam_COMBATLOG, LogFam_DOORLOG, LogFam_DRONELOG, LogFam_HAIRLOG,
+		LogFam_HIDELOG, LogFam_HIGHLOG, LogFam_INTERPLOG, LogFam_INVLOG,
+		LogFam_JOINTLOG, LogFam_KEYFARLOG, LogFam_KEYLOG, LogFam_KEYSEAMLOG,
+		LogFam_LARALOG, LogFam_LIPLOG, LogFam_MODELOG, LogFam_MODERNLOG,
+		LogFam_MOUSELOG, LogFam_PADLOG, LogFam_POISONLOG, LogFam_REPLAYLOG,
+		LogFam_RNGLOG, LogFam_ROPELOG, LogFam_SPARKLOG, LogFam_SPLASHLOG,
+		LogFam_SPRINGLOG, LogFam_STATELOG, LogFam_SWAPLOG, LogFam_TICKLOG,
+		LogFam_TURNLOG, LogFam_VISLOG, LogFam_XRAYLOG, LogFam_ZIPLOG,
+		LogFam_RNGTRACE, LogFam_ROOMLIST, LogFam_ROOMWALK, LogFam_ROOMFLASH,
+		LogFam_ROOMPOP, LogFam_ZIPSKIP };
+
+	right = 0;
+
+	for (int i = 0; i < 44; i++)
+	{
+		snprintf(name, sizeof(name), "constexpr bool LogFam_%s = "
+			"kLogTestBuild;\r\n", log_test_words[i]);
+		right += values[i] == testBuild && hd_switch_count(fam, name) == 1;
+	}
+
+	ok(kLogTestBuild == testBuild && right == 44 &&
+		hd_switch_count(fam, "constexpr bool ") == 46 &&
+		strstr(fam, "#ifdef TOMB5_TEST_BUILD\r\nconstexpr bool kLogTestBuild "
+		"= true;\r\n#else\r\nconstexpr bool kLogTestBuild = false;\r\n"
+		"#endif") != 0 && hd_switch_count(stubsh, "#include "
+		"\"log_families.h\"") == 1,
+		"log families: the 44 names, true in a test build alone", right,
+		44);
+
+	// No release family is ever a LogFam_.
+	right = 0;
+
+	for (int i = 0; i < 40; i++)
+	{
+		long w = 0;
+
+		snprintf(name, sizeof(name), "LogFam_%s", log_release_words[i]);
+		n = 0;
+		files = 0;
+
+		{
+			const char* subs[3] = { "game", "specific", "specific\\hd" };
+			const char* masks[2] = { "*.cpp", "*.h" };
+
+			for (int s = 0; s < 3; s++)
+				for (int m = 0; m < 2; m++)
+				{
+					long f = 0;
+
+					w += cull_rule_scan(subs[s], masks[m], name, &f);
+					files += f;
+				}
+		}
+
+		right += w == 0 && files > 100;
+	}
+
+	ok(right == 40, "log families: no release family is a LogFam_", right,
+		40);
+
+	// Every site of the 44 gated, none of the 40.
+	log_fam_count = 0;
+	log_fam_load("game", "*.cpp");
+	log_fam_load("game", "*.h");
+	log_fam_load("specific", "*.cpp");
+	log_fam_load("specific", "*.h");
+	log_fam_load("specific\\hd", "*.cpp");
+	log_fam_load("specific\\hd", "*.h");
+
+	long sites = 0, gated = 0, named = 0, families = 0;
+
+	right = 0;
+
+	for (int i = 0; i < 44; i++)
+	{
+		log_fam_sites(log_test_words[i], &sites, &gated, &named);
+		right += sites > 0 && gated == sites;
+
+		if (sites == 0 || gated != sites)
+			printf("  %s: %ld sites, %ld gated\n", log_test_words[i], sites,
+				gated);
+	}
+
+	ok(log_fam_count > 300 && right == 44,
+		"log families: every site of the 44 gated", right, 44);
+
+	right = 0;
+
+	for (int i = 0; i < 40; i++)
+	{
+		log_fam_sites(log_release_words[i], &sites, &gated, &named);
+		right += sites > 0 && named == 0;
+		families += sites;
+	}
+
+	ok(right == 40 && families > 400,
+		"log families: the 40 release families written as they were",
+		right, 40);
+
+	for (long i = 0; i < log_fam_count; i++)
+		free(log_fam_files[i].text);
+
+	log_fam_count = 0;
+
+	// -high: read inside the define alone; the pool the heap's without it.
+	{
+		char* words = test_build_block(winmain, "#ifdef TOMB5_TEST_BUILD\r\n"
+			"\t/* -high (high_pool.h)", "#endif\t// TOMB5_TEST_BUILD: nor "
+			"-high");
+
+		ok(words && hd_switch_count(words, "if (HighSwitchGiven(lpCmdLine))")
+			== 1 && hd_switch_count(winmain, "HighSwitchGiven(") == 1 &&
+			hd_switch_count(words, "\"HIGHLOG ") == 2 &&
+			hd_switch_count(winmain, "\"HIGHLOG ") == 2 &&
+			strstr(stubs, "#ifdef TOMB5_TEST_BUILD\r\n\tconst HighReserve* "
+			"high = HighReserveDone();\r\n#else\r\n\tconst HighReserve* high "
+			"= 0;\r\n#endif") != 0 && hd_switch_count(stubs,
+			"HighReserveDone()") == 1,
+			"log families: -high and HIGHLOG a test build's", 0, 1);
+		free(words);
+	}
+
+	// phd_atan: noinline through the macro alone, ATANLOG in every build.
+	ok(hd_switch_count(math, "TOMB5_NOINLINE_IN_TEST long phd_atan(long x, "
+		"long y)") == 1 && hd_switch_count(math, "__declspec(noinline)") ==
+		0 && hd_switch_count(math, "\"ATANLOG ") == 1 &&
+		hd_switch_count(math, "LogFam_ATANLOG") == 0,
+		"log families: phd_atan noinline in a test build only", 0, 1);
+
+	free(fam);
+	free(stubs);
+	free(stubsh);
+	free(winmain);
+	free(math);
 }
 
 /* A stalled frame says where its time went (#322). The PROFLOG pause line
@@ -38514,7 +39005,7 @@ static void lara_joints()
 
 	glass_body(draw, "void LaraJointsLive()", body, sizeof(body));
 	ok(!strcmp(body, "if(!g_joints.blended)return;LaraJointsBuild(0);"
-		"g_joints.passes++;"),
+		"if(LogFam_JOINTLOG)g_joints.passes++;"),
 		"lara joints: the pass runs only after a blended frame", 0, 1);
 
 	/* fps_mode 0: InterpAlphaNow gives 1, InterpBeginFrame returns before
@@ -38624,7 +39115,7 @@ static void logic_leftovers()
 		hd_switch_count(interp, "g_seedSaved = "), 5);
 
 	glass_body(interp, "void InterpEndFrame()", body, sizeof(body));
-	ok(hd_switch_count(body, "if(gLogEnabled)NoteGiveBack();"
+	ok(hd_switch_count(body, "if(LogFam_RNGLOG&&gLogEnabled)NoteGiveBack();"
 		"if(g_seedSaved)SeedRandomControl(g_seed);"
 		"trigger_index=g_hTrigger;tiltxoff=g_hTiltX;tiltyoff=g_hTiltY;"
 		"OnObject=g_hOnObject;height_type=g_hType;g_seedSaved=false;}") == 1,
@@ -38654,12 +39145,12 @@ static void logic_leftovers()
 	ok(door && flow, "leftovers: the door and the flow", !!door + !!flow, 2);
 
 	glass_body(door, "void ProcessClosedDoors()", body, sizeof(body));
-	a = joints_at(body, "if(InterpIsTweenFrame())g_doorTweens++;return;}"
-		"g_doorFrames++;");
+	a = joints_at(body, "if(InterpIsTweenFrame())if(LogFam_DOORLOG)"
+		"g_doorTweens++;return;}if(LogFam_DOORLOG)g_doorFrames++;");
 	b = joints_at(body, "for(inti=0;i<32;i++)");
 	c = joints_at(body, "ItemNewRoom(");
 	ok(a >= 0 && b > a && c > b && hd_switch_count(body, "ItemNewRoom(") == 2
-		&& hd_switch_count(body, "g_doorMoves++;") == 2,
+		&& hd_switch_count(body, "if(LogFam_DOORLOG)g_doorMoves++;") == 2,
 		"leftovers: a closed door changes lists on the tick's frame only",
 		b, a + 1);
 
@@ -39431,7 +39922,8 @@ static void level_camera_rule()
 		"elseif(camera.type==HEAVY_CAMERA)type=MODERN_LEVCAM_HEAVY_T;") != 0,
 		"level camera: ModernLevelCamera reads type, number and item",
 		hd_switch_count(decide, "camera."), 5);
-	ok(strstr(calc, "if(gLogEnabled)ModernLevelCameraLog(levelWhy);") != 0,
+	ok(strstr(calc, "if(LogFam_CAMLOG&&gLogEnabled)ModernLevelCameraLog("
+		"levelWhy);") != 0,
 		"level camera: the CAMLOG level line sits behind -log",
 		hd_switch_count(calc, "ModernLevelCameraLog("), 1);
 
@@ -39705,6 +40197,7 @@ int main()
 	cull_rule();
 	film_av();
 	test_build_rule();
+	log_family_rule();
 	pause_rule();
 	runtime_rule();
 	toolset_rule();

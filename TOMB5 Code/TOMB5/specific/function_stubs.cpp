@@ -45,7 +45,13 @@ static long rand_2 = 0xD371F947;
 
 void init_game_malloc()
 {
+	// -high is a test build's (winmain.cpp, #338): a shipping one takes the
+	// pool from the heap, always.
+#ifdef TOMB5_TEST_BUILD
 	const HighReserve* high = HighReserveDone();
+#else
+	const HighReserve* high = 0;
+#endif
 
 	// MALLOC_SIZE, and in the Asan build the room for the red zones on top
 	// (pool_guard.h); POOL_SPARE is 0 on every other build.
@@ -76,7 +82,7 @@ void init_game_malloc()
 	Log("POOL base=0x%08lX size=%ld", (unsigned long)(uintptr_t)malloc_buffer,
 		(long)MALLOC_SIZE);
 
-	if (high)
+	if (LogFam_HIGHLOG && high)
 		Log("HIGHLOG reserved=%ld regions below 4 GB, pool base=0x%016llX%s",
 			high->regions, (unsigned long long)(uintptr_t)malloc_buffer,
 			malloc_high ? " top-down" : " heap: VirtualAlloc refused");

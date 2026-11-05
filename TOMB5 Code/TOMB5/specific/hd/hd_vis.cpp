@@ -79,7 +79,19 @@
  *                  canopy over rooms 8 and 9 (up to 83,680 pixels of 960 x
  *                  540 gone). So 1 is ANDREA3's alone (HDVisLevelParams)
  *   skyShared 0    at 1 one pair of the 501: ANDREA3's room 115, whose
- *                  inside holds the gallery room 92 with no link */
+ *                  inside holds the gallery room 92 with no link
+ *   skyLinked 0    11 of the 501 pairs join two parts of the portal
+ *                  graph, 10 of them taken: ANDY3's 12 and 113 with the
+ *                  flyby's island 180 (104,921 pixels of 960 x 540 from
+ *                  room 113), TITLE's garden 6, 9 and 11 with group 54,
+ *                  the night scene's backdrop (up to 50,504 from the
+ *                  flyby's cameras in room 6), ANDREA3's lids 122 and 125
+ *                  with group 92 (in rooms 36 and 60 the colosseum's
+ *                  stone through the rooms and its arches over them, up
+ *                  to 237,306), and rooms no portal leads to, never
+ *                  listed (ANDREA2's 191 and 197, JOBY5's 1). ANDREA3's
+ *                  arches may be its own sky, so 1 is ANDY3's alone
+ *                  (HDVisLevelParams) */
 HDVisParams HDVisDefaults()
 {
 	HDVisParams p;
@@ -101,6 +113,7 @@ HDVisParams HDVisDefaults()
 	p.skyReach = 1024.0;
 	p.skyNear = 0;
 	p.skyShared = 0;
+	p.skyLinked = 0;
 	return p;
 }
 
@@ -412,6 +425,44 @@ bool HDVisBuild(const trf::remaster::Trg& trg, const HDVisRoom* rooms,
 			}
 		}
 	}
+
+	/* The parts of the portal graph: the links above, each flipmap pair
+	 * one room. Union by the lower root, so a part is named by its lowest
+	 * room. */
+	t.part.assign(n, 0);
+
+	for (int r = 0; r < roomCount; r++)
+		t.part[(size_t)r] = r;
+
+	const auto partOf = [&](int r)
+	{
+		while (t.part[(size_t)r] != r)
+			r = t.part[(size_t)r] = t.part[(size_t)t.part[(size_t)r]];
+
+		return r;
+	};
+
+	const auto unite = [&](int a, int b)
+	{
+		a = partOf(a);
+		b = partOf(b);
+
+		if (a != b)
+			t.part[(size_t)(a > b ? a : b)] = a < b ? a : b;
+	};
+
+	for (int a = 0; a < roomCount; a++)
+	{
+		if (rooms[a].twin >= 0 && rooms[a].twin < roomCount)
+			unite(a, rooms[a].twin);
+
+		for (int b = a + 1; b < roomCount; b++)
+			if (link[(size_t)a * n + b])
+				unite(a, b);
+	}
+
+	for (int r = 0; r < roomCount; r++)
+		t.part[(size_t)r] = partOf(r);
 
 	const auto linked = [&](int a, int b)
 	{
@@ -946,7 +997,13 @@ bool HDVisBuild(const trf::remaster::Trg& trg, const HDVisRoom* rooms,
 	 * rock; and not the group of a room standing in this room's inside with
 	 * no link: taken, it draws that room's inside whole in the air -
 	 * ANDREA3's gallery 92 inside room 115, a box with its enemy over the
-	 * arena. Every pair the box takes is asked and noted either way. */
+	 * arena. And where the row asks it (skyLinked) not the group of a room
+	 * in another part of the portal graph: no walk of the classic game leads
+	 * from one part into the other, so art of the other part seen across
+	 * the sky is a place the game never shows from here - ANDY3's island
+	 * room 180, built for the flyby that stands in it, hung lit over the
+	 * valley seen from the mill. Every pair the box takes is asked and
+	 * noted either way. */
 	if (params.skyArt)
 	{
 		std::vector<int> order;
@@ -1068,7 +1125,7 @@ bool HDVisBuild(const trf::remaster::Trg& trg, const HDVisRoom* rooms,
 				 * the floor plan or within the reach of it. Shared: the
 				 * group's room standing in this room's inside, inner grids
 				 * and heights crossing, with no link between the two. */
-				HDVisSkyAsked asked = { h, g, 0, 0, 0 };
+				HDVisSkyAsked asked = { h, g, 0, 0, 0, 0 };
 				const double nx0 = (double)room.x - reach;
 				const double nx1 = (double)(room.x +
 					((long)room.xs << 10)) + reach;
@@ -1097,11 +1154,14 @@ bool HDVisBuild(const trf::remaster::Trg& trg, const HDVisRoom* rooms,
 					&& !linked(h, g);
 
 				asked.shared = shared ? 1 : 0;
+				asked.linked = t.part[(size_t)h] == t.part[(size_t)g] ? 1 : 0;
 
 				if (params.skyNear > 0 && asked.nearTris < params.skyNear)
 					asked.refused = 1;
 				else if (params.skyShared && shared)
 					asked.refused = 2;
+				else if (params.skyLinked && !asked.linked)
+					asked.refused = 3;
 
 				t.skyAsked.push_back(asked);
 
@@ -1109,6 +1169,8 @@ bool HDVisBuild(const trf::remaster::Trg& trg, const HDVisRoom* rooms,
 					t.skyRefusedFar++;
 				else if (asked.refused == 2)
 					t.skyRefusedShared++;
+				else if (asked.refused == 3)
+					t.skyRefusedUnlinked++;
 
 				if (asked.refused)
 					continue;

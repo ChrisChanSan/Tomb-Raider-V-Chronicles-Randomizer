@@ -9484,12 +9484,13 @@ static int SurfaceRoom()
  *         guest_tris= wide= ms= twin= wide_bare= edge= statics_held=
  *         statics_ms= enclosed= hull_guests= hollow_hidden= guests_hanging=
  *         openings_state= sky_groups= sky_tris= sky_pairs= sky_copies=
- *         hull_sky= sky_closed= sky_far= sky_shared=
+ *         hull_sky= sky_closed= sky_far= sky_shared= sky_unlinked=
  *   HDLOG visguest level=<stem> room= group= tris= box= refused=hanging
  *   HDLOG visopening level=<stem> room= face= behind= refused=flipstate
  *   HDLOG vissky level=<stem> room= group= tris= over_sky= over_closed=
  *         beyond= box= near=
- *   HDLOG vissky level=<stem> room= group= near= refused=far|shared
+ *   HDLOG vissky level=<stem> room= group= near=
+ *         refused=far|shared|unlinked
  *   HDLOG vissky level=<stem> group= tris= copy_of= refused=copy
  *   HDLOG vissky level=<stem> group= tris= refused=closed
  *
@@ -9524,10 +9525,12 @@ static int SurfaceRoom()
  * and sky_closed the groups with art in the sky whose room is not under
  * the sky, left out, one line each; sky_far the pairs whose box stood
  * near the room but none of whose triangles in the sky do, sky_shared
- * those whose group's room shares the room's inside with no link
- * (hd_vis.h, skyNear and skyShared), each with a vissky line of the
- * room, the group and its triangles near the room (near=, also at the
- * end of a taken pair's line). */
+ * those whose group's room shares the room's inside with no link,
+ * sky_unlinked those whose group's room stands in another part of the
+ * portal graph than the room (hd_vis.h, skyNear, skyShared and
+ * skyLinked), each with a vissky line of the room, the group and its
+ * triangles near the room (near=, also at the end of a taken pair's
+ * line). */
 
 static int VisContents(int roomIndex)
 {
@@ -9617,14 +9620,15 @@ bool HDVisWalkOn()
 			"wide_bare=%.2f edge=%.5f statics_held=%d statics_ms=%.0f "
 			"enclosed=%d hull_guests=%d hollow_hidden=%d guests_hanging=%d "
 			"openings_state=%d sky_groups=%d sky_tris=%lld sky_pairs=%d "
-			"sky_copies=%d hull_sky=%d sky_closed=%d sky_far=%d sky_shared=%d",
+			"sky_copies=%d hull_sky=%d sky_closed=%d sky_far=%d sky_shared=%d "
+			"sky_unlinked=%d",
 			g_stem, t->rooms, t->artRooms, t->wallFaces, t->bareFaces,
 			t->voidFaces, t->guestPairs, t->guestTris, t->widePortals, t->ms,
 			t->openingsTwin, p.wideBare, p.edge, t->staticsHeld, t->staticMs,
 			t->roomsEnclosed, g_vis_hull_guests, hollow_hidden,
 			t->guestsHanging, t->openingsState, t->skyGroups, t->skyArtTris,
 			t->skyPairs, t->skyCopies, g_vis_hull_sky, t->skyClosed,
-			t->skyRefusedFar, t->skyRefusedShared);
+			t->skyRefusedFar, t->skyRefusedShared, t->skyRefusedUnlinked);
 
 		// The guests the sky's rule refused (HDVisRefused), one line each.
 		for (const HDVisRefused& one : t->hanging)
@@ -9660,13 +9664,14 @@ bool HDVisWalkOn()
 					one.hi[1], one.lo[2], one.hi[2], nearTris);
 			}
 
-		// The pairs the art near the room refused (hd_vis.h, skyNear and
-		// skyShared), one line each.
+		// The pairs the sky answer refused (hd_vis.h, skyNear, skyShared
+		// and skyLinked), one line each.
 		for (const HDVisSkyAsked& asked : t->skyAsked)
 			if (asked.refused)
 				Log("HDLOG vissky level=%s room=%d group=%d near=%d "
 					"refused=%s", g_stem, asked.room, asked.group,
-					asked.nearTris, asked.refused == 1 ? "far" : "shared");
+					asked.nearTris, asked.refused == 1 ? "far" :
+					asked.refused == 2 ? "shared" : "unlinked");
 
 		for (size_t g = 0; g < t->skyCopyOf.size(); g++)
 			if (t->skyCopyOf[g] >= 0)

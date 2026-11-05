@@ -96,11 +96,12 @@ namespace
 	 * for -vistable, -1 every room under the sky; unset, the default. */
 	bool g_sky_reach_set = false;
 	double g_sky_reach = 0.0;
-	/* -visskynear <n> / -visskyshared 0|1: the sky table's two refusals
-	 * (HDVisParams::skyNear, skyShared), -1 for the level's row
-	 * (HDVisLevelParams). */
+	/* -visskynear <n> / -visskyshared 0|1 / -visskylinked 0|1: the sky
+	 * table's refusals (HDVisParams::skyNear, skyShared, skyLinked), -1
+	 * for the level's row (HDVisLevelParams). */
 	int g_sky_near = -1;
 	int g_sky_shared = -1;
+	int g_sky_linked = -1;
 
 	const char* const kLevels[] =
 	{
@@ -4694,6 +4695,9 @@ namespace
 		if (g_sky_shared >= 0)
 			base.skyShared = g_sky_shared;
 
+		if (g_sky_linked >= 0)
+			base.skyLinked = g_sky_linked;
+
 		HDVisBuild(trg, rooms.empty() ? 0 : &rooms[0], (int)rooms.size(),
 			faces.empty() ? 0 : &faces[0], (int)faces.size(),
 			portals.empty() ? 0 : &portals[0], (int)portals.size(),
@@ -4704,23 +4708,61 @@ namespace
 			"ms=%.0f guests_unlinked=%d openings=%d openings_unlinked=%d "
 			"openings_twin=%d wide_mirror=%d guests_hanging=%d "
 			"openings_state=%d sky_groups=%d sky_tris=%lld sky_pairs=%d "
-			"sky_copies=%d sky_closed=%d sky_far=%d sky_shared=%d\n",
+			"sky_copies=%d sky_closed=%d sky_far=%d sky_shared=%d "
+			"sky_unlinked=%d\n",
 			stem.c_str(), (int)rooms.size(), (int)trg.groups.size(), t.artRooms,
 			t.wallFaces, t.bareFaces, t.voidFaces, t.guestPairs, t.guestTris,
 			(int)portals.size(), t.widePortals, t.ms, t.guestsUnlinked,
 			(int)t.openings.size(), t.openingsUnlinked, t.openingsTwin,
 			t.wideMirrored, t.guestsHanging, t.openingsState, t.skyGroups,
 			t.skyArtTris, t.skyPairs, t.skyCopies, t.skyClosed,
-			t.skyRefusedFar, t.skyRefusedShared);
+			t.skyRefusedFar, t.skyRefusedShared, t.skyRefusedUnlinked);
+
+		/* The parts of the portal graph (HDVisTables::part) with more than
+		 * one room, by their lowest room, each with its rooms; then the
+		 * rooms standing alone, on one line. */
+		{
+			std::string alone;
+			int parts = 0;
+
+			for (size_t r = 0; r < t.part.size(); r++)
+			{
+				if (t.part[r] != (int)r)
+					continue;
+
+				std::string list;
+				int count = 0;
+
+				for (size_t s = r; s < t.part.size(); s++)
+					if (t.part[s] == (int)r)
+					{
+						list += " " + std::to_string(s);
+						count++;
+					}
+
+				parts++;
+
+				if (count == 1)
+					alone += list;
+				else
+					std::printf("vistable: %s part=%d rooms=%d:%s\n",
+						stem.c_str(), (int)r, count, list.c_str());
+			}
+
+			std::printf("vistable: %s parts=%d alone:%s\n", stem.c_str(),
+				parts, alone.c_str());
+		}
 
 		/* Every pair the sky table's box answer took: its triangles near the
 		 * room, whether the group's room shares the room's inside unlinked,
 		 * and the answer (taken, refused=far, refused=shared). */
 		for (const HDVisSkyAsked& one : t.skyAsked)
 			std::printf("vistable: %s skyask room=%d group=%d near=%d "
-				"shared=%d%s\n", stem.c_str(), one.room, one.group,
-				one.nearTris, one.shared, one.refused == 1 ? " refused=far" :
-				one.refused == 2 ? " refused=shared" : "");
+				"shared=%d linked=%d%s\n", stem.c_str(), one.room, one.group,
+				one.nearTris, one.shared, one.linked,
+				one.refused == 1 ? " refused=far" :
+				one.refused == 2 ? " refused=shared" :
+				one.refused == 3 ? " refused=unlinked" : "");
 
 		// The guests the sky's rule refused, one line each.
 		for (const HDVisRefused& one : t.hanging)
@@ -7471,6 +7513,8 @@ int main(int argc, char** argv)
 			g_sky_near = std::atoi(argv[++i]);
 		else if (!_stricmp(argv[i], "-visskyshared") && i + 1 < argc)
 			g_sky_shared = std::atoi(argv[++i]);
+		else if (!_stricmp(argv[i], "-visskylinked") && i + 1 < argc)
+			g_sky_linked = std::atoi(argv[++i]);
 		else if (!_stricmp(argv[i], "-visreach") && i + 1 < argc)
 		{
 			vis_reaches.clear();

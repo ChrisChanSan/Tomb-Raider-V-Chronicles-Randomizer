@@ -5288,10 +5288,12 @@ namespace walkoff
 	 * the level's hulls (the HDLOG hull lines with hull=1). */
 	static std::set<int> g_vis_noguest;
 	static HDVisParams g_vis_params = HDVisDefaults();
-	/* -visskynear / -visskyshared, -1 unset: then the level's row of the
-	 * sky answer (HDVisLevelParams), as the engine builds it. */
+	/* -visskynear / -visskyshared / -visskylinked, -1 unset: then the
+	 * level's row of the sky answer (HDVisLevelParams), as the engine
+	 * builds it. */
 	static int g_vis_sky_near = -1;
 	static int g_vis_sky_shared = -1;
+	static int g_vis_sky_linked = -1;
 	/* -visyshift 1: the tables built with the groups' y shifts, as the
 	 * engine's build hands them in (HDVisLevelBuild); 0, the default, with
 	 * the art as the file stores it, as before. */
@@ -6134,6 +6136,8 @@ namespace walkoff
 					row.skyNear;
 				g_vis_params.skyShared = g_vis_sky_shared >= 0 ?
 					g_vis_sky_shared : row.skyShared;
+				g_vis_params.skyLinked = g_vis_sky_linked >= 0 ?
+					g_vis_sky_linked : row.skyLinked;
 			}
 
 			HDVisBuild(trg, g_vis_rooms.empty() ? 0 : &g_vis_rooms[0],
@@ -6154,7 +6158,8 @@ namespace walkoff
 				"twin=%d wide_bare=%.2f edge=%.5f mirror=%d enclosed=%d "
 				"openings_state=%d sky_groups=%d sky_tris=%lld sky_pairs=%d "
 				"sky_copies=%d sky_closed=%d sky_far=%d sky_shared=%d "
-				"sky_near_min=%d sky_shared_on=%d\n",
+				"sky_unlinked=%d sky_near_min=%d sky_shared_on=%d "
+				"sky_linked_on=%d\n",
 				t.rooms, t.artRooms, t.wallFaces, t.bareFaces, t.voidFaces,
 				t.guestPairs, t.guestTris, t.widePortals, t.ms,
 				g_vis_params.reach, g_vis_params.bare, g_vis_params.guestTris,
@@ -6162,8 +6167,9 @@ namespace walkoff
 				g_vis_params.edge, t.wideMirrored, t.roomsEnclosed,
 				t.openingsState, t.skyGroups, t.skyArtTris, t.skyPairs,
 				t.skyCopies, t.skyClosed, t.skyRefusedFar,
-				t.skyRefusedShared, g_vis_params.skyNear,
-				g_vis_params.skyShared);
+				t.skyRefusedShared, t.skyRefusedUnlinked,
+				g_vis_params.skyNear, g_vis_params.skyShared,
+				g_vis_params.skyLinked);
 
 			/* The openings the flipmaps' states refused, as the engine's
 			 * HDLOG visopening lines name them. */
@@ -6188,12 +6194,14 @@ namespace walkoff
 						one.hi[2]);
 				}
 
-			// The pairs the art near the room refused (skyNear, skyShared).
+			/* The pairs the sky answer refused (skyNear, skyShared,
+			 * skyLinked). */
 			for (const HDVisSkyAsked& asked : t.skyAsked)
 				if (asked.refused)
 					printf("-vis: vissky room=%d group=%d near=%d refused=%s\n",
 						asked.room, asked.group, asked.nearTris,
-						asked.refused == 1 ? "far" : "shared");
+						asked.refused == 1 ? "far" :
+						asked.refused == 2 ? "shared" : "unlinked");
 
 			for (size_t g = 0; g < t.skyCopyOf.size(); g++)
 				if (t.skyCopyOf[g] >= 0)
@@ -18892,6 +18900,8 @@ static void SpringBlocks(const char* stem, std::vector<HDSpringBlock>& out,
  *                     HDVisLevelParams: 1 for ANDREA3, 0 elsewhere)
  *   -visskyshared 0|1 1 refuses the group of a room sharing the room's
  *                     inside with no link (skyShared); unset, the row's
+ *   -visskylinked 0|1 1 refuses the group of a room in another part of
+ *                     the portal graph (skyLinked); unset, the row's
  *   -visyshift 0|1   1 builds the tables with the groups' y shifts, as
  *                     the engine's build does; 0, the default, with the
  *                     art as the file stores it, as before
@@ -18944,6 +18954,8 @@ static bool VisArg(int argc, char** argv, int* at)
 		walkoff::g_vis_sky_near = atoi(argv[*at + 1]);
 	else if (!strcmp(a, "-visskyshared"))
 		walkoff::g_vis_sky_shared = atoi(argv[*at + 1]);
+	else if (!strcmp(a, "-visskylinked"))
+		walkoff::g_vis_sky_linked = atoi(argv[*at + 1]);
 	else if (!strcmp(a, "-visyshift"))
 		walkoff::g_vis_yshift = atoi(argv[*at + 1]) != 0;
 	else if (!strcmp(a, "-visnoguest"))

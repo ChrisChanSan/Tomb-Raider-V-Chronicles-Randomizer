@@ -19973,6 +19973,83 @@ list, defaults line and the paragraph of the switch use the new name.
 
 **Commits.** see the appendix.
 
+### ANDY3's flyby island is sky art only for the rooms linked to it (#342)
+2026-11-05
+
+**What.** On the visibility path (`hd_vis` 1) the sky table of #286 can now refuse a pair
+whose group's room stands in another part of the level's portal graph than the room under
+the sky that would take it: the rooms reachable from one another through portals and floor
+links, a flipmap pair counted as one room (`skyLinked`). The rule is off by default and on
+for ANDY3 alone, by its row in `kHDVisLevelRows` (`specific/hd/hd_vis.h`), as #334 bound
+its rule to ANDREA3. In ANDY3 the island of room 180 - its own ground, a stone house and a
+bridge, built for flyby 6 - no longer hangs lit over the dark valley seen from the cliff
+by the mill and from the rooms beside it; flyby 6 still shows it, its cameras standing in
+room 180. With `-log` the `HDLOG level= vis=1` line ends in `sky_unlinked=`, and each pair
+so left out has a `HDLOG vissky level= room= group= near= refused=unlinked` line. TrgProbe
+`-vistable` ends its level line in the same count, adds `linked=0|1` to every `skyask`
+line and prints the parts of the graph (`part=` with its rooms, `parts= alone:`);
+RoomProbe's `-vis: tables` line ends in `sky_unlinked=` and `sky_linked_on=`; both take
+`-visskylinked 0|1` over the row. ModernTest checks the rule and the row on rooms built by
+hand.
+
+**Why.** Measured with TrgProbe and RoomProbe and in the play log's walk (`VISLOG`). Group
+180 is room 180's own art, 710 triangles, all past the level's rooms (x 30,720..43,118,
+y 8,651..12,032, z 61,440..67,584). Room 180 is not a room with no portal: it is one of
+four, 180, 189, 190 and 191, linked with each other and with nothing else - an island of
+the graph (ANDY3 has seven parts: 119 rooms with the mill, 69, 16, these four and three
+rooms alone). The sky table's box answer gave group 180 to rooms 12 and 113 of the mill's
+part (174 triangles near each) and to 189 and 191 of its own; listed under the sky, it
+drew the island, and the walk went on from it into 189, 190 and 191. The log lists `180g`
+from eye rooms 113 (7 lines), 101, 105 (3 each), 107 (2), 100, 106 and 37; the classic
+walk never lists 180. Drawn at the log's places: from room 113 104,921 pixels of 960 x
+540, from room 107 54,166, from the cliff in room 101 1,933 (the island at the horizon).
+Flyby 6 (sequence 6, cameras 15 and 16) stands in room 180 at 40,448/9,984/66,048 and
+39,424/10,496/66,048; its walk starts there and lists 180, 189, 190 and 191 itself.
+
+Over the fifteen levels 11 of the 501 pairs the box takes join two parts. Besides ANDY3's
+two: TITLE's garden rooms 6, 9 and 11 take group 54, the night scene's backdrop, a dark
+blue wall over the garden's wall from the title flyby's cameras in room 6 (up to 50,504
+pixels); ANDREA3's lids 122 and 125 take group 92, the colosseum's tiers, in the rooms 36
+and 60 below them - a beam of the gallery and a slab of stone standing in the rooms, and
+arches over them, up to 237,306 pixels -; ANDREA2's rooms 191 and 197 and JOBY5's room 1
+take a skyline, rooms no portal leads to and nothing lists; and ANDREA3's 128 with 92 is
+already refused as far. TITLE's backdrop is a ghost; ANDREA3's arches may be the sky that
+room sees. So the rule is bound to the level that needs it.
+
+**How.** `HDVisBuild` (`specific/hd/hd_vis.cpp`) joins the rooms its link table already
+holds - a portal either way or a floor link - and each flipmap pair, and names each room's
+part by its lowest room (`HDVisTables::part`). Every pair the box takes is asked whether
+the two rooms share a part (`HDVisSkyAsked::linked`) and refused as unlinked where
+`HDVisParams::skyLinked` says so, after the refusals of #334, counted in
+`skyRefusedUnlinked`. `HDVisLevelParams` takes the new column of the row; ANDY3's row
+asks `skyLinked` 1 and leaves `skyNear` and `skyShared` at 0, ANDREA3's leaves `skyLinked`
+at 0. `hd_level.cpp` writes the seams; the walk and `game/draw.cpp` are not touched, so a
+flyby's eye in the island walks it as the classic game does. `hd_vis` 0 and `hd_build` 0
+are unchanged by construction.
+
+**Decisions.** The part and not the direct link: ANDREA2's tower (room 222) and ANDY3's
+group 106 (the belt of trees north of the mill, room 106, portals to 105 and 101) stand in
+the takers' parts, and every pair of the fifteen levels but those 11 does. A row and not
+the default: TITLE and ANDREA3 change too, and ANDREA3 not only by ghosts.
+
+**Checked.** ModernTest's new group `flyby_room_rule` (6 checks): the default off, ANDY3's
+row on in either case, ANDREA3, TITLE and a missing stem off; an island with no link to
+the room under the sky refused as unlinked and noted so, taken with `skyLinked` 0; linked
+through a third room by floor links taken, the parts named by their lowest room; linked
+through a flipmap twin taken, the same links without the twin refused. TrgProbe
+`-vistable` on the fifteen levels: with `-visskylinked 0` every table equals #334's line
+for line; with the rows ANDY3 refuses its two pairs (sky pairs 497 to 495) and the
+fourteen other levels are unchanged. The probe with the base and this build: the island
+gone from rooms 113, 107 and 101 at the log's places; flyby 6's two cameras, four yaws
+each, lists and pixels equal; ANDY3's rooms 8 and 9 swept (2,880 walks each): 1,270 and
+971 walks differ, losing 180 and 189 alone, and #334's canopy pictures over rooms 8 and 9
+are pixel-equal; ANDREA3's ghost places of #334 (rooms 31, 37, 108) pixel-equal, its
+tables unchanged. #236's 72 probe images md5-equal; #269's seven proof places and 88 card
+views md5-equal, the lists equal; #283's RICH1 and #286's ANDREA2 courtyard unchanged,
+their tables being those of before. ModernTest 17776 checks (17770 + 6), MenuTest 45043,
+InterpTest 754, LipsTest 272, none failed; no warning line in the logs of `be64.bat`,
+`basan.bat`, `be64.bat test`, `btrg.bat` and `broom.bat`.
+
 ### Trajan Markets' ways belong to its scripted Larson alone (#343)
 
 #340 laid a dead Larson down outside Trajan Markets. Inside it a pool Larson still took
@@ -20526,4 +20603,5 @@ entries above.
 | #339 | The 64-bit engine is PCtomb5.exe, the 32-bit one PCtomb5_x86.exe |
 | #340 | Larson dies lying down outside Trajan Markets |
 | #341 | The Corpses row is called Corpse fade |
+| #342 | ANDY3's flyby island is sky art only for the rooms linked to it |
 | #343 | Trajan Markets' ways belong to its scripted Larson alone |

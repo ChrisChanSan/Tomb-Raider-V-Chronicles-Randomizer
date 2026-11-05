@@ -652,6 +652,16 @@ void HDModelOffCentreMatrix(const D3DMATRIX* base, float kx, float ky,
  * pixel; the upload happens only when the value changes. */
 void HDModelClip(const float* planes);
 
+/* The weight of the next HDModelDraw and HDModelDrawHead, the corpse fade's
+ * (hd_object_rules.h, HDCorpseFadeByte): 255 draws as always, anything less
+ * lays the model over what is behind it at byte/255 through the blend factor
+ * (BLENDFACTOR / INVBLENDFACTOR in the opaque and the alpha-test pass, the
+ * glow and the glass added times it) - one draw, the same shader, the depth
+ * written as the classic writes its faded body (specific\polyinsert.cpp,
+ * draw type 7). A card without D3DPBLENDCAPS_BLENDFACTOR draws it whole.
+ * HDModelFrameBegin puts 255 back; nothing reaches the card here. */
+void HDModelFade(unsigned int byte);
+
 // One object. `nodeMatrix` is nodeCount row-major 4x4 matrices, model space
 // to VIEW space - the very matrices the classic path has on its stack when it
 // calls phd_PutPolygons for each mesh. `nodeLight` is nodeCount colour

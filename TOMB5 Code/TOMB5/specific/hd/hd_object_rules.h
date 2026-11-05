@@ -496,3 +496,25 @@ inline bool HDMatrixMirrors(const float* m)
 
 	return det < 0.0f;
 }
+
+/* The corpse fade's weight, as the blend factor's byte (D3DRS_BLENDFACTOR):
+ * the alpha the classic path gives a dead body (game\draw.cpp, PrintObjects).
+ * There GlobalAlpha is 0xFE000000 * after_death, which keeps the low byte
+ * of 254 * after_death in the top byte: 256 - 2 * after_death, 254 at 1 and
+ * 2 at 127, one step less per logic tick, 4.2 seconds at thirty ticks.
+ *
+ * 255 - drawn as a living thing - for every item that is not a body on its
+ * way out: after_death 0, 128 and over (KillItem's), and an item that still
+ * has hit points. The last is the skeleton, whose control writes after_death
+ * as a rise timer while it lives (game\skeleton.cpp); the HD path never drew
+ * it faded and does not start to. And 255 at after_death 1, where the
+ * classic is at 254 out of 255: the step no eye sees, and the body the
+ * Corpses switch keeps lying there (tomb5.corpses off holds the count at 1)
+ * stays on the solid path with everything else. */
+inline unsigned int HDCorpseFadeByte(int afterDeath, int hitPoints)
+{
+	if (afterDeath <= 1 || afterDeath >= 128 || hitPoints > 0)
+		return 255;
+
+	return (0xFE000000u * (unsigned int)afterDeath) >> 24;
+}

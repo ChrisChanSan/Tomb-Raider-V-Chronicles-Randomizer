@@ -1405,6 +1405,25 @@ static bool MenuStepCheats(long, long dir)
 	return 1;
 }
 
+/* Whether a dead body fades out and is cleared away, as it always has, or
+ * stays where it fell (game\draw.cpp, StepAfterDeathFade). Read live: a
+ * body lying there when the row is turned on starts to fade from then on. */
+static const char* MenuValCorpses(long, char* buf)
+{
+	strcpy(buf, CustomText(tomb5.corpses ? "on" : "off"));
+	return buf;
+}
+
+static bool MenuStepCorpses(long, long dir)
+{
+	if (!dir)
+		return 0;
+
+	SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
+	tomb5.corpses = !tomb5.corpses;
+	return 1;
+}
+
 static const char* MenuValLevelSelect(long, char* buf)
 {
 	strcpy(buf, CustomText(tomb5.level_select ? "on" : "off"));
@@ -1709,6 +1728,7 @@ static const menu_row menu_rows_tomb5[] =
 {
 	MENU_VALUE("Cutscene skipper", MenuValCutsceneSkipper, MenuStepCutsceneSkipper, MENU_SAVE_TOMB5),
 	MENU_VALUE("Cheats", MenuValCheats, MenuStepCheats, MENU_SAVE_TOMB5),
+	MENU_VALUE("Corpses", MenuValCorpses, MenuStepCorpses, MENU_SAVE_TOMB5),
 	// One literal for the two places this option is named: the title
 	// screen's own row has said "Level Select", and a second spelling
 	// would have been a second CustomText key for one setting.

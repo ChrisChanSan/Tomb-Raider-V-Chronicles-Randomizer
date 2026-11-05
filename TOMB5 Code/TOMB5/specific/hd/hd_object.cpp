@@ -214,6 +214,10 @@ namespace
 		int receiver;
 		bool mirrored;
 		int mirror;
+		/* The corpse fade's byte (hd_object_rules.h, HDCorpseFadeByte),
+		 * handed to HDModelFade for the entry's draw: 255 for everything
+		 * but a dead body on its way out. */
+		unsigned int fade;
 	};
 
 	FrameItem g_frame[HD_OBJ_ITEMS];
@@ -229,6 +233,8 @@ namespace
 	// HDObjectBegin (which has the ITEM_INFO) to HDObjectEnd (which has not).
 	int g_open_room = -1;
 	unsigned int g_open_mask = 0;
+	// The corpse fade's byte of the item being walked (HDCorpseFadeByte).
+	unsigned int g_open_fade = 255;
 	float g_raw[HD_OBJ_NODES * 12];		// the engine's own 3x4, per node
 	unsigned int g_seen = 0;
 	// The lips of the item being walked (HDObjectLips), -1 for none.
@@ -4366,6 +4372,10 @@ bool HDObjectBegin(ITEM_INFO* item, OBJECT_INFO* obj)
 	g_open_nodes = g_slot[slot].nodes;
 	g_open_room = (int)item->room_number;	// its portal window
 	g_open_mask = (unsigned int)item->mesh_bits;
+	/* How far its corpse has faded, out of the count the classic path
+	 * draws by (GlobalAlpha, game\draw.cpp) - the same for a mirror's
+	 * reflection of it, which is drawn out of the same item. */
+	g_open_fade = HDCorpseFadeByte(item->after_death, item->hit_points);
 	// Its place, the world position its blob would be drawn under.
 	g_open_place[0] = (float)item->pos.x_pos;
 	g_open_place[1] = (float)item->pos.y_pos;
@@ -4544,6 +4554,7 @@ void HDObjectEnd()
 	entry.receiver = g_open_receiver;
 	entry.mirrored = g_reflection;
 	entry.mirror = g_reflection ? g_reflection_mirror : -1;
+	entry.fade = g_open_fade;
 
 	/* And the pickup on the floor takes the mod's own inventory model.
 	 *
@@ -5146,6 +5157,7 @@ void HDInvEnd()
 	entry.mask = g_open_mask;
 	entry.lipsTrack = -1;	// nothing on the ring speaks
 	entry.lipsFrame = -1;
+	entry.fade = 255;		// and nothing on it fades
 
 	/* A mod's own inventory model, for the ring and the display in the
 	 * corner (and the floor, see HDObjectEnd). It is a file out of another
@@ -5318,6 +5330,15 @@ void HDObjectFrameDraw(const void* projection, int bulbs, unsigned int passes)
 
 	HDModelFrameBegin((const D3DMATRIX*)projection, bulbs, passes);
 
+	/* Two rounds over the list: everything drawn whole first, then the
+	 * bodies fading out (HDModelFade), laid over what the first round and
+	 * the rooms have drawn - the classic sorts its faded body behind the
+	 * solid work the same way (specific\polyinsert.cpp, draw type 7). The
+	 * second round is skipped when the first saw no such body, so a frame
+	 * without one walks the list once, as it always has. */
+	bool anyFading = false;
+
+	for (int round = 0; round < 2; round++)
 	for (int i = 0; i < g_count; i++)
 	{
 		const FrameItem& entry = g_frame[i];
@@ -5327,6 +5348,17 @@ void HDObjectFrameDraw(const void* projection, int bulbs, unsigned int passes)
 		 * item walked for the second map alone. */
 		if (entry.cast == HD_OBJ_CAST_ONLY || entry.cast == HD_OBJ_CAST_OTHERS_ONLY)
 			continue;
+
+		if (round == 0 && entry.fade < 255)
+		{
+			anyFading = true;
+			continue;
+		}
+
+		if (round == 1 && (!anyFading || entry.fade >= 255))
+			continue;
+
+		HDModelFade(entry.fade);
 
 		/* The call switches the scissor test off for every item and takes a
 		 * count on the way past; the argument is over HDFrameScissorForRoom
@@ -5433,6 +5465,7 @@ void HDObjectFrameDraw(const void* projection, int bulbs, unsigned int passes)
 	// last item's clip planes.
 	HDModelOffCentre(0.0f, 0.0f);
 	HDModelClip(0);
+	HDModelFade(255);
 	HDRenderScissorOff();
 
 	/* The phases add up. HDModelFrameBegin zeroes the model file's own
@@ -5784,6 +5817,12 @@ int HDObjectShadowReceiveFrame(bool herDrawn, bool othersDrawn, int* reflections
 			entry.offCentreX != 0.0f || entry.offCentreY != 0.0f)
 			continue;
 
+		/* A body fading out takes no projected shadow: the receive draw
+		 * darkens at full strength what the body lays over the room at a
+		 * fraction of it, and a shadow on a ghost is a dark ghost. */
+		if (entry.fade < 255)
+			continue;
+
 		const ReceiveBlocks* blocks = &frame;
 		const bool mirrorBlocks = entry.mirrored &&
 			receive_blocks_mirror(shadow, entry.mirror, herDrawn, othersDrawn, mirrors, &scratch,
@@ -5856,6 +5895,13 @@ bool HDObjectBlobGivesWay(ITEM_INFO* item, OBJECT_INFO* obj)
 	if (!item || !obj || !obj->shadow_size)
 		return false;
 
+	/* A body fading out keeps the blob, which the classic path fades with
+	 * it (specific\specificfx.cpp, S_PrintShadow: alpha 128 - after_death).
+	 * The second map holds depth and nothing else, so a caster cannot cast
+	 * it at a fraction; the blob can. */
+	if (HDCorpseFadeByte(item->after_death, item->hit_points) < 255)
+		return false;
+
 	/* Her step first: it ran only in a frame the projected shadow runs in,
 	 * whose decision asked for the second target beside hers
 	 * (HDShadowFrameOthersReady); a blob asks for no target itself. */
@@ -5923,6 +5969,7 @@ bool HDObjectPush(int slot, const float* matrix, int nodes, const float* light,
 	entry.head = HDModelHasHead(slot);
 	entry.nodes = nodes < HD_OBJ_NODES ? nodes : HD_OBJ_NODES;
 	entry.mask = mask;
+	entry.fade = 255;	// Lara never fades
 
 	memcpy(entry.matrix, matrix, sizeof(float) * 16 * entry.nodes);
 

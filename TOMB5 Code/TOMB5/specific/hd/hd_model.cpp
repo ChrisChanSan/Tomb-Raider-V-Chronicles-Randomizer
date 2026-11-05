@@ -418,6 +418,10 @@ namespace
 	const float kClipKeepAll[12] = { 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1 };
 	float g_clip_now[12] = { 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1 };
 
+	/* The corpse fade's byte for the next draw (HDModelFade), 255 for
+	 * everything that is not a body on its way out. */
+	unsigned int g_fade = 255;
+
 	/* --------------------------------------------------------- helpers -- */
 
 	std::string join(const std::string& a, const char* b)
@@ -3104,6 +3108,34 @@ namespace
 				g_device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ONE);
 			}
 
+			/* The corpse fade (HDModelFade): the opaque and the alpha-test
+			 * step laid over what lies behind them at the fade's weight,
+			 * SRC times the factor plus DEST times one minus it, the depth
+			 * still written; the glow added times it. The glass weighs its
+			 * own factor by it further down. Put back as the step found it
+			 * at the end of the step. */
+			const bool fading = g_fade < 255 && g_blend_factor && !glassStep;
+			DWORD fadeOn = FALSE, fadeSrc = D3DBLEND_ONE;
+			DWORD fadeDest = D3DBLEND_ZERO, fadeFactor = 0xFFFFFFFF;
+
+			if (fading)
+			{
+				g_device->GetRenderState(D3DRS_ALPHABLENDENABLE, &fadeOn);
+				g_device->GetRenderState(D3DRS_SRCBLEND, &fadeSrc);
+				g_device->GetRenderState(D3DRS_DESTBLEND, &fadeDest);
+				g_device->GetRenderState(D3DRS_BLENDFACTOR, &fadeFactor);
+				g_device->SetRenderState(D3DRS_BLENDFACTOR,
+					D3DCOLOR_ARGB(g_fade, g_fade, g_fade, g_fade));
+				g_device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_BLENDFACTOR);
+
+				if (pass != 2)
+				{
+					g_device->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+					g_device->SetRenderState(D3DRS_DESTBLEND,
+						D3DBLEND_INVBLENDFACTOR);
+				}
+			}
+
 			if (oneSided)
 				g_device->SetRenderState(D3DRS_CULLMODE,
 					HDMatrixMirrors(nodeMatrix) ? D3DCULL_CW : D3DCULL_CCW);
@@ -3232,9 +3264,13 @@ namespace
 				{
 					const int cullHere = first.sided && cull ==
 						HD_MODEL_CULL_NONE ? (int)glassOutside : -1;
-					const int byteHere = g_blend_factor
+					int byteHere = g_blend_factor
 						? (int)HDGlassOpacityByte(HDGlassWeight(first.opacity,
 							first.sided)) : 255;
+
+					// And the corpse fade over it, rounded.
+					if (g_blend_factor && g_fade < 255)
+						byteHere = (byteHere * (int)g_fade + 127) / 255;
 
 					if (cullHere != glassCullNow)
 					{
@@ -3271,6 +3307,17 @@ namespace
 			{
 				g_device->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
 				g_device->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
+			}
+
+			// The fade's states as the step found them.
+			if (fading)
+			{
+				if (pass != 2)
+					g_device->SetRenderState(D3DRS_ALPHABLENDENABLE, fadeOn);
+
+				g_device->SetRenderState(D3DRS_SRCBLEND, fadeSrc);
+				g_device->SetRenderState(D3DRS_DESTBLEND, fadeDest);
+				g_device->SetRenderState(D3DRS_BLENDFACTOR, fadeFactor);
 			}
 
 			if (oneSided)
@@ -4861,6 +4908,7 @@ void HDModelFrameBegin(const D3DMATRIX* projection, int bulbCount,
 	}
 
 	g_off_centre = false;
+	g_fade = 255;
 
 	/* The clip planes start every bracket as the planes that keep every
 	 * pixel, uploaded here: a register of the pixel file is the device's,
@@ -4883,6 +4931,11 @@ void HDModelClip(const float* planes)
 
 	std::memcpy(g_clip_now, want, sizeof(g_clip_now));
 	g_device->SetPixelShaderConstantF(5, g_clip_now, 3);
+}
+
+void HDModelFade(unsigned int byte)
+{
+	g_fade = byte < 255 ? byte : 255;
 }
 
 void HDModelOffCentreMatrix(const D3DMATRIX* base, float kx, float ky,

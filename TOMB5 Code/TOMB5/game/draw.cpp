@@ -1422,7 +1422,17 @@ bool RoomOnDrawList(short room_number)
  * differs. The always-true `!(wibble & 3)` is dropped, which changes nothing.
  *
  * The marks are cleared as they are read, so a body whose room is not drawn
- * for a while does not age, as in the original. */
+ * for a while does not age, as in the original.
+ *
+ * The Corpses switch (tomb5.corpses, the options menu) off holds the count
+ * at 1: the first step, 1 to 2, is the one it refuses, so a body that has
+ * not begun to fade stays where it fell, drawn whole, and is never killed
+ * here. A body already past 1 when the switch goes off finishes its fade
+ * rather than freezing half seen. Read every tick, so turning it on lets
+ * the bodies lying there fade from then on. Nothing else moves: the kill at
+ * 128, the skeleton, whose control writes the field itself every tick
+ * after this (game\skeleton.cpp), and the cyborg, which counts its own
+ * frames before it sets 1 (game\hitman.cpp). */
 void StepAfterDeathFade()
 {
 	for (int i = 0; i < MAX_ITEMS; i++)
@@ -1434,7 +1444,8 @@ void StepAfterDeathFade()
 
 		ITEM_INFO* item = &items[i];
 
-		if (item->after_death < 128 && item->after_death > 0)
+		if (item->after_death < 128 && item->after_death > 0 &&
+			(tomb5.corpses || item->after_death > 1))
 		{
 			item->after_death++;
 			InterpNoteStep(INTERP_STEP_AFTERDEATH);

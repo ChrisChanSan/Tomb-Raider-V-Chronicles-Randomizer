@@ -780,6 +780,11 @@
  *                         the bands, opacity, factor and band at its end.
  *     -noglass            the glass rule left off: the before picture, for
  *                         -slot and for the -shadowitem models alike.
+ *     -fade <byte>        with -slot: the model drawn as a dead body at that
+ *                         point of its fade (HDModelFade, the byte
+ *                         HDCorpseFadeByte gives, 2 to 254), laid over the
+ *                         background. 255, the default, is the whole model
+ *                         and writes the very picture a run without it does.
  *     -animframe <anim> <key>
  *                         with -slot: the picture in that keyframe of one of
  *                         the slot's own animations, on the bind pose's
@@ -995,6 +1000,9 @@ static bool g_dotsAsked = false;
  * note); a dark one is what an additive pass is measured against, because
  * magenta plus a glow saturates to white whatever the glow is. */
 static unsigned long g_clear = 0x00FF00FFu;
+
+// -fade <byte>: the corpse fade's weight of the -slot picture, 255 for none.
+static unsigned int g_fadeAsked = 255;
 
 static void OverlayClear()
 {
@@ -14444,6 +14452,8 @@ int main(int argc, char** argv)
 			alphaCheck = true;
 		else if (!_stricmp(argv[i], "-noglass"))
 			noGlass = true;
+		else if (!_stricmp(argv[i], "-fade") && i + 1 < argc)
+			g_fadeAsked = (unsigned int)atoi(argv[++i]);
 		else if (!_stricmp(argv[i], "-crossdrift"))
 			crossDrift = true;
 		else if (!_stricmp(argv[i], "-slidecensus"))
@@ -16916,6 +16926,8 @@ int main(int argc, char** argv)
 	g_device->BeginScene();
 	HDRenderFrameBegin((const D3DMATRIX*)view, &projection, &frame);
 	HDModelFrameBegin(&projection, bulbCount);
+	// -fade: the corpse fade's weight for the draws below.
+	HDModelFade(g_fadeAsked);
 
 	/* The inventory ring's own screen centre, exactly as
 	 * hd_object.cpp hands it over per ring item. Zero without -ring, and then

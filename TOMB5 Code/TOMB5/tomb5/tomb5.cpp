@@ -126,6 +126,10 @@ void init_tomb5_stuff()
 		tomb5.enable_cheats = 0;						//off
 		REG_WriteBool(buf, tomb5.enable_cheats);
 
+		sprintf(buf, "corpses");
+		tomb5.corpses = 1;								//on: the bodies fade
+		REG_WriteBool(buf, tomb5.corpses);
+
 		sprintf(buf, "bar_pos");
 		tomb5.bars_pos = 1;								//original
 		REG_WriteLong(buf, tomb5.bars_pos);
@@ -405,6 +409,9 @@ void init_tomb5_stuff()
 
 		sprintf(buf, "cheats");
 		REG_ReadBool(buf, tomb5.enable_cheats, 0);
+
+		sprintf(buf, "corpses");
+		REG_ReadBool(buf, tomb5.corpses, 1);
 
 		sprintf(buf, "bar_pos");
 		REG_ReadLong(buf, tomb5.bars_pos, 1);
@@ -754,6 +761,9 @@ void save_new_tomb5_settings()
 
 	sprintf(buf, "cheats");
 	REG_WriteBool(buf, tomb5.enable_cheats);
+
+	sprintf(buf, "corpses");
+	REG_WriteBool(buf, tomb5.corpses);
 
 	sprintf(buf, "bar_pos");
 	REG_WriteLong(buf, tomb5.bars_pos);

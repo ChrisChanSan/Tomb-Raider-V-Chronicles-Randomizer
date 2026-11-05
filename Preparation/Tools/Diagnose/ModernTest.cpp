@@ -13006,6 +13006,7 @@ static const caption_site caption_sites[] =
 	{ "Cutscene skipper", CC_LABEL, CF_FRAME,
 		"MENU_VALUE(\"Cutscene skipper\"," },
 	{ "Cheats", CC_LABEL, CF_FRAME, "MENU_VALUE(\"Cheats\"," },
+	{ "Corpses", CC_LABEL, CF_FRAME, "MENU_VALUE(\"Corpses\"," },
 	{ "Bar mode", CC_LABEL, CF_FRAME, "MENU_VALUE(\"Bar mode\"," },
 	{ "Bar positions", CC_LABEL, CF_FRAME, "MENU_VALUE(\"Bar positions\"," },
 	{ "Enemy bars", CC_LABEL, CF_FRAME, "MENU_VALUE(\"Enemy bars\"," },
@@ -13256,8 +13257,8 @@ static void caption_columns()
 		read += (files[f] = hd_switch_text(names[f])) != 0;
 
 	ok(read == CF_COUNT, "columns: the eight files are read", read, CF_COUNT);
-	ok(caption_table(files[CF_FLOW], rows) && rows.size() == 136,
-		"columns: the table has its 136 rows", (long)rows.size(), 136);
+	ok(caption_table(files[CF_FLOW], rows) && rows.size() == 137,
+		"columns: the table has its 137 rows", (long)rows.size(), 137);
 
 	// The pad's names: the literals of the four pages (specific\input.cpp).
 	const char* pads = files[CF_INPUT] ? strstr(files[CF_INPUT],
@@ -13576,9 +13577,9 @@ static void extra_strings()
 	std::vector<caption_cells> rows;
 	char what[200];
 
-	ok(flow && file && caption_table(flow, rows) && rows.size() == 136,
+	ok(flow && file && caption_table(flow, rows) && rows.size() == 137,
 		"extra strings: the table and the shipped file are read",
-		(long)rows.size(), 136);
+		(long)rows.size(), 137);
 
 	// The shipped file, read line by line: UTF-8 without a byte order mark
 	// (the shipped copy holds only Latin-1 letters, in two bytes each), CRLF.
@@ -38928,6 +38929,111 @@ static void narrowing_closed()
 	free(setup);
 }
 
+/* The corpse fade in HD and the Corpses switch (#332). The byte the HD path
+ * weighs a dead body with is the classic's GlobalAlpha byte, 256 - 2 *
+ * after_death, and 255 for whatever is no body on its way out; the object
+ * path takes it per item into the draw and the blob; the switch lives in
+ * tomb5, the three registry places and the options row after Cheats, and
+ * the logic tick's count asks it. Read from the tree. */
+static void corpse_fade()
+{
+	char* rules = hd_switch_text("hd_object_rules.h");
+	char* obj = hd_switch_text("hd_object.cpp");
+	char* model = hd_switch_text("hd_model.cpp");
+	char* types = hd_switch_text("../../global/types.h");
+	char* t5 = hd_switch_text("../../tomb5/tomb5.cpp");
+	char* menu = hd_switch_text("../../game/menu_frame.cpp");
+	char* draw = hd_switch_text("../../game/draw.cpp");
+	char* flow = hd_switch_text("../../game/gameflow.cpp");
+
+	printf("The corpse fade\n");
+
+	// The curve: the classic's byte at every step of the count.
+	int curve = 0;
+
+	for (int n = 2; n < 128; n++)
+		if (HDCorpseFadeByte(n, -16384) == (unsigned int)(256 - 2 * n))
+			curve++;
+
+	ok(curve == 126, "corpse fade: 256 - 2 * after_death from 2 to 127",
+		curve, 126);
+	ok(HDCorpseFadeByte(2, -16384) == 252 && HDCorpseFadeByte(64, 0) == 128 &&
+		HDCorpseFadeByte(127, -1) == 2,
+		"corpse fade: 252 at 2, 128 at 64, 2 at 127",
+		(int)HDCorpseFadeByte(127, -1), 2);
+	ok(HDCorpseFadeByte(0, -16384) == 255 && HDCorpseFadeByte(1, -16384) == 255 &&
+		HDCorpseFadeByte(128, -16384) == 255,
+		"corpse fade: whole at 0, at 1 (the body the switch keeps) and at 128",
+		(int)HDCorpseFadeByte(1, -16384), 255);
+	ok(HDCorpseFadeByte(125, 15) == 255 && HDCorpseFadeByte(40, 1) == 255,
+		"corpse fade: a thing with hit points (the skeleton's timer) is whole",
+		(int)HDCorpseFadeByte(125, 15), 255);
+
+	// The object path: per item, into the draw, the receive and the blob.
+	ok(rules && obj &&
+		hd_switch_count(obj, "g_open_fade = HDCorpseFadeByte(item->after_death, "
+		"item->hit_points);") == 1 &&
+		hd_switch_count(obj, "entry.fade = g_open_fade;") == 1 &&
+		hd_switch_count(obj, "HDModelFade(entry.fade);") == 1 &&
+		hd_switch_count(obj, "HDModelFade(255);") == 1,
+		"corpse fade: HDObjectBegin takes the byte, HDObjectFrameDraw hands it "
+		"to HDModelFade", obj ? hd_switch_count(obj, "HDModelFade(") : -1, 2);
+	ok(obj && hd_switch_count(obj, "if (entry.fade < 255)\r\n\t\t\tcontinue;") == 1 &&
+		hd_switch_count(obj, "if (HDCorpseFadeByte(item->after_death, "
+		"item->hit_points) < 255)\r\n\t\treturn false;") == 1,
+		"corpse fade: no projected shadow on a fading body, its blob kept",
+		obj ? hd_switch_count(obj, "if (entry.fade < 255)") : -1, 1);
+	ok(model && hd_switch_count(model, "const bool fading = g_fade < 255 && "
+		"g_blend_factor && !glassStep;") == 1 &&
+		hd_switch_count(model, "D3DBLEND_INVBLENDFACTOR);") == 1 &&
+		hd_switch_count(model, "\tg_fade = 255;\r\n") == 1 &&
+		hd_switch_count(model, "byteHere = (byteHere * (int)g_fade + 127) / 255;") == 1,
+		"corpse fade: draw_model blends by the factor, the glass times it",
+		model ? hd_switch_count(model, "g_fade") : -1, 10);
+
+	// The switch.
+	ok(types && hd_switch_count(types, "\tbool corpses;") == 1,
+		"corpses switch: tomb5.corpses in types.h",
+		types ? hd_switch_count(types, "bool corpses;") : -1, 1);
+	ok(t5 && hd_switch_count(t5, "sprintf(buf, \"corpses\");") == 3 &&
+		hd_switch_count(t5, "tomb5.corpses = 1;") == 1 &&
+		hd_switch_count(t5, "REG_ReadBool(buf, tomb5.corpses, 1);") == 1 &&
+		hd_switch_count(t5, "REG_WriteBool(buf, tomb5.corpses);") == 2,
+		"corpses switch: default, read and write under \"corpses\"",
+		t5 ? hd_switch_count(t5, "\"corpses\"") : -1, 3);
+	ok(menu && hd_switch_count(menu, "MENU_VALUE(\"Cheats\", MenuValCheats, "
+		"MenuStepCheats, MENU_SAVE_TOMB5),\r\n\tMENU_VALUE(\"Corpses\", "
+		"MenuValCorpses, MenuStepCorpses, MENU_SAVE_TOMB5),") == 1 &&
+		hd_switch_count(menu, "CustomText(tomb5.corpses ? \"on\" : \"off\")") == 1 &&
+		hd_switch_count(menu, "tomb5.corpses = !tomb5.corpses;") == 1,
+		"corpses switch: the options row right after Cheats",
+		menu ? hd_switch_count(menu, "MENU_VALUE(\"Corpses\"") : -1, 1);
+	ok(flow && hd_switch_count(flow, "{ \"Corpses\", \"Cadavres\", \"Leichen\", "
+		"\"Cadaveri\", \"Cad\\xE1veres\" },") == 1,
+		"corpses switch: the row's word in five languages",
+		flow ? hd_switch_count(flow, "\"Corpses\"") : -1, 1);
+
+	// The count asks it, inside StepAfterDeathFade, before its kill.
+	const char* step = draw ? strstr(draw, "void StepAfterDeathFade()") : 0;
+	const char* test = step ? strstr(step,
+		"(tomb5.corpses || item->after_death > 1))") : 0;
+	const char* kill = step ? strstr(step, "KillItem((short)i);") : 0;
+
+	ok(test && kill && test < kill &&
+		hd_switch_count(draw, "tomb5.corpses ||") == 1,
+		"corpses switch: StepAfterDeathFade holds the count at 1 while off",
+		draw ? hd_switch_count(draw, "tomb5.corpses ||") : -1, 1);
+
+	free(rules);
+	free(obj);
+	free(model);
+	free(types);
+	free(t5);
+	free(menu);
+	free(draw);
+	free(flow);
+}
+
 int main()
 {
 	printf("ModernTest - the arithmetic of the modern control\n");
@@ -39204,6 +39310,7 @@ int main()
 	composite_nodes();
 	spark_item_number();
 	narrowing_closed();
+	corpse_fade();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

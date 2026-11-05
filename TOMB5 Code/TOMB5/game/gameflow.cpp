@@ -1775,6 +1775,7 @@ const char* CustomText(const char* engl)
 		{ "Cutscene skipper", "Passer cin\xE9matiques", "Cutscene-Skipper",
 			"Salta filmati", "Saltar escenas" },
 		{ "Cheats", "Codes de triche", "Cheats", "Trucchi", "Trucos" },
+		{ "Corpses", "Cadavres", "Leichen", "Cadaveri", "Cad\xE1veres" },
 		{ "Bar mode", "Style des barres", "Balkenstil", "Stile barre",
 			"Estilo de barras" },
 		{ "Bar positions", "Position des barres", "Balkenposition",

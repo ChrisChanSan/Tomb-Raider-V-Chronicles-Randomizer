@@ -211,9 +211,17 @@ struct HDVisStatic
  *              second space in its air, drawn whole with the group, not
  *              its sky (ANDREA3's gallery room 92 inside room 115); 0,
  *              the default, takes it
- * Both stay 0 but for the levels of the table below (HDVisLevelParams):
- * on every level they would also take the leaf canopy off ANDY3's rooms 8
- * and 9, which the box answer lists there. */
+ *   skyLinked  1: a room under the sky takes only the group of a room in
+ *              its own part of the portal graph - reachable through
+ *              portals and floor links, a flipmap pair one room
+ *              (HDVisTables::part); a room no link leads to from it is
+ *              not seen from it in the classic game, sky or not (ANDY3's
+ *              room 180, an island built for a flyby, over the valley
+ *              from the mill); 0, the default, takes it
+ * The three stay 0 but for the levels of the table below
+ * (HDVisLevelParams): on every level skyNear and skyShared would also
+ * take the leaf canopy off ANDY3's rooms 8 and 9, which the box answer
+ * lists there, and skyLinked would change TITLE and ANDREA3 as well. */
 struct HDVisParams
 {
 	double reach;
@@ -233,41 +241,49 @@ struct HDVisParams
 	double skyReach;
 	int skyNear;
 	int skyShared;
+	int skyLinked;
 };
 
 /* A (room, group) pair the sky table asked (HDVisTables::skyAsked): the
  * room under the sky, the sky group, how many of the group's triangles in
  * the sky stand over the room's floor plan or within skyReach of it,
- * whether the group's room shares the room's inside with no link, and
- * the answer - 0 taken, 1 too few near it (skyNear), 2 the group's room
- * shares the room's inside with no link (skyShared). Only the pairs whose
- * box answer took them are asked. */
+ * whether the group's room shares the room's inside with no link, whether
+ * it stands in the room's part of the portal graph (linked), and the
+ * answer - 0 taken, 1 too few near it (skyNear), 2 the group's room
+ * shares the room's inside with no link (skyShared), 3 the group's room
+ * in another part (skyLinked). Only the pairs whose box answer took them
+ * are asked. */
 struct HDVisSkyAsked
 {
 	int room;
 	int group;
 	int nearTris;
 	int shared;
+	int linked;
 	int refused;
 };
 
 HDVisParams HDVisDefaults();
 
-/* The level-bound sky answer: per level, by its file's stem, the skyNear
- * and skyShared it is built with, as hd_life_rules.h holds the water's life
- * per level. A level not in the table keeps HDVisDefaults' answer. */
+/* The level-bound sky answer: per level, by its file's stem, the skyNear,
+ * skyShared and skyLinked it is built with, as hd_life_rules.h holds the
+ * water's life per level. A level not in the table keeps HDVisDefaults'
+ * answer. */
 struct HDVisLevelRow
 {
 	const char* stem;
 	int skyNear;
 	int skyShared;
+	int skyLinked;
 };
 
 static const HDVisLevelRow kHDVisLevelRows[] =
 {
 	// #334: the colosseum's tiers through the caves, the gallery box over
 	// the arena (hd_vis.cpp, the sky groups).
-	{ "ANDREA3", 1, 1 },
+	{ "ANDREA3", 1, 1, 0 },
+	// #342: the flyby's island over the valley, seen from the mill.
+	{ "ANDY3", 0, 0, 1 },
 };
 
 /* HDVisDefaults with the row of the level whose stem is `stem` (any case),
@@ -288,6 +304,7 @@ inline HDVisParams HDVisLevelParams(const char* stem)
 		{
 			p.skyNear = row.skyNear;
 			p.skyShared = row.skyShared;
+			p.skyLinked = row.skyLinked;
 		}
 	}
 
@@ -381,10 +398,16 @@ struct HDVisTables
 	int skyCopies = 0;			// the groups left out as copies
 	int skyClosed = 0;			// the groups left out, rooms not under it
 	/* Every pair the box answer took, with the near count and the answer
-	 * of skyNear and skyShared (HDVisSkyAsked), and how many each refused. */
+	 * of skyNear, skyShared and skyLinked (HDVisSkyAsked), and how many
+	 * each refused. */
 	std::vector<HDVisSkyAsked> skyAsked;
 	int skyRefusedFar = 0;
 	int skyRefusedShared = 0;
+	int skyRefusedUnlinked = 0;
+	/* Per room: its part of the level's portal graph - the rooms reachable
+	 * from it through portals and floor links, a flipmap pair counted as
+	 * one room -, named by its lowest room. */
+	std::vector<int> part;
 	long long samples = 0, samplesCovered = 0;
 	double ms = 0.0;
 };

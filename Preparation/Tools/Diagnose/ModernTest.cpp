@@ -16156,6 +16156,101 @@ static void ghost_rule()
 		t.skyRefusedShared, 0);
 }
 
+/* #342: a sky group is taken only by the rooms in its own room's part of
+ * the portal graph. ghost_rule's rooms, group 2's art as one cluster over
+ * S's floor plan - near and not shared, so the box, skyNear and skyShared
+ * all take it; the links alone decide. */
+static void flyby_room_rule()
+{
+	std::vector<HDVisRoom> rooms(5);
+	const long z[5] = { 0, 0, 12288, 24576, 18432 };
+	const int xs[5] = { 6, 6, 4, 6, 4 };
+
+	for (int r = 0; r < 5; r++)
+	{
+		HDVisRoom& one = rooms[(size_t)r];
+
+		std::memset(&one, 0, sizeof(one));
+		one.x = r == 1 ? 6144 : 0;
+		one.z = z[r];
+		one.xs = one.zs = xs[r];
+		one.top = -4096;
+		one.bottom = 0;
+		one.flags = r == 1 ? 0 : 8;
+		one.twin = -1;
+		one.flip = -1;
+	}
+
+	trf::remaster::Trg trg;
+	HDVisTables t;
+	HDVisParams p = HDVisDefaults();
+	const float over[1][3] = { { 3000.0f, -6000.0f, 3000.0f } };
+	const auto pair = [&](int room, int group)
+	{
+		for (const HDVisSkyAsked& one : t.skyAsked)
+			if (one.room == room && one.group == group)
+				return one.linked * 10 + one.refused;
+
+		return -1;
+	};
+
+	ok(p.skyLinked == 0 && HDVisLevelParams("ANDY3").skyLinked == 1 &&
+		HDVisLevelParams("andy3").skyLinked == 1 &&
+		HDVisLevelParams("ANDREA3").skyLinked == 0 &&
+		HDVisLevelParams("TITLE").skyLinked == 0 &&
+		HDVisLevelParams(0).skyLinked == 0,
+		"flyby room: off by default, on by ANDY3's row alone",
+		HDVisLevelParams("ANDY3").skyLinked, 1);
+
+	// The rule as ANDY3's row sets it, on these rooms.
+	p.skyLinked = 1;
+
+	// 1. G's room on an island with no link to S: refused.
+	ghost_scene(trg, 0.0f, 12288.0f, over, 1);
+	HDVisBuild(trg, &rooms[0], 5, 0, 0, 0, 0, 0, 0, p, &t);
+	ok(t.skyCount[0] == 0 && t.skyRefusedUnlinked == 1 && pair(0, 2) == 3 &&
+		t.part[0] != t.part[2],
+		"flyby room: G unlinked to S, its group refused unlinked",
+		pair(0, 2), 3);
+
+	HDVisParams off = p;
+
+	off.skyLinked = 0;
+	HDVisBuild(trg, &rooms[0], 5, 0, 0, 0, 0, 0, 0, off, &t);
+	ok(t.skyCount[0] == 1 && t.skyRefusedUnlinked == 0 && pair(0, 2) == 0,
+		"flyby room: with skyLinked 0 S takes it, noted unlinked",
+		t.skyCount[0], 1);
+
+	// 2. S -> 3 -> G by floor links: one part, taken.
+	const int chain[2] = { 3, 2 };
+
+	rooms[0].firstLink = 0;
+	rooms[0].linkCount = 1;
+	rooms[3].firstLink = 1;
+	rooms[3].linkCount = 1;
+	HDVisBuild(trg, &rooms[0], 5, 0, 0, 0, 0, chain, 2, p, &t);
+	ok(t.skyCount[0] == 1 && pair(0, 2) == 10 && t.part[0] == 0 &&
+		t.part[2] == 0 && t.part[3] == 0 && t.part[1] == 1,
+		"flyby room: linked through a third room, taken", pair(0, 2), 10);
+
+	/* 3. S -> 3, and 3's flipmap twin 4 -> G: the pair one room, linked;
+	 * without the twin, G stands apart again. */
+	rooms[3].linkCount = 0;
+	rooms[3].twin = 4;
+	rooms[3].flip = 0;
+	rooms[4].firstLink = 1;
+	rooms[4].linkCount = 1;
+	HDVisBuild(trg, &rooms[0], 5, 0, 0, 0, 0, chain, 2, p, &t);
+	ok(t.skyCount[0] == 1 && pair(0, 2) == 10 && t.part[4] == 0,
+		"flyby room: linked through a flipmap twin, taken", pair(0, 2), 10);
+
+	rooms[3].twin = -1;
+	rooms[3].flip = -1;
+	HDVisBuild(trg, &rooms[0], 5, 0, 0, 0, 0, chain, 2, p, &t);
+	ok(t.skyCount[0] == 0 && pair(0, 2) == 3 && t.part[4] == 2,
+		"flyby room: the twin's link alone, no twin: refused", pair(0, 2), 3);
+}
+
 /* The art of a static carried to another placement of its slot
  * (hd_artcopy.h) on a level of two rooms built by hand, RICH2's stairwell
  * cut down: room 0 drawn by its own art, x and z 0..6144, y -1536..0, and
@@ -40056,6 +40151,7 @@ int main()
 	vis_flip_state();
 	vis_sky_art();
 	ghost_rule();
+	flyby_room_rule();
 	vis_plane();
 	vis_wall();
 	vis_hidden_room();

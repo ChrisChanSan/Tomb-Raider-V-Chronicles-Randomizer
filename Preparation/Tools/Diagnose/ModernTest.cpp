@@ -39961,6 +39961,61 @@ static void level_camera_rule()
 	free(cam);
 }
 
+/* Larson dies lying down outside Trajan Markets (#340). His death animation
+ * (+15) is a fall and a rise and ends standing; outside Trajan Markets the
+ * control holds it on its lowest frame and makes him a corpse the way
+ * CreatureDie does, and the heavy trigger test at the animation's end runs
+ * in Trajan Markets alone. Pierre's latch makes him a corpse the same way.
+ * Read from the tree. */
+static void larson_death_rule()
+{
+	char* src = hd_switch_text("../../game/pierre.cpp");
+	static char lay[4096], ctl[32768];
+	const char* rule;
+	const char* heavy;
+
+	printf("Larson's death outside Trajan Markets\n");
+
+	glass_body(src, "static void PierreLayDown(", lay, sizeof(lay));
+	glass_body(src, "void PierreControl(", ctl, sizeof(ctl));
+
+	ok(src && hd_switch_count(src, "#define LARSON_DEATH_DOWN\t28") == 1,
+		"larson death: the lying frame of the death animation is 28",
+		src ? hd_switch_count(src, "#define LARSON_DEATH_DOWN") : -1, 1);
+	ok(strstr(lay, "item->frame_number=(short)frame;if(!item->after_death)"
+		"item->after_death=1;item->status=ITEM_DEACTIVATED;CreatureDie("
+		"item_number,0);") != 0 && !strstr(lay, "DropBaddyPickups("),
+		"larson death: laid down as command 4 and CreatureDie do it",
+		hd_switch_count(lay, "CreatureDie("), 1);
+	ok(strstr(lay, "if(gLogEnabled)Log(\"ITEMLOG%d:corpselaiddown") != 0,
+		"larson death: an ITEMLOG line behind -log names the corpse",
+		hd_switch_count(lay, "ITEMLOG"), 1);
+
+	rule = strstr(ctl, "elseif(item->object_number==LARSON&&gfLevelId!="
+		"LVL5_TRAJAN_MARKETS)");
+	heavy = strstr(ctl, "TestTriggers(trigger_index,1,0);");
+	ok(rule && strstr(rule, "if(item->frame_number>=anims[item->anim_number]"
+		".frame_base+LARSON_DEATH_DOWN)PierreLayDown(item_number,anims["
+		"item->anim_number].frame_base+LARSON_DEATH_DOWN);return;}}elseif("
+		"item->object_number==LARSON&&item->frame_number==anims[item->"
+		"anim_number].frame_end)") != 0,
+		"larson death: outside Trajan Markets held on frame 28, a corpse",
+		hd_switch_count(ctl, "LARSON_DEATH_DOWN"), 2);
+	ok(rule && heavy && heavy > rule && hd_switch_count(ctl,
+		"TestTriggers(") == 1,
+		"larson death: the one heavy test lies past the rule (Trajan only)",
+		hd_switch_count(ctl, "TestTriggers("), 1);
+	ok(strstr(ctl, "elseif(item->object_number==PIERRE&&item->frame_number>="
+		"anims[item->anim_number].frame_end-1)") != 0 &&
+		strstr(ctl, "PierreLayDown(item_number,anims[item->anim_number]."
+		"frame_end-1);return;}") != 0 &&
+		hd_switch_count(ctl, "DropBaddyPickups(") == 2,
+		"larson death: Pierre's latch lays him down too, cargo calls unchanged",
+		hd_switch_count(ctl, "PierreLayDown("), 2);
+
+	free(src);
+}
+
 int main()
 {
 	printf("ModernTest - the arithmetic of the modern control\n");
@@ -40242,6 +40297,7 @@ int main()
 	corpse_fade();
 	body_save();
 	level_camera_rule();
+	larson_death_rule();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

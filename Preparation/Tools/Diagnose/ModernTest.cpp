@@ -30005,7 +30005,8 @@ static void film_av()
 		"\"TOMB5\\specific\\yuv_rgb.cpp\"><ExcludedFromBuildCondition=\"'$("
 		"Platform)'=='Win32'\">true</ExcludedFromBuild>") != 0 &&
 		strstr(sav, "#include\"../tomb5/pch.h\"") != 0 &&
-		strstr(sav, "#ifdef_WIN64extern\"C\"{") != 0 &&
+		strstr(sav, "#ifdef_WIN64#pragmawarning(push,0)") != 0 &&
+		strstr(sav, "#pragmawarning(disable:4244)extern\"C\"{") != 0 &&
 		!strcmp(sav + strlen(sav) - 6, "#endif"),
 		"film_av: x64 only - left out of Win32, its body under _WIN64", 0,
 		1);
@@ -30367,14 +30368,14 @@ static void toolset_rule()
 /* The engine builds without a warning (#328): the macro and unused-local
  * warnings of tomb5.vcxproj are errors in each of the five configurations'
  * own ClCompile, beside the five of #324, and global\types.h
- * keeps ddraw.h's DD_OK and DD_FALSE where fmv.cpp includes it first. Read
- * from the tree. */
+ * keeps ddraw.h's DD_OK and DD_FALSE where fmv.cpp includes it first. The
+ * narrowings (C4244) joined them with #331. Read from the tree. */
 static void warning_rule()
 {
 	static const char* const configs[5] = { "Debug|Win32", "Release|Win32",
 		"Debug|x64", "Release|x64", "Asan|x64" };
 	static const char* const list = "<TreatSpecificWarningsAsErrors>"
-		"4311;4312;4302;4267;4477;4005;4101;"
+		"4311;4312;4302;4267;4477;4005;4101;4244;"
 		"%(TreatSpecificWarningsAsErrors)</TreatSpecificWarningsAsErrors>";
 	char* proj = hd_switch_text("../../../tomb5.vcxproj");
 	char* types = hd_switch_text("../../global/types.h");
@@ -30397,7 +30398,7 @@ static void warning_rule()
 		for (const char* q = p; e && (q = strstr(q, list)) && q < e; q++)
 			n++;
 
-		snprintf(what, sizeof(what), "warning rule: %s treats the seven "
+		snprintf(what, sizeof(what), "warning rule: %s treats the eight "
 			"warnings as errors", configs[i]);
 		ok(n == 1, what, n, 1);
 	}
@@ -38866,9 +38867,8 @@ static void spark_item_number()
 /* The six narrowings #329 left (#331). Lara's seam rows are uchar and end
  * on 0xFF, so a vertex 128..254 no longer reads as the end; the save keeps
  * an item's animation as a short behind a format mark the load checks; a
- * level over 255 rooms is refused where OutsideRoomTable is built. C4244
- * stays out of the error list (stb_vorbis.c, ffmpeg's common.h). Read from
- * the tree. */
+ * level over 255 rooms is refused where OutsideRoomTable is built. The 4244
+ * in each configuration stands in warning_rule. Read from the tree. */
 static void narrowing_closed()
 {
 	char* del = hd_switch_text("../../game/delstuff.cpp");

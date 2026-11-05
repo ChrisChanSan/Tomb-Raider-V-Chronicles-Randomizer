@@ -606,3 +606,71 @@ inline long ModernCameraZoomLerp(long from, long to, float alpha)
 
 	return from + (long)((float)(to - from) * alpha);
 }
+
+/* Which level camera the orbit keeps (#335), the pure part of
+ * CalculateCamera's decision in game\camera.cpp.
+ *
+ * A trigger's Camera command makes the camera FIXED, or HEAVY when an item
+ * set the trigger off. Most of them only frame Lara from outside - a lever,
+ * a door seen from the room, a corridor - and the orbit discards those: a
+ * Camera command would take the view out of the player's hands mid-stride.
+ * Some show something she cannot see from where she stands: the trigger
+ * also names a Target item (control.cpp's TO_TARGET, camera.item), or an
+ * item set it off (a falling door, a heavy trigger). Those are kept and run
+ * as under the classic control, cut, speed, timer and all, as the sniper
+ * camera always was.
+ *
+ *   modern    ModernCameraActive(): 0 means nothing is discarded at all
+ *   would_fix the pass is not a chase pass (camera.type and camera.flags)
+ *   sniper    the level's sniper camera (fixed[number].flags & 2)
+ *   type      MODERN_LEVCAM_FIXED or _HEAVY, or 0 for any other camera type
+ *             (a look or combat pass, which only the sniper keeps)
+ *   numbered  camera.number >= 0: a trigger named the camera. The forced
+ *             fixed camera of a trapdoor or a turn switch names none
+ *   target    camera.item is an item and not Lara
+ *
+ * The answer is why: NONE (no level camera to decide - classic, or a chase
+ * pass), LARA_FRAME (discarded), or SNIPER, TARGET, HEAVY (kept). A heavy
+ * trigger with a Target reads TARGET. */
+enum
+{
+	MODERN_LEVCAM_NONE,
+	MODERN_LEVCAM_LARA_FRAME,
+	MODERN_LEVCAM_SNIPER,
+	MODERN_LEVCAM_TARGET,
+	MODERN_LEVCAM_HEAVY
+};
+
+#define MODERN_LEVCAM_FIXED		1	// type: FIXED_CAMERA
+#define MODERN_LEVCAM_HEAVY_T	2	// type: HEAVY_CAMERA
+
+inline long ModernLevelCameraWhy(long modern, long would_fix, long sniper,
+	long type, long numbered, long target)
+{
+	if (!modern || !would_fix)
+		return MODERN_LEVCAM_NONE;
+
+	if (sniper)
+		return MODERN_LEVCAM_SNIPER;
+
+	if (numbered && target &&
+		(type == MODERN_LEVCAM_FIXED || type == MODERN_LEVCAM_HEAVY_T))
+		return MODERN_LEVCAM_TARGET;
+
+	if (numbered && type == MODERN_LEVCAM_HEAVY_T)
+		return MODERN_LEVCAM_HEAVY;
+
+	return MODERN_LEVCAM_LARA_FRAME;
+}
+
+/* Kept: the fixed shot is built as under the classic control. */
+inline long ModernLevelCameraKept(long why)
+{
+	return why >= MODERN_LEVCAM_SNIPER;
+}
+
+/* Discarded: the orbit runs in its place (CalculateCamera's modernDiscard). */
+inline long ModernLevelCameraDiscards(long why)
+{
+	return why == MODERN_LEVCAM_LARA_FRAME;
+}

@@ -208,9 +208,12 @@ static char CameraSnaps = 0;
  * both slots keep the vanilla values, and the draw predicate returns false
  * before it measures anything. MODERNLOG never runs without the option on.
  *
- * The level cameras are discarded exactly as first person discards them,
- * sniper excepted (CalculateCamera). Flybys and cutscenes are untouched in
- * every mode - CalculateCamera is not called during a flyby.
+ * The level cameras that only frame Lara are discarded, as first person
+ * discards them; the ones that show something are kept - the sniper camera,
+ * a camera whose trigger names a Target item, a camera a heavy trigger set
+ * (ModernLevelCamera, CalculateCamera, #335). First person still discards
+ * all but the sniper. Flybys and cutscenes are untouched in every mode -
+ * CalculateCamera is not called during a flyby.
  *
  * MODERN_CAMERA_LEAD_MAX, the bound ModernCameraLeadEye needs, lives in
  * game\modern_camera.h so that ModernTest reads the same number. */
@@ -610,9 +613,10 @@ static void ModernCameraOrbit()
 
 	/* The orbit stamps that it ran. game\modern_state.cpp builds her course
 	 * against the world angle this function keeps, and that angle is only the
-	 * player's view while this function is the camera. Under a rich2 sniper
-	 * camera - the one level camera Modern does not discard - FixedCamera runs
-	 * instead and the orbit stands still while the player still steers her.
+	 * player's view while this function is the camera. Under a level camera
+	 * Modern keeps - a rich2 sniper camera, a Target item's, a heavy
+	 * trigger's (ModernLevelCamera) - FixedCamera runs instead and the orbit
+	 * stands still while the player still steers her.
 	 * ModernCameraWorldYaw checks this stamp, one tick apart, like the clip
 	 * flag.
 	 *
@@ -746,10 +750,11 @@ static void ModernCameraLeadEye()
  * cases: before the orbit's first tick (`seated`), on a tick the orbit did
  * not run, and on a tick whose orbit eye that push moved.
  * ModernCameraActive() does not mean "the orbit is the camera":
- * under a rich2 sniper camera (CalculateCamera's modernDiscard keeps sniperCam
- * on purpose) FixedCamera runs, the orbit stands still, and the player still
- * steers her. A frozen world angle would walk her along the chase camera's
- * angle from before the cut instead of relative to the sniper view. The look
+ * under a level camera Modern keeps (ModernLevelCamera: a rich2 sniper
+ * camera, a Target item's, a heavy trigger's) FixedCamera runs, the orbit
+ * stands still, and the player still steers her. A frozen world angle would
+ * walk her along the chase camera's angle from before the cut instead of
+ * relative to the level camera's view. The look
  * key needs no case, because the seam does not run under it
  * (specific\input.cpp's !(input & IN_LOOK)); a flyby, a cutscene, the title
  * and first person are refused by ModernCameraActive(). */
@@ -1050,6 +1055,75 @@ static void DiscardedFixedCameraTimer(long wouldFix)
 		if (!camera.timer)
 			camera.timer = -1;
 	}
+}
+
+// The modern camera's answer for this pass's level camera (#335): the pure
+// rule is ModernLevelCameraWhy in game\modern_camera.h, and this is the one
+// place that reads the engine for it, so the target build, the shot's
+// branch and the head turn all go by the same answer. Kept: a sniper
+// camera, a camera whose trigger names a Target item that is not Lara, a
+// camera a heavy trigger set. Discarded: every other one - the lever and
+// door cameras that frame Lara, and the forced fixed camera of the
+// trapdoors and the turn switch, which names no camera at all.
+static long ModernLevelCamera(long wouldFix, long sniperCam)
+{
+	long type = 0;
+
+	if (camera.type == FIXED_CAMERA)
+		type = MODERN_LEVCAM_FIXED;
+	else if (camera.type == HEAVY_CAMERA)
+		type = MODERN_LEVCAM_HEAVY_T;
+
+	return ModernLevelCameraWhy(ModernCameraActive() ? 1 : 0, wouldFix,
+		sniperCam ? 1 : 0, type, camera.number >= 0 ? 1 : 0,
+		(camera.item && camera.item != lara_item) ? 1 : 0);
+}
+
+/* CAMLOG's level line, behind -log: one line on the pass a level camera's
+ * answer under the modern camera changes - a new camera, type, target or
+ * verdict - and none while it holds or on a pass without one.
+ *   f       GlobalCounter
+ *   number  camera.number, -1 for the forced fixed camera
+ *   type    fixed or heavy
+ *   target  the item camera.item names, or lara
+ *   kept    1 the fixed shot runs, 0 the orbit runs in its place
+ *   why     target, heavy, sniper or lara_frame (ModernLevelCameraWhy) */
+static void ModernLevelCameraLog(long why)
+{
+	static long last_why = MODERN_LEVCAM_NONE;
+	static long last_number, last_type, last_target;
+	static const char* why_name[] =
+		{ "none", "lara_frame", "sniper", "target", "heavy" };
+	const long target = (camera.item && camera.item != lara_item) ?
+		(long)(camera.item - items) : -1;
+	char tgt[16];
+
+	if (why == MODERN_LEVCAM_NONE ||
+		(camera.type != FIXED_CAMERA && camera.type != HEAVY_CAMERA))
+	{
+		last_why = MODERN_LEVCAM_NONE;
+		return;
+	}
+
+	if (why == last_why && camera.number == last_number &&
+		camera.type == last_type && target == last_target)
+		return;
+
+	last_why = why;
+	last_number = camera.number;
+	last_type = camera.type;
+	last_target = target;
+
+	if (target >= 0)
+		_snprintf(tgt, sizeof(tgt), "%ld", target);
+	else
+		_snprintf(tgt, sizeof(tgt), "lara");
+
+	tgt[sizeof(tgt) - 1] = 0;
+	Log("CAMLOG level f=%d number=%d type=%s target=%s kept=%ld why=%s",
+		(int)GlobalCounter, (int)camera.number,
+		camera.type == HEAVY_CAMERA ? "heavy" : "fixed", tgt,
+		ModernLevelCameraKept(why), why_name[why]);
 }
 
 /* LEDGELOG's camera line, behind -log: one line per CalculateCamera pass while
@@ -1449,32 +1523,45 @@ void CalculateCamera()
 		return;
 	}
 
-	// The modern camera's discard of level cameras is decided here, before the
-	// target is built. A trigger that carries a Camera and a Target command
-	// makes control.cpp set camera.item, and the lines below then build the
-	// whole shot around that item: its bounds, its height, its heading, and no
-	// ConfirmCameraTargetPos because it is not Lara. ChaseCamera reads only
-	// camera.target, so a discard decided later would orbit the door at 1536
-	// units and leave Lara out of the picture.
+	// The modern camera's answer for the level camera is decided here, before
+	// the target is built (#335). A trigger that carries a Camera and a Target
+	// command makes control.cpp set camera.item, and the lines below then
+	// build the whole shot around that item: its bounds, its height, its
+	// heading, and no ConfirmCameraTargetPos because it is not Lara.
+	// ChaseCamera reads only camera.target, so a discard decided later would
+	// orbit the door at 1536 units and leave Lara out of the picture.
 	//
-	// Twenty floor triggers in the campaign carry both commands on one tile -
-	// Andrea1 4, Andrea2 1, joby2 1, rich1 4, rich2 3, rich3 7 (CamTargetPairs
-	// over the player's .trc files).
+	// Kept (ModernLevelCamera): the sniper camera, a camera whose trigger
+	// names a Target item, and a camera a heavy trigger set. Such a camera
+	// shows something away from her - a door falling, a crane moving - and
+	// runs as under the classic control, from the cut to the timer. Twenty
+	// triggers in the campaign carry both commands - Andrea1 4, Andrea2 1,
+	// joby2 1, rich1 4, rich2 3, rich3 7: twelve floor tiles, four switches,
+	// one keyhole and rich2's three heavy triggers (CamTriggers over the
+	// vanilla .trc files, #335). No heavy trigger there names a camera
+	// without a Target.
 	//
-	// Discarded, the camera is built as if the trigger had never fired: item
-	// is Lara, fixed_camera stays 0 (no SniperCount, no camera.speed of 1, no
-	// fixed_camera flip for the interpolator to read as a cut), and the target
-	// block below is the ordinary one, ConfirmCameraTargetPos included.
+	// Discarded, every other one - a camera that only frames Lara - is built
+	// as if the trigger had never fired: item is Lara, fixed_camera stays 0
+	// (no SniperCount, no camera.speed of 1, no fixed_camera flip for the
+	// interpolator to read as a cut), and the target block below is the
+	// ordinary one, ConfirmCameraTargetPos included.
 	//
-	// wouldFix and sniperCam are also used by the branch further down. They
-	// read camera.type, camera.flags, camera.number and camera.fixed[], none of
-	// which is written in between: the only assignment is camera.type =
-	// LOOK_CAMERA in the target-item block below, and that makes the branch
-	// unreachable (it sits inside "camera.type != LOOK_CAMERA").
+	// wouldFix, sniperCam and the answer are also used by the branch further
+	// down. They read camera.type, camera.flags, camera.number, camera.item
+	// and camera.fixed[], none of which is written in between: the only
+	// assignment is camera.type = LOOK_CAMERA in the target-item block below,
+	// and that makes the branch unreachable (it sits inside "camera.type !=
+	// LOOK_CAMERA").
 	const long wouldFix = (camera.type != CHASE_CAMERA && camera.flags != 3);
 	const long sniperCam = wouldFix && camera.number >= 0 &&
 							   (camera.fixed[camera.number].flags & 2);
-	const long modernDiscard = ModernCameraActive() && wouldFix && !sniperCam;
+	const long levelWhy = ModernLevelCamera(wouldFix, sniperCam);
+	const long levelKept = ModernLevelCameraKept(levelWhy);
+	const long modernDiscard = ModernLevelCameraDiscards(levelWhy);
+
+	if (gLogEnabled)
+		ModernLevelCameraLog(levelWhy);
 
 	// The Camera command also writes camera.speed (control.cpp's TO_CAMERA:
 	// the camera word's code bits plus one, so 1 for a word of 0x0000), and a
@@ -1516,23 +1603,27 @@ void CalculateCamera()
 	// units across and 300 down in one, tilting the view some 12 degrees.
 	// So while the rule holds the point is looked up from the room it was in
 	// last tick, and ChaseCamera accepts it from that room or from hers; it
-	// glides after her instead (50, 38, 28, 21, 16 units ...). Not for the
-	// sniper camera or a camera built round an item, which do not look at her.
+	// glides after her instead (50, 38, 28, 21, 16 units ...). Not under a
+	// level camera the orbit keeps (ModernLevelCamera: the sniper's, one built
+	// round an item, a heavy trigger's): the orbit does not run under it.
 	const long ledgePhase = ModernCameraActive() ? LaraLedgeCamera(lara_item) : (long)LEDGE_CAMERA_NONE;
 
-	modern_ledge_cam = (ledgePhase != LEDGE_CAMERA_NONE && !fixed_camera && !sniperCam) ? 1 : 0;
+	modern_ledge_cam = (ledgePhase != LEDGE_CAMERA_NONE && !fixed_camera && !levelKept) ? 1 : 0;
 
 	bounds = GetBoundsAccurate(item);
 	y = ((bounds[2] + bounds[3]) >> 1) + item->pos.y_pos - 256;
 
-	// The head turn that comes with it is discarded too. This block is
+	// A discarded camera's head turn is discarded with it. This block is
 	// vanilla's answer to a Target command without a Camera command: turn her
 	// head at the thing and, if it is in front of her, hand the view to
-	// LOOK_CAMERA. With the discard above clearing fixed_camera, a trigger that
-	// carries both commands would otherwise fall in here and take the view away
-	// through the look camera instead - the same cutaway. A trigger carrying
-	// only a Target is untouched: modernDiscard needs wouldFix, and a Target
-	// alone leaves the camera CHASE.
+	// LOOK_CAMERA. A trigger that carries both commands is kept under the
+	// orbit (ModernLevelCamera), so fixed_camera is 1 and the block is passed
+	// over as under the classic control. Were such a camera discarded, the
+	// cleared fixed_camera would let it fall in here and take the view away
+	// through the look camera instead - the same cutaway; modernDiscard
+	// keeps it out, on whatever pass the discard meets a camera.item. A
+	// trigger carrying only a Target is untouched: the discard needs
+	// wouldFix, and a Target alone leaves the camera CHASE.
 	if (camera.item && !fixed_camera && !modernDiscard)
 	{
 		shift = phd_sqrt(SQUARE(camera.item->pos.z_pos - item->pos.z_pos) + SQUARE(camera.item->pos.x_pos - item->pos.x_pos));
@@ -1689,8 +1780,10 @@ void CalculateCamera()
 		// look identical in trview). SniperCamActive keeps its own job either
 		// way - it is assigned further up and the locks stay.
 		//
-		// wouldFix and sniperCam are computed at the top of this function,
-		// because the modern discard needs them before the target is built.
+		// wouldFix, sniperCam and the modern answer are computed at the top
+		// of this function, because the discard needs them before the target
+		// is built. First person keeps its own rule: everything but the
+		// sniper camera is passed over, as it takes her eyes.
 
 		if (FirstPersonEnabled() && !sniperCam)
 		{
@@ -1699,9 +1792,11 @@ void CalculateCamera()
 		}
 		else if (modernDiscard)
 		{
-			// The modern camera discards level cameras too, with the same
-			// sniper exception: a trigger's Camera command would take the
-			// orbit out of the player's hands mid-stride.
+			// The modern camera discards the level cameras that only frame
+			// Lara: such a Camera command would take the orbit out of the
+			// player's hands mid-stride. The ones that show something - the
+			// sniper camera, a Target item, a heavy trigger - are kept and
+			// take the FixedCamera branch below (ModernLevelCamera, #335).
 			//
 			// The chase camera runs instead, which is the orbit: ChaseCamera
 			// reads camera.target_angle and target_elevation, which

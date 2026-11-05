@@ -348,14 +348,16 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 	 * ModernCameraActive() is false and the measured vector is the reference;
 	 * so is the one tick before the orbit's first, when it is not seated yet.
 	 *
-	 * The rich2 sniper camera falls back as well, but not through
+	 * A level camera Modern keeps falls back as well, but not through
 	 * ModernCameraActive(), which reads the option, lara_item, the title, the
 	 * spotcam, the cutscene and first person, not the running camera. The
-	 * sniper is the one level camera Modern keeps, so FixedCamera runs, the
-	 * orbit does not tick, and ModernCameraActive() stays true. game\camera.cpp's
-	 * stamp answers it: ModernCameraWorldYaw declines unless the orbit ran on
-	 * the tick before, so the measured vector - the camera the player sees - is
-	 * the reference while the sniper has the view.
+	 * rich2 sniper camera, a camera whose trigger names a Target item and a
+	 * heavy trigger's camera are kept (game\camera.cpp's ModernLevelCamera,
+	 * #335), so FixedCamera runs, the orbit does not tick, and
+	 * ModernCameraActive() stays true. game\camera.cpp's stamp answers it:
+	 * ModernCameraWorldYaw declines unless the orbit ran on the tick before,
+	 * so the measured vector - the camera the player sees - is the reference
+	 * while the level camera has the view.
 	 *
 	 * The same accessor declines on a tick after Core's diagonal-wall push
 	 * moved the orbit's eye (The 13th Floor and Escape with the Iris,
@@ -431,11 +433,11 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 	 * steer the view at all" and the orbit's tick stamp inside the accessor for
 	 * "did it really run" - so the two answers cannot disagree about which
 	 * camera this tick had. Where either says no the step is 0 and the held
-	 * course is left alone: a flyby, a cutscene, first person, the title, the
-	 * rich2 sniper camera, the tick before the orbit's first, a tick after the
-	 * diagonal-wall push moved the eye. The accessor returns the stick's own
-	 * term and not the orbit's whole step, which keeps the return and the
-	 * carried swing out of her course. */
+	 * course is left alone: a flyby, a cutscene, first person, the title, a
+	 * level camera the orbit keeps, the tick before the orbit's first, a tick
+	 * after the diagonal-wall push moved the eye. The accessor returns the
+	 * stick's own term and not the orbit's whole step, which keeps the return
+	 * and the carried swing out of her course. */
 	sit.cam_player_step = 0;
 
 	if (ModernCameraActive())
@@ -652,9 +654,9 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 	 * Camera tile whose level camera the orbit discards, 1 (5 if heavy) where
 	 * a level camera takes the view. cam_speed is 10 after every
 	 * CalculateCamera pass, a heavy camera the orbit discards included; a
-	 * heavy camera the orbit does not discard (in first person, or the sniper
-	 * camera fired as heavy) keeps the trigger's speed while its timer runs,
-	 * and a flyby writes its own 1 (game\spotcam.cpp).
+	 * heavy camera the orbit does not discard (in first person, or one the
+	 * orbit keeps: a heavy trigger's, #335) keeps the trigger's speed while
+	 * its timer runs, and a flyby writes its own 1 (game\spotcam.cpp).
 	 *
 	 * `cut` is sit.cam_cut, 1 on the tick the reference changed cameras (the
 	 * orbit's world yaw against the measured vector, so one per change of
@@ -664,12 +666,14 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 	 * re-aimed (MODERN_CUT_LATCH).
 	 *
 	 * `ref_view` is 1 when the modern camera may steer the view and the
-	 * reference is nevertheless the measured vector: under the rich2 sniper
-	 * camera, under a flyby that tracks her and leaves her the controls (the
-	 * X-ray corridor of rich2), whose ticks run no orbit, on the tick before
-	 * the orbit's first, and on a tick after the diagonal-wall push moved the
-	 * eye (CAMLOG's `diag=` above 0 on the tick before). 0 when the reference
-	 * is the orbit's world yaw, and whenever the modern camera is off.
+	 * reference is nevertheless the measured vector: under a level camera the
+	 * orbit keeps (the rich2 sniper camera, a Target item's, a heavy
+	 * trigger's), under a flyby that tracks her and leaves her the controls
+	 * (the X-ray corridor of rich2), whose ticks run no orbit, on the tick
+	 * before the orbit's first, and on a tick after the diagonal-wall push
+	 * moved the eye (CAMLOG's `diag=` above 0 on the tick before). 0 when the
+	 * reference is the orbit's world yaw, and whenever the modern camera is
+	 * off.
 	 *
 	 * `latch_drop` is out.latch_drop: 1 on the tick the stick, turned more than
 	 * MODERN_CUT_REAIM from where it pointed when the latch was armed, ended

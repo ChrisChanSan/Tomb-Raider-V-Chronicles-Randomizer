@@ -2735,7 +2735,7 @@ namespace
 				CoveredFaceArt(trg, a, f, nf, made.held);
 				CoveredFaceArt(trg, b, f, nf, made.own);
 				made.behind = 1;
-				g_face_behind[(size_t)f] = made.behind;
+				g_face_behind[(size_t)f] = (unsigned char)made.behind;
 				g_cover_faces.push_back(made);
 			}
 		}

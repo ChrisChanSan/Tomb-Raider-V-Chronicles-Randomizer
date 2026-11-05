@@ -632,7 +632,7 @@ void LaraGetNewTarget(WEAPON_INFO* winfo)
 						if (abs(ang[0]) < bestyrot + 2730 && dist < bestdist)
 						{
 							bestdist = dist;
-							bestyrot = abs(ang[0]);
+							bestyrot = (short)abs(ang[0]);
 							bestitem = item;
 						}
 					}

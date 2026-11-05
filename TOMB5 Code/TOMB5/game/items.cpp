@@ -92,7 +92,7 @@ void InitialiseItemArray(short num)
 	
 	for (int i = level_items + 1; i < num; i++)
 	{
-		item->next_item = i;
+		item->next_item = (short)i;
 		item->active = 0;
 		item++;
 	}
@@ -395,7 +395,7 @@ void InitialiseFXArray(long allocmem)
 
 	for (int i = 1; i < 24; i++)
 	{
-		fx->next_fx = i;
+		fx->next_fx = (short)i;
 		fx++;
 	}
 

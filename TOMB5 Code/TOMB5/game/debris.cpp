@@ -162,8 +162,10 @@ void TriggerDebris(GAME_VECTOR* pos, void* TextInfo, short* Offsets, long* Vels,
 	}
 
 	dptr->TextInfo = TextInfo;
-	dptr->r = rgb << 3;
-	dptr->g = (rgb >> 5) << 3;
+	// The cut to 8 bits keeps colour bits 0-4: red, shifted up by 3.
+	dptr->r = (uchar)(rgb << 3);
+	// The cut to 8 bits keeps colour bits 5-9: green, shifted up by 3.
+	dptr->g = (uchar)((rgb >> 5) << 3);
 	dptr->b = (rgb >> 10) << 3;
 
 	if (DebrisMesh->prelight)
@@ -256,10 +258,11 @@ void UpdateDebris()
 				dptr->On--;
 			else
 			{
-				dptr->XRot += dptr->Yvel >> 6;
+				// XRot, YRot: 8-bit spin angles that wrap; a full turn is 256.
+				dptr->XRot += (uchar)(dptr->Yvel >> 6);
 
 				if (dptr->Yvel)
-					dptr->YRot += dptr->Speed >> 5;
+					dptr->YRot += (uchar)(dptr->Speed >> 5);
 
 				if (room[dptr->RoomNumber].flags & ROOM_UNDERWATER)
 					dptr->Yvel -= dptr->Yvel >> 2;

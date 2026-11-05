@@ -112,7 +112,7 @@ void DisplayStatsUCunt()
 	PrintString(phd_centerx >> 2, ypos + 7 * font_height, 2, SCRIPT_TEXT(TXT_Secrets_Found), 0);
 
 	Sec = short(GameTimer / 30);
-	Days = Sec / (24 * 60 * 60);
+	Days = (short)(Sec / (24 * 60 * 60));
 	Hours = (Sec % (24 * 60 * 60)) / (60 * 60);
 	Min = (Sec / 60) % 60;
 	Sec = (Sec % 60);

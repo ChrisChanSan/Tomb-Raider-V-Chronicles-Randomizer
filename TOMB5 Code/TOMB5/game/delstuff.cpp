@@ -310,13 +310,13 @@ void CalcLaraMatrices(long flag)
 	else
 	{
 		if (!lara.hit_direction)
-			spaz = lara.IsDucked ? ANIM_SPAZ_DUCKF : ANIM_SPAZ_FORWARD;
+			spaz = (short)(lara.IsDucked ? ANIM_SPAZ_DUCKF : ANIM_SPAZ_FORWARD);
 		else if (lara.hit_direction == 1)
-			spaz = lara.IsDucked ? ANIM_SPAZ_DUCKR : ANIM_SPAZ_RIGHT;
+			spaz = (short)(lara.IsDucked ? ANIM_SPAZ_DUCKR : ANIM_SPAZ_RIGHT);
 		else if (lara.hit_direction == 2)
-			spaz = lara.IsDucked ? ANIM_SPAZ_DUCKB : ANIM_SPAZ_BACK;
+			spaz = (short)(lara.IsDucked ? ANIM_SPAZ_DUCKB : ANIM_SPAZ_BACK);
 		else
-			spaz = lara.IsDucked ? ANIM_SPAZ_DUCKL : ANIM_SPAZ_LEFT;
+			spaz = (short)(lara.IsDucked ? ANIM_SPAZ_DUCKL : ANIM_SPAZ_LEFT);
 
 		frame = &anims[spaz].frame_ptr[lara.hit_frame * (anims[spaz].interpolation >> 8)];
 	}

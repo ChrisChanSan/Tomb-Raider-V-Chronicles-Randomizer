@@ -97,7 +97,7 @@ void CreateZone(ITEM_INFO* item)
 		for (int i = 0; i < num_boxes; i++)
 		{
 			node = &creature->LOT.node[i];
-			node->box_number = i;
+			node->box_number = (short)i;
 			creature->LOT.zone_count++;
 		}
 	}
@@ -114,7 +114,7 @@ void CreateZone(ITEM_INFO* item)
 		{
 			if (*zone == zone_number || *flip == flip_number)
 			{
-				node->box_number = i;
+				node->box_number = (short)i;
 				node++;
 				creature->LOT.zone_count++;
 			}

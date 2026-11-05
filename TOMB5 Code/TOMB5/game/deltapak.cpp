@@ -1471,8 +1471,8 @@ void stealth3_start()
 			{
 				GLOBAL_cutme->actor_data[1].objslot = item->object_number;
 				item->status = ITEM_INVISIBLE;
-				RemoveActiveItem(i);
-				DisableBaddieAI(i);
+				RemoveActiveItem((short)i);
+				DisableBaddieAI((short)i);
 				item->flags |= IFL_INVISIBLE;
 			}
 		}
@@ -1516,7 +1516,7 @@ void stealth3_end()
 					item->anim_number = objects[BLUE_GUARD].anim_index + 11;
 
 				item->frame_number = anims[item->anim_number].frame_end;
-				AddActiveItem(i);
+				AddActiveItem((short)i);
 			}
 		}
 	}
@@ -2157,7 +2157,7 @@ void handle_cutseq_triggering(long name)
 				lara.request_gun_type = WEAPON_NONE;
 				lara.gun_status = LG_NO_ARMS;
 				old_lara_LHolster = LHolster;
-				LHolster = lara.pistols_type_carried == W_NONE ? LARA_HOLSTERS : LARA_HOLSTERS_PISTOLS;
+				LHolster = (ushort)(lara.pistols_type_carried == W_NONE ? LARA_HOLSTERS : LARA_HOLSTERS_PISTOLS);
 				old_lara_holster = lara.holster;
 				lara.holster = LHolster;
 				lara.mesh_ptrs[LM_LHAND] = meshes[objects[LARA].mesh_index + (2 * LM_LHAND)];
@@ -3631,8 +3631,8 @@ void nail_intelligent_object(short objnum)
 		if (item->object_number == objnum)
 		{
 			item->status = ITEM_INVISIBLE;
-			RemoveActiveItem(i);
-			DisableBaddieAI(i);
+			RemoveActiveItem((short)i);
+			DisableBaddieAI((short)i);
 		}
 	}
 }

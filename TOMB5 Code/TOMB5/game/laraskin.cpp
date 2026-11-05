@@ -342,7 +342,7 @@ void CreateSkinningData()
 		obj = &objects[LARA_SKIN_JOINTS];
 		meshpp = &meshes[obj->mesh_index + 1];
 		bone = &bones[obj->bone_index];
-		jointMeshNum = i + 1;
+		jointMeshNum = (short)(i + 1);
 
 		for (int j = 1; j < obj->nmeshes; j++, bone += 4, meshpp++)
 		{
@@ -446,7 +446,7 @@ void CreateSkinningData()
 					}
 
 					SkinVertNums[SkinJoints[i][2]][aboveVerts] = ii;
-					ScratchVertNums[SkinJoints[i][2]][aboveVerts] = j;
+					ScratchVertNums[SkinJoints[i][2]][aboveVerts] = (char)j;
 					aboveVerts++;
 				}
 			}
@@ -499,7 +499,7 @@ void CreateSkinningData()
 					}
 
 					SkinVertNums[SkinJoints[i][3]][belowVerts] = ii;
-					ScratchVertNums[SkinJoints[i][3]][belowVerts] = j;
+					ScratchVertNums[SkinJoints[i][3]][belowVerts] = (char)j;
 					belowVerts++;
 				}
 			}
@@ -751,7 +751,7 @@ void CreateSkinningData()
 						continue;
 
 					SkinVertNums[SkinJoints[i][2]][aboveVerts] = who;
-					ScratchVertNums[SkinJoints[i][2]][aboveVerts] = j;
+					ScratchVertNums[SkinJoints[i][2]][aboveVerts] = (char)j;
 					aboveVerts++;
 				}
 				else
@@ -760,7 +760,7 @@ void CreateSkinningData()
 						continue;
 
 					SkinVertNums[SkinJoints[i][3]][belowVerts] = who;
-					ScratchVertNums[SkinJoints[i][3]][belowVerts] = j;
+					ScratchVertNums[SkinJoints[i][3]][belowVerts] = (char)j;
 					belowVerts++;
 				}
 
@@ -831,7 +831,7 @@ void CreateSkinningData()
 							break;
 						}
 
-						PointsToCalc[jointMeshNum - 1][calcPointsCounter] = j;
+						PointsToCalc[jointMeshNum - 1][calcPointsCounter] = (uchar)j;
 						calcPointsCounter++;
 					}
 				}

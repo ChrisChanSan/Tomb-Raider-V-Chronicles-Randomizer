@@ -159,7 +159,7 @@ void TriggerRomanGodLightningGlow(long x, long y, long z, long rgb)
 	sptr->Flags = SF_DEF | SF_SCALE;
 	sptr->Scalar = 3;
 	sptr->MaxYvel = 0;
-	sptr->Def = objects[DEFAULT_SPRITES].mesh_index + 11;
+	sptr->Def = (uchar)(objects[DEFAULT_SPRITES].mesh_index + 11);
 	sptr->Gravity = 0;
 	sptr->sSize = (GetRandomControl() & 3) + (rgb >> 24);
 	sptr->Size = sptr->sSize;

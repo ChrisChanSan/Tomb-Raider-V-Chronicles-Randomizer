@@ -4633,7 +4633,7 @@ void lara_as_pulley(ITEM_INFO* item, COLL_INFO* coll)
 				p->item_flags[2] = 1;
 
 				if (p->item_flags[3] >= 0)
-					p->trigger_flags = abs(p->item_flags[3]);
+					p->trigger_flags = (short)abs(p->item_flags[3]);
 				else
 					p->item_flags[0] = 1;
 			}
@@ -5110,7 +5110,7 @@ void UpdateRopeSwing(ITEM_INFO* item)
 			lara.RopeMaxXForward = item->pos.x_rot;
 	}
 	else if (item->pos.x_rot < -lara.RopeMaxXBackward)
-		lara.RopeMaxXBackward = abs(item->pos.x_rot);
+		lara.RopeMaxXBackward = (short)abs(item->pos.x_rot);
 }
 
 void ApplyVelocityToRope(long node, ushort angle, ushort n)

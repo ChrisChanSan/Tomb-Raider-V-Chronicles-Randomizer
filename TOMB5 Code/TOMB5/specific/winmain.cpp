@@ -354,7 +354,7 @@ void WinProcessCommandLine(LPSTR cmd)
 	for (int i = 0; (ulong)i < strlen(cmd); i++)
 	{
 		if (toupper(cmd[i]))
-			cmd[i] = toupper(cmd[i]);
+			cmd[i] = (CHAR)toupper(cmd[i]);
 	}
 
 	for (int i = 0; i < num; i++)

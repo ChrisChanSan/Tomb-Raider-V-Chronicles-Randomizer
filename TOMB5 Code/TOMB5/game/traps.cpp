@@ -999,7 +999,8 @@ void ControlRollingBall(short item_number)
 			item->pos.y_rot = destyrot;
 	}
 
-	item->pos.x_rot -= (abs(item->item_flags[0]) + abs(item->item_flags[1])) >> 1;
+	// x_rot is a 16-bit angle: it wraps through 0x10000 as it spins.
+	item->pos.x_rot -= (short)((abs(item->item_flags[0]) + abs(item->item_flags[1])) >> 1);
 	GetHeight(GetFloor(item->pos.x_pos, item->pos.y_pos, item->pos.z_pos, &room_number), item->pos.x_pos, item->pos.y_pos, item->pos.z_pos);
 	TestTriggers(trigger_index, 1, 0);
 }

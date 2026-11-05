@@ -462,7 +462,7 @@ void ControlPortalDoor(short item_number)
 	sptr->sSize = sptr->Size;
 	sptr->dSize = sptr->Size;
 	sptr->Scalar = 1;
-	sptr->Def = objects[DEFAULT_SPRITES].mesh_index + 14;
+	sptr->Def = (uchar)(objects[DEFAULT_SPRITES].mesh_index + 14);
 }
 
 void ControlGenSlot1(short item_number)

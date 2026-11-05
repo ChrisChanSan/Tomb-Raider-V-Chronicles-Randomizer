@@ -841,7 +841,7 @@ void TriggerExplosionBubble(long x, long y, long z, short room_number)
 	sptr->Friction = 0;
 	sptr->Flags = SF_UNWATER | SF_DEF | SF_SCALE;
 	sptr->Scalar = 3;
-	sptr->Def = objects[DEFAULT_SPRITES].mesh_index + 13;
+	sptr->Def = (uchar)(objects[DEFAULT_SPRITES].mesh_index + 13);
 	sptr->Gravity = 0;
 	sptr->MaxYvel = 0;
 	size = (GetRandomControl() & 7) + 63;
@@ -926,7 +926,7 @@ void TriggerWaterfallMist(long x, long y, long z, long ang)
 	sptr->Friction = 0;
 	sptr->Flags = SF_DEF | SF_SCALE;
 	sptr->Scalar = 2;
-	sptr->Def = objects[DEFAULT_SPRITES].mesh_index + 17;
+	sptr->Def = (uchar)(objects[DEFAULT_SPRITES].mesh_index + 17);
 	sptr->Gravity = 0;
 	sptr->MaxYvel = 0;
 	sptr->Size = (GetRandomControl() & 7) + 8;
@@ -1202,7 +1202,7 @@ void TriggerRicochetSpark(GAME_VECTOR* pos, long ang, long num, long smoke_only)
 			sptr->RotAdd = ((rnd >> 1) & 0x3F) + 64;
 
 		sptr->Scalar = 3;
-		sptr->Def = objects[DEFAULT_SPRITES].mesh_index + 12;
+		sptr->Def = (uchar)(objects[DEFAULT_SPRITES].mesh_index + 12);
 		sptr->Size = ((rnd >> 10) & 7) + 8;
 		sptr->sSize = sptr->Size;
 		sptr->dSize = 1;

@@ -202,7 +202,7 @@ void ControlLavaEffect(short item_number)
 	else
 	{
 		sptr->Flags = SF_ROTATE | SF_DEF | SF_SCALE;
-		sptr->Def = objects[DEFAULT_SPRITES].mesh_index + 14;
+		sptr->Def = (uchar)(objects[DEFAULT_SPRITES].mesh_index + 14);
 		sptr->Scalar = 1;
 		sptr->Gravity = (GetRandomControl() & 0xF) + 64;
 	}
@@ -245,7 +245,7 @@ void TriggerCoinGlow(short item_number)
 	sptr->Zvel = 0;
 	sptr->Flags = SF_NOKILL | SF_DEF | SF_SCALE;
 	sptr->Scalar = 4;
-	sptr->Def = objects[DEFAULT_SPRITES].mesh_index + 11;
+	sptr->Def = (uchar)(objects[DEFAULT_SPRITES].mesh_index + 11);
 	sptr->MaxYvel = 0;
 	sptr->Gravity = 0;
 	sptr->Size = 24;

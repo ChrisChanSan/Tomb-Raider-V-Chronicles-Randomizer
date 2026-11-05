@@ -200,7 +200,7 @@ void RaptorControl(short item_number)
 			else if (info.bite && info.distance < 0x240000)
 			{
 				if (item->goal_anim_state == RAPTOR_RUN)
-					item->goal_anim_state = GetRandomControl() < 0x2000 ? RAPTOR_STOP : RAPTOR_ATTACK2;
+					item->goal_anim_state = (short)(GetRandomControl() < 0x2000 ? RAPTOR_STOP : RAPTOR_ATTACK2);
 			}
 			// Without the ANIMATING6 comparison, but checked against null -
 			// see the file header.

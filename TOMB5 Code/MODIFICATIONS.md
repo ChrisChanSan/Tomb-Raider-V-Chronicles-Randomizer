@@ -19885,6 +19885,33 @@ holds `PCtomb5_x86.exe`.
 
 **Commits.** see the appendix.
 
+### The Corpses row is called Corpse fade (#341)
+
+The options row that #332 named *Corpses* is now *Corpse fade*. Read as "Corpses:
+on/off" the old word said the opposite of what the switch does: *on* made the bodies
+disappear, *off* left them lying. Named after the act, *on* reads as what happens - the
+body fades and is cleared, as in the original - and *off* as what it does not do.
+
+The five words, in the order English, French, German, Italian, Spanish: *Corpse fade*,
+*Fondu des cadavres*, *Leichen ausblenden*, *Sparizione cadaveri*, *Fundido cadáveres*.
+They stand in `CustomText`'s table (`game/gameflow.cpp`) and in the four non-English
+blocks of `Preparation/extrastrings.txt`, whose key is the English word. Width, measured
+on the real font (`game/chardef.inc`, the sum `GetStringLength` makes, 640x480): the
+longest new word, *Fondu des cadavres*, is 183 glyph units, the longest label already on
+the tab, *Inclinaison reptation*, 193. The label column starts at `phd_centerx >> 2` and
+the value column at `phd_centerx + (phd_centerx >> 2)`, 320 units further at 640x480, so
+every new word clears the value by 137 units or more, and at every resolution, since
+both ends scale together.
+
+Nothing else moved. The registry key stays `corpses`, `tomb5.corpses` keeps its name,
+its default (on) and its meaning, so a setting saved before reads the same; the two
+functions behind the row keep their names; the recorder header's byte is still the
+Corpses byte, a byte name rather than a menu word. `ModernTest` follows the new texts,
+`MenuTest` counts rows and not words and is unchanged at 45043. The manual's options
+list, defaults line and the paragraph of the switch use the new name.
+
+**Commits.** see the appendix.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -20362,3 +20389,4 @@ entries above.
 | #335 | Under Modern a level camera that shows something is kept |
 | #338 | The log families a test build alone carries |
 | #339 | The 64-bit engine is PCtomb5.exe, the 32-bit one PCtomb5_x86.exe |
+| #341 | The Corpses row is called Corpse fade |

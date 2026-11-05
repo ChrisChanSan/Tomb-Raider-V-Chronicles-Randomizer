@@ -45,6 +45,13 @@ ulong tomb5_save_size;
 ulong savegame_bytes_read;
 bool  savegame_checksum_ok;	// built in S_LoadGame, see there
 
+/* The first four bytes of savegame.buffer: the format of the item block
+ * behind them. The file's size did not change when the animation went from
+ * a byte to a short, so the size check cannot tell an older save; the mark
+ * can. An older save holds FmvSceneTriggered there, which nothing sets any
+ * more (fmv.cpp), so it reads 0. A new mark for every change of the block. */
+#define SAVE_FORMAT_MARK	0x02355653	// "SV5" and format 2
+
 // The 22 bytes a save writes of a creature end with the four of its enemy's
 // field, which save_pointer_rule.h fills - a long, whatever the width of the
 // pointer behind it.
@@ -538,10 +545,15 @@ void SaveLevelData(long FullSave)
 					byte = (uchar)(item->required_anim_state);
 					WriteSG(&byte, sizeof(uchar));
 
+					/* A short relative to the object's own anim_index: a
+					 * stealth cutscene (deltapak.cpp's stealth3_end) gives a
+					 * guard SWAT's animation, hundreds of animations away,
+					 * which a byte cut. SAVE_FORMAT_MARK says the item
+					 * block holds the short. */
 					if (item->object_number != LARA)
 					{
-						byte = item->anim_number - obj->anim_index;
-						WriteSG(&byte, sizeof(uchar));
+						pos = item->anim_number - obj->anim_index;
+						WriteSG(&pos, sizeof(short));
 					}
 					else
 						WriteSG(&item->anim_number, sizeof(short));
@@ -846,7 +858,8 @@ void RestoreLevelData(long FullSave)
 	ushort word, packed, uroom_number, uword;
 	short sword, item_number, room_number, req, goal, current, objnum;
 	uchar numberof;
-	char byte, anim, lflags;
+	short anim;
+	char byte, lflags;
 	char line[128];
 
 	pool = SavePointerPool();
@@ -994,7 +1007,7 @@ void RestoreLevelData(long FullSave)
 
 				if (item->object_number != LARA)
 				{
-					ReadSG(&anim, sizeof(char));
+					ReadSG(&anim, sizeof(short));
 					item->anim_number = obj->anim_index + anim;
 				}
 				else
@@ -1292,12 +1305,15 @@ void RestoreLevelData(long FullSave)
 void sgSaveGame()
 {
 	char* ptr;
+	long mark;
 	char sum;
 
 	SGcount = 0;
 	SGpoint = savegame.buffer;
 	savegame.Game.Timer = GameTimer;
 	savegame.CurrentLevel = gfCurrentLevel;
+	mark = SAVE_FORMAT_MARK;
+	WriteSG(&mark, sizeof(long));
 	SaveLevelData(1);
 	SaveLaraData();
 	savegame.Checksum = 0;
@@ -1315,6 +1331,8 @@ void sgSaveGame()
 
 void sgRestoreGame()
 {
+	long mark;
+
 	// Validate the loaded savegame before trusting any of it - see
 	// savegame_bytes_read (set in specific\gamemain.cpp's S_LoadGame) and
 	// the buffer[] resize comment in global\types.h. Two independent,
@@ -1381,8 +1399,27 @@ void sgRestoreGame()
 		ExitProcess(1);
 	}
 
+	// Same size, sound checksum, older item block: refused by the mark
+	// before a single item is read.
+	memcpy(&mark, savegame.buffer, sizeof(long));
+
+	if (mark != SAVE_FORMAT_MARK)
+	{
+		Log("FATAL: savegame format mark 0x%08lX, this version writes 0x%08lX",
+			(unsigned long)mark, (unsigned long)SAVE_FORMAT_MARK);
+
+		MessageBox(0,
+			"This savegame was written by an older version of the game. "
+			"This version uses a newer savegame format and cannot load "
+			"it.\r\n\r\nThe game cannot continue and must close.",
+			"Tomb Raider V - Fatal Error", MB_ICONSTOP);
+
+		ExitProcess(1);
+	}
+
 	SGcount = 0;
 	SGpoint = savegame.buffer;
+	ReadSG(&mark, sizeof(long));
 	GameTimer = savegame.Game.Timer;
 	gfCurrentLevel = savegame.CurrentLevel;
 	RestoreLevelData(1);

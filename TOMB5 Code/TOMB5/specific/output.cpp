@@ -1514,16 +1514,16 @@ void StashSkinVertices(long node)
 	D3DTLVERTEX* v;
 	D3DTLVERTEX* d;
 	short* cf;
-	char* vns;
+	uchar* vns;
 
-	vns = (char*)&SkinVertNums[node];
+	vns = SkinVertNums[node];
 	cf = (short*)&SkinClip[node];
 	d = (D3DTLVERTEX*)&SkinVerts[node];
 	v = aVertexBuffer;
 
 	while (1)
 	{
-		if (*vns < 0)
+		if (*vns == 0xFF)	// the row's end; 0..254 name a vertex
 			break;
 
 		d->sx = v[*vns].sx;
@@ -1574,14 +1574,14 @@ void SkinVerticesToScratch(long node)
 void StashSkinNormals(long node)
 {
 	ENVUV* d;
-	char* vns;
+	uchar* vns;
 
-	vns = (char*)&SkinVertNums[node];
+	vns = SkinVertNums[node];
 	d = &SkinENVUV[node][0];
 
 	while (1)
 	{
-		if (*vns < 0)
+		if (*vns == 0xFF)	// the row's end; 0..254 name a vertex
 			break;
 
 		d->u = aMappedEnvUV[*vns].u;

@@ -49,6 +49,9 @@
 
 #ifdef _WIN64
 
+#pragma warning(push, 0)
+// vendored code: its narrowings are not this project's
+#pragma warning(disable: 4244)
 extern "C" {
 #include "libavformat/avformat.h"
 #include "libavcodec/avcodec.h"
@@ -57,6 +60,7 @@ extern "C" {
 #include "libavutil/pixdesc.h"
 #include "libavutil/samplefmt.h"
 }
+#pragma warning(pop)
 
 #include "fmv_av.h"
 #include "yuv_rgb.h"

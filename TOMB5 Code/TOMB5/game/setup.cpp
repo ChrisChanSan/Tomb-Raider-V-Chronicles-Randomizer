@@ -2511,12 +2511,17 @@ void BuildOutsideTable()
 	// class as SAVEGAME_INFO (see that fix's comments in game\savegame.cpp),
 	// but worse here since this one overflows the stack, not the heap.
 	// number_rooms comes straight from the level file with no upstream cap.
-	if (number_rooms > 256)
+	//
+	// The tighter limit is OutsideRoomTable's: a room number goes in as one
+	// byte and 255 means "empty", so room 255 would vanish from the table
+	// (and the save keeps an item's room in a byte too). 255 rooms, 0..254.
+	if (number_rooms > 255)
 	{
-		Log("FATAL: level has %d rooms, only 256 fit in BuildOutsideTable()'s flipped[]", number_rooms);
+		Log("FATAL: level has %d rooms, only 255 fit in BuildOutsideTable()'s OutsideRoomTable", number_rooms);
 
 		MessageBox(0,
-			"This level has more rooms than the engine can handle.\r\n\r\n"
+			"This level has more rooms than the engine can handle "
+			"(at most 255).\r\n\r\n"
 			"The game cannot continue and must close.",
 			"Tomb Raider V - Fatal Error", MB_ICONSTOP);
 
@@ -2576,7 +2581,8 @@ void BuildOutsideTable()
 				{
 					if (pTable[lp] == 255)
 					{
-						pTable[lp] = i;
+						// i < number_rooms, at most 255 (checked above)
+						pTable[lp] = (uchar)i;
 
 						if (lp > max_slots)
 							max_slots = lp;

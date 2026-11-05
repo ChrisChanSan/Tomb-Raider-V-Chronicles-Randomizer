@@ -811,7 +811,7 @@
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
       <DisableSpecificWarnings>
       </DisableSpecificWarnings>
-      <TreatSpecificWarningsAsErrors>4311;4312;4302;4267;4477;4005;4101;%(TreatSpecificWarningsAsErrors)</TreatSpecificWarningsAsErrors>
+      <TreatSpecificWarningsAsErrors>4311;4312;4302;4267;4477;4005;4101;4244;%(TreatSpecificWarningsAsErrors)</TreatSpecificWarningsAsErrors>
     </ClCompile>
     <Link>
       <LargeAddressAware>true</LargeAddressAware>
@@ -843,7 +843,7 @@
       <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
       <EnableEnhancedInstructionSet>NotSet</EnableEnhancedInstructionSet>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
-      <TreatSpecificWarningsAsErrors>4311;4312;4302;4267;4477;4005;4101;%(TreatSpecificWarningsAsErrors)</TreatSpecificWarningsAsErrors>
+      <TreatSpecificWarningsAsErrors>4311;4312;4302;4267;4477;4005;4101;4244;%(TreatSpecificWarningsAsErrors)</TreatSpecificWarningsAsErrors>
     </ClCompile>
     <Link>
       <LargeAddressAware>true</LargeAddressAware>
@@ -883,7 +883,7 @@ exit /b 0</Command>
       <PrecompiledHeaderFile>../tomb5/pch.h</PrecompiledHeaderFile>
       <EnableEnhancedInstructionSet>NotSet</EnableEnhancedInstructionSet>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
-      <TreatSpecificWarningsAsErrors>4311;4312;4302;4267;4477;4005;4101;%(TreatSpecificWarningsAsErrors)</TreatSpecificWarningsAsErrors>
+      <TreatSpecificWarningsAsErrors>4311;4312;4302;4267;4477;4005;4101;4244;%(TreatSpecificWarningsAsErrors)</TreatSpecificWarningsAsErrors>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -913,7 +913,7 @@ exit /b 0</Command>
       <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
       <EnableEnhancedInstructionSet>NotSet</EnableEnhancedInstructionSet>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
-      <TreatSpecificWarningsAsErrors>4311;4312;4302;4267;4477;4005;4101;%(TreatSpecificWarningsAsErrors)</TreatSpecificWarningsAsErrors>
+      <TreatSpecificWarningsAsErrors>4311;4312;4302;4267;4477;4005;4101;4244;%(TreatSpecificWarningsAsErrors)</TreatSpecificWarningsAsErrors>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -947,7 +947,7 @@ exit /b 0</Command>
       <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
       <EnableEnhancedInstructionSet>NotSet</EnableEnhancedInstructionSet>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
-      <TreatSpecificWarningsAsErrors>4311;4312;4302;4267;4477;4005;4101;%(TreatSpecificWarningsAsErrors)</TreatSpecificWarningsAsErrors>
+      <TreatSpecificWarningsAsErrors>4311;4312;4302;4267;4477;4005;4101;4244;%(TreatSpecificWarningsAsErrors)</TreatSpecificWarningsAsErrors>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>

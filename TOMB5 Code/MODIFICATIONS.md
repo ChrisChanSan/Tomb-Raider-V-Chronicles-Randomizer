@@ -19277,6 +19277,90 @@ logs of `be64.bat`, `be64.bat test`, `basan.bat` and `be.bat` hold no warning li
 
 **Commits.** `81d4d2c3`.
 
+### The six suspect narrowings closed, and C4244 an error (#331)
+2026-11-05
+
+**Measured.** Over the 15 vanilla levels in `data/Backup` and the randomized ones in
+`data/` on this date (a tool over `core/Tr5Level`, outfits of Tomb Raider III read from
+their `.TR2`):
+
+- The save's item block (`SaveLevelData`/`RestoreLevelData`, inside `savegame.buffer`)
+  holds five one-byte fields: the room (a `uchar`, bounded by the room count, see
+  below), the three anim states (written as `uchar`, read zero-extended, so exact up to
+  255; the largest state in any anim table is Lara's 137), the LOT flags (seven bits)
+  and the anim. The anim was the only one that could leave its byte: the largest
+  animation set of any object but Lara is 72 (the cyborg, slot 67 and 469), 64 for the
+  soldiers - below 127 everywhere. The other way out is `stealth3_end`
+  (`deltapak.cpp`), the end of cutscenes 1 to 4, the stealth knock-outs with the wet
+  cloth or the crowbar: SAS, BLUE_GUARD and SWAT_PLUS actors within a sector of Lara
+  are given `objects[SWAT].anim_index + 11` when SWAT is loaded. The triggers stand in
+  joby3 (cut 2, the chef), rich1 (cut 4, the twogun), rich2 (cut 1, four places) and
+  del.trc (cut 2). In vanilla no level with a guard there loads SWAT. The randomized
+  rich2 of this date does: its three BLUE_GUARDs at two cut-1 places get anim 834
+  against their own `anim_index` 489, 345 apart - the byte kept 89, and the load put the
+  guard into anim 578, a floor trapdoor's, at a frame number from SWAT's death anim. The
+  actor keeps the anim after the cutscene (its control leaves a guard in state 6
+  alone), so every save made after the knock-out held a guard in a foreign pose.
+- Lara's meshes (slots 0 to 27 - LARA, the weapon hands, LARA_SKIN, the joints, the
+  heads): the largest vertex count is 114, joby4's diving suit (slot 8, the torso); every
+  other level and every randomized one stays at 104 or below, the three outfits of TR5
+  among them. The four outfits of Tomb Raider III (object 315 of ROOFS, CRASH, ANTARC,
+  NEVADA) reach 70, 70, 79 and 70. Nothing crosses 127 today; the margin is 13.
+- Rooms: Andy2 254, Andrea2 252, andy1 243, Andrea1 242, rich3 218, andy3 211, joby3
+  195, joby5 191, rich2 179, joby2 169, rich1 165, joby4 137, Andrea3 130, title 116,
+  richcut2 7 - the same in the randomized levels. No form of the secret list adds a
+  room: `Make_Room_Geometry` builds on a room that exists (`buildRoomGeometry` refuses
+  any other), `Move_Room`, `Make_Portal`, the floor and ceiling portals, `Make_Climb` and
+  `Make_Room_Water` change existing rooms, and `Tr5Level` never writes the room count.
+  The randomizer is therefore unchanged.
+
+**Changed.** The save keeps a non-Lara item's anim as a `short` relative to its object's
+`anim_index` (written and read; the puzzle hole's re-read uses the same `short`). The
+file did not change size, so the size and checksum checks would have read an older save
+as the new layout; the first four bytes of `savegame.buffer` now hold a format mark,
+`SAVE_FORMAT_MARK` ("SV5" and 2), written ahead of `SaveLevelData`. `sgRestoreGame`
+compares it after the size and checksum checks and before a single item is read; an
+older save holds `FmvSceneTriggered` there, which nothing has set since `fmv.cpp`
+commented it out, so it reads 0. A save without the mark is refused with a Log line
+and the message "This savegame was written by an older version of the game. This
+version uses a newer savegame format and cannot load it." and the game closes, as the
+other two refusals do. Saves of Beta_5.0 do not load in this build.
+
+`SkinVertNums` (`delstuff.cpp`/`.h`) and `HairSkinVertNums` (`laraskin.cpp`, copied into
+it) are `uchar`; the row's end is 0xFF where it was -1, and the two readers in
+`output.cpp` (`StashSkinVertices`, `StashSkinNormals`) stop on `== 0xFF`. A vertex
+number 0..254 (`nVerts & 0xFF`) can no longer pass for the end. `ScratchVertNums` and
+its two readers are unchanged (`jointVerts` stops at 128). The four writes cast the
+`int` to `uchar` with a line naming the bound - the type alone does not quiet C4244.
+
+`BuildOutsideTable` (`setup.cpp`), where the room count is first used after the read,
+refuses a level over 255 rooms with a Log line and a MessageBox ("at most 255") and
+closes; it used to stop at 256, the size of `flipped[]`, which let room 255 vanish into
+`OutsideRoomTable`'s "empty". The save's room byte is bounded by the same check. The
+write into the table casts with that check named.
+
+C4244 is in `TreatSpecificWarningsAsErrors` of all five configurations
+(4311;4312;4302;4267;4477;4005;4101;4244). `/we4244` turns the warning's level-4
+form into an error even inside `#pragma warning(push, 0)`, and two pieces of
+vendored code carry it: 74 places of `tomb5/libs/stb/stb_vorbis.c` (included by
+`audio.cpp` inside its `push, 0` block) and four of `vendor/ffmpeg-min`'s
+`libavutil/common.h` (reached through the FFmpeg headers `fmv_av.cpp` includes).
+The one exception is for them: `#pragma warning(disable: 4244)` inside the
+`push, 0` block around the stb include in `audio.cpp`, and inside a `push, 0` /
+`pop` pair put around the FFmpeg includes of `fmv_av.cpp` (there was none), each
+with a line saying the code is vendored. No `/wd`, no external include path, no
+per-file setting, and no such pragma around any of the engine's own code.
+
+**Checked.** A measurement build with `CL=-w14244` names none of the engine's own
+places: none in the 32-bit build, and in the 64-bit build only the four lines of
+`vendor/ffmpeg-min`'s `libavutil/common.h` that #329's measurement showed as well.
+ModernTest's `warning_rule` expects the eight numbers; the new group `narrowing_closed`
+(5 checks) holds the `uchar` rows and their 0xFF tests, the `short` anim, the mark
+written and checked, and the room check. The `.text` comparison does not apply: types
+changed.
+
+**Commits.** see the appendix.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -19747,3 +19831,4 @@ entries above.
 | #328 | The engine builds without a warning |
 | #329 | The hidden narrowings, and C4244 still a warning |
 | #330 | A spark follows its item above number 255 |
+| #331 | The six suspect narrowings closed, and C4244 an error |

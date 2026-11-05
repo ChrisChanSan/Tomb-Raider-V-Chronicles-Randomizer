@@ -30,6 +30,8 @@
 // them - the OGGs are the player's own data, the engine only checks whether
 // they are there.
 #pragma warning(push, 0)
+// vendored code: its narrowings are not this project's
+#pragma warning(disable: 4244)
 #define STB_VORBIS_NO_PUSHDATA_API
 #include "../tomb5/libs/stb/stb_vorbis.c"
 #pragma warning(pop)

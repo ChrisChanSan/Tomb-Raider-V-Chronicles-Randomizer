@@ -30005,7 +30005,8 @@ static void film_av()
 		"\"TOMB5\\specific\\yuv_rgb.cpp\"><ExcludedFromBuildCondition=\"'$("
 		"Platform)'=='Win32'\">true</ExcludedFromBuild>") != 0 &&
 		strstr(sav, "#include\"../tomb5/pch.h\"") != 0 &&
-		strstr(sav, "#ifdef_WIN64extern\"C\"{") != 0 &&
+		strstr(sav, "#ifdef_WIN64#pragmawarning(push,0)") != 0 &&
+		strstr(sav, "#pragmawarning(disable:4244)extern\"C\"{") != 0 &&
 		!strcmp(sav + strlen(sav) - 6, "#endif"),
 		"film_av: x64 only - left out of Win32, its body under _WIN64", 0,
 		1);
@@ -30367,14 +30368,14 @@ static void toolset_rule()
 /* The engine builds without a warning (#328): the macro and unused-local
  * warnings of tomb5.vcxproj are errors in each of the five configurations'
  * own ClCompile, beside the five of #324, and global\types.h
- * keeps ddraw.h's DD_OK and DD_FALSE where fmv.cpp includes it first. Read
- * from the tree. */
+ * keeps ddraw.h's DD_OK and DD_FALSE where fmv.cpp includes it first. The
+ * narrowings (C4244) joined them with #331. Read from the tree. */
 static void warning_rule()
 {
 	static const char* const configs[5] = { "Debug|Win32", "Release|Win32",
 		"Debug|x64", "Release|x64", "Asan|x64" };
 	static const char* const list = "<TreatSpecificWarningsAsErrors>"
-		"4311;4312;4302;4267;4477;4005;4101;"
+		"4311;4312;4302;4267;4477;4005;4101;4244;"
 		"%(TreatSpecificWarningsAsErrors)</TreatSpecificWarningsAsErrors>";
 	char* proj = hd_switch_text("../../../tomb5.vcxproj");
 	char* types = hd_switch_text("../../global/types.h");
@@ -30397,7 +30398,7 @@ static void warning_rule()
 		for (const char* q = p; e && (q = strstr(q, list)) && q < e; q++)
 			n++;
 
-		snprintf(what, sizeof(what), "warning rule: %s treats the seven "
+		snprintf(what, sizeof(what), "warning rule: %s treats the eight "
 			"warnings as errors", configs[i]);
 		ok(n == 1, what, n, 1);
 	}
@@ -38863,6 +38864,70 @@ static void spark_item_number()
 	free(init);
 }
 
+/* The six narrowings #329 left (#331). Lara's seam rows are uchar and end
+ * on 0xFF, so a vertex 128..254 no longer reads as the end; the save keeps
+ * an item's animation as a short behind a format mark the load checks; a
+ * level over 255 rooms is refused where OutsideRoomTable is built. The 4244
+ * in each configuration stands in warning_rule. Read from the tree. */
+static void narrowing_closed()
+{
+	char* del = hd_switch_text("../../game/delstuff.cpp");
+	char* delh = hd_switch_text("../../game/delstuff.h");
+	char* skin = hd_switch_text("../../game/laraskin.cpp");
+	char* out = hd_switch_text("../output.cpp");
+	char* save = hd_switch_text("../../game/savegame.cpp");
+	char* setup = hd_switch_text("../../game/setup.cpp");
+
+	printf("The narrowings closed\n");
+
+	ok(del && delh && skin &&
+		hd_switch_count(del, "uchar SkinVertNums[40][12];") == 1 &&
+		hd_switch_count(delh, "extern uchar SkinVertNums[40][12];") == 1 &&
+		hd_switch_count(skin, "static uchar HairSkinVertNums[6][12]") == 1 &&
+		hd_switch_count(skin, "Verts] = 0xFF;") == 4 &&
+		hd_switch_count(skin, "HairSkinVertNums[0][i] == 0xFF") == 1 &&
+		hd_switch_count(skin, "HairSkinVertNums[2][j] == 0xFF") == 1,
+		"narrowing closed: SkinVertNums is uchar, its rows end on 0xFF",
+		skin ? hd_switch_count(skin, "Verts] = 0xFF;") : -1, 4);
+
+	ok(out && hd_switch_count(out, "vns = SkinVertNums[node];") == 2 &&
+		hd_switch_count(out, "if (*vns == 0xFF)") == 2 &&
+		hd_switch_count(out, "if (*vns < 0)") == 2,
+		"narrowing closed: the two stash loops end on 0xFF, the scratch "
+		"loops on a negative char", out ? hd_switch_count(out,
+		"if (*vns == 0xFF)") : -1, 2);
+
+	ok(save && hd_switch_count(save, "pos = item->anim_number - "
+		"obj->anim_index;\r\n\t\t\t\t\t\tWriteSG(&pos, sizeof(short));") == 1 &&
+		hd_switch_count(save, "ReadSG(&anim, sizeof(short));") == 1 &&
+		hd_switch_count(save, "ReadSG(&anim, sizeof(char));") == 0 &&
+		hd_switch_count(save, "\tshort anim;\r\n") == 1,
+		"narrowing closed: the save keeps an item's animation as a short",
+		save ? hd_switch_count(save, "ReadSG(&anim, sizeof(short));") : -1,
+		1);
+
+	ok(save && hd_switch_count(save, "WriteSG(&mark, sizeof(long));\r\n"
+		"\tSaveLevelData(1);") == 1 &&
+		hd_switch_count(save, "if (mark != SAVE_FORMAT_MARK)") == 1 &&
+		hd_switch_count(save, "ReadSG(&mark, sizeof(long));") == 1 &&
+		hd_switch_count(save, "uses a newer savegame format") == 1,
+		"narrowing closed: the save's format mark is written and checked",
+		save ? hd_switch_count(save, "SAVE_FORMAT_MARK") : -1, 4);
+
+	ok(setup && hd_switch_count(setup, "if (number_rooms > 255)") == 1 &&
+		hd_switch_count(setup, "if (number_rooms > 256)") == 0 &&
+		hd_switch_count(setup, "pTable[lp] = (uchar)i;") == 1,
+		"narrowing closed: a level over 255 rooms is refused",
+		setup ? hd_switch_count(setup, "number_rooms > 255") : -1, 1);
+
+	free(del);
+	free(delh);
+	free(skin);
+	free(out);
+	free(save);
+	free(setup);
+}
+
 int main()
 {
 	printf("ModernTest - the arithmetic of the modern control\n");
@@ -39138,6 +39203,7 @@ int main()
 	logic_leftovers();
 	composite_nodes();
 	spark_item_number();
+	narrowing_closed();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

@@ -762,26 +762,26 @@
     <OutDir>$(ProjectDir)..\release\</OutDir>
     <IntDir>$(Platform)\$(Configuration)\</IntDir>
     <LibraryPath>$(ProjectDir)TOMB5\tomb5\libs\discordRPC;$(LibraryPath)</LibraryPath>
-    <TargetName>PCtomb5</TargetName>
+    <TargetName>PCtomb5_x86</TargetName>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <LinkIncremental>false</LinkIncremental>
     <OutDir>$(ProjectDir)..\release\</OutDir>
     <IntDir>$(Platform)\$(Configuration)\</IntDir>
     <LibraryPath>$(ProjectDir)TOMB5\tomb5\libs\discordRPC;$(LibraryPath)</LibraryPath>
-    <TargetName>PCtomb5</TargetName>
+    <TargetName>PCtomb5_x86</TargetName>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
     <OutDir>$(ProjectDir)..\release64\</OutDir>
     <IntDir>$(Platform)\$(Configuration)\</IntDir>
-    <TargetName>PCtomb5_x64</TargetName>
+    <TargetName>PCtomb5</TargetName>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
     <OutDir>$(ProjectDir)..\release64\</OutDir>
     <IntDir>$(Platform)\$(Configuration)\</IntDir>
-    <TargetName>PCtomb5_x64</TargetName>
+    <TargetName>PCtomb5</TargetName>
   </PropertyGroup>
   <!-- Release|x64 with Tomb5Test=true (be64.bat test): the same engine as
        a test build, into releasetest\PCtomb5_x64t.exe - its own folder,

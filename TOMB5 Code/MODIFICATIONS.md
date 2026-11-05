@@ -19730,6 +19730,50 @@ of the recorder's run, carries no Camera command, so no kept camera lies on its 
 
 **Commits.** see the appendix.
 
+### The 64-bit engine is PCtomb5.exe, the 32-bit one PCtomb5_x86.exe (#339)
+
+Since #324 the 64-bit build ships, but its file was still called `PCtomb5_x64.exe`
+and only the package script renamed it, while the 32-bit comparison build held the
+game's own name. A copy of `release64\` into the game folder therefore did not replace
+the EXE the game and the players' batch files start, and a 32-bit `PCtomb5.exe` could
+pass for the real one. Now the build writes the shipping name itself, and the 32-bit
+file says what it is.
+
+**The four names** (`tomb5.vcxproj`, `<TargetName>` only; folders unchanged):
+`Release|x64` and `Debug|x64` build `release64\PCtomb5.exe` (+ `.pdb`),
+`Release|Win32` and `Debug|Win32` build `release\PCtomb5_x86.exe` (+ `.pdb`). The test
+build `releasetest\PCtomb5_x64t.exe` and the Asan build `releaseasan\PCtomb5_asan.exe`
+keep their names. The only build step that reads the target name is the Release|Win32
+post-build copy into `TR5_GAME_DIR` (`$(TargetPath)`): with that variable set it now
+copies `PCtomb5_x86.exe` beside the game, no longer over its `PCtomb5.exe`.
+`be64.bat` copies its DLLs by folder, not by EXE name.
+
+**The package.** `BuildRelease.ps1` reads `release64\PCtomb5.exe` and still writes it
+as `PCTomb5.exe` - the casing the game folder, Steam and the players' batch files use
+(`Log.bat`). The 32-bit build is built on request (`be.bat`) to compare against and
+never goes in.
+
+**Changed text.** The heads of `be64.bat` and `be.bat` (`basan.bat` names only its own
+EXE), the header of `BuildRelease.ps1`, README's build section, the Engine-Manual's
+build paragraph, the names in `Preparation/Verification.md` sections 8 and 11 (the
+replay steps take `PCtomb5_x86.exe` and the test build `PCtomb5_x64t.exe`, the only
+64-bit EXE that records), `Preparation/Tools/README.md` on `be64.bat`, and section 4
+of this record. The entries above keep the names of their day. The engine's own
+strings - "PCtomb5 built", the launcher's "PCtomb5 build", the crash seam's
+`module=PCtomb5.exe` - are the game's name, not the file's, and are untouched; no
+engine source changed.
+
+**Checked.** ModernTest's package rule now reads `$EngineExe = "$Root\release64\
+PCtomb5.exe"` and no `PCtomb5_x64.exe`, and a new check (`exe name rule`) pins the four
+`<TargetName>` elements to their configurations: ModernTest 17763 checks (17762 + 1),
+MenuTest 45043, InterpTest 754, LipsTest 272, none failed; no warning line in the logs
+of `be64.bat`, `basan.bat`, `be64.bat test` and `be.bat`; `b1.bat` and `b2.bat` link
+unchanged (the randomizer names the game folder's `PCtomb5.exe`, never a build path).
+After the builds `release64\` holds `PCtomb5.exe` and no `PCtomb5_x64.*`, `release\`
+holds `PCtomb5_x86.exe`.
+
+**Commits.** see the appendix.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -19993,9 +20037,9 @@ modified, one moved out into `package/`, one removed.
 The published binary need not be trusted. Either:
 
 - build from this tree directly - open `tomb5.sln`, configuration `Release`,
-  platform `x64`; the result is `release64/PCtomb5_x64.exe`, the package's
+  platform `x64`; the result is `release64/PCtomb5.exe` (#339), the package's
   `PCTomb5.exe` since #324 (`be64.bat` also puts the FFmpeg and C++ runtime DLLs
-  beside it). Platform `x86` builds the same sources into `release/PCtomb5.exe`,
+  beside it). Platform `x86` builds the same sources into `release/PCtomb5_x86.exe`,
   the build shipped until Beta_5.0 and the one most measurements in this record
   were made on, now the comparison build. The
   40 `TOMB5/specific/hd/hd_shader/*.inc` are `fxc` output of the eleven `.hlsl`
@@ -20205,3 +20249,4 @@ entries above.
 | #333 | A lying body survives the savegame, format 3 |
 | #334 | ANDREA3's sky table asks the art near a room, not its box |
 | #335 | Under Modern a level camera that shows something is kept |
+| #339 | The 64-bit engine is PCtomb5.exe, the 32-bit one PCtomb5_x86.exe |

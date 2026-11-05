@@ -5742,10 +5742,10 @@ release package it is `Source\TOMB5 engine\tomb5.sln`, in the repository
 `TOMB5 Code/tomb5.sln` (the package renames the folder so the two can be told
 apart). Configuration **Release**, platform **x64**, the build the package
 ships; on the command line `Preparation\Tools\Diagnose\be64.bat`, which
-puts `release64\PCtomb5_x64.exe` (the package's `PCTomb5.exe`) and its six
-DLLs together. Platform **Win32 (x86)** gives `release\PCtomb5.exe`, the
-32-bit build (`be.bat`) that is kept to compare against and no longer
-ships. Both link the C++ runtime as DLLs (`/MD`). The project builds with the **v145** toolset, the one
+puts `release64\PCtomb5.exe` (the package's `PCTomb5.exe`) and its six
+DLLs together. Platform **Win32 (x86)** gives `release\PCtomb5_x86.exe`,
+the 32-bit build (`be.bat`) that is built on request to compare against
+and no longer ships. Both link the C++ runtime as DLLs (`/MD`). The project builds with the **v145** toolset, the one
 any current Visual Studio 2026 with the C++ workload brings along.
 
 > **Pick x64 and Release.** Win32 builds the 32-bit comparison EXE, and

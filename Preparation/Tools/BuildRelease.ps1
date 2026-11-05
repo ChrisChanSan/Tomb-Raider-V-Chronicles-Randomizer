@@ -2,10 +2,11 @@
 # and the licenses.
 #
 # Since #324 the package is 64-bit only. The engine is be64.bat's
-# release64\PCtomb5_x64.exe, shipped as PCTomb5.exe - the name the game and
-# Steam start; the 32-bit EXE of be.bat is a comparison build and never goes
-# in. Beside the two EXEs: the films' three FFmpeg DLLs from
-# vendor\ffmpeg-min\bin, and the three Visual C++ runtime DLLs both programs
+# release64\PCtomb5.exe, shipped as PCTomb5.exe - the name the game and
+# Steam start; the 32-bit release\PCtomb5_x86.exe of be.bat is built on
+# request, to compare, and never goes in. Beside the two EXEs: the films'
+# three FFmpeg DLLs from vendor\ffmpeg-min\bin, and the three Visual C++
+# runtime DLLs both programs
 # import (/MD) - vcruntime140.dll, vcruntime140_1.dll, msvcp140.dll - from
 # the compiler's redist folder: $env:VCToolsRedistDir (set by vcvars64.bat),
 # or -RedistDir when the script runs outside a vcvars64 shell. No installer.
@@ -35,7 +36,7 @@ $ErrorActionPreference = "Stop"
 $Root      = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 if ($OutDir -eq "") { $OutDir = Join-Path $Root "Release Package" }
 $EngineSrc = "$Root\TOMB5 Code"
-$EngineExe = "$Root\release64\PCtomb5_x64.exe"
+$EngineExe = "$Root\release64\PCtomb5.exe"
 $FfmpegBin = "$Root\vendor\ffmpeg-min\bin"
 $FfmpegDlls = @('avutil-61.dll', 'avcodec-63.dll', 'avformat-63.dll')
 # The runtime set, as the import tables of the three EXEs name it (#324).

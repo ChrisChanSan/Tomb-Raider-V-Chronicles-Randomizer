@@ -1,8 +1,10 @@
 @echo off
 rem be - build the engine.
 rem
-rem The 32-bit build: since #324 its EXE no longer ships - be64.bat's does -
-rem and it is kept as the build to compare the 64-bit one against.
+rem The 32-bit build, release\PCtomb5_x86.exe (#339): since #324 it no
+rem longer ships - be64.bat's release64\PCtomb5.exe does. Built on request
+rem only, never part of a release: it is the build to compare the 64-bit
+rem one against.
 rem
 rem Runs the shader guard first. The HD shaders have no runtime compiler
 rem behind them: their bytecode is checked in as .inc byte arrays beside the

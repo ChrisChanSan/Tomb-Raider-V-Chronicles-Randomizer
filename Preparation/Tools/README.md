@@ -430,11 +430,12 @@ every binary its own build time (`winmain.cpp` writes it as the first line of
 a `-log` run).
 
 **`be64.bat` builds the same engine as a 64-bit program** (`vcvars64`,
-`Release|x64`): `release64\PCtomb5_x64.exe` beside `release\PCtomb5.exe`, never
+`Release|x64`): `release64\PCtomb5.exe` beside `release\PCtomb5_x86.exe`, never
 in its place. It runs `be.bat`'s own shader guard (`be guard`) and compiles
 the whole engine every time, for the same reasons. Since #324 it is the build
 that ships (`BuildRelease.ps1` packs it as `PCTomb5.exe`); the 32-bit build of
-`be.bat` is the one it is measured against and no longer ships. It plays the
+`be.bat`, built on request only, is the one it is measured against and no
+longer ships. It plays the
 films through the three FFmpeg DLLs of `vendor\ffmpeg-min\bin`, the game's
 `binkw32.dll` being 32-bit code, and it links the C++ runtime as DLLs (`/MD`,
 like every build of the project since #324): the script copies the FFmpeg DLLs

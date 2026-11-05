@@ -1,11 +1,11 @@
 @echo off
 rem be64 - build the engine as a 64-bit program.
 rem
-rem The same engine as be.bat, compiled for x64: release64\PCtomb5_x64.exe
-rem beside release\PCtomb5.exe, never in its place - the two builds have
-rem their own output folders, so neither overwrites the other. Since #324
-rem this is the build that ships, as PCTomb5.exe; the 32-bit one of be.bat
-rem is kept to compare against.
+rem The same engine as be.bat, compiled for x64: release64\PCtomb5.exe,
+rem the shipping name itself (#339; the package writes it PCTomb5.exe).
+rem Since #324 this is the build that ships. The 32-bit one of be.bat is
+rem release\PCtomb5_x86.exe, built on request to compare against - its own
+rem folder and its own name, so neither build overwrites the other.
 rem
 rem The shader guard is be.bat's own ("be guard"): one list of shaders for
 rem both builds, and a stale .inc is rebuilt here exactly as there.

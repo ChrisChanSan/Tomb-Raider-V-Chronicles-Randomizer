@@ -29,7 +29,7 @@ float lara_matrices[180];
 float lara_joint_matrices[180];
 long LaraNodeAmbient[2];
 uchar LaraNodeUnderwater[15];
-char SkinVertNums[40][12];
+uchar SkinVertNums[40][12];	// 0xFF ends a row
 
 // Did this joint's seam find anything to sew? Set by CreateSkinningData, read
 // by the three joint loops in specific/drawlara.cpp. A joint that matched no

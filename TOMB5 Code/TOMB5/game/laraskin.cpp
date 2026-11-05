@@ -37,14 +37,14 @@ static uchar SkinJoints[14][4] =
 	{ 14, 7, 27, 16 }
 };
 
-static char HairSkinVertNums[6][12] =
+static uchar HairSkinVertNums[6][12] =
 {
-	{ 37, 38, 39, 40, -1, 0, 0, 0, 0, 0, 0, 0 },
-	{ 79, 77, 78, 76, -1, 0, 0, 0, 0, 0, 0, 0 },
-	{ 68, 71, 69, 70, -1, 0, 0, 0, 0, 0, 0, 0 },
-	{ 0, 1, 2, 3, -1, 0, 0, 0, 0, 0, 0, 0 },
-	{ 4, 5, 6, 7, -1, 0, 0, 0, 0, 0, 0, 0 },
-	{ 25, 26, 27, 28, -1, 0, 0, 0, 0, 0, 0, 0 }
+	{ 37, 38, 39, 40, 0xFF, 0, 0, 0, 0, 0, 0, 0 },
+	{ 79, 77, 78, 76, 0xFF, 0, 0, 0, 0, 0, 0, 0 },
+	{ 68, 71, 69, 70, 0xFF, 0, 0, 0, 0, 0, 0, 0 },
+	{ 0, 1, 2, 3, 0xFF, 0, 0, 0, 0, 0, 0, 0 },
+	{ 4, 5, 6, 7, 0xFF, 0, 0, 0, 0, 0, 0, 0 },
+	{ 25, 26, 27, 28, 0xFF, 0, 0, 0, 0, 0, 0, 0 }
 };
 
 static char HairScratchVertNums[4][12] =
@@ -445,7 +445,8 @@ void CreateSkinningData()
 						break;
 					}
 
-					SkinVertNums[SkinJoints[i][2]][aboveVerts] = ii;
+					// ii < laraVerts, a byte of the header: 0..254, never 0xFF.
+					SkinVertNums[SkinJoints[i][2]][aboveVerts] = (uchar)ii;
 					ScratchVertNums[SkinJoints[i][2]][aboveVerts] = (char)j;
 					aboveVerts++;
 				}
@@ -460,7 +461,7 @@ void CreateSkinningData()
 			}
 		}
 
-		SkinVertNums[SkinJoints[i][2]][aboveVerts] = -1;
+		SkinVertNums[SkinJoints[i][2]][aboveVerts] = 0xFF;
 		ScratchVertNums[SkinJoints[i][2]][aboveVerts] = -1;
 		belowVerts = 0;
 		laraVerts = belowMesh->nVerts & 0xFF;
@@ -498,7 +499,8 @@ void CreateSkinningData()
 						break;
 					}
 
-					SkinVertNums[SkinJoints[i][3]][belowVerts] = ii;
+					// ii < laraVerts, a byte of the header: 0..254, never 0xFF.
+					SkinVertNums[SkinJoints[i][3]][belowVerts] = (uchar)ii;
 					ScratchVertNums[SkinJoints[i][3]][belowVerts] = (char)j;
 					belowVerts++;
 				}
@@ -513,7 +515,7 @@ void CreateSkinningData()
 			}
 		}
 
-		SkinVertNums[SkinJoints[i][3]][belowVerts] = -1;
+		SkinVertNums[SkinJoints[i][3]][belowVerts] = 0xFF;
 		ScratchVertNums[SkinJoints[i][3]][belowVerts] = -1;
 
 		// SKINREACH: answers "would a wider tolerance help?" - the numbers
@@ -750,7 +752,8 @@ void CreateSkinningData()
 					if (aboveVerts >= 11)
 						continue;
 
-					SkinVertNums[SkinJoints[i][2]][aboveVerts] = who;
+					// who < nv, a byte of the header: 0..254, never 0xFF.
+					SkinVertNums[SkinJoints[i][2]][aboveVerts] = (uchar)who;
 					ScratchVertNums[SkinJoints[i][2]][aboveVerts] = (char)j;
 					aboveVerts++;
 				}
@@ -759,7 +762,8 @@ void CreateSkinningData()
 					if (belowVerts >= 11)
 						continue;
 
-					SkinVertNums[SkinJoints[i][3]][belowVerts] = who;
+					// who < nv, a byte of the header: 0..254, never 0xFF.
+					SkinVertNums[SkinJoints[i][3]][belowVerts] = (uchar)who;
 					ScratchVertNums[SkinJoints[i][3]][belowVerts] = (char)j;
 					belowVerts++;
 				}
@@ -778,9 +782,9 @@ void CreateSkinningData()
 					worstTurn = 1.0F - turn;
 			}
 
-			SkinVertNums[SkinJoints[i][2]][aboveVerts] = -1;
+			SkinVertNums[SkinJoints[i][2]][aboveVerts] = 0xFF;
 			ScratchVertNums[SkinJoints[i][2]][aboveVerts] = -1;
-			SkinVertNums[SkinJoints[i][3]][belowVerts] = -1;
+			SkinVertNums[SkinJoints[i][3]][belowVerts] = 0xFF;
 			ScratchVertNums[SkinJoints[i][3]][belowVerts] = -1;
 
 			SkinJointUsable[i] = (aboveVerts > 0 && belowVerts > 0
@@ -880,7 +884,7 @@ void CreateSkinningData()
 		SkinVertNums[35][i] = HairSkinVertNums[3][i];
 		ScratchVertNums[35][i] = HairScratchVertNums[2][i];
 
-		if (HairSkinVertNums[0][i] == -1)
+		if (HairSkinVertNums[0][i] == 0xFF)
 			break;
 	}
 
@@ -897,7 +901,7 @@ void CreateSkinningData()
 			SkinVertNums[i + 36][j] = HairSkinVertNums[4][j];
 			SkinVertNums[i + 37][j] = HairSkinVertNums[3][j];
 
-			if (HairSkinVertNums[2][j] == -1)
+			if (HairSkinVertNums[2][j] == 0xFF)
 				break;
 		}
 	}

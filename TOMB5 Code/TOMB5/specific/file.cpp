@@ -1573,7 +1573,7 @@ bool LoadItems()
 			items[i].trigger_flags & 0x3F, items[i].flags,
 			items[i].pos.x_pos, items[i].pos.y_pos, items[i].pos.z_pos);
 
-		InitialiseItem(i);
+		InitialiseItem((short)i);
 
 		// ITEMWATCH: room numbers were checked while reading, so an item in
 		// an impossible room afterwards was hit by a stray write from one of
@@ -2059,7 +2059,7 @@ unsigned int __stdcall LoadLevel(void* name)
 		g_pages_kept = 0;
 
 		fread(data, 1, 32, level_fp);
-		LaraDrawType = data[0] + LARA_NORMAL;
+		LaraDrawType = (char)(data[0] + LARA_NORMAL);
 		WeatherType = (char)data[1];
 		// data[2]: randomizer marker "speech heads do not match the outfit"
 		// (outfit donor without LARA_SPEECH_HEAD1-4, e.g. catsuit from rich2).

@@ -227,7 +227,7 @@ void TriggerAirBubbles()
 	sptr->Zvel = short(pos2.z - pos1.z + ((GetRandomControl() & 0x7F) - 64));
 
 	sptr->Friction = 0; 
-	sptr->Def = objects[DEFAULT_SPRITES].mesh_index + 17;
+	sptr->Def = (uchar)(objects[DEFAULT_SPRITES].mesh_index + 17);
 	sptr->MaxYvel = 0;
 	sptr->Gravity = -4 - (GetRandomControl() & 3);
 	sptr->Scalar = 1;
@@ -300,7 +300,7 @@ void TriggerSubMist(PHD_VECTOR* pos, PHD_VECTOR* pos1, long size)
 	sptr->Yvel = short(pos1->y + (GetRandomControl() & 0x7F) - pos->y - 64);
 	sptr->Zvel = short(pos1->z + (GetRandomControl() & 0x7F) - pos->z - 64);
 	sptr->Friction = 0;
-	sptr->Def = objects[458].mesh_index + (n != 0 ? 17 : 13);
+	sptr->Def = (uchar)(objects[458].mesh_index + (n != 0 ? 17 : 13));
 	sptr->Gravity = -4 - (GetRandomControl() & 3);
 	sptr->MaxYvel = 0;
 	sptr->Scalar = 1;

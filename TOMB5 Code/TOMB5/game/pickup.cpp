@@ -1027,7 +1027,7 @@ void PickUpCollision(short item_number, ITEM_INFO* l, COLL_INFO* coll)
 								itemme = &items[i];
 
 								if (itemme->object_number == item->object_number)
-									KillItem(i);
+									KillItem((short)i);
 							}
 						}
 					}

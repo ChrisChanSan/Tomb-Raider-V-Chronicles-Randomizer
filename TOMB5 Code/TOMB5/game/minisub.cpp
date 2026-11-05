@@ -93,7 +93,7 @@ void TriggerMinisubLight(short item_number)
 	sptr->MaxYvel = 0;
 	sptr->Gravity = 0;
 	sptr->Scalar = 1;
-	sptr->Def = objects[DEFAULT_SPRITES].mesh_index + 11;
+	sptr->Def = (uchar)(objects[DEFAULT_SPRITES].mesh_index + 11);
 	sptr->Size = (GetRandomControl() & 7) + 192;
 	sptr->sSize = sptr->Size;
 	sptr->dSize = sptr->Size;
@@ -171,7 +171,7 @@ void TorpedoControl(short item_number)
 
 			if (item2->object_number == CHAFF && item2->active)
 			{
-				item->item_flags[0] = i;
+				item->item_flags[0] = (short)i;
 				target.x = item2->pos.x_pos;
 				target.y = item2->pos.y_pos;
 				target.z = item2->pos.z_pos;
@@ -391,7 +391,7 @@ void TriggerMiniSubMist(PHD_VECTOR* pos1, PHD_VECTOR* pos2, long chaff)
 	sptr->Yvel = short(pos2->y + (GetRandomControl() & 0x7F) - pos1->y - 64);
 	sptr->Zvel = short(pos2->z + (GetRandomControl() & 0x7F) - pos1->z - 64);
 	sptr->Friction = 0;
-	sptr->Def = objects[DEFAULT_SPRITES].mesh_index + 17;
+	sptr->Def = (uchar)(objects[DEFAULT_SPRITES].mesh_index + 17);
 	sptr->MaxYvel = 0;
 	sptr->Gravity = -4 - (GetRandomControl() & 3);
 	sptr->Scalar = 1;

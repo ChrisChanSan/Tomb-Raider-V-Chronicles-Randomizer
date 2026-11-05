@@ -380,7 +380,7 @@ void ControlWreckingBall(short item_number)
 		if (item->item_flags[0] == 1)
 		{
 			SoundEffect(SFX_J_GRAB_MOTOR_B_LP, &item->pos, SFX_DEFAULT);
-			speed = abs(Xdiff);
+			speed = (short)abs(Xdiff);
 
 			if (speed >= 32)
 				speed = 32;
@@ -396,7 +396,7 @@ void ControlWreckingBall(short item_number)
 		if (item->item_flags[0] == 2)
 		{
 			SoundEffect(SFX_J_GRAB_MOTOR_B_LP, &item->pos, SFX_DEFAULT);
-			speed = abs(Zdiff);
+			speed = (short)abs(Zdiff);
 
 			if (speed >= 32)
 				speed = 32;
@@ -708,13 +708,13 @@ void TriggerCableSparks(long x, long z, short item_number, long node, long flare
 
 	if (flare)
 	{
-		sptr->Def = objects[DEFAULT_SPRITES].mesh_index + 11;
+		sptr->Def = (uchar)(objects[DEFAULT_SPRITES].mesh_index + 11);
 		sptr->Scalar = 1;
 		n = (GetRandomControl() & 0x1F) + 160;
 	}
 	else
 	{
-		sptr->Def = objects[DEFAULT_SPRITES].mesh_index + 14;
+		sptr->Def = (uchar)(objects[DEFAULT_SPRITES].mesh_index + 14);
 		sptr->Scalar = 0;
 		n = (GetRandomControl() & 7) + 8;
 	}

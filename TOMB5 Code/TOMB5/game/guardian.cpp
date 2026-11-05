@@ -59,7 +59,7 @@ void InitialiseGuardian(short item_number)
 	{
 		if (items[i].object_number == ANIMATING12)
 		{
-			aptr[0] = i;
+			aptr[0] = (short)i;
 			break;
 		}
 	}
@@ -73,7 +73,7 @@ void InitialiseGuardian(short item_number)
 		{
 			if (items[j].object_number == ANIMATING12_MIP && items[j].pos.y_rot == angle)
 			{
-				bptr[i] = j;
+				bptr[i] = (short)j;
 				break;
 			}
 		}
@@ -85,7 +85,7 @@ void InitialiseGuardian(short item_number)
 	{
 		if (items[i].object_number == PUZZLE_ITEM4)
 		{
-			aptr[9] = i;
+			aptr[9] = (short)i;
 			items[i].status = ITEM_INVISIBLE;
 			break;
 		}

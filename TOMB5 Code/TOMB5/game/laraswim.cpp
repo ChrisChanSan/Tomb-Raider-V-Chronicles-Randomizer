@@ -262,7 +262,7 @@ void UpdateSubsuitAngles()
 		subsuit.YVel -= 1 + (subsuit.YVel >> 4);
 	}
 
-	vel = abs(lara_item->fallspeed << 2);
+	vel = (short)abs(lara_item->fallspeed << 2);
 	subsuit.Vel[0] = vel;
 	subsuit.Vel[1] = vel;
 
@@ -295,14 +295,14 @@ void UpdateSubsuitAngles()
 			lara_item->pos.x_rot -= 364;
 	}
 
-	vel = abs(subsuit.XRot >> 3);
+	vel = (short)abs(subsuit.XRot >> 3);
 	subsuit.Vel[0] += vel;
 	subsuit.Vel[1] += vel;
 
 	if (lara.turn_rate > 0)
-		subsuit.Vel[0] += 2 * abs(lara.turn_rate);
+		subsuit.Vel[0] += (short)(2 * abs(lara.turn_rate));
 	else if (lara.turn_rate < 0)
-		subsuit.Vel[1] += 2 * abs(lara.turn_rate);
+		subsuit.Vel[1] += (short)(2 * abs(lara.turn_rate));
 
 	if (subsuit.Vel[0] > 1536)
 		subsuit.Vel[0] = 1536;

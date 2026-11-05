@@ -149,7 +149,7 @@ void UpdateRats()
 				else
 					fx->pos.y_rot -= 512;
 
-				fx->speed = 48 - (abs(angle) >> 10);
+				fx->speed = (short)(48 - (abs(angle) >> 10));
 			}
 			else
 			{

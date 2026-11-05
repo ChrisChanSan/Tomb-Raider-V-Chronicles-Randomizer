@@ -167,7 +167,7 @@ void UpdateSpiders()
 					else
 					{
 						fx->pos.y_rot += fx->speed & 1 ? 512 : -512;
-						fx->speed = 48 - (abs(angle) >> 10);
+						fx->speed = (short)(48 - (abs(angle) >> 10));
 					}
 				}
 

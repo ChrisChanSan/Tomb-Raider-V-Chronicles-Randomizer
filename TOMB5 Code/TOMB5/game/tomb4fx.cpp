@@ -180,7 +180,7 @@ void UpdateBlood()
 			{
 				if (Blood->Life < Blood->FadeToBlack)
 				{
-					Blood->Shade = (Blood->dShade * (((Blood->Life - Blood->FadeToBlack) << 16) / Blood->FadeToBlack + 0x10000)) >> 16;
+					Blood->Shade = (uchar)((Blood->dShade * (((Blood->Life - Blood->FadeToBlack) << 16) / Blood->FadeToBlack + 0x10000)) >> 16);
 
 					if (Blood->Shade < 8)
 					{
@@ -495,11 +495,11 @@ void ControlTeleporter(short item_number)
 						sptr->On = 1;
 						sptr->dR = (uchar)item->item_flags[0];
 						sptr->sR = (uchar)item->item_flags[0];
-						sptr->dG = item->item_flags[0] >> 1;
-						sptr->sG = item->item_flags[0] >> 1;
+						sptr->dG = (uchar)(item->item_flags[0] >> 1);
+						sptr->sG = (uchar)(item->item_flags[0] >> 1);
 						sptr->ColFadeSpeed = 20;
-						sptr->dB = item->item_flags[0] >> 2;
-						sptr->sB = item->item_flags[0] >> 2;
+						sptr->dB = (uchar)(item->item_flags[0] >> 2);
+						sptr->sB = (uchar)(item->item_flags[0] >> 2);
 						sptr->FadeToBlack = 4;
 						sptr->Life = 24;
 						sptr->sLife = 24;
@@ -513,7 +513,7 @@ void ControlTeleporter(short item_number)
 						sptr->Flags = SF_DEF | SF_SCALE;
 						sptr->Scalar = 3;
 						sptr->MaxYvel = 0;
-						sptr->Def = objects[DEFAULT_SPRITES].mesh_index + 11;
+						sptr->Def = (uchar)(objects[DEFAULT_SPRITES].mesh_index + 11);
 						sptr->Gravity = 0;
 						size = (GetRandomControl() & 3) + 24;
 						sptr->dSize = (uchar)size;
@@ -742,7 +742,7 @@ long ExplodingDeath2(short item_number, long mesh_bits, short Flags)
 				else
 					fx->fallspeed = (short)-(GetRandomControl() >> 8);
 
-				fx->frame_number = obj->mesh_index + 2 * i;
+				fx->frame_number = (short)(obj->mesh_index + 2 * i);
 				fx->object_number = BODY_PART;
 				fx->shade = 0x4210;
 				fx->flag2 = Flags;
@@ -950,7 +950,7 @@ void TriggerLightningGlow(long x, long y, long z, long rgb)
 	sptr->Flags = SF_DEF | SF_SCALE;
 	sptr->Scalar = 3;
 	sptr->MaxYvel = 0;
-	sptr->Def = objects[DEFAULT_SPRITES].mesh_index + 11;
+	sptr->Def = (uchar)(objects[DEFAULT_SPRITES].mesh_index + 11);
 	sptr->Gravity = 0;
 	sptr->Size = (rgb >> 24) + (GetRandomControl() & 3);
 	sptr->dSize = sptr->Size;
@@ -1092,7 +1092,7 @@ void TriggerShockwaveHitEffect(long x, long y, long z, long rgb, short dir, long
 		sptr->RotAdd = (GetRandomControl() & 0xF) + 16;
 
 	sptr->Scalar = 1;
-	sptr->Def = objects[DEFAULT_SPRITES].mesh_index + 14;
+	sptr->Def = (uchar)(objects[DEFAULT_SPRITES].mesh_index + 14);
 	sptr->MaxYvel = 0;
 	sptr->Gravity = (GetRandomControl() & 0x3F) + 64;
 	sptr->Size = (GetRandomControl() & 0x1F) + 32;

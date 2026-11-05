@@ -549,7 +549,7 @@ void ControlArea51Laser(short item_number)
 
 	if (item->item_flags[3])
 	{
-		num = abs(item->item_flags[3] >> 4);
+		num = (short)abs(item->item_flags[3] >> 4);
 
 		if (num > 31)
 			num = 31;
@@ -1046,7 +1046,7 @@ void TriggerLiftBrakeSparks(PHD_VECTOR* pos, short yrot)
 	sptr->sSize = sptr->Size;
 	sptr->dSize = sptr->Size >> 1;
 	sptr->Flags = SF_DEF | SF_SCALE;
-	sptr->Def = objects[DEFAULT_SPRITES].mesh_index + W2V_SHIFT;
+	sptr->Def = (uchar)(objects[DEFAULT_SPRITES].mesh_index + W2V_SHIFT);
 	sptr->Gravity = (GetRandomControl() & 0xF) + 16;
 	sptr->Scalar = 1;
 }
@@ -1145,7 +1145,7 @@ void TriggerWeldingEffects(PHD_VECTOR* pos, short yrot, short flag)
 	sptr->Zvel = 0;
 
 	sptr->Flags = SF_DEF | SF_SCALE;
-	sptr->Def = objects[DEFAULT_SPRITES].mesh_index + 14;
+	sptr->Def = (uchar)(objects[DEFAULT_SPRITES].mesh_index + 14);
 	sptr->Scalar = 0;
 	sptr->MaxYvel = 0;
 	sptr->Gravity = 0;
@@ -1248,7 +1248,7 @@ void TriggerWeldingEffects(PHD_VECTOR* pos, short yrot, short flag)
 		sptr->Zvel = 0;
 
 		sptr->Flags = SF_DEF | SF_SCALE;
-		sptr->Def = objects[DEFAULT_SPRITES].mesh_index + 14;
+		sptr->Def = (uchar)(objects[DEFAULT_SPRITES].mesh_index + 14);
 		sptr->Scalar = 1;
 		sptr->MaxYvel = 0;
 		sptr->Gravity = 0;
@@ -1300,7 +1300,7 @@ void TriggerWeldingEffects(PHD_VECTOR* pos, short yrot, short flag)
 
 		sptr->Friction = 3;
 		sptr->Flags = SF_DEF | SF_SCALE;
-		sptr->Def = objects[DEFAULT_SPRITES].mesh_index + 14;
+		sptr->Def = (uchar)(objects[DEFAULT_SPRITES].mesh_index + 14);
 		sptr->Scalar = 1;
 		sptr->Gravity = (GetRandomControl() & 0xF) + 8;
 		sptr->MaxYvel = 0;

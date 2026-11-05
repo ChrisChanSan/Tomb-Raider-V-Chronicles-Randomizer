@@ -459,7 +459,7 @@ void InitialisePulley(short item_number)
 
 	item = &items[item_number];
 	item->item_flags[3] = item->trigger_flags;
-	item->trigger_flags = abs(item->trigger_flags);
+	item->trigger_flags = (short)abs(item->trigger_flags);
 
 	if (item_number == GlobalPulleyFrigItem)
 		item->item_flags[1] = 1;
@@ -820,7 +820,7 @@ void InitialiseSearchObject(short item_number)
 			if ((items[i].object_number == EXPLOSION || objects[items[i].object_number].collision == PickUpCollision) &&
 				item->pos.x_pos == items[i].pos.x_pos && item->pos.y_pos == items[i].pos.y_pos && item->pos.z_pos == items[i].pos.z_pos)
 			{
-				item->item_flags[1] = i;
+				item->item_flags[1] = (short)i;
 				break;
 			}
 
@@ -1065,7 +1065,7 @@ void InitialiseBurningRoots(short item_number)
 	{
 		if (items[i].object_number == PUZZLE_ITEM1)
 		{
-			item->item_flags[1] = i;
+			item->item_flags[1] = (short)i;
 			return;
 		}
 	}
@@ -1283,7 +1283,7 @@ void InitialiseGasCloud(short item_number)
 
 		if (ai->room_number == item->room_number)
 		{
-			clouds[j] = i;
+			clouds[j] = (short)i;
 			j++;
 
 			if (j >= 7)

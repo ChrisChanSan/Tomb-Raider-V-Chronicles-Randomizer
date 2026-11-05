@@ -1345,7 +1345,7 @@ void PrintObjects(short room_number)
 	nPolyType = 3;
 
 	for (int i = r->fx_number; i != NO_ITEM; i = effects[i].next_fx)
-		DrawEffect(i);
+		DrawEffect((short)i);
 
 	phd_PopMatrix();
 	r->left = phd_winxmax;

@@ -894,7 +894,7 @@ void RestoreLevelData(long FullSave)
 
 				if (!mesh->Flags)
 				{
-					room_number = i;
+					room_number = (short)i;
 					floor = GetFloor(mesh->x, mesh->y, mesh->z, &room_number);
 					GetHeight(floor, mesh->x, mesh->y, mesh->z);
 					TestTriggers(trigger_index, 1, 0);
@@ -932,7 +932,7 @@ void RestoreLevelData(long FullSave)
 
 		if (packed & 0x2000)
 		{
-			KillItem(i);
+			KillItem((short)i);
 			item->status = ITEM_DEACTIVATED;
 			item->flags |= IFL_INVISIBLE;
 		}
@@ -971,7 +971,7 @@ void RestoreLevelData(long FullSave)
 					item->fallspeed = 0;
 
 				if (item->room_number != uroom_number)
-					ItemNewRoom(i, uroom_number);
+					ItemNewRoom((short)i, uroom_number);
 
 				if (obj->shadow_size)
 				{
@@ -1045,7 +1045,7 @@ void RestoreLevelData(long FullSave)
 					ReadSG(&item->carried_item, sizeof(short));
 
 				if (flags & 0x10000 && !item->active)
-					AddActiveItem(i);
+					AddActiveItem((short)i);
 
 				//*(ushort*)((char*)item + 0x15EA) = flags >> 16;	//doing it manually for clarity:
 				item->active = (flags >> 16) & 1;
@@ -1061,7 +1061,7 @@ void RestoreLevelData(long FullSave)
 
 				if (flags & 0x80000000)
 				{
-					EnableBaddieAI(i, 1);
+					EnableBaddieAI((short)i, 1);
 					creature = (CREATURE_INFO*)item->data;
 
 					if (creature)

@@ -1703,7 +1703,8 @@ struct SMOKE_SPARKS
 	char sLife;
 	char Life;
 	uchar TransType;
-	uchar FxObj;
+	// An item or effect number: items run up to MAX_ITEMS (512).
+	short FxObj;
 	uchar NodeNumber;
 	uchar mirror;
 };
@@ -1803,7 +1804,8 @@ struct SPARKS
 	uchar TransType;
 	uchar extras;
 	char Dynamic;
-	uchar FxObj;
+	// An item or effect number: items run up to MAX_ITEMS (512).
+	short FxObj;
 	uchar RoomNumber;
 	uchar NodeNumber;
 };

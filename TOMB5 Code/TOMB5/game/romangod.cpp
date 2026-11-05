@@ -101,7 +101,7 @@ void TriggerRomanGodMissileFlame(PHD_VECTOR* pos, long fxnum)
 	sptr->Gravity = 0;
 	sptr->MaxYvel = 0;
 	sptr->RotAdd = (GetRandomControl() & 0x3F) - 32;
-	sptr->FxObj = (uchar)fxnum;
+	sptr->FxObj = (short)fxnum;
 	sptr->Scalar = 2;
 	sptr->sSize = (GetRandomControl() & 0xF) + 96;
 	sptr->Size = sptr->sSize;
@@ -199,7 +199,7 @@ void TriggerRomanGodPowerupFlames(short item_number, long shade)
 	sptr->Zvel = (GetRandomControl() & 0xFF) - 128;
 	sptr->Friction = 4;
 	sptr->Flags = SF_ATTACHEDNODE | SF_ITEM | SF_ROTATE | SF_DEF | SF_SCALE;
-	sptr->FxObj = (uchar)item_number;
+	sptr->FxObj = item_number;
 	sptr->NodeNumber = 6;
 	sptr->RotAng = GetRandomControl() & 0xFFF;
 	sptr->RotAdd = (GetRandomControl() & 0x3F) - 32;

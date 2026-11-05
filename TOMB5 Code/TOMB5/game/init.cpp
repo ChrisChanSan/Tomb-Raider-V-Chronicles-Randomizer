@@ -502,7 +502,7 @@ void InitialisePickup(short item_number)
 		// loses the auto-refresh for the extras past the 16th - a minor
 		// gameplay-only degradation, not a crash or corruption risk.
 		if (NumRPickups < 16)
-			RPickups[NumRPickups++] = (uchar)item_number;
+			RPickups[NumRPickups++] = item_number;
 		else
 			Log("WARNING: more than 16 regenerating pickups in this level - item %d won't auto-refresh", item_number);
 	}

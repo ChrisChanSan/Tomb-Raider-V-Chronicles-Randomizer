@@ -82,7 +82,7 @@ void TriggerMinisubLight(short item_number)
 	sptr->TransType = 2;
 	sptr->FadeToBlack = 0;
 	sptr->Flags = SF_ATTACHEDNODE | SF_ITEM | SF_NOKILL | SF_DEF | SF_SCALE;
-	sptr->FxObj = (uchar)item_number;
+	sptr->FxObj = item_number;
 	sptr->NodeNumber = 7;
 	sptr->x = 0;
 	sptr->z = 0;

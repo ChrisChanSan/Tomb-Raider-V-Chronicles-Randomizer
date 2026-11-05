@@ -386,7 +386,7 @@ void TriggerHydraPowerupFlames(short item_number, long shade)
 	sptr->Zvel = (GetRandomControl() & 0xFF) - 128;
 	sptr->Friction = 4;
 	sptr->Flags = SF_ATTACHEDNODE | SF_ITEM | SF_ROTATE | SF_DEF | SF_SCALE;
-	sptr->FxObj = (uchar)item_number;
+	sptr->FxObj = item_number;
 	sptr->NodeNumber = 5;
 	sptr->RotAng = GetRandomControl() & 0xFFF;
 	sptr->RotAdd = (GetRandomControl() & 0x3F) - 32;

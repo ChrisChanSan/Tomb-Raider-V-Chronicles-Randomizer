@@ -19885,6 +19885,69 @@ holds `PCtomb5_x86.exe`.
 
 **Commits.** see the appendix.
 
+### Larson dies lying down outside Trajan Markets (#340)
+
+A pool Larson died standing: his body kept its collision, stood there for good with the
+Corpses switch off, and before that he was seen to get up again. Measured on the level
+files (vanilla Andrea2, anim 522; a randomized andy3, anim 785 - the same data), his
+death animation (+15: 208 frames at rate 2, seven PlaySound commands, no command 4) is a
+fall AND a rise: the root drops from 398 to 62 above the floor by frame 18, frame 28 is
+the lowest pose of the piece (the box 187 high, the arms settled), from frame 60 he
+props himself up, from frame 148 he gets up, from frame 180 he stands, and frame 207 is
+a man standing taller than at the start; the animation continues with itself on that
+frame and so holds it. In Trajan Markets a cutscene takes over at that last frame; in
+every other level the player watched him rise and then stand.
+
+**The rule.** `PierreControl` (`game/pierre.cpp`), outside Trajan Markets
+(`gfLevelId != LVL5_TRAJAN_MARKETS`): once the death animation reaches frame 28
+(`LARSON_DEATH_DOWN`, key 14, so no blend), `PierreLayDown` holds it there and makes
+him a corpse as command 4 and `CreatureAnimation` do for a guard: `after_death` 1 if it
+is not counting yet, `ITEM_DEACTIVATED`, then `CreatureDie(item_number, 0)` - hit
+points -16384, collidable 0, off the active chain, AI slot freed, `IFL_INVISIBLE |
+IFL_CLEARBODY`, the cargo dropped. The control never runs for him again, so the cargo
+comes out once, and the control returns at once (`item->data` is gone). From there the
+body is a guard's: the Corpses switch fades it (#332) or keeps it lying, and the
+savegame keeps it (#333: `SaveBodyLies` wants `IFL_CLEARBODY`, `after_death` 1..127 and
+the body in its room's list - `RemoveActiveItem` leaves it there). The test is `>=`, so
+a Larson an older save left standing at the end lies down on the first tick after the
+load. Trajan Markets keeps its path as it was.
+
+**The heavy trigger.** At the last frame the old code tested the floor data of the
+sector he STARTED on (`InitialiseCreature` keeps room and sector in `item_flags[2]` and
+`draw_room`) with `TestTriggers(trigger_index, 1, 0)` - which acts on HEAVY and
+HEAVYANTITRIGGER - on every tick, since the animation holds that frame. The three
+vanilla Larsons: Andrea1 34 and 35 flee to their markers and never die; Andrea2 76
+stands on a HEAVY trigger whose one command is `TO_CUTSCENE 7`, andrea3b, the scene that
+ends the fight. The randomizer however puts pool enemies on heavy triggers too (rich3
+in the run measured: Pierre item 20 on a HEAVY trigger with a flyby); a pool Larson
+there would have fired it on every tick after his death. The test now runs in Trajan
+Markets alone.
+
+**Pierre.** His death animation (+12: 95 frames at rate 3) kneels, falls on frames 78 to
+84 and lies; it continues with itself on its last frame (vanilla Andrea3 and a pool
+copy alike - not with a living animation, as the comment of the earlier round said)
+and carries a command 4 at its end. The latch one frame before the end lies as low as
+the last frame (176 high) and stays, but it kept command 4 and with it `CreatureDie`
+from ever firing: Pierre had the same hole, collidable after death, on the active chain
+with his AI slot, and no body for the savegame. He is laid down by the same
+`PierreLayDown` on the latch frame. With both, the exception #333 named - Larson and
+Pierre outside the body branch - is gone.
+
+**Seam.** `ITEMLOG <item>: corpse laid down slot frame after_death room` behind `-log`
+(a release family: the item's number first, like the load lines, and the line belongs
+to the question "why is this item there, or gone"). SAVELOG's body lines name him as
+any body.
+
+**Checked.** ModernTest group `larson_death_rule` (6 checks) reads `pierre.cpp`: the
+frame 28, the corpse state in `PierreLayDown` (no own `DropBaddyPickups`), the
+`ITEMLOG` line behind `gLogEnabled`, the rule outside Trajan Markets before the Trajan
+branch, the one heavy test after it, and Pierre's latch laying him down. ModernTest
+17776 checks (17770 + 6), also built with `TOMB5_TEST_BUILD`, MenuTest 45043,
+InterpTest 754, LipsTest 272, none failed; no `warning C` line in `be64.bat`,
+`basan.bat` and `be64.bat test`. Not run in the game here.
+
+**Commits.** see the appendix.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -20362,3 +20425,4 @@ entries above.
 | #335 | Under Modern a level camera that shows something is kept |
 | #338 | The log families a test build alone carries |
 | #339 | The 64-bit engine is PCtomb5.exe, the 32-bit one PCtomb5_x86.exe |
+| #340 | Larson dies lying down outside Trajan Markets |

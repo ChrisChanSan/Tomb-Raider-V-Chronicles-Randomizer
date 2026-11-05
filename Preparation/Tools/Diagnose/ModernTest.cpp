@@ -16197,10 +16197,18 @@ static void flyby_room_rule()
 	ok(p.skyLinked == 0 && HDVisLevelParams("ANDY3").skyLinked == 1 &&
 		HDVisLevelParams("andy3").skyLinked == 1 &&
 		HDVisLevelParams("ANDREA3").skyLinked == 0 &&
-		HDVisLevelParams("TITLE").skyLinked == 0 &&
+		HDVisLevelParams("TITLE").skyLinked == 1 &&
+		HDVisLevelParams("title").skyShared == 0 &&
 		HDVisLevelParams(0).skyLinked == 0,
-		"flyby room: off by default, on by ANDY3's row alone",
+		"flyby room: off by default, on by ANDY3's and TITLE's rows",
 		HDVisLevelParams("ANDY3").skyLinked, 1);
+
+	// #344: TITLE has a row of its own: linked on, no near, no shared.
+	ok(HDVisLevelParams("TITLE").skyLinked == 1 &&
+		HDVisLevelParams("TITLE").skyNear == 0 &&
+		HDVisLevelParams("TITLE").skyShared == 0,
+		"flyby room: TITLE's row exists, skyLinked 1",
+		HDVisLevelParams("TITLE").skyLinked, 1);
 
 	// The rule as ANDY3's row sets it, on these rooms.
 	p.skyLinked = 1;

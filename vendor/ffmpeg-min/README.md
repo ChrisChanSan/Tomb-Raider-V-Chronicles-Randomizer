@@ -8,10 +8,9 @@ nothing else in them.
 
 | File | Size | What it is |
 |---|---|---|
-| `bin/avutil-61.dll` | 992,256 B | libavutil 61.20.100 - memory, frames, log, CPU, float transforms |
-| `bin/avcodec-63.dll` | 473,600 B | libavcodec 63.26.100 - decoders `bink`, `binkaudio_dct`, `binkaudio_rdft` |
+| `bin/avutil-61.dll` | 991,744 B | libavutil 61.20.100 - memory, frames, log, CPU, float transforms |
+| `bin/avcodec-63.dll` | 473,088 B | libavcodec 63.26.100 - decoders `bink`, `binkaudio_dct`, `binkaudio_rdft` |
 | `bin/avformat-63.dll` | 410,112 B | libavformat 63.18.100 - demuxer `bink`, protocol `file` |
-| `lib/*.lib` | | the three import libraries (not used today: the engine and `BinkProbe` load the DLLs at run time) |
 | `include/` | | the public headers, as `make install` wrote them |
 | `build-min.sh` | | the exact configure line and the build recipe |
 | `COPYING.LGPLv2.1` | | the licence, from the source tree |
@@ -37,8 +36,9 @@ The DLLs were built from the FFmpeg master snapshot of **2026-11-03**
 (`FFmpeg-master.zip`, 24,050,402 bytes, SHA-256
 `139de434067d59e5ccd40a0768a165c61c1e544d3ec2c930eaa5ce1ed5985e65`). Its
 `RELEASE` file and configure call it `8.0.git`; the newest release section
-of its `Changelog` is 9.1. The source tree was not modified. That snapshot is
-offered with every release that ships these DLLs, as the LGPL asks.
+of its `Changelog` is 9.1. The source tree was not modified. That snapshot
+lies beside the release as `FFmpeg-master.zip` (24,050,402 bytes, SHA-256
+`139de434067d59e5ccd40a0768a165c61c1e544d3ec2c930eaa5ce1ed5985e65`).
 
 ## How it was built
 
@@ -53,11 +53,15 @@ configure --toolchain=msvc --arch=x86_64 --target-os=win64
   --disable-swscale --disable-swresample --disable-network
   --disable-autodetect --disable-x86asm --disable-debug
   --enable-demuxer=bink --enable-decoder=bink,binkaudio_dct,binkaudio_rdft
-  --enable-protocol=file
+  --enable-protocol=file --extra-cflags=-d1trimfile:<src>/
 ```
 
-`make install` puts the import libraries beside the DLLs in `bin/`; here
-they sit in `lib/`.
+The build ran out of tree in a neutral folder: the snapshot extracted to
+`C:\src\ffmpeg\src`, then `sh build-min.sh /c/src/ffmpeg/src
+/c/src/ffmpeg/build /c/src/ffmpeg/out`; `-d1trimfile` cuts the source folder
+off the file names in the DLLs. `make install` also writes import
+libraries; they are not kept here (the engine and `BinkProbe` load the DLLs
+at run time and link none).
 
 ## Proof
 

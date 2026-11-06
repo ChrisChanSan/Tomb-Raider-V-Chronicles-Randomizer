@@ -143,7 +143,8 @@
 // start hands markers to them alone (ai_marker_rule, #346).
 #include "../../../TOMB5 Code/TOMB5/game/ai_marker_rule.h"
 // A creature whose enemy is a marker looks at Lara for its wake test: the
-// distance and the noise (marker_wake_rule, #350).
+// distance, the noise, the cause and the gate (marker_wake_rule, #350,
+// #351).
 #include "../../../TOMB5 Code/TOMB5/game/marker_wake_rule.h"
 // A room group stored off its height: the count, the pick (yshift_rule).
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_scan.h"
@@ -38853,8 +38854,8 @@ static void brawler_rule()
 	glass_body(chef, "void ChefControl(short item_number)", body,
 		sizeof(body));
 	ok(strstr(body, "brawler=item->object_number==BRAWLER;") &&
-		strstr(body, "if(ChefHunts(item->object_number,"
-		"item->trigger_flags)||") && !strstr(body, "trigger_flags&1"),
+		strstr(body, "hunts=ChefHunts(item->object_number,"
+		"item->trigger_flags);") && !strstr(body, "trigger_flags&1"),
 		"brawler: state 1 asks the rule", 0, 1);
 	ok(strstr(body, "lara_item->hit_points-=EnemyDamage(brawler?"
 		"balance.dmgBrawlerFist:balance.dmgChefKnife);") &&
@@ -40209,26 +40210,33 @@ static void larson_trajan_rule()
 	free(src);
 }
 
-/* A Larson, Pierre or Raptor whose enemy is an AI marker looks at Lara
- * for its wake test (game\marker_wake_rule.h, #350): the pure distance and
- * noise rule, the helper's body in people.cpp, its two callers and the
- * kinds that keep their own test. Read from the tree. */
+/* A creature on an AI marker's errand wakes on Lara and attacks at once
+ * (game\marker_wake_rule.h; #350, #351): the pure distance, noise, cause
+ * and gate rules, the helper's body in people.cpp, its six callers, the
+ * kitchen chef's gate and the kinds that keep their own way or follow no
+ * marker at all. Read from the tree. */
 static void marker_wake_rule()
 {
 	char* src = hd_switch_text("../../game/pierre.cpp");
 	char* ppl = hd_switch_text("../../game/people.cpp");
-	char* rap = hd_switch_text("../../game/raptor.cpp");
-	static char ctl[32768], sees[4096], rctl[16384];
+	char* box = hd_switch_text("../../game/box.cpp");
+	char* chf = hd_switch_text("../../game/chef.cpp");
+	static char ctl[32768], wakes[4096];
+	static const char* const callers[][3] = {
+		{ "gladiatr.cpp", "void GladiatorControl(", "gladiator" },
+		{ "imp.cpp", "void ImpControl(", "imp" },
+		{ "chef.cpp", "void ChefControl(", "chef" },
+		{ "hydra.cpp", "void HydraControl(", "hydra" },
+		{ "willwisp.cpp", "void MazeMonsterControl(", "monster" } };
 	static const char* const keep[] = { "sas.cpp", "hitman.cpp",
-		"mafia2.cpp", "twogun.cpp", "huskie.cpp", "gladiatr.cpp", "imp.cpp",
-		"chef.cpp", "hydra.cpp", "willwisp.cpp", "swampy.cpp", "minisub.cpp",
-		"sniper.cpp", "skeleton.cpp", "box.cpp" };
-	char path[64];
+		"mafia2.cpp", "twogun.cpp", "huskie.cpp", "raptor.cpp", "swampy.cpp",
+		"minisub.cpp", "sniper.cpp", "skeleton.cpp", "box.cpp" };
+	char path[64], want[160];
 	const char* wake;
 	const char* info;
-	long others = 0;
+	long others = 0, called = 0, seen = 0;
 
-	printf("A creature on a marker's errand looks at Lara\n");
+	printf("A creature on a marker's errand wakes on Lara\n");
 
 	ok(MarkerWakeDistance(2048, 0) == 0x400000 &&
 		MarkerWakeDistance(-3, 4) == 25,
@@ -40247,52 +40255,147 @@ static void marker_wake_rule()
 		0x7FFFFFFF, 0, 0), "marker wake: a hit wakes at any distance",
 		MarkerWakeByNoise(0x7FFFFFFF, 0, 1), 1);
 
-	glass_body(ppl, "long CreatureSeesLara(", sees, sizeof(sees));
-	ok(strstr(sees, "lara_info.distance=MarkerWakeDistance(dx,dz);if("
-		"MarkerWakeByNoise(lara_info.distance,lara_item->speed,item->"
-		"hit_status))return1;lara_info.angle=(short)(phd_atan(dz,dx)-item"
-		"->pos.y_rot);enemy=creature->enemy;creature->enemy=lara_item;seen="
-		"TargetVisible(item,&lara_info);creature->enemy=enemy;returnseen;")
-		!= 0, "marker wake: sight is TargetVisible against Lara, enemy kept",
-		hd_switch_count(sees, "TargetVisible("), 1);
+	// The cause: hurt before noise, an alert or a run is noise, else sight.
+	ok(MarkerWakeCause(0, 50, true, true) == MARKER_WAKE_HURT &&
+		MarkerWakeCause(0x7FFFFFFF, 0, false, true) == MARKER_WAKE_NOISE &&
+		MarkerWakeCause(0x3FFFFF, 21, false, false) == MARKER_WAKE_NOISE &&
+		MarkerWakeCause(0x400000, 21, false, false) == 0 &&
+		MarkerWakeCause(0, 20, false, false) == 0,
+		"marker wake: hurt, then noise (alert or run), else the sight test",
+		MarkerWakeCause(0x7FFFFFFF, 0, false, true), MARKER_WAKE_NOISE);
+	ok(!strcmp(MarkerWakeWhy(MARKER_WAKE_HURT), "hurt") &&
+		!strcmp(MarkerWakeWhy(MARKER_WAKE_NOISE), "noise") &&
+		!strcmp(MarkerWakeWhy(MARKER_WAKE_SIGHT), "sight"),
+		"marker wake: the AILOG words hurt, noise, sight", 0, 0);
 
+	// The errand: marker bits, or a marker still its enemy.
+	ok(MARKER_WAKE_BITS == 0x1F && MarkerWakeOnErrand(0x1, false) &&
+		MarkerWakeOnErrand(0x10, false) && MarkerWakeOnErrand(0, true) &&
+		!MarkerWakeOnErrand(0, false) && !MarkerWakeOnErrand(0x20, false),
+		"marker wake: on an errand by its bits or a marker enemy",
+		MARKER_WAKE_BITS, 0x1F);
+
+	// The gate: the kitchen chef by his OCB, the imps by the switch.
+	ok(MarkerWakeLevelKeeps(CHEF_RULE_CHEF, 0) &&
+		MarkerWakeLevelKeeps(CHEF_RULE_CHEF, 2) &&
+		!MarkerWakeLevelKeeps(CHEF_RULE_CHEF, 1) &&
+		!MarkerWakeLevelKeeps(CHEF_RULE_BRAWLER, 0),
+		"marker wake: the kitchen chef (OCB 0) is kept, the pool's is not",
+		MarkerWakeLevelKeeps(CHEF_RULE_CHEF, 0), 1);
+	ok(MarkerWakeLevelKeeps(MARKER_WAKE_IMP, 3) ==
+		(MARKER_WAKE_KEEPS_LEVEL_IMPS != 0) &&
+		!MarkerWakeLevelKeeps(MARKER_WAKE_IMP, 0) &&
+		!MarkerWakeLevelKeeps(46, 0) && !MarkerWakeLevelKeeps(47, 3),
+		"marker wake: an imp with an OCB of its own by the switch only",
+		MARKER_WAKE_KEEPS_LEVEL_IMPS, 0);
+
+	glass_body(ppl, "long CreatureWakesOnLara(", wakes, sizeof(wakes));
+	ok(strstr(wakes, "if(!creature||!MarkerWakeOnErrand(item->ai_bits,"
+		"creature->enemy==&creature->ai_target))return0;if("
+		"MarkerWakeLevelKeeps(item->object_number,item->trigger_flags))"
+		"return0;") != 0,
+		"marker wake: only on an errand, never past the level's mark", 0, 1);
+	ok(strstr(wakes, "cause=MarkerWakeCause(lara_info.distance,lara_item->"
+		"speed,creature->hurt_by_lara||item->hit_status,creature->alerted!="
+		"0);if(!cause)lara_info.angle=(short)(phd_atan(dz,dx)-item->pos."
+		"y_rot);enemy=creature->enemy;creature->enemy=lara_item;if("
+		"TargetVisible(item,&lara_info))cause=MARKER_WAKE_SIGHT;creature->"
+		"enemy=enemy;}") != 0,
+		"marker wake: sight is TargetVisible against Lara, enemy kept", 0,
+		1);
+	ok(strstr(wakes, "bits=item->ai_bits;item->ai_bits&=~MARKER_WAKE_BITS;"
+		"creature->enemy=lara_item;creature->alerted=1;AILogWake(creature,"
+		"bits,MarkerWakeWhy(cause));returncause;") != 0,
+		"marker wake: every bit falls, Lara the enemy, alerted, logged", 0,
+		1);
+	ok(hd_switch_count(box, "Log(\"AILOG drop item=%d obj=%d bit=%s why=%s "
+		"was=0x%X bits=0x%X \"\r\n\t\t\"if3=%d enemy=lara\"") == 1,
+		"marker wake: the AILOG drop line with why=hurt|noise|sight",
+		hd_switch_count(box, "enemy=lara\""), 1);
+
+	// Larson and Pierre: only an unmarked one, before GetAITarget; his own
+	// test only without a marker.
 	glass_body(src, "void PierreControl(", ctl, sizeof(ctl));
-	wake = strstr(ctl, "if(pierre->enemy!=lara_item&&!PierreScripted(item))"
-		"awake=CreatureSeesLara(item);elseawake=info.distance<0x400000&&"
-		"lara_item->speed>20||item->hit_status||TargetVisible(item,&info);"
-		"if(awake)item->ai_bits&=~GUARD;pierre->alerted=1;}");
-	info = strstr(ctl, "CreatureAIInfo(item,&info);");
-	ok(wake && info && info < wake,
-		"marker wake: Pierre asks Lara while a marker is his enemy",
-		hd_switch_count(ctl, "CreatureSeesLara("), 1);
+	wake = strstr(ctl, "if(!PierreScripted(item))CreatureWakesOnLara(item);"
+		"if(item->ai_bits)GetAITarget(pierre);elsepierre->enemy=lara_item;");
+	info = strstr(ctl, "if(PierreScripted(item)||!item->ai_bits&&pierre->"
+		"enemy==lara_item)awake=info.distance<0x400000&&lara_item->speed>20"
+		"||item->hit_status||TargetVisible(item,&info);elseawake=0;if(awake)"
+		"item->ai_bits&=~GUARD;pierre->alerted=1;}");
+	ok(wake && info && wake < info &&
+		hd_switch_count(ctl, "CreatureWakesOnLara(") == 1,
+		"marker wake: Larson and Pierre wake before GetAITarget",
+		hd_switch_count(ctl, "CreatureWakesOnLara("), 1);
 	ok(hd_switch_count(ctl, "TargetVisible(") == 1,
 		"marker wake: a marked Larson keeps his own test (all vanilla)",
 		hd_switch_count(ctl, "TargetVisible("), 1);
 
-	glass_body(rap, "void RaptorControl(", rctl, sizeof(rctl));
-	wake = strstr(rctl, "if(raptor->enemy!=lara_item&&CreatureSeesLara(item))"
-		"raptor->alerted=1;");
-	info = strstr(rctl, "CreatureAIInfo(item,&info);");
-	ok(wake && info && info < wake && hd_switch_count(rctl,
-		"CreatureSeesLara(") == 1,
-		"marker wake: the Raptor asks Lara while a marker is its enemy",
-		hd_switch_count(rctl, "CreatureSeesLara("), 1);
+	// The other five controls, each once, right before GetAITarget.
+	for (size_t i = 0; i < sizeof(callers) / sizeof(callers[0]); i++)
+	{
+		char* t;
 
-	// The others keep their own test (lara_info) or have none of their own.
+		snprintf(path, sizeof(path), "../../game/%s", callers[i][0]);
+		t = hd_switch_text(path);
+		glass_body(t, callers[i][1], ctl, sizeof(ctl));
+		snprintf(want, sizeof(want), "CreatureWakesOnLara(item);if(item->"
+			"ai_bits)GetAITarget(%s);", callers[i][2]);
+		called += strstr(ctl, want) != 0 &&
+			hd_switch_count(ctl, "CreatureWakesOnLara(") == 1;
+		free(t);
+	}
+
+	ok(called == 5, "marker wake: gladiator, imp, chef, hydra, maze monster",
+		called, 5);
+
+	// The pool's chef walks a marker's errand; the kitchen chef as ever.
+	glass_body(chf, "void ChefControl(", ctl, sizeof(ctl));
+	ok(strstr(ctl, "hunts=ChefHunts(item->object_number,item->trigger_flags"
+		");if(hunts?!(item->ai_bits&MARKER_WAKE_BITS):abs(lara_item->pos."
+		"y_pos-item->pos.y_pos)<1024&&info.distance<0x240000&&(item->"
+		"touch_bits||lara_item->speed>15||item->hit_status||TargetVisible("
+		"item,&larainfo)))item->goal_anim_state=2;chef->alerted=1;item->"
+		"ai_bits=0;}elseif(hunts&&item->ai_bits&(AMBUSH|PATROL1|FOLLOW))"
+		"item->goal_anim_state=2;") != 0,
+		"marker wake: the kitchen chef's test unchanged, the hunter waits",
+		0, 1);
+
+	// The levels' own marker users and the animals do not call it, and
+	// #350's helper is gone.
 	for (size_t i = 0; i < sizeof(keep) / sizeof(keep[0]); i++)
 	{
 		char* t;
 
 		snprintf(path, sizeof(path), "../../game/%s", keep[i]);
 		t = hd_switch_text(path);
-		others += t ? hd_switch_count(t, "CreatureSeesLara(") : 100;
+		others += t ? hd_switch_count(t, "CreatureWakesOnLara(") : 100;
+		seen += t ? hd_switch_count(t, "CreatureSeesLara(") : 100;
 		free(t);
 	}
 
-	ok(others == 0, "marker wake: no other control calls the helper",
-		others, 0);
+	seen += hd_switch_count(ppl, "CreatureSeesLara(") +
+		hd_switch_count(src, "CreatureSeesLara(");
+	ok(others == 0 && seen == 0,
+		"marker wake: no other control calls it, CreatureSeesLara gone",
+		others + seen, 0);
 
+	// The animals follow no marker: no GetAITarget, Lara from the start.
+	char* rap = hd_switch_text("../../game/raptor.cpp");
+	char* hus = hd_switch_text("../../game/huskie.cpp");
+
+	glass_body(rap, "void RaptorControl(", ctl, sizeof(ctl));
+	ok(strstr(ctl, "raptor->enemy=lara_item;CreatureAIInfo(item,&info);") &&
+		!strstr(rap, "GetAITarget(") && !strstr(ctl, "item->ai_bits"),
+		"marker wake: the Raptor takes Lara, never a marker", 0, 1);
+	glass_body(hus, "void HuskieControl(", ctl, sizeof(ctl));
+	ok(strstr(ctl, "huskie->enemy=lara_item;CreatureAIInfo(item,&info);") &&
+		!strstr(hus, "GetAITarget(") && !strstr(ctl, "item->ai_bits"),
+		"marker wake: the huskie takes Lara, never a marker", 0, 1);
+
+	free(hus);
 	free(rap);
+	free(chf);
+	free(box);
 	free(ppl);
 	free(src);
 }
@@ -40302,8 +40405,9 @@ static void marker_wake_rule()
  * own name, each with a body of its own so the linker folds none into
  * another; the group then reads the engine's text: every control in
  * game\ that calls GetAITarget is the rule's, no other is, and the 35
- * kinds setup.cpp makes intelligent split by their control into the 27
- * that read and the 8 that do not. GetAIPickups, the save's restore and
+ * kinds setup.cpp makes intelligent split by their control into the 25
+ * that read and the 10 that do not (the Raptor and the huskie left with
+ * #351). GetAIPickups, the save's restore and
  * the AILOG lines are held as the engine writes them. */
 static volatile long ai_rule_sink;
 
@@ -40471,10 +40575,10 @@ static void ai_marker_rule()
 		readers += reads;
 	}
 
-	ok(calls == 18 && unknown == 0,
-		"ai marker rule: 18 GetAITarget calls, each in a known control",
+	ok(calls == 16 && unknown == 0,
+		"ai marker rule: 16 GetAITarget calls, each in a known control",
 		calls, 18);
-	ok(right == 25 && readers == 18,
+	ok(right == 25 && readers == 16,
 		"ai marker rule: the rule's controls are the callers, no more",
 		right, 25);
 
@@ -40502,8 +40606,8 @@ static void ai_marker_rule()
 	ok(kinds == 35 && kindsKnown == 35,
 		"ai marker rule: 35 intelligent kinds, each control known",
 		kindsKnown, 35);
-	ok(kindsRead == 27, "ai marker rule: 27 read the markers, 8 do not",
-		kindsRead, 27);
+	ok(kindsRead == 25, "ai marker rule: 25 read the markers, 10 do not",
+		kindsRead, 25);
 
 	// The level start: only a reader's pickup, the log line for all.
 	static char body[16384];

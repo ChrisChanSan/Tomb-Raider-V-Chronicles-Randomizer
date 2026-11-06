@@ -28,6 +28,9 @@
 #include "lara.h"
 #include "marker_wake_rule.h"
 
+static_assert(MARKER_WAKE_IMP == IMP && MARKER_WAKE_BITS == (GUARD | AMBUSH |
+	PATROL1 | MODIFY | FOLLOW), "marker_wake_rule.h: the imp's slot, the bits");
+
 long TargetVisible(ITEM_INFO* item, AI_INFO* info)
 {
 	ITEM_INFO* enemy;
@@ -54,31 +57,58 @@ long TargetVisible(ITEM_INFO* item, AI_INFO* info)
 	return LOS(&start, &target);
 }
 
-// Whether a creature whose enemy is an AI marker notices Lara (#350): the
-// guard's wake test (sas.cpp, mafia2.cpp) made against her, not against
-// the marker - near and running, a hit, or in sight. TargetVisible reads
-// the creature's enemy, so Lara stands in for the marker for that call.
-long CreatureSeesLara(ITEM_INFO* item)
+// Whether a creature on an AI marker's errand notices Lara, and its wake
+// (#351; marker_wake_rule.h). The test is the guard's (sas.cpp,
+// mafia2.cpp) made against Lara, not against the marker: a hit or Lara's
+// hurt, a noise - an alert (a shot nearby, AlertNearbyGuards) or Lara near
+// and running - or Lara in its sight. TargetVisible reads the creature's
+// enemy, so Lara stands in for the marker for that call. On waking every
+// marker bit falls, Lara becomes the enemy and the creature is alerted:
+// its control's fight begins on this tick. Called before GetAITarget by
+// the eight controls without a test of their own; returns the cause.
+long CreatureWakesOnLara(ITEM_INFO* item)
 {
 	CREATURE_INFO* creature;
 	ITEM_INFO* enemy;
 	AI_INFO lara_info;
-	long dx, dz, seen;
+	long dx, dz, cause, bits;
 
 	creature = (CREATURE_INFO*)item->data;
+
+	if (!creature || !MarkerWakeOnErrand(item->ai_bits,
+		creature->enemy == &creature->ai_target))
+		return 0;
+
+	if (MarkerWakeLevelKeeps(item->object_number, item->trigger_flags))
+		return 0;
+
 	dx = lara_item->pos.x_pos - item->pos.x_pos;
 	dz = lara_item->pos.z_pos - item->pos.z_pos;
 	lara_info.distance = MarkerWakeDistance(dx, dz);
+	cause = MarkerWakeCause(lara_info.distance, lara_item->speed,
+		creature->hurt_by_lara || item->hit_status, creature->alerted != 0);
 
-	if (MarkerWakeByNoise(lara_info.distance, lara_item->speed, item->hit_status))
-		return 1;
+	if (!cause)
+	{
+		lara_info.angle = (short)(phd_atan(dz, dx) - item->pos.y_rot);
+		enemy = creature->enemy;
+		creature->enemy = lara_item;
 
-	lara_info.angle = (short)(phd_atan(dz, dx) - item->pos.y_rot);
-	enemy = creature->enemy;
+		if (TargetVisible(item, &lara_info))
+			cause = MARKER_WAKE_SIGHT;
+
+		creature->enemy = enemy;
+	}
+
+	if (!cause)
+		return 0;
+
+	bits = item->ai_bits;
+	item->ai_bits &= ~MARKER_WAKE_BITS;
 	creature->enemy = lara_item;
-	seen = TargetVisible(item, &lara_info);
-	creature->enemy = enemy;
-	return seen;
+	creature->alerted = 1;
+	AILogWake(creature, bits, MarkerWakeWhy(cause));
+	return cause;
 }
 
 long Targetable(ITEM_INFO* item, AI_INFO* info)

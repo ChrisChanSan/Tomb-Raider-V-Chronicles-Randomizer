@@ -27,6 +27,7 @@
 #include "effect2.h"
 #include "flmtorch.h"
 #include "sound.h"
+#include "people.h"
 
 static BITE_INFO imp_hit = { 0, 100, 0, 9 };
 
@@ -153,6 +154,10 @@ void ImpControl(short item_number)
 	}
 	else
 	{
+		// On a marker's errand it wakes on Lara (#351; it took her only
+		// when she hurt it, and an alert left it on the stale marker).
+		CreatureWakesOnLara(item);
+
 		if (item->ai_bits)
 			GetAITarget(imp);
 		else if (imp->hurt_by_lara)

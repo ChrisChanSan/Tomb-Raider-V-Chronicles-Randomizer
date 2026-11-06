@@ -26,6 +26,7 @@
 #include "../specific/function_stubs.h"
 #include "effects.h"
 #include "lara.h"
+#include "people.h"
 
 static BITE_INFO mazemonster_hitright = {0, 0, 0, 22};
 static BITE_INFO mazemonster_hitleft = {0, 0, 0, 16};
@@ -178,6 +179,11 @@ void MazeMonsterControl(short item_number)
 		}
 		else
 		{
+			// On a marker's errand it wakes on Lara (#351; it took her
+			// only when she hurt it, and an alert left it on the stale
+			// marker).
+			CreatureWakesOnLara(item);
+
 			if (item->ai_bits)
 				GetAITarget(monster);
 			else if (monster->hurt_by_lara)

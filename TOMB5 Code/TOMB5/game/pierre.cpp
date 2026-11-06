@@ -44,8 +44,9 @@ static BITE_INFO pierre_gun2 = { -57, 200, 0, 14 };
 //
 // Everything a mark changes asks this, never item_flags[3] alone: the
 // stand-and-turn idle, the flight, the stop at a goal, the death. An
-// unmarked one with a pickup walks to its marker, and while the marker is
-// his enemy he looks at Lara for his wake test (CreatureSeesLara, #350).
+// unmarked one with a pickup walks to its marker, and while a marker
+// steers him he wakes on Lara (CreatureWakesOnLara, #351): every bit
+// falls and he fights at once.
 static long PierreScripted(ITEM_INFO* item)
 {
 	return item->item_flags[3] && !(item->TOSSPAD & 0x1F00);
@@ -300,6 +301,12 @@ void PierreControl(short item_number)
 	}
 	else
 	{
+		// One the level did not mark wakes on Lara while he walks or stands
+		// on a marker's errand (#351): all bits fall, Lara is his enemy, he
+		// fights at once - no run to an ambush point, no stand-and-turn.
+		if (!PierreScripted(item))
+			CreatureWakesOnLara(item);
+
 		if (item->ai_bits)
 			GetAITarget(pierre);
 		else
@@ -320,16 +327,16 @@ void PierreControl(short item_number)
 		GetCreatureMood(item, &info, 1);
 		CreatureMood(item, &info, 1);
 
-		// A marker he picked up at level start is his enemy while its bit
-		// sends him there, and info measures the marker: he woke only when
-		// hurt. One the level did not mark looks at Lara then, as a guard
-		// does (#350); the bits fall in GetAITarget's alert path. The
-		// marked ones (all vanilla) keep their own test.
-		if (pierre->enemy != lara_item && !PierreScripted(item))
-			awake = CreatureSeesLara(item);
-		else
+		// The marked ones (all vanilla) keep their own test. For one the
+		// level did not mark, CreatureWakesOnLara above is the test while
+		// a marker steers him: info measures the marker then, and an
+		// alert of his own would send an AMBUSH one on its ambush run
+		// (GetAITarget's alert path, #350). Without bits he tests as ever.
+		if (PierreScripted(item) || !item->ai_bits && pierre->enemy == lara_item)
 			awake = info.distance < 0x400000 && lara_item->speed > 20 ||
 				item->hit_status || TargetVisible(item, &info);
+		else
+			awake = 0;
 
 		if (awake)
 		{

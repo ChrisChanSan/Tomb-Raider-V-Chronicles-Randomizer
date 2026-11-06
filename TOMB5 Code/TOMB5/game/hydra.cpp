@@ -26,6 +26,7 @@
 #include "tomb4fx.h"
 #include "lara.h"
 #include "gameflow.h"
+#include "people.h"
 
 static BITE_INFO hydra_hit = { 0, 0, 0, 11 };
 
@@ -93,6 +94,10 @@ void HydraControl(short item_number)
 	}
 	else
 	{
+		// On a marker's errand it wakes on Lara (#351; it took her only
+		// when she hurt it, and an alert left it on the stale marker).
+		CreatureWakesOnLara(item);
+
 		if (item->ai_bits)
 			GetAITarget(hydra);
 		else if (hydra->hurt_by_lara)

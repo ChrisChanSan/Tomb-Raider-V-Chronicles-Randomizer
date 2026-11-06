@@ -73,10 +73,13 @@ void HuskieControl(short item_number)
 	}
 	else
 	{
-		if (item->ai_bits)
-			GetAITarget(huskie);
-		else
-			huskie->enemy = lara_item;
+		// An animal follows no AI marker (#351): its control left the
+		// readers (ai_marker_rule.h), GetAIPickups hands it no bits and the
+		// marker stays where it lies. joby2's huskies sat on their GUARD
+		// marker (states 1 and 9, AIGuard) until Lara came within 3072 or
+		// hurt one; they attack at once now. With ai_bits always 0 the
+		// GUARD sit, the PATROL1 walk and the MODIFY rest below are gone.
+		huskie->enemy = lara_item;
 
 		CreatureAIInfo(item, &info);
 
@@ -104,11 +107,8 @@ void HuskieControl(short item_number)
 		angle = CreatureTurn(item, huskie->maximum_turn);
 		torso_y = 4 * angle;
 
-		if (huskie->hurt_by_lara || lara_info.distance < 0x900000 && !(item->ai_bits & MODIFY))
-		{
+		if (huskie->hurt_by_lara || lara_info.distance < 0x900000)
 			AlertAllGuards(item_number);
-			item->ai_bits &= ~MODIFY;
-		}
 
 		random = (short)GetRandomControl();
 		frame = item->frame_number - anims[item->anim_number].frame_base;
@@ -120,7 +120,7 @@ void HuskieControl(short item_number)
 			head = 0;
 			head_x = 0;
 
-			if (item->current_anim_state && item->ai_bits != MODIFY)
+			if (item->current_anim_state)
 				item->goal_anim_state = 1;
 			else
 			{
@@ -135,9 +135,7 @@ void HuskieControl(short item_number)
 
 		case 2:
 
-			if (item->ai_bits & PATROL1)
-				item->goal_anim_state = 2;
-			else if (huskie->mood == BORED_MOOD && random < 256)
+			if (huskie->mood == BORED_MOOD && random < 256)
 				item->goal_anim_state = 1;
 			else
 				item->goal_anim_state = 5;
@@ -212,17 +210,8 @@ void HuskieControl(short item_number)
 		case 1:
 			huskie->maximum_turn = 0;
 
-			if (item->ai_bits & GUARD)
-			{
-				head = AIGuard(huskie);
-
-				if (!(GetRandomControl() & 0xFF))
-					item->goal_anim_state = item->current_anim_state == 1 ? 9 : 1;
-			}
-			else if (item->current_anim_state == 9 && random < 128)
+			if (item->current_anim_state == 9 && random < 128)
 				item->goal_anim_state = 1;
-			else if (item->ai_bits & PATROL1)
-				item->goal_anim_state = item->current_anim_state == 1 ? 2 : 1;
 			else if (huskie->mood == ESCAPE_MOOD)
 			{
 				if (lara.target != item && info.ahead && !item->hit_status)
@@ -238,12 +227,7 @@ void HuskieControl(short item_number)
 				huskie->flags = 0;
 				huskie->maximum_turn = 182;
 
-				if (random < 256 && item->ai_bits & MODIFY && item->current_anim_state == 1)
-				{
-					item->goal_anim_state = 8;
-					huskie->flags = 0;
-				}
-				else if (random < 4096)
+				if (random < 4096)
 					item->goal_anim_state = item->current_anim_state == 1 ? 2 : 1;
 				else if (!(random & 0x1F))
 					item->goal_anim_state = 7;

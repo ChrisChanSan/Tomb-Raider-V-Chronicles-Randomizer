@@ -20,12 +20,14 @@
  * marker's OCB in item_flags[3], and every marker but AI_GUARD consumed.
  * Only GetAITarget (box.cpp) ever turns those bits into a goal, and only
  * a control that calls it reads them. `intelligent` is wider: 35 kinds
- * carry it, and 8 of them run a control that never calls GetAITarget -
+ * carry it, and 10 of them run a control that never calls GetAITarget -
  * the T-Rex (SAS slot), the compy (SAILOR slot), the lion, the dog, the
- * vulture (CROW slot), the drone and both Roman gods. Those took the bits
- * anyway, consumed the marker another creature's chain or twin needed,
- * and the Roman god's attack waits behind a GUARD bit he can never clear
- * (romangod.cpp, the `!(ai_bits & GUARD)` before every strike).
+ * vulture (CROW slot), the drone, both Roman gods, and since #351 the
+ * Raptor (REAPER slot) and the huskie: an animal follows no marker, it
+ * attacks at once. Those took the bits anyway, consumed the marker
+ * another creature's chain or twin needed, and the Roman god's attack
+ * waits behind a GUARD bit he can never clear (romangod.cpp, the
+ * `!(ai_bits & GUARD)` before every strike).
  *
  * The rule is said by the control itself, not by a list of slots: a
  * creature reads the markers when its control is one of the functions
@@ -41,12 +43,10 @@ void HitmanControl(short item_number);		// hitman.cpp
 void PierreControl(short item_number);		// pierre.cpp
 void MafiaControl(short item_number);		// mafia2.cpp
 void TwogunControl(short item_number);		// twogun.cpp
-void HuskieControl(short item_number);		// huskie.cpp
 void GladiatorControl(short item_number);	// gladiatr.cpp
 void ImpControl(short item_number);			// imp.cpp
 void ChefControl(short item_number);		// chef.cpp
 void HydraControl(short item_number);		// hydra.cpp
-void RaptorControl(short item_number);		// raptor.cpp
 void MazeMonsterControl(short item_number);	// willwisp.cpp
 void WillOWispControl(short item_number);	// willwisp.cpp
 void SwampyControl(short item_number);		// swampy.cpp
@@ -57,15 +57,14 @@ void SkeletonControl(short item_number);	// skeleton.cpp
 
 typedef void (*AIMarkerControl)(short item_number);
 
-// The 18 controls that call GetAITarget; true when `control` is one.
+// The 16 controls that call GetAITarget; true when `control` is one.
 inline bool ControlReadsAIMarkers(AIMarkerControl control)
 {
 	return control == SasControl || control == HitmanControl ||
 		control == PierreControl || control == MafiaControl ||
-		control == TwogunControl || control == HuskieControl ||
-		control == GladiatorControl || control == ImpControl ||
-		control == ChefControl || control == HydraControl ||
-		control == RaptorControl || control == MazeMonsterControl ||
+		control == TwogunControl || control == GladiatorControl ||
+		control == ImpControl || control == ChefControl ||
+		control == HydraControl || control == MazeMonsterControl ||
 		control == WillOWispControl || control == SwampyControl ||
 		control == MinisubControl || control == JellyControl ||
 		control == SniperControl || control == SkeletonControl;

@@ -1767,6 +1767,38 @@ static void AILogDrop(CREATURE_INFO* creature, long bit, const char* why)
 			(int)item->ai_bits, item->item_flags[3]);
 }
 
+// A creature on a marker's errand woke on Lara (CreatureWakesOnLara,
+// people.cpp, #351): every bit it carried fell at once, Lara is its enemy.
+// `bit` names them all, NONE when only a marker it had reached was left.
+void AILogWake(CREATURE_INFO* creature, long bits, const char* why)
+{
+	ITEM_INFO* item;
+	char names[48];
+
+	item = &items[creature->item_num];
+
+	if (!gLogEnabled || !AILogLine(creature->item_num))
+		return;
+
+	names[0] = 0;
+
+	for (long bit = GUARD; bit <= FOLLOW; bit <<= 1)
+	{
+		if (!(bits & bit))
+			continue;
+
+		if (names[0])
+			strcat_s(names, sizeof(names), "+");
+
+		strcat_s(names, sizeof(names), AILogBit(bit));
+	}
+
+	Log("AILOG drop item=%d obj=%d bit=%s why=%s was=0x%X bits=0x%X "
+		"if3=%d enemy=lara", creature->item_num, item->object_number,
+		names[0] ? names : "NONE", why, (int)bits, (int)item->ai_bits,
+		item->item_flags[3]);
+}
+
 static void AILogGoal(CREATURE_INFO* creature, long bit)
 {
 	ITEM_INFO* item;

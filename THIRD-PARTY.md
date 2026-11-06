@@ -34,11 +34,11 @@ The HD art read at run time carries code over from TROne, and the modern
 control scheme carries its design and its test expectations over.
 TROne is under the same licence as this project, which is what allows the
 combination. TROne was read in several copies and handovers between 2026-09-05
-and 2026-10-31, each named at its row: the TROne-main copies of 2026-09-05,
+and 2026-11-05, each named at its row: the TROne-main copies of 2026-09-05,
 2026-09-13, 2026-10-05 and 2026-10-06 (commit 75c4c843), the handovers of
 2026-10-14 and 2026-10-24, the copy of 2026-10-23 (commit a3c0c633) and the
-readings of 2026-10-19, 2026-10-24, 2026-10-29 and 2026-10-31. On 2026-10-06
-TROne restarted its public history at commit 75c4c843, so the three earlier
+readings of 2026-10-19, 2026-10-24, 2026-10-29, 2026-10-31 and 2026-11-05.
+On 2026-10-06 TROne restarted its public history at commit 75c4c843, so the three earlier
 copies are no longer published; a citation that names one of them records what
 was taken from it, and every citation of the copy of 2026-10-06 was checked
 against that state on 2026-10-07. Where that state differs from what was taken,
@@ -62,6 +62,7 @@ taken, file by file:
 | `TOMB5 Code/TOMB5/specific/hd/hd_render.cpp`, the water marks | `host/render/game_renderer.cpp`, `hd_load` and `hd_water_mark` (TROne-main, copy of 2026-10-05) | The **road**, not the code: the remaster's geometry carries no water flag, so the classic level's own water vertices are matched to it by room-local position through a hash of the packed int16 x/y/z, per room, once at level build - and which group owns which vertex is recovered by walking the group's index runs. In its copy of 2026-10-05 TROne marked a vertex from the classic `RoomVertexMove` flag and from the room's underwater bit, one bit; in 75c4c843 it classes water, shore and underwater-dark from the engine's own split, keeps the hash for shore corners and matches water surfaces as horizontal planes. Ours marks it from `ROOMLET::nWVtx` and from the engine's own shimmer predicate, and carries three bits rather than one. |
 | `TOMB5 Code/TOMB5/specific/hd/hd_shader/hd_glow.hlsl` | TROne's rules for its glow material | The fade near the eye and the `|N.V|` term, translated to HLSL for Direct3D 9; not a line of the original is copied. The edge fade and the end fade are this project's own, and so is the per-part choice between the file's normal and the face's normal, re-derived on this project's own measurement. Origin ledger, entries 31 and 475. |
 | `TOMB5 Code/TOMB5/specific/hd/hd_vis.cpp/.h` | `host/render/hd_visibility_tr2.inc`, its TR2 visibility prototype (the copy handed over on 2026-10-14); and `host/render/game_renderer.cpp`, `pv5_pairs_build`, the guests' height column built at the load (TROne-main, copy of 2026-10-23, commit a3c0c633, read on 2026-10-31) | The **approach**, not the code: the portal walk as the room list, every listed room's art drawn whole, a group listed by its art in a listed room's box, and the count of eight triangles that makes a guest. The walk, the tables and their other rules are this project's own. The sky table takes a **reading** of that column, not the code: art standing above a room's classic box counts for that room; the open air, the sky, the reach and the copies are this project's own. Origin ledger, entries 209, 210 and 509. |
+| `TOMB5 Code/TOMB5/specific/hd/hd_vis.cpp/.h`, the sky table's shared inside (`skyShared`, `HDVisLevelParams`' row for ANDREA3) | `games/common/trone_inner_world.h`: `trone_inner_worlds` (the "overlap pairs" rule, header paragraph RULE; TROne-main, copy of 2026-10-23, commit a3c0c633, read on 2026-11-05) | Taken: the idea only - two rooms whose inner grids (the sector grid without the wall ring) and heights cross with no direct connection are two spaces; applied by this project to the sky table. No code. The sky application, the near-art rule, the ANDREA3 row and the counts are this project's own. Origin ledger, entry 518. |
 | `TOMB5 Code/TOMB5/specific/hd/hd_level.cpp`, `hd_render.cpp/.h`: the second shells (`BuildShellRooms`, `MarkSecondShells`) | `host/render/dupshell.h` and the `schacht` and `rich2lift` blocks of `hd_load` (the copy of 2026-10-23, read on 2026-10-24) | The **rule and its thresholds**, not the code: a group's art standing outside its own box (widened by 64) in exactly one other room's box (widened by 16) is a second shell of that room when 200 of its triangles, a fifth of the pair or more, lie in the plane of the room's own art (normals within 0.98, 16 units) and fewer than half of those are the room's very triangles, and then the whole pair goes; the rest of such a group by those rooms (within 512 in x and z, 64 in y) and its art in the open air of the rooms in their column (32 units off a square's floor and ceiling); a flipmap room's pair not taken whole. The scans, the plane cells, the mirror and the shared-face refusals, the log lines and the probe are this project's own. Origin ledger, entry 480. |
 | `TOMB5 Code/TOMB5/specific/hd/hd_scan.h` and its readers in `hd_level.cpp`, `hd_render.cpp/.h`, `hd_vis.cpp/.h` and `hd_gloss_seed.h`: a room group stored off its height (`HDYShiftScan`); `TOMB5 Code/TOMB5/game/lift_door_rule.h` and `game/control.cpp`: a lift door's delay | the handover of its rounds K166 (`trgyshift.h`, `test_trgyshift.cpp`, the notes on the shaft) and K159 (the lift doors' code and notes), given to this project by its author on 2026-10-24 | K166: the **finding and the rule with its thresholds**, not the code - a room group whose art reaches above y -32,768 lies in the `.TRG` a multiple of 16,384 too low (RICH2's group 61); per room group the room's classic corners looked for in the group at k * 16,384, k -2..2, within 4 units on every axis, the best shift taken when not 0, with 16 hits or more and twice the hits of 0; the shift per group, a shared corner keeping its place in the other group; a world y wider than int16; and the four tests, written again against this project's structures. This project's own: the shift kept per group and added by every reader instead of copied corners, the draw moving the group by its shift, the distinct corners, the hash cells, the cells' read-back below -32,768, the log lines and the probe. K159: the **condition**, as its code has it - a trigger's timer not written into a lift door that holds all its code bits when the timer is negative, the hit not heavy and the trigger no switch, heavy switch, antipad, antitrigger or heavy antitrigger; the pure function and its checks are this project's own. Origin ledger, entries 481 and 482. |
 | `TOMB5 Code/TOMB5/specific/hd/hd_level.cpp` (`g_group_hollow`, `g_hollow_host`, `HollowWindows`, `DrawRoomWindowed`), `hd_vis.h` (`HDVisClassicRoomEnclosed`, `HDVisHollowWindow`) and `hd_render.cpp/.h` (`NoteHollowGroups`, `HDHollowGroup`): a hollow group's art and its window | its renderer: the HD view of a listed room's group and its room rule, the host room's rectangle (read on 2026-10-24, for a comparison) | The **reading**, not the code: a room's group is drawn wherever the walk lists the room, and none of the room's classic faces in front of it; and a triangle whose centroid lies outside its own room's box and in another room's box passes the clip test against that room's screen rectangle as well as its own. This project keeps its hollow verdict and its stand and cover rules, leaves a hollow room's faces out by the enclosure it measures, and draws the whole art of a hollow group inside one rectangle: its room's window joined with the windows of the listed rooms whose grids hold its triangles - by group, not per triangle. Origin ledger, entry 483. |
@@ -120,7 +121,7 @@ fog model, fog bulbs and room lights of its own (`set_fog_model`,
 | **TRForge** — TRForge contributors | MIT | `TOMB5 Code/TOMB5/vendor/trforge/LICENSE` |
 
 The engine, `PCtomb5.exe`, compiles stb_vorbis, TRForge's five files and this
-project's own code; Dear ImGui and stb_image are the randomizer's. Deflate - the
+project's own code; Dear ImGui is the randomizer's. Deflate - the
 level files' texture blocks, the title's logo - is read in both programs and in
 the diagnostic tools, and written by the randomizer, with this project's own
 `TR5Randomizer/src/core/Inflate.cpp`, written from RFC 1950 and RFC 1951; the
@@ -245,10 +246,13 @@ and lying on the floor" - the slot stays excluded either way.
 written against that description, not copied from it: the order the three
 prefixes are tried in, and the rule that this project's own hand table is
 asked BEFORE any of them, are this project's reading of it. The `EXTRA4_` tier
-- for `COMPASS_ITEM` and `CROSSBOW_AMMO1/2_ITEM`, TR4 survivors TROne itself
+- for `COMPASS_ITEM` and `CROSSBOW_AMMO2_ITEM`, TR4 survivors TROne itself
 can never reach because it always runs as its own game number - and the
 measured table of which of the 471 slots resolves to which file on the
 installed bundle are new, in the same entry of `MODIFICATIONS.md`.
+`CROSSBOW_AMMO1_ITEM`, the grappling gun's ammunition, is bound by the hand
+table to the hook's model, `EXTRA5_CROSSBOW_BOLT` (#349, origin ledger entry
+523), and is no longer among the TR4 names the prefixes reach.
 
 ### FFmpeg, minimal — three DLLs for the 64-bit engine's films
 
@@ -268,20 +272,25 @@ are linked dynamically: loaded at run time, not compiled into any EXE. The
 exact configure line and the recipe are `vendor/ffmpeg-min/build-min.sh`,
 the headers and import libraries sit beside the DLLs, and
 `vendor/ffmpeg-min/README.md` names the snapshot's SHA-256. The source tree
-was not modified; that snapshot is offered with every release that ships the
-three DLLs.
+was not modified; that snapshot lies beside the release as
+`FFmpeg-master.zip` (24,050,402 bytes, SHA-256
+`139de434067d59e5ccd40a0768a165c61c1e544d3ec2c930eaa5ce1ed5985e65`), with
+every release that ships the three DLLs.
 
 ### Microsoft Visual C++ runtime - the DLLs beside the 64-bit programs
 
 | Library | Licence | Full text |
 |---|---|---|
-| **Microsoft Visual C++ runtime** — Microsoft Corporation | Microsoft's terms for the Visual Studio "Distributable Code" | the Redist license text that ships with Visual Studio, `Licenses\1031\Redist.txt` under the Visual Studio folder, and the Visual Studio licence terms it belongs to |
+| **Microsoft Visual C++ runtime** — Microsoft Corporation | Microsoft's terms for the Visual Studio "Distributable Code" | the Redist license text that ships with Visual Studio, `Licenses\<locale id>\Redist.txt` under the Visual Studio folder (1033 for English), and the Visual Studio licence terms it belongs to |
 
 Since #324 both programs link the C++ runtime as DLLs (`/MD`) instead of
 compiling it in: `PCTomb5.exe` (the 64-bit engine of `be64.bat`),
 `TR5Randomizer.exe` and `Randomize.exe` import `vcruntime140.dll`,
 `vcruntime140_1.dll` and `msvcp140.dll`, measured in each EXE's import
-table, and nothing else of the Visual C++ runtime. Those three files lie
+table, and nothing else of the Visual C++ runtime. The three FFmpeg DLLs carry
+their own copy of the C runtime, linked statically (`/MT`, as FFmpeg's
+configure leaves it; `vendor/ffmpeg-min/README.md`), and import none of these;
+the EXEs use the three runtime DLLs. Those three files lie
 beside the programs, version **14.51.36247.0**, copied unchanged from the
 compiler's own redist folder - the one `vcvars64.bat` names in
 `VCToolsRedistDir`, on the build machine `VC\Redist\MSVC\14.51.36231\x64\
@@ -5155,6 +5164,90 @@ carries the tables.
     TEXTBOOK: value noise blended by a smoothstep, read from a table in a texture. DATA:
     the hashed breath was the larger part of the quads' price (entry 514), and the
     table gives the hashing shader's lattice there (RoomProbe `-fogquads`).
+516. **A composite's borrowed nodes** (`specific/hd/hd_object.cpp`, `kCompositeNodes`,
+    `HDObjectBegin`, `push_borrowed`; `specific/hd/hd_model.cpp`, `HDModelBorrowJointsAt`;
+    ModelProbe `-borrowown`) - the armed scientist's nodes 10 and 13, the hands the
+    randomizer gives him, are drawn from the HD model the slot `MESHSWAP_CROSS_SWAT`
+    binds, hung at the actor's own bind pose. OWN: the table, its one row, the source
+    named by slot (a model is drawn only through a slot that binds it), the anchor at the
+    actor's bind, the order before the cutscene's answer. DATA (ModelProbe `-bones`,
+    `-meshbits`, `-borrow` on ANDREA2 as the randomizer writes it): `SWAT.TRM`'s node 13
+    is the right hand with the rifle, `SCIENTIST.TRM`'s nodes 10 and 13 are bare gloves;
+    the warehouse tree's node 13 sits at -68 5 -4, SWAT's and the scientist's at 126 61
+    -21 (0 of 14 bones apart), so the lender's own bind put the hand about 200 units
+    beside the arm.
+517. **The corpse fade in HD** (`specific/hd/hd_object_rules.h`, `HDCorpseFadeByte`;
+    `specific/hd/hd_object.cpp`, `HDObjectFrameDraw`; `specific/hd/hd_model.cpp`,
+    `HDModelFade`, `draw_model`; `game/draw.cpp`, `StepAfterDeathFade`; `tomb5.corpses`)
+    - a dead body's HD model fades by the classic byte. CLASSIC: the curve, `GlobalAlpha
+    = 0xFE000000 * after_death`, 256 - 2 x after_death for 2 to 127, one step a tick, and
+    the count's end at 128. OWN: 255 at 0, at 1 and for anything with hit points left
+    (the skeleton's control writes `after_death` as a timer while it lives); the fading
+    entries drawn after the whole ones with the depth written, by the card's blend factor
+    (`D3DRS_BLENDFACTOR`), the body whole on a card without it; the blob kept and the
+    receive draw left out for a fading body; the switch refusing the step from 1 to 2;
+    the body saved with `after_death` as one byte (1 to 127 fit, format 3) and the switch
+    in the recording's header byte 6. PICTURE: the curve and the order checked on
+    ModelProbe's `-fade <byte>` pictures, `-fade 255` the picture of a run without it.
+518. **The sky table asks the art near a room, and a shared inside**
+    (`specific/hd/hd_vis.cpp`, `HDVisBuild`, `SkyPoint`, `skyAsked`, `skyRefusedFar`,
+    `skyRefusedShared`; `specific/hd/hd_vis.h`, `HDVisParams::skyNear`, `skyShared`,
+    `skyReach`, `kHDVisLevelRows`, `HDVisLevelParams`) - a room under the sky takes a sky
+    group only when one triangle or more of it stands, by its corners, over the room's
+    floor plan or within the reach (`skyNear`), and not when the group's room stands in
+    the room's own inside with no link (`skyShared`); both on for ANDREA3 alone, by its
+    row. THIRD: the shared inside is after TROne's inner worlds (TROne-main, copy of
+    2026-10-23, `games/common/trone_inner_world.h`, `trone_inner_worlds`, the "overlap
+    pairs" rule, read on 2026-11-05): two rooms whose inner grids and heights cross with
+    no direct connection are two spaces - the idea only, no code. OWN: its application to
+    the sky table, one triangle and not eight, the level row and not the rule on every
+    level (there it would refuse ANDY3's belt of trees, group 106, and open holes in its
+    canopy), the census choice of 501 pairs to 497. DATA (TrgProbe `-vistable`,
+    RoomProbe `-vis` on the player's ANDREA3): rooms 128 and 116 took groups 67 and 92 by
+    their boxes with no triangle within a sector of their floor plans; room 92's gallery
+    stands inside room 115's inner grid with no portal between them (115/92).
+519. **Sky art only within a part of the portal graph** (`specific/hd/hd_vis.cpp`,
+    `HDVisBuild`, `HDVisTables::part`, `HDVisSkyAsked::linked`, `skyRefusedUnlinked`;
+    `specific/hd/hd_vis.h`, `HDVisParams::skyLinked`, the rows of ANDY3, TITLE and
+    ANDREA3) - a sky pair is refused when the group's room lies in another part of the
+    level's portal graph than the room under the sky. CLASSIC: the graph is the level's
+    own portals and floor links, a flipmap pair counted as one room, as the classic walk
+    goes. OWN: the part and not the direct link, named by its lowest room; the rule bound
+    by a row; ANDY3's island of rooms 180, 189, 190 and 191 (flyby 6's) drawn only for the
+    rooms linked to it. DATA (TrgProbe `-vistable`): 11 of the 501 pairs the box takes
+    join two parts; ANDY3 refuses two of them.
+520. **The title's night backdrop in its own scene** (`specific/hd/hd_vis.h`, the row
+    `{ "TITLE", 0, 0, 1 }` and ANDREA3's `{ "ANDREA3", 1, 1, 1 }`) - entry 519's rule on
+    for two more levels. DATA (TrgProbe `-vistable` on the player's TITLE and ANDREA3):
+    TITLE's group 54, the night backdrop, lies in graph part 16 and was given to the
+    garden rooms 6, 9 and 11 of part 0; ANDREA3's lids 122 and 125 gave group 92 to the
+    rooms 36 and 60 below them across two parts; five pairs refused, the scene's own rooms
+    34 and 35 keep group 54.
+521. **A guest from another part of the graph** (`specific/hd/hd_vis.cpp`, the guest loop
+    of `HDVisBuild`, `guestsUnlinked`) - where a level's row asks `skyLinked`, a room
+    under the sky takes no guest art of a room in another part of the graph. DATA
+    (TrgProbe `-vistable` on the player's TITLE files): 12 triangles of group 33, the
+    night scene's city backdrop (part 33), reach into the Irish hill's room 54 (part 16)
+    and made it a guest by rule 2; of the game's 429 guest pairs it is the only one
+    across two parts. OWN: the row's switch rather than a general rule, the smaller
+    change.
+522. **A hollow room gives way to its guest** (`specific/hd/hd_vis.h`,
+    `HDVisHollowRoomGuested`, asked by `HDVisClassicRoomVerdict`) - a classic room whose
+    own group is hollow and drawn leaves its classic faces out when its inside holds a
+    guest and the stand rule covers none of its faces. OWN: the rule, the guest clause
+    the empty groups have in `HDVisClassicRoomVerdict` applied to hollow ones;
+    `HD_COVER_PART_SHARE` stays 0.5. DATA (TrgProbe `-classicart -arttol` and RoomProbe
+    `-hollowlist` on the player's TITLE files and the fifteen levels): the desert rooms
+    70, 101 and 103 are hollow, the dunes in their place are the neighbours' art (group 71
+    lies within 128 units of 7 of room 101's 96 faces), so the stand rule's half share
+    fails; over the fifteen levels only those three rooms change.
+523. **The grapple ammunition wears the hook** (`specific/hd/hd_bind.cpp`, the hand
+    table's line for `CROSSBOW_AMMO1_ITEM`, slot 342) - the pickup binds
+    `5/ITEM/EXTRA5_CROSSBOW_BOLT.TRM` in every level. DATA (the player's `5\ITEM` folder;
+    ModelProbe `-slot 342 -bones`, `-slot 344 -bones` on RICH3): no `5\ITEM` file exists
+    for the ammunition under any name, and the slot's classic box equals the hook's
+    (slot 344) to the unit, `EXTRA5_CROSSBOW_BOLT` 2 units off it, Tomb Raider IV's quiver
+    66; the slot stands in RICH3 alone.
 
 ## Credited, but not contained here
 

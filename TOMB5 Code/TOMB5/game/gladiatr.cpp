@@ -24,6 +24,7 @@
 #include "effects.h"
 #include "gameflow.h"
 #include "lara.h"
+#include "people.h"
 
 static BITE_INFO gladiator_hit = { 0, 0, 0, 16 };
 
@@ -77,6 +78,10 @@ void GladiatorControl(short item_number)
 	}
 	else
 	{
+		// On a marker's errand it wakes on Lara (#351; it took her only
+		// when she hurt it, and an alert left it on the stale marker).
+		CreatureWakesOnLara(item);
+
 		if (item->ai_bits)
 			GetAITarget(gladiator);
 		else if (gladiator->hurt_by_lara)

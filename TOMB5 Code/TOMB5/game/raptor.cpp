@@ -62,7 +62,6 @@
 #include "control.h"
 #include "lara.h"
 #include "lot.h"
-#include "people.h"
 #include "items.h"
 #include "../specific/function_stubs.h"
 
@@ -122,23 +121,17 @@ void RaptorControl(short item_number)
 		// the Raptor would maul its own reinforcements instead of hunting
 		// Lara.
 		//
-		// This is the same line every native TR5 enemy uses instead. The
-		// bite effect on non-Lara targets further down stays: via ai_bits,
-		// GetAITarget can still set an AI object.
-		if (item->ai_bits)
-			GetAITarget(raptor);
-		else
-			raptor->enemy = lara_item;
+		// An animal follows no AI marker (#351): the port took over the
+		// human enemies' `if (ai_bits) GetAITarget` line, and a Raptor on a
+		// guard's spot walked to the marker or stood there until hurt or
+		// shot at. Its control left the readers (ai_marker_rule.h), so
+		// GetAIPickups hands it no bits and the marker stays for others -
+		// as with the T-Rex, compy, dog, lion and vulture. No TR5 level
+		// carries a Raptor. The bite effect on a non-Lara enemy further
+		// down stays as the port wrote it; the enemy is always Lara now.
+		raptor->enemy = lara_item;
 
 		CreatureAIInfo(item, &info);
-
-		// On a marker's errand the marker is its enemy, and it has no wake
-		// test of its own: it stood there until hurt or shot at. It looks at
-		// Lara as a guard does (#350); the alert drops the PATROL1 or GUARD
-		// bit in GetAITarget as for a guard on that spot. No TR5 level gives
-		// a Raptor a marker: only a randomized one has it.
-		if (raptor->enemy != lara_item && CreatureSeesLara(item))
-			raptor->alerted = 1;
 
 		if (info.ahead)
 			head = info.angle;

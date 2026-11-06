@@ -20368,6 +20368,76 @@ game here.
 
 **Commits.** see the appendix.
 
+### A pool creature on a marker attacks as soon as it notices Lara (#351)
+2026-11-06
+
+**What.** #350 let a Larson, Pierre or Raptor on an inherited AI marker see Lara, but the
+bits still fell through `GetAITarget`'s alert path: an AMBUSH|PATROL1 Pierre ran to his
+ambush point first and shot nothing on the way (rich1 Pierre 80). The gladiator, imp,
+chef, brawler, hydra and maze monster take Lara as their enemy only when she hurts them
+(`else if (hurt_by_lara)`); an alert dropped their bit and left the stale marker as their
+enemy. Now a creature of these eight kinds on a marker's errand follows its path or stands
+its watch until it notices Lara, and then attacks her at once.
+
+**The rule.** `CreatureWakesOnLara(item)` (`game/people.cpp`; pure part in
+`game/marker_wake_rule.h`) replaces #350's `CreatureSeesLara`. It acts while the creature
+is on an errand: marker bits (GUARD, AMBUSH, PATROL1, MODIFY, FOLLOW) steer it or a marker
+is still its `enemy` (a reached FOLLOW point, a dropped bit). Causes in this order: hurt
+(`hurt_by_lara` or `hit_status`), noise (`alerted` - Lara's shot through
+`AlertNearbyGuards`, every creature in her room or within about 5700; or Lara within 2048
+and faster than a walk), sight (`TargetVisible` with Lara standing in for the enemy). On
+waking ALL marker bits fall, `enemy = lara_item`, `alerted = 1`, and the control's own
+fight runs on the same tick: no ambush run, no stand-and-turn. `-log` writes `AILOG drop
+item=.. obj=.. bit=<the bits> why=hurt|noise|sight was=0x.. bits=0x0 if3=.. enemy=lara`.
+It is called before `GetAITarget` in `PierreControl` (Larson and Pierre, only when not
+`PierreScripted`), `GladiatorControl`, `ImpControl`, `ChefControl` (chef and brawler),
+`HydraControl` and `MazeMonsterControl`. Pierre's own test runs only for a marked one or
+one without bits and with Lara as enemy (with a marker enemy it measured the marker).
+Nothing changes for a creature without marker bits; nothing wakes earlier than a guard.
+
+**The chef.** The kitchen chef of joby3 (item 186, room 120) has OCB 0 (raw 0) and stands
+on his GUARD marker ai2 (OCB 0, the CUTSCENE2 trigger); the randomizer gives every chef it
+swaps in or adds OCB 1 (`kSpawnOcb`, `Randomizer.cpp` - the swap loop writes the kind's
+spawn OCB, it does not clear it for the chef). The gate is that level-given mark, in one
+place: `MarkerWakeLevelKeeps` keeps a chef whose OCB has bit 0 clear (`!ChefHunts`), so
+his kitchen test, his stove and the stealth kill (`deltapak.cpp`, by object and position)
+are untouched. A hunting chef (OCB 1, or the brawler by his slot) without bits hunts at
+once as before; on a GUARD spot he stays at his work until he wakes, on a PATROL1, AMBUSH
+or FOLLOW marker he leaves it and walks there (state 1, `chef.cpp`).
+
+**The two imps.** andy3 items 2 and 3 (room 11, OCB 3, the stone throwers) each take a
+FOLLOW marker (ai1, ai3) that sends them 3072 west at the level's flyby. Before, they ran
+there, the bit dropped on arrival, the enemy stayed the marker (no bite against it) and
+they threw stones at Lara. Now an imp that notices Lara stops where it is and fights her:
+stones, and a bite when she is close. `MARKER_WAKE_KEEPS_LEVEL_IMPS` (0) in
+`marker_wake_rule.h` keeps an imp with an OCB of its own out of the rule when set to 1;
+every pool imp has OCB 0.
+
+**Animals follow no marker.** The Raptor (REAPER slot; the TR3 port had copied the human
+enemies' `if (ai_bits) GetAITarget`) and the huskie stop calling `GetAITarget` and leave
+the readers in `game/ai_marker_rule.h`: `GetAIPickups` hands them no bits and the marker
+stays where it lies, as for the T-Rex, compy, dog, lion and vulture. 16 controls read the
+markers, 25 of the 35 intelligent kinds. joby2's huskie 86 sat on its GUARD marker (states
+1 and 9, `AIGuard`) until Lara came within 3072 or hurt one; it attacks at once now.
+Nothing else writes a huskie's `ai_bits` (`GetAIPickups` and `ResetGuards` for readers
+only, the save's restore clears non-readers, `ResetTest` reads `item_flags[0]`, which
+stays 0), so its GUARD sit, PATROL1 walk and MODIFY rest were removed. Vanilla carries no
+Raptor.
+
+**Untouched.** The Sas family, Hitman/Cyborg, Mafia2 and Twogun (the levels' own marker
+users with their own test against Lara); `PierreCanFlee` and `PierreScripted`; no new AI
+marker, no OCB change, no randomizer change.
+
+**Checked.** ModernTest group `marker_wake_rule` (20 checks, was 9): the distance, noise,
+cause, errand and gate rules, the helper's body, its call before `GetAITarget` in the six
+controls, the chef's state 1, no call elsewhere and `CreatureSeesLara` gone, the Raptor
+and the huskie without `GetAITarget`; `ai_marker_rule` at 16 calls and 25 reading kinds.
+ModernTest 17828 checks (17817 - 9 + 20), MenuTest 45043, InterpTest 754, LipsTest 272,
+none failed; no warning line in `be64.bat`, `basan.bat` and `be64.bat test`. Not run in
+the game here.
+
+**Commits.** see the appendix.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -20853,3 +20923,4 @@ entries above.
 | #346 | AI markers reach only the kinds that read them |
 | #349 | The grappling gun's ammo wears its own HD model |
 | #350 | Larson and Pierre on an inherited marker see Lara |
+| #351 | A pool creature on a marker attacks as soon as it notices Lara |

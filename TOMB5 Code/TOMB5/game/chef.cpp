@@ -26,6 +26,7 @@
 #include "draw.h"
 #include "../specific/function_stubs.h"
 #include "chef_rule.h"
+#include "marker_wake_rule.h"
 
 static BITE_INFO knife = { 0, 200, 0, 13 };
 
@@ -132,7 +133,7 @@ void ChefControl(short item_number)
 	AI_INFO larainfo;
 	long dx, dz, swing, dist;
 	short angle, head, torso_y, torso_x;
-	bool brawler, touch, reach, ahead;
+	bool brawler, touch, reach, ahead, hunts;
 
 	if (!CreatureActive(item_number))
 		return;
@@ -190,6 +191,11 @@ void ChefControl(short item_number)
 		return;
 	}
 
+	// On a marker's errand he wakes on Lara (#351; he took her only when
+	// she hurt him). The kitchen chef is no errand: the rule's gate keeps
+	// him by his OCB (MarkerWakeLevelKeeps, marker_wake_rule.h).
+	CreatureWakesOnLara(item);
+
 	if (item->ai_bits)
 		GetAITarget(chef);
 	else if (chef->hurt_by_lara)
@@ -246,14 +252,22 @@ void ChefControl(short item_number)
 		//
 		// The brawler hunts whatever his OCB says - he has no kitchen
 		// (ChefHunts, chef_rule.h).
-		if (ChefHunts(item->object_number, item->trigger_flags) ||
-			(abs(lara_item->pos.y_pos - item->pos.y_pos) < 1024 && info.distance < 0x240000 &&
-			(item->touch_bits || lara_item->speed > 15 || item->hit_status || TargetVisible(item, &larainfo))))
+		//
+		// A hunter on a marker's errand hunts once he wakes on Lara
+		// (#351): on a guard's spot he stays at his work until then, on
+		// a patrol, ambush or follow marker he leaves it and walks there.
+		hunts = ChefHunts(item->object_number, item->trigger_flags);
+
+		if (hunts ? !(item->ai_bits & MARKER_WAKE_BITS) :
+			abs(lara_item->pos.y_pos - item->pos.y_pos) < 1024 && info.distance < 0x240000 &&
+			(item->touch_bits || lara_item->speed > 15 || item->hit_status || TargetVisible(item, &larainfo)))
 		{
 			item->goal_anim_state = 2;
 			chef->alerted = 1;
 			item->ai_bits = 0;
 		}
+		else if (hunts && item->ai_bits & (AMBUSH | PATROL1 | FOLLOW))
+			item->goal_anim_state = 2;
 
 		break;
 

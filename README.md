@@ -35,7 +35,7 @@ GPLv3.
 | | |
 |---|---|
 | **Items and keys** | Rolled per level within verified zones — every boundary was checked in trview, so a key never lands where it cannot be reached |
-| **Enemies** | Swapped among themselves, or drawn from the whole game; extra enemies on request. Guests from Tomb Raider III (T-Rex, raptor, compy, vulture) come along |
+| **Enemies** | Swapped among themselves, or drawn from the whole game; extra enemies on request. Guests from Tomb Raider III (T-Rex, raptor, compy, vulture) come along, and so do RICH1's armed scientist, JOBY2's brawler and RICH3's drone |
 | **Outfits** | Lara's three Chronicles outfits, plus outfits imported from Tomb Raider III — pick what may be rolled in the wardrobe |
 | **Secrets** | Placed in a glitchless or a glitched set, or rolled from a pool |
 | **Music** | Ambience and triggers permuted; HQ soundtracks in OGG are played if you supply them |
@@ -48,7 +48,7 @@ GPLv3.
 | **Level order** | Optional, from shuffling inside a section up to a free run through the whole game |
 | **Weather** | Rolled per level — the rainy Ireland levels can come up dry, the Russian base can get rain instead of snow |
 | **Difficulty** | Every weapon, enemy and hazard tunable by hand in `Balance.txt`, or by three sliders |
-| **Engine** | Native Direct3D 9 and XAudio2, controller support with an optional modern (analog-stick) control scheme — a free orbit camera on the right stick, matching swim controls — a first-person view, an optional modern keyboard scheme with its own rebindable W/S/A/D-style default keys, a Combat mode that can hold the draw key instead of toggling it, an Action row that splits Interact and the Secondary (climb/grab/shoot) button onto two keys with the pad's own second bindings page, Sprint mode, Duck mode and Grab mode (let go of a ledge without holding the key) as Toggle instead of Hold, an optional Ledge hang move that turns a run or walk at an edge into an automatic hang (Modern controls only, off by default), rebindable hotkeys for the medipacks, quick save/load, the six weapons, (with Cheats on) five cheat actions and an *HD / SD* switch (F12, for comparing the HD and the classic draw at one spot) — on the keyboard as F-keys, on a pad as chords behind a Modifier button — and a long list of fixed original bugs |
+| **Engine** | Native Direct3D 9 and XAudio2, controller support with an optional modern (analog-stick) control scheme — a free orbit camera on the right stick, matching swim controls — a first-person view, a *Corpse fade* option (a defeated enemy fades as in the original, or stays where it fell), an optional modern keyboard scheme with its own rebindable W/S/A/D-style default keys, a Combat mode that can hold the draw key instead of toggling it, an Action row that splits Interact and the Secondary (climb/grab/shoot) button onto two keys with the pad's own second bindings page, Sprint mode, Duck mode and Grab mode (let go of a ledge without holding the key) as Toggle instead of Hold, an optional Ledge hang move that turns a run or walk at an edge into an automatic hang (Modern controls only, off by default), rebindable hotkeys for the medipacks, quick save/load, the six weapons, (with Cheats on) five cheat actions and an *HD / SD* switch (F12, for comparing the HD and the classic draw at one spot) — on the keyboard as F-keys, on a pad as chords behind a Modifier button — and a long list of fixed original bugs |
 
 The same **seed** produces the same game on any machine. The randomizer
 window shows the version and the build id, and every run writes
@@ -124,8 +124,9 @@ nothing was taken away.
 The seven tabs. <i>Special Features</i> opens from the title screen only;
 anywhere else it is drawn in red, as here, and the cursor steps over it.</td>
 <td width="50%"><img src="docs/menu-tomb5-options.jpg" alt="tomb5 options"><br>
-<b>tomb5 options</b>: the cutscene skipper, cheats, level select, and the
-three movement fixes — climb-up delay, flexible crawling, crawl tilting.</td>
+<b>tomb5 options</b>: the cutscene skipper, cheats, Corpse fade (whether a
+defeated enemy fades or stays where it fell), level select, and the three
+movement fixes — climb-up delay, flexible crawling, crawl tilting.</td>
 </tr>
 <tr>
 <td width="50%"><img src="docs/menu-graphics.jpg" alt="Graphics"><br>
@@ -338,9 +339,9 @@ is never stopped on the card's account.
 
 **Why the address space, on a machine with 16 GiB of video memory?** Because
 the engine was a 32 bit program until Beta_5.0: four gigabytes of address
-space and no more, whatever the card and the RAM held. Since #324 the
-package's `PCTomb5.exe` is the 64-bit build and that ceiling is gone, but
-the budget below still decides. Measured with `PoolProbe`, the
+space and no more, whatever the card and the RAM held. Since 6.0
+`PCTomb5.exe` is a 64-bit program and that ceiling is gone; the budget
+below still decides. Measured with `PoolProbe`, the
 pages themselves live on the CARD and cost the program almost nothing of it —
 0.04 MiB for a page of 85.25 — so in practice it is the texture budget that
 decides, and on a big card's automatic budget a level has room for well over
@@ -476,14 +477,12 @@ HDLOG level=ANDREA3 pickup floor slot=240 name=CROWBAR_ITEM
 
 **How far that can go.** Most of these numbers are millimetres: over the
 fifteen levels of the campaign, eleven pickups are lifted at all and nine of
-them by 7 units or less — a crowbar 6.2, a laser sight 4.2, a flare 1.0. Two
-are not. A mod's fitted pair of Uzis comes up 19.2, and the largest in the game
-is your own installation's: RICH3's crossbow ammunition, where your installation
-has no Tomb Raider V model for the slot and the engine falls back to the Tomb
-Raider IV quiver. That model is drawn at TR5's item origin and reaches **126.6
-units** below the level's own mesh — at that origin nearly two thirds of it
-would stand in the floor; the engine lifts it onto it. A big number always
-means the same thing:
+them by 7 units or less — a crowbar 6.2, a laser sight 4.2, a flare 1.0. A
+mod's fitted pair of Uzis comes up 19.2. RICH3's grapple ammunition, for which
+your installation has no model of its own, wears the grappling hook's own
+model (`EXTRA5_CROSSBOW_BOLT`), which lies within 2 units of the level's own mesh;
+the Tomb Raider IV quiver the prefix rule would have found reaches **126.6
+units** below it. A big number always means the same thing:
 the model was modelled over a different item's origin. A model authored over
 this game's own reads zero.
 
@@ -970,6 +969,12 @@ compiler's redist folder (`VCToolsRedistDir` of `vcvars64.bat`) beside them.
 - **[Dear ImGui](https://github.com/ocornut/imgui)** by Omar Cornut (MIT) —
   the interface.
 - **stb_vorbis** by Sean Barrett (public domain) — HQ music.
+- **[FFmpeg](https://ffmpeg.org)** by the FFmpeg developers (LGPL v2.1 or
+  later) — the films: three DLLs beside the engine, loaded at run time and
+  not compiled in, built from an unmodified source snapshot with nothing but
+  the Bink decoders. The licence is `Licenses\COPYING.LGPLv2.1`, and the
+  source snapshot lies beside the release (`FFmpeg-master.zip`, named with
+  its SHA-256 in [THIRD-PARTY.md](THIRD-PARTY.md)).
 - **TRForge** by the TRForge contributors (MIT) — five of its files, the
   reader for the Remaster's own room-geometry format, are vendored into the
   engine and compiled in, byte for byte but for three comment passages left

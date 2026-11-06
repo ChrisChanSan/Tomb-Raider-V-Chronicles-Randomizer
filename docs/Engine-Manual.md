@@ -7,7 +7,8 @@
 **PCTomb5.exe, Beta_5.0**
 
 A native Windows 11 build of Tomb Raider Chronicles: Direct3D 9 and XAudio2,
-no wrappers, one self-contained executable. This page covers everything it
+no wrappers, one 64-bit executable and the six DLLs that lie beside it. This
+page covers everything it
 does that the original did not, and everything you can set.
 
 The randomizer has its own manual — [Randomizer-Manual.md](Randomizer-Manual.md).
@@ -47,10 +48,11 @@ Upstream TOMB5 — Troye's decompilation of Chronicles — ships `PCTomb5.exe`
 plus a `tomb5.dll` of its own that carries the game code. (That is upstream's
 file, and it is not *Tomb Raider IV-VI Remastered*'s `tomb5.dll`, which has
 the same name and nothing else in common; nothing in this build ever opens
-the Remaster's.) **This build is a single
-executable.** There is no DLL to copy, upstream's "dll only" updates do not
-apply to it, and because it links the C runtime statically it needs no Visual
-C++ redistributable installed.
+the Remaster's.) **This build has no
+`tomb5.dll`:** the game code is in `PCTomb5.exe` itself, and upstream's "dll
+only" updates do not apply to it. Beside it lie the Microsoft C++ runtime's
+three DLLs and the three FFmpeg DLLs for the films; keep them next to the EXE -
+nothing has to be installed.
 
 The rendering is Direct3D 9 and the sound is XAudio2, both native. In
 practice that means no compatibility shims, no wrapper, and no fiddling with
@@ -84,8 +86,9 @@ twenty minutes, as the engine's own `-log` lines count it:
   475 MiB (RICH2) a level, the 18 pages of an installed outfit mod among
   them, and its geometry 10 to 62 MiB more. No page had to give up a mip
   level.
-- **Address space**: at most about 870 MiB of the program's 4 GiB were in use
-  at the start of a level's build.
+- **Address space**: at most about 870 MiB were in use at the start of a level's
+  build
+  (measured on the 32-bit build, whose ceiling was 4 GiB).
 - **Frame rate**: every level held 165 frames a second (the median second),
   on a median of 0.3 to 0.8 ms of processor work a frame; 3 of 139,405
   frames of play came late. The rest of each frame is the wait for the
@@ -661,7 +664,8 @@ trigger only to show Lara from outside — at a lever, in a doorway, along a
 corridor — does not take the view, the same as in first person. Crossing such
 a trigger's tile leaves no trace either: the camera keeps following as smoothly
 as anywhere else, with no jump of the view and no camera cut counted in
-`INTERPLOG`. The same goes for the outside view the game cuts to while she
+`INTERPLOG` *(test build)*. The same goes for the outside view the game cuts to
+while she
 lifts a trapdoor or turns a wheel switch: the camera stays yours and eases
 through the animation instead of snapping.
 
@@ -673,7 +677,8 @@ steel door in Escape with the Iris that falls when the guards have cut through
 it and shows the dog coming in. So does the real sniper camera in Escape with
 the Iris. The view cuts to the level's camera, holds it as long as the level
 says, and cuts back to your camera where you left it. Over the fifteen levels
-these are twenty triggers, besides the sniper camera's. With `-log`, a `CAMLOG
+these are twenty triggers, besides the sniper camera's. With `-log` on a test
+build, a `CAMLOG
 level` line names every level camera the *Modern* camera decides on, once, with
 `kept=1` and `why=target`, `heavy` or `sniper` for one that takes the view and
 `kept=0 why=lara_frame` for one that does not.
@@ -685,7 +690,8 @@ the stick more than 45 degrees away from where it pointed at that moment. Push
 again, or turn it that far, and the stick goes by the view you now see; turning
 it does not stop her. The same holds where a level camera that follows her
 takes the view and hands it back, as in the X-ray corridor of Escape with the
-Iris. With `-log`, the `MODERNLOG` line of every game tick carries `cut=1` on
+Iris. With `-log` on a test build, the `MODERNLOG` line of every game tick
+carries `cut=1` on
 the tick the camera changed hands, `latch=1` while such a held course is kept,
 and `latch_drop=1` on the tick a turn of the stick ended it.
 
@@ -695,7 +701,8 @@ camera can stand close beside Lara, away from the angle you set. While it does,
 the stick goes by the view you see, not by the angle the camera would like to
 have; held through the moment the push starts or ends, it keeps her course the
 same way as at the sniper camera, until you let go or turn it more than 45
-degrees. With `-log`, the `CAMLOG` line ends in `diag=`, how far the push
+degrees. With `-log` on a test build, the `CAMLOG` line ends in `diag=`, how far
+the push
 moved the camera, and the `MODERNLOG` line carries `ref_view=1`, just before
 its last field `latch_drop=`, on the ticks the stick goes by the view.
 
@@ -1159,7 +1166,8 @@ picture, as in the original, so the walk that would read the same press a
 second time is handed a blank input for the length of that one call and gets
 its own back immediately after.
 
-With `-log` the ring writes an `INVLOG` line a second — `frames=` what was
+With `-log` on a test build the ring writes an `INVLOG` line a second —
+`frames=` what was
 presented, `steps=` its logic, and which of its motions were really drawn
 in between. A healthy second at *Display* on a 165 Hz panel reads
 `frames=165 steps=30`, and the `FPSLOG` line beside it reads
@@ -1205,7 +1213,7 @@ half turn is spread over the in-between pictures — one at *Frame rate 60*,
 five or six at *Display* on a 165 Hz panel, none at 30 — and runs the way her
 body was already turning. It is a motion the animation itself does not
 contain. In the other twists and the roll the step is 6 to 20 degrees and is
-simply smoothed. The `BRIDGELOG` line says when it happens.
+simply smoothed. The `BRIDGELOG` line *(test build)* says when it happens.
 
 Its **position** is another matter. An animation carries an offset of its own that moves the whole body — a climb
 wrap moves it 248 units in one step, the entry into a climb down 111, the
@@ -1217,7 +1225,8 @@ tick's own position step really pays for it and no further: where nothing
 else moved with it, the frame keeps the offset it already carries. A ladder
 wrap and a ledge grab are continuous; a crawl ending in a stand does not
 float at the old height. The frames this really moved are counted as
-`root_fix` in the `INTERPLOG` line, and they are a small minority of the
+`root_fix` in the `INTERPLOG` line *(test build)*, and they are a small minority
+of the
 refused ones — an ordinary room has a couple of dozen refusals per drawn
 frame and no `root_fix` at all.
 
@@ -1319,7 +1328,8 @@ notch. Raising the binoculars or the sight and lowering them stay the cuts
 they are at thirty: the camera jumps there between Lara's head and the view
 behind her, and the field of view jumps with it. With `-log`, every
 `ALTERFOV` line ends with `alpha` and `tween`: during a zoom at *Display* the
-lines with `tween 1` carry a new value on every picture, and `INTERPLOG`'s
+lines with `tween 1` carry a new value on every picture, and on a test build
+`INTERPLOG`'s
 `zoom=` counts the pictures a second that were drawn in between. At 30
 nothing changes.
 
@@ -1401,7 +1411,8 @@ high-refresh monitor, where the extra pictures are worth it.
 
 **How to check it.** With `-log`, `FPSLOG` reads `fps=144 real_fps=143.8
 logic_ticks=30`: the rate asked for, the rate measured, and the game still at
-thirty. `INTERPLOG`'s `alpha=` is three numbers on this setting — the smallest,
+thirty. On a test build, `INTERPLOG`'s `alpha=` is three numbers on this setting
+— the smallest,
 the mean and the largest blend factor of the second — and a healthy 144 Hz
 second walks the whole interval, roughly `0.03/0.50/0.98`. A maximum sitting
 at `1.00` with a mean close to it means the frames are arriving faster than the
@@ -2781,7 +2792,8 @@ it.
   The splash's and the spray's timing and everything the game decides
   are the classic ones. `hd_motion` `0` draws the classic splash, spray and
   tank's dome, and so does the classic look (F12).
-- **`SPLASHLOG` in the log.** With `-log`, once a second while anything of
+- **`SPLASHLOG` in the log.** With `-log` on a test build, once a second while
+  anything of
   it draws: `SPLASHLOG level=<stem> splashes=<n> cards=<n> rings=<n>
   tank=<item>:<state>` - the HD splashes alive, the cards drawn, the splash
   rings on the sheets (two a splash), the item of the fish tank whose
@@ -2897,7 +2909,8 @@ it.
   born in it and the current rises out of it. Seen through the water the pit is
   shaded by the water's depth like any floor. The registry DWORD `hd_springcrack`
   at 0 leaves the cracks out, for a comparison.
-- **`SPRINGLOG` in the log.** With `-log`, at every level's load one `SPRINGLOG
+- **`SPRINGLOG` in the log.** With `-log` on a test build, at every level's load
+  one `SPRINGLOG
   level=<stem>` line: the springs (`springs=`) and where they came from (`table=`,
   `file=`, `rule=`), the file's spring rows (`rows=`), springs with no sheet over
   them (`dropped=`), the bodies the rule saw (`bodies=`), those that could hold one
@@ -4316,7 +4329,8 @@ dress her in the catsuit there. The install's *Russia Extra*, a Russia body
 without legs made for these two cutscenes, is therefore not offered in the
 outfit menu. Her thigh holsters go with her thighs: the HD composite masks its
 holster rig with the nodes shown, and the classic outfit and the catsuit draw
-each holster only while the thigh it hangs on is shown. With `-log` a
+each holster only while the thigh it hangs on is shown. With `-log` on a test
+build a
 `SWAPLOG` line names every node whose mesh a cutscene takes from another slot -
 the cutscene, its frame, the node, the slot and its mesh, and the outfit node
 drawn there - and its return, and ends in the nodes the frame hides and the
@@ -4326,7 +4340,8 @@ followed by the thigh holsters that draw drew, `holsters=LR`, `L`, `R` or
 `none`; and then in `shows=` what was drawn on the node: the model of the slot
 the mesh belongs to (the hammer's hand file in the 13th Floor's gate
 cutscene), `own` (her outfit's node, the slot having no model - the suit's
-hips) or `classic`. A `HIDELOG` line names them on every other change. With
+hips) or `classic`. A `HIDELOG` line *(test build)* names them on every other
+change. With
 the HD path off and the catsuit worn, the Sinking Submarine's first cutscene
 opens with `HIDELOG level=JOBY5 cut=32 frame=… mesh_bits=0x81FF01FF
 hidden=1,2,3,4,5,6 hd=- drawn=DrawLara__4 holsters=none`, and a second line
@@ -4372,7 +4387,8 @@ frame she steps off the scanner draws her outfit again. A mirror shows her the
 same way. Where the set cannot be loaded, the classic X-ray figure is drawn as
 before. The X-ray outfit of the outfit changer (*Xray*) wears the same set
 wherever it is worn: X-ray hands and holsters, its own skull, no braid and no
-face. With `-log` an `XRAYLOG` line says when the look comes on, whenever what
+face. With `-log` on a test build an `XRAYLOG` line says when the look comes on,
+whenever what
 draws it changes, and when it goes off - `XRAYLOG level=RICH2 cut=0 frame=-1
 room=… xray=on set=block body=OUTFIT_XRAY right=HAND_XRAY_REST
 left=HAND_XRAY_REST holsters=-/- back=HOLSTER_HK_XRAY drawn=hd
@@ -4542,7 +4558,8 @@ along, and reports how far it misses the next link. Both are the same checks
 `ModelProbe -laracheck` runs without the game, where they read 0.00000 px and
 0.00002 units.
 
-A third line, `HAIRLOG`, is written **every frame** for every braid: which
+A third line, `HAIRLOG` *(test build)*, is written **every frame** for every
+braid: which
 anchor offset that frame used, where the root of the chain landed, how many
 collision spheres it was tested against, whether the backpack was there and
 how many of its links it pushed, where the tip ended up, how far the root and
@@ -5079,7 +5096,8 @@ already faded the screen and reloaded the level, so the program says what is
 wrong and exits rather than carry on with half a game in memory.
 
 > **Move your old saves aside before you start this build.** If you played
-> Beta 1.0, put the contents of `savegame\` somewhere else first. Otherwise
+> any earlier version - every Beta up to 5.0 - put the contents of `savegame\`
+> somewhere else first. Otherwise
 > your first attempt to load one ends with a message box and a closed game —
 > nothing is destroyed, the file is untouched, but it cannot be loaded here.
 
@@ -5114,11 +5132,8 @@ instead of being thrown away, and the ring shows how many you carry; the save
 format grew with it, which is what makes every Beta 1.0 save too short for
 this build — refused, with the message box above, and the game closes.
 
-Saves of Beta 2.0 and of this build load in either. This build adds three
-bytes to the end of the engine's own block of the save (Lara hanging from a
-ledge in mid move, *Ledge hang*) and reads them only where a save has them, so
-a Beta 2.0 save loads here; Beta 2.0 reads that block's first part and leaves
-the three bytes unread.
+This build refuses every save older than format 3, a Beta 2.0 save among
+them, with the message box above.
 
 ---
 
@@ -5165,8 +5180,8 @@ else SWAT's - the moves, the bursts, the cover, the deaths and the cry; the
 two skeletons are the same bone for bone. His line in `Balance.txt` is
 `HP_ScientistArmed` (35, SWAT's); his shots are the soldiers' lines. The
 scientists of the 13th Floor itself stay unarmed. With the Remaster
-installed he wears its model of the scientist, whose gloves are empty, so
-the rifle shows only in the classic picture.
+installed he wears its model of the scientist, and his hands are SWAT's HD
+hands, the rifle in the right one.
 
 **The drone is the gunship from Red Alert, shrunk to the size of the
 vulture.** The helicopter in Red Alert stays what it was: it flies along its
@@ -5179,7 +5194,8 @@ slides from side to side while it has her in sight, and fires the gunship's
 gun in short bursts, nose on, at up to eight sectors. Each hit costs five
 times what the gunship's does, as play tuned it. Shot down, it blows apart.
 Its two lines in `Balance.txt` are `HP_Drone` (100) and `DMG_Drone` (50 a
-hit); like every enemy's, its damage follows `EnemyDamage`. With `-log`, a
+hit); like every enemy's, its damage follows `EnemyDamage`. With `-log` on a
+test build, a
 `DRONELOG` line names each change of what it is doing and each shot.
 
 **Some deaths burst apart instead of playing an animation.** The skeletons,
@@ -5207,7 +5223,7 @@ picked up.
 **Corpses and models behave.** Outside Trajan's Markets Larson dies lying
 down: his death animation would have him get up again, so it stops where he
 lies, and he becomes a body like any other enemy - no collision, faded or
-kept by the Corpses setting, kept by a savegame. Pierre's body is the same.
+kept by the *Corpse fade* setting, kept by a savegame. Pierre's body is the same.
 In Trajan's Markets only the level's own Larson stands for his cutscene; a
 Larson the randomizer put there dies lying down like anywhere else.
 Larson and Pierre only flee where the level itself placed them and actually
@@ -5335,10 +5351,10 @@ wrote it, and each seam answers a different question:
 | an enemy stands passive, walks no patrol, or another enemy's patrol or ambush breaks off | `AILOG` — at the level start one `AILOG start` line per enemy within reach of an AI marker: `item=`, `obj=`, `reads=` (1 when its kind follows markers), the `bits=` and `if3=` it took, the `marker=` with its `kind=` and `ocb=`, and `consumed=`; in play one line per event of a marker-reading enemy: `AILOG goal` (a marker reached), `AILOG drop` (a bit given up on an alert, a hurt or a hit, `modify=1` when an ambush turned into MODIFY; or, with `why=sight`, `why=noise` or `why=hurt` and `enemy=lara`, every bit an enemy carried dropped at once because it noticed Lara), `AILOG miss` (the first search that found no marker) and, after 64 lines of one enemy, `AILOG quiet` |
 | the outfit looks wrong, a limb is misplaced | `SKINLOG` — the skin's bone stack; `OBJLOG skinning done` ends in the seam pieces sewn and, by joint number, those left out (`joints_used=`, `left_out=`) |
 | the first person view sits wrong | `FPHEAD`, `ALTERFOV` — the head bone per frame, and the field of view |
-| a cutscene actor or Lara holds nothing where the classic game shows a thing in the hand | `swap=` at the end of `HDLOG cutseq actor` — every node carrying a mesh of another slot, that slot and mesh, and what drew it: a model, `own` or `classic`; `HDLOG cutswap` on every change later in the cutscene; `shows=` at the end of `SWAPLOG` for Lara |
+| a cutscene actor or Lara holds nothing where the classic game shows a thing in the hand | `swap=` at the end of `HDLOG cutseq actor` — every node carrying a mesh of another slot, that slot and mesh, and what drew it: a model, `own` or `classic`; `HDLOG cutswap` on every change later in the cutscene; `shows=` at the end of `SWAPLOG` *(test build)* for Lara |
 | the armed scientist holds no rifle in HD, or the rifle hangs beside his hand | `HDLOG composite` — at the level start, one line per composite row: the slot, the nodes, the slot they are drawn from and its model, and `reason=` (`ok`, `not_loaded`, `actor_classic`, `source_classic`, `no_geometry`) |
 | a face in a cutscene does not move its lips, or moves them wrong | `HDLOG … lips` — at the level build, one line per face and per track file it has: which file, how many frames, how many of the face's joints it moves, and why it would not be used (`reason=`) - a mod's face ends them in `rig=`, whose track files it speaks: its own, the installed game's for a face on the same rig, or none (`own`, `install`, `differs`, `none`); `LIPLOG` — while a cutscene plays, one line each time a speaking face's frame changes: the frame, the track, whether the file, the settling back or the face at rest was shown (`src=`), how far the face moved from rest at its farthest point (`jaw=`) and the language; and `lips=` at the end of `HDLOG cutseq actor` and `HDLOG frame lara` |
-| Lara's face does not blink between her lines, or does not bare its teeth when she fires | `HDLOG … lips loop` — at the level build, one line per face: how many frames its joint block holds, where it loops, where it lies in the file, which of its joints the loop moves and how many blinks it has, and why it would not play (`reason=`); `LIPLOG … lara face=` — one line each time her face changes between the cutscene line, the firing face, the loop and rest, with what it was before and why; `LIPLOG … lara blink` — one line on the first frame of each blink, with how far the lids are closed; and `lips=loop` or `lips=fire` at the end of `HDLOG frame lara` |
+| Lara's face does not blink between her lines, or does not bare its teeth when she fires | `HDLOG … lips loop` — at the level build, one line per face: how many frames its joint block holds, where it loops, where it lies in the file, which of its joints the loop moves and how many blinks it has, and why it would not play (`reason=`); *(test build)* `LIPLOG … lara face=` — one line each time her face changes between the cutscene line, the firing face, the loop and rest, with what it was before and why; *(test build)* `LIPLOG … lara blink` — one line on the first frame of each blink, with how far the lids are closed; and `lips=loop` or `lips=fire` at the end of `HDLOG frame lara` |
 | in HD Lara's catsuit loses its shine after she walks from one room into another, and a save and a load bring it back | `HDLOG laralights` — one line on her first frame of a level and one whenever her room, the number of lights handed to the card or the number left out changes: `level=` the level, `room=` her room, `il_room=` the room her current light list was last built for, `cur=` and `prev=` the engine's current and previous light list as lights switched on / lights in it (shadow lights included), `dyn=` the dynamic lights (a flare, a torch, a muzzle flash) handed on, `handed=` every light handed to the card, `dark=` the lights of the two lists left out because they have faded to nothing, `eye=` 1 when nothing is handed on, so that the camera is the lamp of her shine, `max_dark=` the brightest colour channel among those left out and `min_lit=` the dimmest brightest channel among the room lights handed on, both on the engine's 0..1 scale (0 when there is none). Walking out of a lit room reads as a line with the old room's light in `prev=` and `dark=0`, and eight drawn frames later a second line: `dark=` counts the light where its fade left it switched on with nothing to give, `prev=` shows it switched off where the fade cleared it, and when nothing else lights her the line reads `handed=0 eye=1` either way |
 | Lara under the water carries a colour of her own, or her light jumps in a long swim | `LARALOG` *(test build)* - once a second of game time while she is in a water room: `room=` her room, `air=` the room over that water whose ambient her wet nodes take (-1 for none), `kept=` 1 where there is none and the last one's stands in, `wet=` and `dry=` the colours the rules give, `drawn_wet=` and `drawn_dry=` the ones drawn, which follow those over a quarter of a second while she is in the water of a level with sheets, `wet_nodes=` her nodes under the water, `lights=` the lights handed to her and `light=` the brightest, `under_light=` the water's scattered light that frame, `wet_mask=` which of her fifteen nodes take the wet colour (bit 0 the hips, bit 14 the head), `sheets=` 1 where the level's sheets are built and `tween=` 1 while her colours glide |
 | the soft motion of the chest does not show, shows on the wrong place, or moves too much or too little | `HDLOG softbody` — one line whenever her HD composite is built and whenever the option changes: `outfit=` the body's model, `state=` on or off, `reason=` `ok` or why it is off (`young` young Lara - the script's young-Lara flag, which the randomizer clears wherever it puts an adult Lara into an Irish level - `classic` no HD Lara, `option` switched off, or the outfit's own refusal: `no_body`, `no_axes`, `no_front`, `no_torso`, `band_empty`, `band_edge`, `flat`, `asymmetric`, `radius`, `deep` (the chest stands further forward than its region reaches back), `sparse`), `strength=` the option 0 to 3, `apexL=` and `apexR=` the two points the regions are built on, in the body model's own units, `radius=` the regions' radius, `verts=` how many of the body's vertices each region moves, left/right, and `parts=` which parts carry the motion. While it is on, `HDLOG softbody second` once for every second of game time in which it moved at all: `peak=` the largest offset drawn in that second, `bound=` the largest it may be at this strength, `clamped=` frames that ran into the bound, `resets=` how often it went back to rest (a jump, a gap, a cutscene edge) and `steps=` how many sub-steps the spring ran |
@@ -5551,7 +5567,8 @@ If a level is rough for its first seconds, look at `first_frame` and at the
 look at the `late` lines and compare `hddraw` and `buckets` against a healthy
 second. Send the first ten seconds of a level's `PROFLOG` lines with a report.
 
-**`INTERPLOG`.** One line per *game second* — thirty logic steps, so it stands
+**`INTERPLOG`** *(test build)*. One line per *game second* — thirty logic steps,
+so it stands
 still while the inventory is up — saying what the in-between frames of the
 frame rate setting really did:
 
@@ -5612,7 +5629,8 @@ lightning has no bit and never will**: its bolts are drawn afresh from
 scratch on every game step rather than moved, so there is nothing between two
 of them to draw.
 
-**`TICKLOG`.** One line per *game second*, beside `INTERPLOG`, saying how many
+**`TICKLOG`** *(test build)*. One line per *game second*, beside `INTERPLOG`,
+saying how many
 times the engine's own clocks stepped in it:
 
 ```
@@ -5633,7 +5651,8 @@ both settings and put the two lines side by side. A number that is roughly
 double at 60 is a clock that is running twice as fast; that is worth reporting
 with the level and what was happening.
 
-**`ARMLOG`.** One line per *drawn frame* while Lara has a weapon in her
+**`ARMLOG`** *(test build)*. One line per *drawn frame* while Lara has a weapon
+in her
 hands, or is drawing or holstering one — none with empty hands, so a run
 without weapons costs nothing:
 
@@ -5776,7 +5795,11 @@ carry over from — see the two credits in those chapters.
 Compiled into `PCtomb5.exe` itself are **stb_vorbis** and **TRForge** (MIT); the
 level files' deflate blocks are read by the project's own code, the reader the
 randomizer uses as well. `Dear ImGui` is the *randomizer's* window and is
-compiled into `TR5Randomizer.exe`, not into the game. **discord-rpc** is in the
+compiled into `TR5Randomizer.exe`, not into the game. The films are played by
+**FFmpeg** (the FFmpeg developers, LGPL v2.1 or later): three DLLs beside the
+engine, loaded at run time and not compiled in; the licence is
+`Licenses\COPYING.LGPLv2.1`, and the source snapshot they were built from lies
+beside the release (`FFmpeg-master.zip`). **discord-rpc** is in the
 source tree as upstream shipped it and is switched off at the source
 (`TOMB5_DISCORD_RPC 0`) — nothing of it is linked into either program, and its
 notice travels because the source does. The Microsoft C++ runtime is not

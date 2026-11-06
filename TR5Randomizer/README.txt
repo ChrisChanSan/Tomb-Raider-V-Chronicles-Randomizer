@@ -7,16 +7,16 @@ What is in here
   docs\               The two manuals with their pictures, and the
                       picture behind the tool's window (Background.jpg);
                       without it the window is plain.
-  PCTomb5.exe         The game engine, a native 64-bit program for
-                      Windows 11.
+  PCTomb5.exe         The game engine, a native 64-bit program; it
+                      needs 64-bit Windows 10 or 11.
   vcruntime140.dll, vcruntime140_1.dll, msvcp140.dll
                       Microsoft's C++ runtime, which both programs
                       need; nothing has to be installed.
   avutil-61.dll, avcodec-63.dll, avformat-63.dll
                       FFmpeg, which plays the films. Keep all six DLLs
                       next to the two EXEs.
-  Setup.bat           Opens the engine's setup dialog: resolution,
-                      renderer, controls.
+  Setup.bat           Opens the engine's setup dialog: graphics
+                      adapter, resolution, window or fullscreen.
   Log.bat             Starts the game writing a logfile - use this if
                       you want to report a bug.
   audio\, movie\      Where your HQ soundtracks and FMVs go; each
@@ -213,11 +213,10 @@ The randomizer has "Restore original". It plays all levels back from
 data\Backup. Please do not delete that folder - it is the only copy
 of your original levels the program knows about.
 
-A note on savegames: the save format was changed compared to the
-original. An old savegame is not loaded into a mismatch: the game
-says so in a message box and then closes. So move your old saves
-aside, or finish a running playthrough, before you switch to a new
-version.
+A note on savegames: this version writes savegame format 3. Saves
+of Beta 5.0 and of every earlier version are refused with a message
+box, and the game closes - so move your old saves aside, or finish a
+running playthrough, before you switch to this version.
 
 If you want to report something, start the game once with -log:
 
@@ -281,6 +280,13 @@ not been run in the actual game first.
 
 The randomizer's interface uses Dear ImGui by Omar Cornut (MIT
 license).
+
+The films are played by FFmpeg, by the FFmpeg developers (LGPL v2.1
+or later, https://ffmpeg.org): the three DLLs beside the engine,
+loaded at run time and not compiled in. The licence is
+Licenses\COPYING.LGPLv2.1; Licenses\THIRD-PARTY.md names the source
+snapshot they were built from, which lies beside the release as
+FFmpeg-master.zip.
 
 The engine can play music in the OGG format (for HQ soundtracks you
 provide yourself - we ship none). The decoder for that is

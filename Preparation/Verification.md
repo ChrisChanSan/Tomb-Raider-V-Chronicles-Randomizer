@@ -21,7 +21,7 @@ git worktree add --detach <tmp> <commit-before>
 # build the old randomizer there, build the new one as usual
 # run BOTH with the same seed, the same switches and the same inputs
 cmp old.trc new.trc
-# across the change of the texture packing (#306): the content
+# across the change of the texture packing to stored blocks: the content
 LevelDiff -content old.trc new.trc
 ```
 
@@ -38,15 +38,16 @@ comments and names" would have been a belief.
 - **Your own shell holds the folder.** `git worktree remove` and folder
   renames fail with "in use by another process" when a shell sits inside.
   Leave the folder first.
-- **The data folder.** Since #306 the CLI reads its zone export only from
+- **The data folder.** The CLI reads its zone export only from
   the path it is given and the checksum list only from `data\` beside the
   EXE; neither EXE carries a copy. Copy each build in turn to the SAME
   folder beside the same `data\` before its run: the log names the paths it
   read, and two EXEs in two folders give logs that differ in that line.
 
-**The texture packing changed with #306.** A build before it packs the
+**The texture packing changed to stored blocks.** A build before that change
+packs the
 texture blocks a run grows (every level that takes a page from another
-level) with zlib's compressor; a build from #306 on writes them as stored
+level) with zlib's compressor; a build since writes them as stored
 deflate blocks. Every pixel is the same, the file carries about twice the
 bytes, and `cmp` reports the whole rest of the file. Across that change the
 recipe compares with `LevelDiff -content old.trc new.trc` (`bld.bat`): it
@@ -54,34 +55,19 @@ unpacks the three texture blocks of both files with the randomizer's own
 reader and compares their content, and it compares every other byte - the
 ten header bytes in front and everything from `data[16]` to the end of the
 file - as it stands. `SAME CONTENT` (exit code 0) is the pass; anything
-else is a regression. Between two builds that both carry #306, `cmp` holds
-again: a stored block depends on nothing but its raw bytes. Measured over
-the thirteen campaign levels at seed 380 plain and with `mix cross
-allsanity 8 weapons items20 weather`, seed 1 with `mix cross 8 weapons` and
-seed 77 with `mix cross allsanity 8 items20`: every `.hdm` and log
-identical, every `.trc` identical or `SAME CONTENT`.
-#326 ran the recipe across `/MD` (the build before #324 against the one
-after), `/W4 /sdl /permissive-` and the warning fixes, with the same four sets
-and a fifth, seed 380 with `mix cross allsanity 8 weapons outfit
-outfits-off=Lara_Joby` and the glitched secret list: every `.trc`, `.hdm` and
-printout identical. The source levels must be untouched ones - a level the
-randomizer has written is refused as "not the vanilla level".
-Since #328 the engine's builds are free of warnings as well: `grep -c
-"warning C"` gives 0 on the logs of `be64.bat`, `basan.bat`, `be64.bat test`
-and `be.bat`, and those logs are the proof. #329 cast the level-4 form of
-C4244 as well, except six places whose value nothing bounded; #331 settled
-those six and made C4244 an error (the vendored stb_vorbis and FFmpeg
-includes excepted by a pragma), so a measurement build with
-`CL=-w14244` names none in the engine's own files (the four lines of
-`vendor/ffmpeg-min`'s `libavutil/common.h` in the 64-bit build are not ours
-and stood there for #329 too).
-Since #338 the 44 `-log` families of `specific\log_families.h` are a test
-build's alone, and the proof is in the bytes: counted as the word with a
-space behind it (`CAMLOG `, not inside `CLIPLOG `), each of the 44 stands 0
-times in `release64\PCtomb5_x64.exe` and `release\PCtomb5.exe` and as before
-in the two test EXEs, and the 40 named release families as before in all
-four - in Python, `len(re.findall(rb'(?<![A-Z])CAMLOG ', data))` per word
-over each EXE's bytes.
+else is a regression. Between two builds that both write stored blocks,
+`cmp` holds again: a stored block depends on nothing but its raw bytes. The
+source levels must be untouched ones - a level the randomizer has written
+is refused as "not the vanilla level".
+The engine's builds are free of warnings as well: `grep -c "warning C"`
+must give 0 on the logs of `be64.bat`, `basan.bat`, `be64.bat test` and
+`be.bat`. The 44 `-log` families of `specific\log_families.h` are a test
+build's alone, and the check is in the bytes: counted as the word with a
+space behind it (`CAMLOG `, not inside `CLIPLOG `), each of the 44 must
+stand 0 times in `release64\PCtomb5.exe` and `release\PCtomb5_x86.exe` and
+as before in the two test EXEs, and the 40 named release families as before
+in all four - in Python, `len(re.findall(rb'(?<![A-Z])CAMLOG ', data))` per
+word over each EXE's bytes.
 
 **Exercise the risky path on purpose.** A run that never touches the changed
 code proves nothing. When the change was to the TR3 cache keys, the test had
@@ -193,7 +179,7 @@ beside it, and says so when the two disagree.
   files identical. Deselecting him (`enemiesoff=471`) takes him out
   before the roll and is the same case: the full build so, at seed 380
   with the cross switches above, gives the old build's 39 files.
-- **The armed scientist in the cross pool (#302).** The same claim the
+- **The armed scientist in the cross pool.** The same claim the
   same way: a build with only his pool row (473) removed gives the build
   before him at the four seed and switch pairs above, all 156 files, and
   `enemiesoff=473` gives it with the row. That build also carries the
@@ -403,20 +389,21 @@ it shows as a line of the `-log` seams that differs. So the same game is
 played on both builds and their logs are compared line by line: the same
 level files, the same input, the same ticks.
 
-Since #324 the 64-bit build is the one that ships, as `PCTomb5.exe`; the
+The 64-bit build is the one that ships, as `PCTomb5.exe`; the
 32-bit build of `be.bat` (`release\PCtomb5_x86.exe`, built on request) is
 no longer in the package and stays only as the comparison build of this
 section.
 
-A person cannot play the same five minutes twice, so the 32-bit build
-records what the run takes from outside and both builds play it again:
+A person cannot play the same five minutes twice, so a build records what
+the run takes from outside and plays it again:
 
-Since #321 the recorder is compiled only into test builds (section 10):
-`releasetest\PCtomb5_x64t.exe` and `releaseasan\PCtomb5_asan.exe`. There is
-no 32-bit test build; `PCtomb5_x86.exe` of `be.bat` and the shipping
-`PCtomb5.exe` do not know `-record` or `-replay` and start as without
-them. The 32-bit steps below need a 32-bit build with
-`TOMB5_TEST_BUILD`, which no script makes today; the 64-bit steps take
+The recorder is compiled only into test builds (section 10):
+`releasetest\PCtomb5_x64t.exe` and `releaseasan\PCtomb5_asan.exe`.
+`PCtomb5_x86.exe` of `be.bat` and the shipping `PCtomb5.exe` do not know
+`-record` or `-replay` and start as without them. The comparison with the
+32-bit build needs a 32-bit build with `TOMB5_TEST_BUILD`, and no script
+makes one (`be64.bat test`'s property `Tomb5Test` serves `Release|x64`
+alone), so the run below is the 64-bit half: record and replay on
 `PCtomb5_x64t.exe`.
 
 - `-record <file>` writes, once per call of the input function, what the
@@ -433,47 +420,38 @@ them. The 32-bit steps below need a 32-bit build with
   `REPLAYLOG end` or `REPLAYLOG desync` line says so and the game goes on
   with the devices. The first input call whose state check differs writes
   `REPLAYLOG drift tick=`: from that tick the replayed game is another one.
-  A file of an older version (`run1.rec` of the first build of the
-  recorder) is refused; record again.
+  A file an older recorder wrote is refused; record again.
 
 **What must be the same in every run.** The level files (the same `data\`
 folder, or the byte-identical randomizer output of section 1), the options
 (both builds read the same stored settings - do not change an option during
 the recorded run, or the replays start with the changed one), and the
 savegame folder as it was when the recording began (a replay loads what
-the recording loaded). Films are left out with `-nofmv`: the 64-bit build
-has none, and the 32-bit one must not play them either.
+the recording loaded). Films are left out with `-nofmv`.
 
-**The run.** In a Command Prompt in the game folder, with `PCtomb5_x86.exe`
-and `PCtomb5_x64t.exe` (and their `.pdb`) side by side, `<repo>` the clone:
+**The run.** In a Command Prompt in the game folder, with `PCtomb5_x64t.exe`
+(and its `.pdb`), `<repo>` the clone:
 
 ```
 rem 0. once: keep the savegames as they are now
 xcopy /e /i /y savegame savegame_before
 
-rem 1. record on the 32-bit build
-PCtomb5_x86.exe -log -nofmv -record run1.rec
-ren log.txt rec_x86.log
+rem 1. record
+PCtomb5_x64t.exe -log -nofmv -record run1.rec
+ren log.txt rec_x64.log
 copy savegame\savegame.<m> rec_m.sav
 
-rem 2. play it again on the 32-bit build
-rmdir /s /q savegame
-xcopy /e /i /y savegame_before savegame
-PCtomb5_x86.exe -log -nofmv -replay run1.rec
-ren log.txt rep_x86.log
-copy savegame\savegame.<m> x86_m.sav
-
-rem 3. play it again on the 64-bit build
+rem 2. play it again
 rmdir /s /q savegame
 xcopy /e /i /y savegame_before savegame
 PCtomb5_x64t.exe -log -nofmv -replay run1.rec
 ren log.txt rep_x64.log
 copy savegame\savegame.<m> x64_m.sav
 
-rem 4. compare
-python <repo>\Preparation\Tools\Diagnose\xdiff.py rec_x86.log rep_x86.log > xdiff_x86.txt
-python <repo>\Preparation\Tools\Diagnose\xdiff.py rep_x86.log rep_x64.log > xdiff_x64.txt
-<repo>\Preparation\Tools\Diagnose\SaveDiff.exe x86_m.sav x64_m.sav
+rem 3. compare
+python <repo>\Preparation\Tools\Diagnose\xdiff.py rec_x64.log rep_x64.log >
+xdiff_x64.txt
+<repo>\Preparation\Tools\Diagnose\SaveDiff.exe rec_m.sav x64_m.sav
 ```
 
 `SaveDiff.exe` is built once with `bsd.bat`. A file name for `-record` and
@@ -481,38 +459,33 @@ python <repo>\Preparation\Tools\Diagnose\xdiff.py rep_x86.log rep_x64.log > xdif
 takes them as switches of their own.
 
 **What to play in step 1**, about five minutes: from the title, load a
-savegame in slot `<n>` that this 32-bit build wrote (an older save holds
-pool distances, see below, or is refused by the 64-bit build), play
+savegame in slot `<n>` that this build wrote (an older save holds pool
+distances, see below, or is refused), play
 on into a level start, save into slot `<m>`, load it again, fight the
 brawler (`BRAWLLOG`) and a guard, climb a rope or a ladder, open the
 inventory and use something, and quit through the menu. Leave the keyboard,
 the mouse and the pad alone while a replay runs - it ignores them until its
 file ends - and do not switch away from the window, which holds the game.
 
-**The save cross test** is part of the run: in step 3 the 64-bit build
-loads slot `<n>`, written by the 32-bit build, plays the recorded minutes
-and saves slot `<m>`; in step 2 the 32-bit build does the same.
-`SaveDiff x86_m.sav x64_m.sav` must print `IDENTICAL - every one of the
-29491 bytes.` - no field is expected to differ. Every pointer a save holds
+**The save test** is part of the run: in step 2 the replay loads slot
+`<n>`, plays the recorded minutes and saves slot `<m>` as the recording
+did. `SaveDiff rec_m.sav x64_m.sav` must print `IDENTICAL - every one of
+the 29491 bytes.` - no field is expected to differ. Every pointer a save holds
 is written by number (`game\save_pointer_rule.h`): an item by its item
 number, a creature's AI target by the number of its creature's item,
 Lara's meshes by their number; none is a distance in the pool, which the
 64-bit build lays out wider. At the next load `SAVELOG` says how each one
 was read - `how=tag_item`, `how=tag_ai`, `how=tag_num` or `how=null` - and
 a `SAVELOG save ... kind=outside` line names a pointer the rule could not
-name and wrote as null; send that line if one appears.
-The reverse: write slot `<n>` with the 64-bit build, record `run2.rec` on
-`PCtomb5_x64t.exe`, play it again on both builds (steps 2 and 3 with
-`run2.rec`) and compare the two `<m>` files the same way.
+name and wrote as null; keep that line if one appears.
 
 A save written by a build before this rule holds those pointers as
 distances. It is read the old way (`how=legacy_ok` or `how=legacy_null`),
 exact only on the build that wrote it, so slot `<n>` must be written by
 this build.
 
-**What a clean result prints.** `xdiff_x86.txt` proves the recorder: the
-recorded run and its replay on the same build. `xdiff_x64.txt` is the
-answer. Both end in the family table and, when the builds agree:
+**What a clean result prints.** `xdiff_x64.txt` compares the recorded run
+and its replay. It ends in the family table and, when the runs agree:
 
 ```
 no logic difference
@@ -529,9 +502,9 @@ no float-only difference
 and no `REPLAYLOG desync` or `drift` line at the top. Between the
 recorded run and a replay a few `audio` lines may differ (a sound that waits
 for its last one starts by the audio device's clock, and its volume follows
-the drawn camera); between the builds the `float-only` lines may differ in
-the last digit, where a seam prints a float the two C runtimes computed
-(`sin`, `cos`, `sqrt` differ in their last bit). The braid (`HAIRLOG`) is a
+the drawn camera); between two builds the `float-only` lines may differ in
+the last digit, where a seam prints a float two C runtimes computed (`sin`,
+`cos`, `sqrt` differ in their last bit). The braid (`HAIRLOG`) is a
 render family and dropped. The game logic itself is integer arithmetic and
 must not differ. The summary's last lines say where each log was compared:
 from the first `REPLAYLOG level=` line to `REPLAYLOG end`; after it the
@@ -550,9 +523,9 @@ are different games; the first difference before it is the cause. The
 `load` lines differ when the two builds read a level differently - the
 level file's records are converted on the 64-bit build.
 
-**What to send:** `run1.rec`, `rec_x86.log`, `rep_x86.log`,
-`rep_x64.log`, `xdiff_x86.txt`, `xdiff_x64.txt`, the SaveDiff output and
-the slot files `<n>`, `rec_m.sav`, `x86_m.sav`, `x64_m.sav`.
+**Keep these files:** `run1.rec`, `rec_x64.log`, `rep_x64.log`,
+`xdiff_x64.txt`, the SaveDiff output and the slot files `<n>`,
+`rec_m.sav`, `x64_m.sav`.
 
 **What it does not see.** The families of the drawn frames (`ARMLOG`,
 `ROOMLIST`, `HDLOG`, ...) are dropped: they depend on the frame rate, the
@@ -596,7 +569,7 @@ start, a path without a drive letter (the option list is separated by
 colons). The build runs slower than the release one.
 
 **What to play.** Every way the pool is handed back, and the level pairs where
-a pointer of the level before was read until `FreeLevel` cleared it (#309):
+a pointer of the level before was read until `FreeLevel` cleared it:
 
 - From the title into a level, and through the end of a level into the next
   one: ANDREA2 into ANDREA3 (the AI objects and the rats of the one, none in
@@ -653,21 +626,12 @@ that `.pdb`). The kinds:
 The run cannot see a pointer of the level before whose address the new
 level has already been handed again: that block is the new level's and the
 access a valid one. That class is held by `FreeLevel`'s clears
-(MODIFICATIONS.md, #309). `ITEMWATCH`, on with `-log`, still names an item
+(MODIFICATIONS.md, "The 64-bit engine under AddressSanitizer, -high, and stale
+pool pointers"). `ITEMWATCH`, on with `-log`, still names an item
 whose room was written over while the items were initialised.
 
-**What to send:** `asan_report.<pid>`, `log.txt`, the `.dmp`, and which build
-(the first line of the log).
-
-**What the first runs found.** Two runs of this recipe, one with
-`continue_on_error=1`, through forty level changes, sixty deaths and the
-loads: three faults of the original, all reads at index -1 - a sound the
-level does not carry stopped through its soundmap entry (#311), the forced
-fixed camera reading the flags of camera -1 on every tick of a trapdoor or
-turn switch, and the inventory ring's start position indexed with an empty
-slot (#312). Each showed as `use-after-poison` or `global-buffer-overflow`
-with the source line in frame `#0`; the engine's own clears of #309 raised
-no report.
+**Keep these files:** `asan_report.<pid>`, `log.txt`, the `.dmp`, and which
+build (the first line of the log).
 
 **Run 2, `-high`.** The same game as section 8's recording, played again by
 the 64-bit build with `-high`: at the start every free region below 4 GB is
@@ -685,8 +649,8 @@ python <repo>\Preparation\Tools\Diagnose\xdiff.py rep_x64.log rep_x64_high.log >
 
 Near the top of `rep_x64_high.log`: `HIGHLOG walk reserved=<n> bytes=<n>
 held=<n> left=<n> failed=0` - `held=` the bytes below 4 GB taken before the
-switch was read (in a test process only the system's two shared pages, 8192
-bytes), `left=` the free pieces too small to reserve - and after the `POOL`
+switch was read, `left=` the free pieces too small to reserve - and after the
+`POOL`
 line `HIGHLOG reserved=<n> regions below 4 GB, pool base=0x00007FF...
 top-down`. `xdiff_high.txt` must say what `xdiff_x64.txt` says: no logic
 difference, since where the pool lies does not enter the game. A cut pointer
@@ -694,8 +658,8 @@ shows as a `CRASH code=0xC0000005` line with its dump, at the tick the
 `REPLAYLOG` lines before it name. A file name for the command line must not
 contain ` -high`.
 
-**What to send:** `rep_x64_high.log`, `xdiff_high.txt`, and a `.dmp` if one
-was written.
+**Keep these files:** `rep_x64_high.log`, `xdiff_high.txt`, and a `.dmp` if
+one was written.
 ## 10. Does the 60 fps mode play the classic game?
 
 The logic runs thirty steps a second at every frame rate; the 60 fps modes
@@ -705,7 +669,7 @@ aim, the ledge test, the weapons, the cameras and the drips) and her wet
 nodes are built again from the step's own pose after every blended picture
 (`game\draw.cpp`, `LaraJointsLive`). The proof is a replay whose pictures
 fall at other places between the steps than the recording's. It needs the
-recorder, which only the test builds carry (#321): `be64.bat test` builds
+recorder, which only the test builds carry: `be64.bat test` builds
 `releasetest\PCtomb5_x64t.exe`, the 64-bit engine at full speed, which
 records; `basan.bat` builds `releaseasan\PCtomb5_asan.exe`, which replays
 under AddressSanitizer (either can do both). Their first `-log` line ends
@@ -723,9 +687,7 @@ the first line.
    recording's frame places are not read: the replaying machine draws as
    many frames in a tick as its own clock gives and blends each by that
    clock, and the sub-tick records are skipped - the end line counts them
-   in `skipped_subticks=` (since #319; before it a machine that drew one
-   frame more in a tick than the recording ended the replay with a
-   `REPLAYLOG desync want=A got=P`). The ticks, the input and the
+   in `skipped_subticks=`. The ticks, the input and the
    generators stay the recording's. The open line ends
    `clock=live` - that is the check that the switch was read;
    `clock=recorded` is a replay of the recording's own pictures, which
@@ -734,15 +696,14 @@ the first line.
    `REPLAYLOG end` names the recording's last tick. Played to the
    recording's own exit, the end line is `REPLAYLOG end mode=replay
    why=exit records=<n> tick=<t> left=<bytes> skipped_subticks=<n>`, after
-   the `GameClose` and `WinClose` lines and before the released devices
-   (since #321; before it the log closed in `GameClose` and the line was
-   never written). `why=file` says the game asked for a record after the
+   the `GameClose` and `WinClose` lines and before the released devices.
+   `why=file` says the game asked for a record after the
    file's last one and went on with the devices; `why=desync` that a record
    did not fit. A drift line names the
    tick where the replayed game left the recorded one. Under the live clock
    the ticks, the input and the generators are the recording's, so a drift
    means the logic read something back from a picture: a reader of the
-   blend that #310 did not catch - unless it is one of the two leftovers
+   blend not yet caught - unless it is one of the two leftovers
    below. Around the drift tick compare the two logs' `TICKLOG` second
    (`after_death=`, a body's fade step) with the `ITEMLOG` line of the item
    that died there (its room), and the level's `DOORLOG moves=`: a fade
@@ -761,12 +722,10 @@ the first line.
    than `seed=` is the cause, the seed the consequence. A body's fade one
    step off by itself is no drift: a body whose death animation ended is
    off the active chain and out of the AI slots, and the kill a step later
-   draws no number and touches nothing of Lara's (#314: ANDREA2, the fade
-   one step apart in one live replay and equal in the other, both
-   drifting at the same tick with the same hashes).
+   draws no number and touches nothing of Lara's.
 
    When only `seed=` parts, the call that drew one number more or less is
-   named by `-rngtrace` (#316): replay the same file twice with the same
+   named by `-rngtrace`: replay the same file twice with the same
    build, once with the recorded clock and once with `-liveclock`, each
    with `-rngtrace <drift tick - 6> <drift tick + 3>` beside the switches
    the drifting run had, and keep both logs. For a drift at tick 842 with
@@ -796,20 +755,11 @@ the first line.
    place, is where the two runs part; what that caller read is the next
    question, not answered by the trace.
 
-   The first run of this kind named `TriggerExplosionSparks` and
-   `TriggerExplosionSmokeEnd`, 26 draws, on the live side only (#317): a
-   chained explosion, which `UpdateSparks` fires when a spark reaches a set
-   age. The first thesis was that the draw had ended that spark in the
-   recorded run - `S_DrawDrawSparksNEW` ends a spark whose depth reaches
-   the far plane, and that depth comes from the frame's camera, so where
-   the pictures fell would decide whether the explosion came. With `-log` each such end is a
-   `SPARKLOG kill` line (and `SPARKLOG drip kill`, `SPARKLOG bubble kill`
-   for the two of the same kind): had that been the cause, the
-   recorded-clock log would show a `SPARKLOG kill` with `chain=` above 0
-   before the drift tick and the live-clock log not. The first such run
-   wrote no `SPARKLOG kill` at all, so `SPARKLOG born`, `fire`, `end` (why=life,
-   fade or evict), `light` and `light_index` now follow every chain spark
-   in `game\effect2.cpp`: the live log's `fire` line that the other log
+   When the call on one side only is `TriggerExplosionSparks` (a chained
+   explosion, which `UpdateSparks` fires when a spark reaches a set age),
+   the SPARKLOG lines follow the chain sparks: `SPARKLOG born`, `fire`,
+   `end` (why=life, fade or evict), `light` and `light_index` in
+   `game\effect2.cpp`. The live log's `fire` line that the other log
    lacks names a slot, the last `born` in that slot before it its born
    tick, and the recorded-clock log's lines for that slot and born tick
    tell its fate there. The spark slots the draw takes are `SPARKLOG
@@ -823,37 +773,19 @@ the first line.
    allocation; without `--allocs` it pairs the chain sparks alive at tick
    t in both logs and marks the ones whose fate differs.
 
-   The chain that found the cause (#317, #318): `-rngtrace` named the 26
-   draws of a chain's last link firing a tick early on the live side;
-   the life lines showed the field that parted, the spark slot - the
-   chain born in other slots with the same count of sparks on and the
-   same generator state; the draw-side lines named the taker, 3811
-   `draw_alloc` lines all from `TriggerSmallSplash` called by `DoRain`,
-   the rain's splashes made on the frame with the frame's camera, a
-   count that differs between the clocks (3714 against 3673 in the
-   title's rain before the level, `next=` 1008 against 967: 41 = 41,
-   `spark_life.py --allocs`); and the link that slot put below its
-   parent aged a pass later than one above it. The fix gives the
-   weather its own splashes and ripples (`specific\weather_sparks.cpp`),
-   so nothing the rain makes takes a slot or a draw of the logic. The
-   check, with any build from #318 on: replay a recording made with such
-   a build in a level with rain twice with `-liveclock`; no
+   The weather has its own splashes and ripples
+   (`specific\weather_sparks.cpp`), so nothing the rain makes takes a slot
+   or a draw of the logic. The check: replay a recording in a level with
+   rain twice with `-liveclock`; no
    `REPLAYLOG drift`, no `SPARKLOG draw_alloc` line whose `ret=` names
    `TriggerSmallSplash` (`AddrLine.exe <exe> -ret <ret>`), and every
-   `SPARKLOG level` line's `weather_peak=` under 1024. A recording made
-   before #318 drifts with these builds in both clocks by design: its
-   logic carries the old splash slots.
+   `SPARKLOG level` line's `weather_peak=` under 1024.
 
-   The next drift (#320) was a bubble: 61 `SPARKLOG bubble kill` lines in
-   the recording, 62 in both live replays, the extra one a bubble that
-   `DrawBubbles` ended a tick before it surfaced in `UpdateBubbles`, one
-   ripple and one draw of the logic generator less. Since #320 the draw
-   ends no spark, drip or bubble - it only leaves them undrawn - and the
-   three lines are `cull` lines, once per particle. The check, with any
-   build from #320 on: no `kill` line of any kind (`SPARKLOG kill`,
-   `drip kill`, `bubble kill`); `cull` lines are allowed and change
-   nothing. A recording made before #320 drifts with these builds
-   wherever a particle its draw ended now lives on.
+   The draw ends no spark, drip or bubble - it only leaves them undrawn -
+   and its three lines are `cull` lines, once per particle. The check: no
+   `kill` line of any kind (`SPARKLOG kill`, `drip kill`, `bubble kill`);
+   `cull` lines are allowed and change nothing. A recording made by an
+   older build may drift wherever its draw ended a particle.
 4. `JOINTLOG passes=<n> ticks=<m> tween_frames=<k> blended_frames=<b>`,
    one line at the end of each level and of the title: `passes` equals
    `blended_frames`; at 30 both are 0; at 60 they are about `ticks` (a
@@ -878,13 +810,13 @@ the first line.
 The corpse fade (`StepAfterDeathFade`) counts a body seen by one picture
 per step, the one that is no tween picture. At *Display* that picture is
 blended at a fraction the clock sets, so a drift on the tick a body
-vanishes, with the body's room at the picture's edge, is the one leftover
-#310 measured and left. `ProcessClosedDoors`, which moves a closed door
+vanishes, with the body's room at the picture's edge, is the one known
+leftover. `ProcessClosedDoors`, which moves a closed door
 between its two rooms' item lists by what the picture's walk saw, follows
 the same rule and leaves the same residual: at *Display* the lists follow
 that blended picture, once per step.
 
-A stalled frame (#322): `grep "PROFLOG.*pause"` and sort by `frame=`; a
+A stalled frame: `grep "PROFLOG.*pause"` and sort by `frame=`; a
 line with `presents=1` was no menu, so its `frame` minus `work` is the
 stall. The six fields at its end, `logic= clear= begin_wait= begin= parked=
 rest=`, add up to that stall to a few milliseconds (`parked` is the tick

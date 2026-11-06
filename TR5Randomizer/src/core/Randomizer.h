@@ -85,6 +85,19 @@ inline bool isOperableFixture(int typeId)
         || (typeId >= 329 && typeId <= 331);
 }
 
+// Enemy kinds that never leave the spot they are placed on. Only such a
+// kind can block an operable fixture for good: a moving enemy walks or
+// flies toward Lara and dies before she reaches the fixture, and a corpse
+// has no collision. Read from the controls of every swap-pool kind in
+// TOMB5/game: all of them call CreatureTurn (the drone steers its own
+// flight in drone.cpp) - all but HydraControl, which only aims the head
+// from where InitialiseHydra put her, and the Hydra is undead on top.
+//   63  HYDRA
+inline bool isStationaryEnemy(int typeId)
+{
+    return typeId == 63;
+}
+
 // Swarm critters: bat, rat, spider and the spider generator. If a pickup
 // trigger fires only one of these, it does NOT pin the item.
 //

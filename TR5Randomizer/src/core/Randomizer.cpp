@@ -1864,8 +1864,10 @@ bool Rando::run(const RandoInput& in,
         // instead of +8 and removes ITEM_INVISIBLE. The pool always sets
         // OCB 0, and items with OCB != 0 are never swapped anyway.
         //
-        // joby2's own three huskies (items 4, 86, 153) do not stand in its
-        // curated list - they stay vanilla, joby2 only gives away.
+        // joby2's own three huskies (items 4, 86, 153, all OCB 0) stand in
+        // its curated list and join the swap: 86 and 153 were swapped all
+        // along, item 4 - on the sector of the room-1 keyhole - since the
+        // fixture test spares only stationary kinds (#352).
         { 85, "joby2",   {},                                    {-1,-1},  nullptr,   -1 },  // Huskie
         // The chef: a pure melee fighter (knife), model only in joby3. His
         // set carries only +0..+11 real anims (the rest are dead heirs his
@@ -2653,18 +2655,22 @@ bool Rando::run(const RandoInput& in,
                     continue;
                 }
 
-                // If this enemy stands at an operable fixture, he keeps his
-                // vanilla type.
+                // An enemy at an operable fixture (isOperableFixture within
+                // |dx|,|dz| <= 1536 and |dy| <= 512) keeps his vanilla type
+                // only when the drawn kind cannot move (isStationaryEnemy:
+                // the Hydra). Every moving kind walks or flies toward Lara
+                // and is dead before she operates the fixture, and a corpse
+                // has no collision - exactly as the vanilla enemy there.
                 //
-                // The bar for EXTRA enemies alone does not suffice: here no
-                // place changes, but a kind. Whoever stands next to a
-                // keyhole and becomes a T-Rex blocks the operation just the
-                // same - it just does not show while rolling, because the
-                // place was occupied in vanilla.
-                //
-                // Core put the enemy there and evidently found it
-                // tolerable; simply leaving him is therefore the safe
-                // answer and needs no table of which type is "big".
+                // The test once barred every kind. It came from the bar for
+                // EXTRA enemies (below, untouched), where a new body takes a
+                // new place; at a swap the place was occupied in vanilla
+                // already. Measured over five draws of all 13 levels it held
+                // 13 vanilla enemies (Andrea3, joby2, joby3, joby5, rich1,
+                // rich3) and nothing it held was at risk from a moving kind.
+                // An enemy that must stay himself for other reasons belongs
+                // in fixedItems, not here.
+                if (isStationaryEnemy(kinds[i]))
                 {
                     bool atOperable = false;
                     for (const auto& kv : finalOf)

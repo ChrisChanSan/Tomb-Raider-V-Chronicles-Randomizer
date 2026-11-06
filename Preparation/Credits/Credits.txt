@@ -24,6 +24,11 @@ imgui: https://github.com/ocornut/imgui (ocornut)
 
 stb: https://github.com/nothings/stb (Sean Barrett)
 
+FFmpeg: https://ffmpeg.org (the FFmpeg developers, LGPL v2.1 or later) -
+  the films: three DLLs beside the engine, loaded at run time and not
+  compiled in; licence in Licenses\COPYING.LGPLv2.1, the source snapshot
+  beside the release (FFmpeg-master.zip).
+
 TRForge (MIT, TRForge contributors): five files are vendored (byte for
   byte but for three comment passages left out of Trg.h) and compiled into
   PCtomb5.exe - the reader for the remasters' LEVELn.TRG geometry and the

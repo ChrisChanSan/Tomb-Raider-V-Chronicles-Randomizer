@@ -283,7 +283,8 @@ every release that ships the three DLLs.
 |---|---|---|
 | **Microsoft Visual C++ runtime** — Microsoft Corporation | Microsoft's terms for the Visual Studio "Distributable Code" | the Redist license text that ships with Visual Studio, `Licenses\<locale id>\Redist.txt` under the Visual Studio folder (1033 for English), and the Visual Studio licence terms it belongs to |
 
-Since #324 both programs link the C++ runtime as DLLs (`/MD`) instead of
+Since the 64-bit package both programs link the C++ runtime as DLLs (`/MD`)
+instead of
 compiling it in: `PCTomb5.exe` (the 64-bit engine of `be64.bat`),
 `TR5Randomizer.exe` and `Randomize.exe` import `vcruntime140.dll`,
 `vcruntime140_1.dll` and `msvcp140.dll`, measured in each EXE's import

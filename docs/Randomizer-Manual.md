@@ -126,7 +126,7 @@ which is not code at all. The same
 seed on two different builds is two different games.
 
 That is why both numbers stand at the top of the window and in `spoiler.txt`:
-`Beta_5.0` is the release, `Build 0.24` is the placement data. Nothing stops
+`Beta_5.0` is the release, `Build 0.25` is the placement data. Nothing stops
 you mixing a randomizer and an engine of different versions — the numbers are
 there to be read, not enforced.
 

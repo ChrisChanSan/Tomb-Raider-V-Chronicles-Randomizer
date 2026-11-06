@@ -142,6 +142,9 @@
 // The kinds that read AI markers: the control asks GetAITarget, the level
 // start hands markers to them alone (ai_marker_rule, #346).
 #include "../../../TOMB5 Code/TOMB5/game/ai_marker_rule.h"
+// A creature whose enemy is a marker looks at Lara for its wake test: the
+// distance and the noise (marker_wake_rule, #350).
+#include "../../../TOMB5 Code/TOMB5/game/marker_wake_rule.h"
 // A room group stored off its height: the count, the pick (yshift_rule).
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_scan.h"
 // The fog bulbs' body: the span, the column, the veil, the breath (fog_body),
@@ -40186,10 +40189,11 @@ static void larson_trajan_rule()
 	ok(strstr(ctl, "elseif(item->object_number==LARSON&&(gfLevelId!="
 		"LVL5_TRAJAN_MARKETS||!PierreScripted(item)))") != 0,
 		"larson trajan: an unmarked Larson there lies down at frame 28",
-		hd_switch_count(ctl, "PierreScripted("), 3);
-	ok(strstr(ctl, "elseif(item->ai_bits&GUARD||item->item_flags[3])") != 0,
-		"larson trajan: the stand-guard idle reads the mark, not the level",
-		hd_switch_count(ctl, "item->item_flags[3])"), 1);
+		hd_switch_count(ctl, "PierreScripted("), 5);
+	ok(strstr(ctl, "elseif(item->ai_bits&GUARD||PierreScripted(item))") != 0
+		&& hd_switch_count(ctl, "item->item_flags[3])") == 0,
+		"larson trajan: the stand-guard idle asks the mark, not the OCB",
+		hd_switch_count(ctl, "item->item_flags[3])"), 0);
 	ok(strstr(ctl, "if(pierre->reached_goal)//") != 0 && strstr(ctl,
 		"if(gfLevelId==LVL5_TRAJAN_MARKETS||!PierreScripted(item))item->"
 		"goal_anim_state=1;item->required_anim_state=1;item->trigger_flags=0;"
@@ -40202,6 +40206,94 @@ static void larson_trajan_rule()
 
 	free(setup);
 	free(boxs);
+	free(src);
+}
+
+/* A Larson, Pierre or Raptor whose enemy is an AI marker looks at Lara
+ * for its wake test (game\marker_wake_rule.h, #350): the pure distance and
+ * noise rule, the helper's body in people.cpp, its two callers and the
+ * kinds that keep their own test. Read from the tree. */
+static void marker_wake_rule()
+{
+	char* src = hd_switch_text("../../game/pierre.cpp");
+	char* ppl = hd_switch_text("../../game/people.cpp");
+	char* rap = hd_switch_text("../../game/raptor.cpp");
+	static char ctl[32768], sees[4096], rctl[16384];
+	static const char* const keep[] = { "sas.cpp", "hitman.cpp",
+		"mafia2.cpp", "twogun.cpp", "huskie.cpp", "gladiatr.cpp", "imp.cpp",
+		"chef.cpp", "hydra.cpp", "willwisp.cpp", "swampy.cpp", "minisub.cpp",
+		"sniper.cpp", "skeleton.cpp", "box.cpp" };
+	char path[64];
+	const char* wake;
+	const char* info;
+	long others = 0;
+
+	printf("A creature on a marker's errand looks at Lara\n");
+
+	ok(MarkerWakeDistance(2048, 0) == 0x400000 &&
+		MarkerWakeDistance(-3, 4) == 25,
+		"marker wake: the distance is the ground square",
+		MarkerWakeDistance(2048, 0), 0x400000);
+	ok(MarkerWakeDistance(32001, 0) == 0x7FFFFFFF &&
+		MarkerWakeDistance(0, -32001) == 0x7FFFFFFF &&
+		MarkerWakeDistance(32000, 32000) == 2048000000,
+		"marker wake: beyond 32000 on an axis it is out of reach",
+		MarkerWakeDistance(0, -32001), 0x7FFFFFFF);
+	ok(MarkerWakeByNoise(0x3FFFFF, 21, 0) && !MarkerWakeByNoise(0x400000,
+		21, 0) && !MarkerWakeByNoise(0, 20, 0),
+		"marker wake: near and running, as the guard's test",
+		MarkerWakeByNoise(0x3FFFFF, 21, 0), 1);
+	ok(MarkerWakeByNoise(0x7FFFFFFF, 0, 1) && !MarkerWakeByNoise(
+		0x7FFFFFFF, 0, 0), "marker wake: a hit wakes at any distance",
+		MarkerWakeByNoise(0x7FFFFFFF, 0, 1), 1);
+
+	glass_body(ppl, "long CreatureSeesLara(", sees, sizeof(sees));
+	ok(strstr(sees, "lara_info.distance=MarkerWakeDistance(dx,dz);if("
+		"MarkerWakeByNoise(lara_info.distance,lara_item->speed,item->"
+		"hit_status))return1;lara_info.angle=(short)(phd_atan(dz,dx)-item"
+		"->pos.y_rot);enemy=creature->enemy;creature->enemy=lara_item;seen="
+		"TargetVisible(item,&lara_info);creature->enemy=enemy;returnseen;")
+		!= 0, "marker wake: sight is TargetVisible against Lara, enemy kept",
+		hd_switch_count(sees, "TargetVisible("), 1);
+
+	glass_body(src, "void PierreControl(", ctl, sizeof(ctl));
+	wake = strstr(ctl, "if(pierre->enemy!=lara_item&&!PierreScripted(item))"
+		"awake=CreatureSeesLara(item);elseawake=info.distance<0x400000&&"
+		"lara_item->speed>20||item->hit_status||TargetVisible(item,&info);"
+		"if(awake)item->ai_bits&=~GUARD;pierre->alerted=1;}");
+	info = strstr(ctl, "CreatureAIInfo(item,&info);");
+	ok(wake && info && info < wake,
+		"marker wake: Pierre asks Lara while a marker is his enemy",
+		hd_switch_count(ctl, "CreatureSeesLara("), 1);
+	ok(hd_switch_count(ctl, "TargetVisible(") == 1,
+		"marker wake: a marked Larson keeps his own test (all vanilla)",
+		hd_switch_count(ctl, "TargetVisible("), 1);
+
+	glass_body(rap, "void RaptorControl(", rctl, sizeof(rctl));
+	wake = strstr(rctl, "if(raptor->enemy!=lara_item&&CreatureSeesLara(item))"
+		"raptor->alerted=1;");
+	info = strstr(rctl, "CreatureAIInfo(item,&info);");
+	ok(wake && info && info < wake && hd_switch_count(rctl,
+		"CreatureSeesLara(") == 1,
+		"marker wake: the Raptor asks Lara while a marker is its enemy",
+		hd_switch_count(rctl, "CreatureSeesLara("), 1);
+
+	// The others keep their own test (lara_info) or have none of their own.
+	for (size_t i = 0; i < sizeof(keep) / sizeof(keep[0]); i++)
+	{
+		char* t;
+
+		snprintf(path, sizeof(path), "../../game/%s", keep[i]);
+		t = hd_switch_text(path);
+		others += t ? hd_switch_count(t, "CreatureSeesLara(") : 100;
+		free(t);
+	}
+
+	ok(others == 0, "marker wake: no other control calls the helper",
+		others, 0);
+
+	free(rap);
+	free(ppl);
 	free(src);
 }
 
@@ -40804,6 +40896,7 @@ int main()
 	level_camera_rule();
 	larson_death_rule();
 	larson_trajan_rule();
+	marker_wake_rule();
 	ai_marker_rule();
 	grapple_ammo_rule();
 

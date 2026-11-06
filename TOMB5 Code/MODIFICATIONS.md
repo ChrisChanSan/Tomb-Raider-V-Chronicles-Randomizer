@@ -20345,3 +20345,4 @@ entries above.
 | #356 | no engine entry: `vendor/ffmpeg-min` - `THIRD-PARTY.md` |
 | #358 | section 3 (the randomizer) |
 | #360 | The credits screen names TRForge and FFmpeg |
+| #361 | no engine entry: the record, the manuals and comments - `specific/hd/hd_vis.h`'s skyShared rule credits TROne; `BuildRelease.ps1`'s package copy of `THIRD-PARTY.md` gains the `docs/` rule and a sentence on `Preparation/` |

@@ -36,7 +36,7 @@
 //
 // The text:
 //
-//   TR5-A0R-XXXXX-XXXXX-...-XX-CC
+//   TR5-A0S-XXXXX-XXXXX-...-XX-CC
 //       |||  payload       check
 //       ||build id (two digits)
 //       |format letter

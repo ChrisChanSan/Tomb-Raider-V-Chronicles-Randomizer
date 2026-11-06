@@ -188,8 +188,8 @@ Say ("Source        : $copied files ({0:N1} MB) - GPLv3 obligation" -f `
 # The FFmpeg headers the engine's films compile against: tomb5.vcxproj
 # looks for them at ..\vendor\ffmpeg-min\include beside the engine folder,
 # so they sit at Source\vendor\ffmpeg-min\ with the build recipe, the
-# README and the licence. bin\ and lib\ stay out: the three DLLs already
-# lie beside the EXEs, and the engine loads them at run time, linking no
+# README and the licence. bin\ stays out: the three DLLs already lie
+# beside the EXEs, and the engine loads them at run time, linking no
 # import library.
 $ffOut = "$OutDir\Source\vendor\ffmpeg-min"
 New-Item -ItemType Directory -Path $ffOut -Force | Out-Null
@@ -259,9 +259,17 @@ if ($sStart) {
 }
 # The document gives repository paths. In the package everything sits one
 # level down under Source\, and the engine folder is renamed - so a
-# recipient following those paths finds nothing. Rewrite them in the copy,
-# the same way b1.bat and b2.bat are rewritten above.
+# recipient following those paths finds nothing. Rewrite them in the copy.
+# Paths under Preparation/ have no place in the package: the copy says so
+# below its title. The package's docs folder (Background.jpg) is the
+# package's own docs\, so that rule comes before the randomizer's.
 $tp = [IO.File]::ReadAllText("$Root\THIRD-PARTY.md")
+$tpNl = if ($tp.Contains("`r`n")) { "`r`n" } else { "`n" }
+$tpHead = '# Third-party code in this repository' + $tpNl
+$tp = $tp.Replace($tpHead, $tpHead + $tpNl +
+    'Paths under `Preparation/` are repository paths; the release package' +
+    ' does not carry them.' + $tpNl)
+$tp = $tp.Replace('TR5Randomizer/package/docs/', 'docs/')
 $tp = $tp.Replace('TOMB5 Code/', 'Source/TOMB5 engine/')
 $tp = $tp.Replace('TR5Randomizer/', 'Source/TR5Randomizer/')
 $tp = $tp.Replace('](LICENSE)', '](GPLv3.txt)')

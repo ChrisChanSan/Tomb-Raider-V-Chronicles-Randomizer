@@ -192,9 +192,9 @@ What a code does **not** carry: your folders (Chronicles, Tomb Raider 3,
 The Lost Artifact), the window size and the language — those belong to your
 machine. Nor which levels you unticked in the level list.
 
-A code is tied to the **build** it was made with (`Build 0.24` at the top of
+A code is tied to the **build** it was made with (`Build 0.25` at the top of
 the window). A code from another build is refused as a whole — "this code is
-from build 0.23; this is 0.24 - settings may differ" — because the same
+from build 0.24; this is 0.25 - settings may differ" — because the same
 settings may draw another game there. Ask for a code from your build, or use
 the build it names.
 
@@ -202,7 +202,7 @@ The code ends in two check characters. A mistyped or missing character is
 refused ("does not check out"), never half applied. Case, spaces and the
 dashes do not matter; `O` reads as `0`, `I` and `L` as `1`.
 
-The code of the default settings, with an empty seed field, on build 0.24:
+The code of the default settings, with an empty seed field, on build 0.25:
 
 ```
 TR5-A0S-0C00C-00000-068S3-40000-000-JC

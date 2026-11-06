@@ -16264,6 +16264,25 @@ static void flyby_room_rule()
 	HDVisBuild(trg, &rooms[0], 5, 0, 0, 0, 0, chain, 2, p, &t);
 	ok(t.skyCount[0] == 0 && pair(0, 2) == 3 && t.part[4] == 2,
 		"flyby room: the twin's link alone, no twin: refused", pair(0, 2), 3);
+	/* #348: and a guest. G's art put in S's inside, under the sky - the
+	 * title's night backdrop in the Irish hill, room 54: with the row
+	 * linked S does not take it while no link leads from S to G, takes it
+	 * once one does, and takes it unlinked with the row off. */
+	const float inside[1][3] = { { 3000.0f, -2000.0f, 3000.0f } };
+
+	ghost_scene(trg, 0.0f, 12288.0f, inside, 1);
+	HDVisBuild(trg, &rooms[0], 5, 0, 0, 0, 0, chain, 2, p, &t);
+	ok(t.guestCount[0] == 0 && t.guestsUnlinked == 1 && t.part[0] != t.part[2],
+		"flyby room: G's art in S, no link, not S's guest", t.guestCount[0], 0);
+	HDVisBuild(trg, &rooms[0], 5, 0, 0, 0, 0, chain, 2, off, &t);
+	ok(t.guestCount[0] == 1 && t.guestsUnlinked == 0,
+		"flyby room: with skyLinked 0 S takes it as a guest",
+		t.guestCount[0], 1);
+	rooms[3].linkCount = 1;
+	HDVisBuild(trg, &rooms[0], 5, 0, 0, 0, 0, chain, 2, p, &t);
+	ok(t.guestCount[0] == 1 && t.guestsUnlinked == 0 && t.part[0] == t.part[2],
+		"flyby room: linked through a third room, S's guest",
+		t.guestCount[0], 1);
 }
 
 /* The art of a static carried to another placement of its slot
@@ -17147,6 +17166,32 @@ static void vis_hollow_enclosed()
 		"hollow: TITLE 103, enclosed by none, faces stay", 0, 0);
 	ok(!HDVisClassicRoomEnclosed(true, false, 0, 146),
 		"hollow: no classic face, nothing to leave out", 0, 0);
+}
+
+/* A room whose hollow art is drawn leaves its faces out when a guest models
+ * its place (HDVisHollowRoomGuested), as the fifteen levels measure their
+ * hollow rooms: the title's 70, 101 and 103 (65, 96 and 213 faces, no face
+ * covered, one, one and four guests) go; ANDREA2's 124 and RICHCUT2's 2
+ * and 3 hold guests but are the stand rule's; RICHCUT2's 4 and JOBY2's 19
+ * and 21 hold none; and without the art drawn nothing changes. */
+static void vis_hollow_guested()
+{
+	ok(HDVisHollowRoomGuested(true, false, 96, 1),
+		"guested: TITLE 101, group 71 its guest, faces go", 1, 1);
+	ok(HDVisHollowRoomGuested(true, false, 213, 4),
+		"guested: TITLE 103, four guests, faces go", 1, 1);
+	ok(HDVisHollowRoomGuested(true, false, 65, 1),
+		"guested: TITLE 70, faces go", 1, 1);
+	ok(!HDVisHollowRoomGuested(true, true, 46, 2),
+		"guested: ANDREA2 124, covered, the stand rule's", 0, 0);
+	ok(!HDVisHollowRoomGuested(true, true, 49, 1),
+		"guested: RICHCUT2 2, drawn in part, the stand rule's", 0, 0);
+	ok(!HDVisHollowRoomGuested(true, false, 12, 0),
+		"guested: JOBY2 21, no guest (it stands enclosed)", 0, 0);
+	ok(!HDVisHollowRoomGuested(false, false, 96, 1),
+		"guested: the art not drawn, the faces stay", 0, 0);
+	ok(!HDVisHollowRoomGuested(true, false, 0, 1),
+		"guested: no classic face, nothing to leave out", 0, 0);
 }
 
 /* The window a hollow group's art is drawn in (HDVisHollowWindow): its
@@ -40586,6 +40631,7 @@ int main()
 	vis_hidden_room();
 	vis_enclosed_kept();
 	vis_hollow_enclosed();
+	vis_hollow_guested();
 	vis_hollow_window();
 	vis_hollow_behind();
 	vis_lid_rule();

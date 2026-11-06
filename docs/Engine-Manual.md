@@ -5210,6 +5210,9 @@ In Trajan's Markets only the level's own Larson stands for his cutscene; a
 Larson the randomizer put there dies lying down like anywhere else.
 Larson and Pierre only flee where the level itself placed them and actually
 contains the marker they run to — fleeing without one makes them immortal.
+A Larson, Pierre or Raptor the randomizer put on a guard's patrol spot walks
+the patrol and notices Lara the way that guard would, instead of standing
+there until she shoots.
 Only the enemies whose behaviour follows the level's AI markers take one at
 the level start: a dog, a lion, a vulture, a compy, the T-Rex, the drone or a
 Roman god standing on a guard's or a patrol's spot leaves the marker to

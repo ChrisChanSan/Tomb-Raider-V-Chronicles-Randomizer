@@ -20267,6 +20267,71 @@ the randomizer's `b1.bat` and `b2.bat`. Not run in the game here.
 
 **Commits.** see the appendix.
 
+### Larson and Pierre on an inherited marker see Lara (#350)
+2026-11-06
+
+**What.** A Larson or Pierre the randomizer puts on a vanilla guard's spot inherits the
+guard's AI markers at level start (`GetAIPickups`, `game/setup.cpp`): the bits in
+`ai_bits`, the marker's OCB in `item_flags[3]`. While a PATROL1, AMBUSH or FOLLOW bit
+sends him somewhere, `GetAITarget` (`game/box.cpp`) makes the marker his `enemy`, and
+`CreatureAIInfo` measures distance and angle against it. `PierreControl`'s wake test
+(`game/pierre.cpp`, Lara within 2048 and running, a hit, or `TargetVisible`) therefore
+asked about the marker: an AI target has no `data`, so `TargetVisible` is always 0, and
+Lara walking in front of him was never seen. And the stand-and-turn idle of state 1, meant
+for the level's marked Larsons, read the raw `item_flags[3]`: the marker's OCB sent him
+there, `maximum_turn` 0, turning toward the next marker instead of walking to it. In a
+rich1 run Pierre 207 (PATROL1, OCB 3, the next marker 3072 away in his room) stood until a
+hit (`AILOG drop ... why=hurt`), Pierre 80 (AMBUSH|PATROL1, OCB 30) was alerted by Lara
+running anywhere while his next marker lay 1024 away, and then stood turning toward his
+ambush marker until hurt.
+
+**The rule.** `CreatureSeesLara(item)` (`game/people.cpp`) is the guard's wake test made
+against Lara: her squared ground distance (`MarkerWakeDistance`, out of reach beyond 32000
+on an axis), near and faster than a walk or a hit (`MarkerWakeByNoise`; both in
+`game/marker_wake_rule.h`), else `TargetVisible` with Lara standing in for the enemy for
+that call (the head cone, the range, the line of sight), the enemy put back. In
+`PierreControl`, while the enemy is not Lara and the item is not `PierreScripted`, the
+wake test is this helper; the alert then drops PATROL1 or GUARD in `GetAITarget` as for
+any alerted guard (`AILOG drop ... why=alert`), an AMBUSH|PATROL1 one runs to his ambush
+point first. The idle reads `PierreScripted(item)`: an unmarked one with a pickup walks to
+his marker, and the stop there (#343) sets `ai_bits` 0 and he hunts Lara. `PierreCanFlee`
+and `PierreScripted` are unchanged.
+
+The kinds of #345 that stand at a marker (table 1(c)):
+
+| kind | wake test | with a marker as enemy | #350 |
+|---|---|---|---|
+| Larson, Pierre | own, against `info` | only when hurt | the helper; idle by the mark |
+| Raptor (REAPER slot) | none | at the marker until shot or hurt | helper sets `alerted` |
+| Mafia2, Twogun, Huskie | own, against `lara_info` | wakes on sight | none |
+| Gladiator, Imp, Hydra, maze monster | none | at the marker until alerted/hurt | none |
+| Chef, Brawler | kitchen test, distance to the enemy | the hunter wakes anyway | none |
+
+Gladiator, Imp, Chef/Brawler, Hydra and the maze monster take Lara as their enemy only
+when hurt (`else if (hurt_by_lara)`): after an alert their enemy stays the old marker, so
+the helper alone would change nothing they do; making them wake is a change to that design
+and is left. The Sas family and Hitman/Cyborg measure Lara already. No kind wakes earlier
+than a guard on the same spot: the test is the guard's; it leaves out the Sas family's
+|dy| < 1280 gate, as Pierre's own test against Lara always did, so a pool Pierre with a
+marker wakes as one without. A Raptor without a marker hunts Lara from its first tick.
+
+**Vanilla.** #345's probe of the 15 levels in `data/Backup` lists three Larsons (Andrea1
+34 and 35, Trajan Markets 76; OCB 1, 2, 1), no Pierre, no Raptor, and no AI object within
+512 of a Larson, so none takes a marker: `TOSSPAD & 0x1F00` is 0, `item_flags[3]` is his OCB, and
+`PierreScripted` equals `item_flags[3] != 0` - the idle reads the same as before. The new
+wake branch needs `!PierreScripted`: Trajan's scripted Larson, whose AMBUSH start makes
+the marker his enemy, and the 40-HP flight keep the old test word for word.
+
+**Checked.** ModernTest group `marker_wake_rule` (9 checks): the distance and the noise
+rule at their edges, the helper's body, Pierre's wake branch after `CreatureAIInfo` with
+the old test kept for the marked ones, the Raptor's call, and no other control calling the
+helper; `larson_trajan_rule` now holds the idle at `PierreScripted`. ModernTest 17814
+checks (17805 + 9), MenuTest 45043, InterpTest 754, LipsTest 272, none failed; no warning
+line in `be64.bat`, `basan.bat`, `be64.bat test`, `b1.bat` and `b2.bat`. Not run in the
+game here.
+
+**Commits.** see the appendix.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -20750,3 +20815,4 @@ entries above.
 | #343 | Trajan Markets' ways belong to its scripted Larson alone |
 | #344 | The title's night backdrop stays in its own scene |
 | #346 | AI markers reach only the kinds that read them |
+| #350 | Larson and Pierre on an inherited marker see Lara |

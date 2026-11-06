@@ -40487,6 +40487,39 @@ static void ai_marker_rule()
 	free(fam);
 }
 
+/* The grappling gun's ammunition (#349). TR5 keeps it in the crossbow's
+ * old slot CROSSBOW_AMMO1_ITEM with the grapple's hook for a mesh; the HD
+ * hand table binds it to that hook, EXTRA5_CROSSBOW_BOLT, in every level,
+ * and not, by the EXTRA4_ prefix, to Tomb Raider IV's quiver. The line
+ * sits inside the table, CROSSBOW_AMMO2_ITEM keeps none, and hd_bind.h's
+ * rule comment no longer calls the slot one TR5 never renamed. */
+static void grapple_ammo_rule()
+{
+	printf("the grappling gun's ammunition: the hook, not the quiver\n");
+
+	char* bind = hd_switch_text("hd_bind.cpp");
+	char* bindh = hd_switch_text("hd_bind.h");
+	const char* table = bind ?
+		strstr(bind, "const HandBound hand_table[] =") : 0;
+	const char* end = table ? strstr(table, "\r\n\t};") : 0;
+	const char* line = table ? strstr(table,
+		"{ \"CROSSBOW_AMMO1_ITEM\",     \"EXTRA5_CROSSBOW_BOLT\","
+		"        0 },") : 0;
+
+	ok(line && end && line < end,
+		"grapple ammo: the hand table binds it to the hook, every level",
+		line && end && line < end, 1);
+	ok(table && end && !strstr(table, "{ \"CROSSBOW_AMMO2_ITEM\""),
+		"grapple ammo: CROSSBOW_AMMO2_ITEM keeps no line", 0, 0);
+	ok(bindh && strstr(bindh, "CROSSBOW_AMMO1_ITEM,\r\n//      whose mesh "
+		"is the grapple's hook, -> EXTRA5_CROSSBOW_BOLT") &&
+		!strstr(bindh, "never renamed: COMPASS_ITEM"),
+		"grapple ammo: hd_bind.h's rules comment says so", 0, 0);
+
+	free(bind);
+	free(bindh);
+}
+
 int main()
 {
 	printf("ModernTest - the arithmetic of the modern control\n");
@@ -40772,6 +40805,7 @@ int main()
 	larson_death_rule();
 	larson_trajan_rule();
 	ai_marker_rule();
+	grapple_ammo_rule();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

@@ -291,6 +291,25 @@ namespace
 		{ "BINOCULARS_ITEM",         "EXTRA5_BINOCULARS_ITEM_RICH", "RICH1 RICH2 RICH3" },
 		{ "HK_ITEM",                 "EXTRA5_HK_ITEM_RICH2",        "RICH2" },
 
+		/* The grappling gun's ammunition. TR5 keeps the grapple in the
+		 * crossbow's old slots - CROSSBOW_ITEM the gun, CROSSBOW_BOLT the
+		 * hook it fires, CROSSBOW_AMMO1_ITEM the pickup - and gave the
+		 * pickup the hook's own mesh: in RICH3 the boxes of the two slots'
+		 * classic meshes are one box, -44..43 -51..27 -81..68
+		 * (ModelProbe -slot 342 -bones, -slot 344 -bones). Rule 3 finds
+		 * 4/ITEM/EXTRA4_CROSSBOW_AMMO1_ITEM.TRM, Tomb Raider IV's quiver
+		 * of bolts, 66 units off that mesh. 5/ITEM ships no file of its
+		 * own for the ammunition and no .MAP names the slot; the hook is
+		 * 5/ITEM/EXTRA5_CROSSBOW_BOLT.TRM, the file CROSSBOW_BOLT binds
+		 * to by rule 3, 2 units off the mesh. A line for every level:
+		 * the file carries no level suffix, and the slot's mesh is the
+		 * hook in the one level that has it.
+		 *
+		 * CROSSBOW_AMMO2_ITEM gets no line: none of the fifteen levels
+		 * carries the slot (ModelProbe -all), and the randomizer scatters
+		 * a pickup only into a level that can draw it. */
+		{ "CROSSBOW_AMMO1_ITEM",     "EXTRA5_CROSSBOW_BOLT",        0 },
+
 		/* The submarine's diving suits, JOBY3 and JOBY5. Each crew cabin's
 		 * glass case hangs the suit in two halves on chains, and JOBY3's
 		 * room 40 has a third pair: the legs standing and the top hanging

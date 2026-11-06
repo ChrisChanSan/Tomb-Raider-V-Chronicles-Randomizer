@@ -33,7 +33,10 @@
 //      BINOCULARS_ITEM -> EXTRA5_BINOCULARS_ITEM_RICH, in RICH1, RICH2 and
 //      RICH3, and RICH2's own HK, HK_ITEM -> EXTRA5_HK_ITEM_RICH2 -
 //      remaster names rule 3 cannot build. Elsewhere those lines are
-//      skipped and the slot goes on to rule 3.
+//      skipped and the slot goes on to rule 3. And one slot rule 3 would
+//      answer wrongly: the grappling gun's ammunition, CROSSBOW_AMMO1_ITEM,
+//      whose mesh is the grapple's hook, -> EXTRA5_CROSSBOW_BOLT, where
+//      rule 3 would take Tomb Raider IV's quiver.
 //   3. The EXTRA prefix. Every pickup in the remaster's own bundle sits
 //      under a prefixed name rather than its plain slot name - PISTOLS_ITEM
 //      has no PISTOLS_ITEM.TRM anywhere, only 4\ITEM\EXTRA_PISTOLS_ITEM.TRM.
@@ -41,9 +44,12 @@
 //      fallback find_model uses to load it): EXTRA5_<slot> (own-game
 //      models: HK_ITEM, REVOLVER_ITEM, the grapple), EXTRA_<slot> (the
 //      shared TR4-VI base: pistols, medipacks, flares, ...), EXTRA4_<slot>
-//      (TR4-only survivors the remaster kept under their TR4 name and TR5
-//      never renamed: COMPASS_ITEM, CROSSBOW_AMMO1/2_ITEM - slots TROne
-//      itself, running only as game 5, structurally cannot reach). Measured
+//      (TR4 names the remaster kept for TR4's own models: COMPASS_ITEM,
+//      CROSSBOW_AMMO1/2_ITEM - slots TROne itself, running only as game 5,
+//      structurally cannot reach. Of the three only CROSSBOW_AMMO2_ITEM,
+//      in no level, would take it: the compass's model names a second
+//      node its one-mesh slot lacks, is refused and draws classic, and
+//      TR5's grapple ammunition has its hand-table line). Measured
 //      against the shipped files: the names are never "squashed",
 //      underscores and all match a real filename or nothing does. Skipped
 //      for a slot already answered by the .MAP, the hand table or a

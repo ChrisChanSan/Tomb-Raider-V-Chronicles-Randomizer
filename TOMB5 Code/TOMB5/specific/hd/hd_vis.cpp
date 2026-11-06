@@ -91,7 +91,10 @@
  *                  to 237,306), and rooms no portal leads to, never
  *                  listed (ANDREA2's 191 and 197, JOBY5's 1). ANDREA3's
  *                  arches may be its own sky, so 1 is ANDY3's alone
- *                  (HDVisLevelParams) */
+ *                  (HDVisLevelParams). Of the 429 guest pairs one joins
+ *                  two parts: TITLE's hill 54 with the night backdrop's
+ *                  group 33 (12 triangles in its inside), refused under
+ *                  the same row */
 HDVisParams HDVisDefaults()
 {
 	HDVisParams p;
@@ -903,6 +906,21 @@ bool HDVisBuild(const trf::remaster::Trg& trg, const HDVisRoom* rooms,
 
 		if ((params.guestRule == 0 || (params.guestRule == 2 && !sky)) &&
 			!linked(h, g))
+		{
+			t.guestsUnlinked++;
+			continue;
+		}
+
+		/* And where the level's row asks it (skyLinked), as the sky table
+		 * does, not the art of a room in another part of the portal graph:
+		 * no walk of the classic game leads from one part into the other.
+		 * The title's night scene stands its city backdrop round room 33,
+		 * and 12 of group 33's triangles reach down into the inside of the
+		 * Irish hill, room 54, under the sky: taken as 54's guest, the
+		 * whole backdrop stood as a dark blue wall behind the hill's trees.
+		 * Of the fifteen levels' guest pairs that is the only one across
+		 * two parts (TrgProbe -vistable). */
+		if (params.skyLinked && t.part[(size_t)h] != t.part[(size_t)g])
 		{
 			t.guestsUnlinked++;
 			continue;

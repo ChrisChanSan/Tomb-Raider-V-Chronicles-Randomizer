@@ -4335,7 +4335,8 @@ static bool VisHidesClassicRoom(int roomIndex)
 	/* A floor room is drawn HD when GroupOfRoom names a group for it: the
 	 * level's verdict (g_group_hd) through the flip table, the same in
 	 * every frame. A room whose hollow art is drawn is asked whether it
-	 * stands enclosed (HDVisClassicRoomEnclosed). */
+	 * stands enclosed (HDVisClassicRoomEnclosed) or holds a guest
+	 * (HDVisHollowRoomGuested). */
 	return HDVisClassicRoomVerdict(*tables, roomIndex, tris == 0, covered,
 		faces, [](int to) { return GroupOfRoom(to) >= 0; },
 		HollowGroupOfRoom(roomIndex) >= 0);
@@ -8366,7 +8367,9 @@ static void HDLevelBuildHD()
 		 * keep their classic geometry. On the visibility path the hollow
 		 * art is drawn as well, inside the room's window (g_group_hollow),
 		 * and a room it stands round leaves its faces out
-		 * (HDVisClassicRoomEnclosed): JOBY2's 19 and 21. */
+		 * (HDVisClassicRoomEnclosed): JOBY2's 19 and 21; so does one whose
+		 * inside holds a guest that models its place
+		 * (HDVisHollowRoomGuested): the title's dunes 70, 101 and 103. */
 		const bool hollow = tris > 0 &&
 			HDRenderGroupOverhangTriangles(r) >= tris;
 
@@ -9485,6 +9488,7 @@ static int SurfaceRoom()
  *         statics_ms= enclosed= hull_guests= hollow_hidden= guests_hanging=
  *         openings_state= sky_groups= sky_tris= sky_pairs= sky_copies=
  *         hull_sky= sky_closed= sky_far= sky_shared= sky_unlinked=
+ *         guests_unlinked=
  *   HDLOG visguest level=<stem> room= group= tris= box= refused=hanging
  *   HDLOG visopening level=<stem> room= face= behind= refused=flipstate
  *   HDLOG vissky level=<stem> room= group= tris= over_sky= over_closed=
@@ -9530,7 +9534,9 @@ static int SurfaceRoom()
  * portal graph than the room (hd_vis.h, skyNear, skyShared and
  * skyLinked), each with a vissky line of the room, the group and its
  * triangles near the room (near=, also at the end of a taken pair's
- * line). */
+ * line); guests_unlinked the guests the link rule refused - of a room
+ * not under the sky with no link to it, and where skyLinked asks it of
+ * a room in another part (the title's night backdrop in room 54). */
 
 static int VisContents(int roomIndex)
 {
@@ -9621,14 +9627,15 @@ bool HDVisWalkOn()
 			"enclosed=%d hull_guests=%d hollow_hidden=%d guests_hanging=%d "
 			"openings_state=%d sky_groups=%d sky_tris=%lld sky_pairs=%d "
 			"sky_copies=%d hull_sky=%d sky_closed=%d sky_far=%d sky_shared=%d "
-			"sky_unlinked=%d",
+			"sky_unlinked=%d guests_unlinked=%d",
 			g_stem, t->rooms, t->artRooms, t->wallFaces, t->bareFaces,
 			t->voidFaces, t->guestPairs, t->guestTris, t->widePortals, t->ms,
 			t->openingsTwin, p.wideBare, p.edge, t->staticsHeld, t->staticMs,
 			t->roomsEnclosed, g_vis_hull_guests, hollow_hidden,
 			t->guestsHanging, t->openingsState, t->skyGroups, t->skyArtTris,
 			t->skyPairs, t->skyCopies, g_vis_hull_sky, t->skyClosed,
-			t->skyRefusedFar, t->skyRefusedShared, t->skyRefusedUnlinked);
+			t->skyRefusedFar, t->skyRefusedShared, t->skyRefusedUnlinked,
+			t->guestsUnlinked);
 
 		// The guests the sky's rule refused (HDVisRefused), one line each.
 		for (const HDVisRefused& one : t->hanging)

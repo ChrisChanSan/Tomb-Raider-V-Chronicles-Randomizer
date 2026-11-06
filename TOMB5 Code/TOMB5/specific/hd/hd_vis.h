@@ -217,7 +217,10 @@ struct HDVisStatic
  *              (HDVisTables::part); a room no link leads to from it is
  *              not seen from it in the classic game, sky or not (ANDY3's
  *              room 180, an island built for a flyby, over the valley
- *              from the mill); 0, the default, takes it
+ *              from the mill); 0, the default, takes it. And no room
+ *              takes the art of a room in another part as its guest
+ *              (the title's night backdrop, group 33, in the Irish hill,
+ *              room 54)
  * The three stay 0 but for the levels of the table below
  * (HDVisLevelParams): on every level skyNear and skyShared would also
  * take the leaf canopy off ANDY3's rooms 8 and 9, which the box answer
@@ -285,7 +288,8 @@ static const HDVisLevelRow kHDVisLevelRows[] =
 	{ "ANDREA3", 1, 1, 1 },
 	// #342: the flyby's island over the valley, seen from the mill.
 	{ "ANDY3", 0, 0, 1 },
-	// #344: the title's night backdrop wall stays in its own scene.
+	// #344: the title's night backdrop wall stays in its own scene. #348:
+	// and out of the Irish hill, room 54, as a guest (hd_vis.cpp).
 	{ "TITLE", 0, 0, 1 },
 };
 
@@ -953,12 +957,37 @@ inline bool HDVisFloorOnArt(const int* floorRooms, int count,
  * well away from it (RICHCUT2's 2 to 4, in no room's grid), or is one
  * to four stray triangles (ANDREA2's 124, four at one point; the title's
  * 70, 101 and 103, one each, below and beside the room; 101's shows as a
- * small sliver where nothing stands in front of it). */
+ * small sliver where nothing stands in front of it) - unless a guest
+ * models its place (HDVisHollowRoomGuested below). */
 inline bool HDVisClassicRoomEnclosed(bool hollowDrawn, bool facesCovered,
 	int classicFaces, int enclosedBy)
 {
 	return hollowDrawn && !facesCovered && classicFaces > 0 &&
 		enclosedBy >= 0;
+}
+
+/* Whether the visibility path draws none of the faces of a room whose
+ * hollow art is drawn and whose inside holds a guest (`guests`,
+ * HDVisTables::guests): the art of a group linked with it. A hollow
+ * group's art stands outside the room, so inside its own box the room is
+ * as empty as an empty group's, and HDVisClassicRoomHidden's guest clause
+ * holds for it as it does for one: none of its faces covered by the stand
+ * rule, faces to leave out, a guest modelling the place.
+ *
+ * What for: the title's desert rooms 70, 101 and 103 are hollow, and the
+ * dunes in their place are the art of their neighbours - group 71's 1,400
+ * triangles in room 101, groups 68, 71, 104 and 108 in 103. The art lies
+ * up to a sector off the classic floors (group 71 within 128 units of 7 of
+ * 101's 96 faces, within 1,024 of 92), so the stand rule takes no carrier
+ * and every flat old floor was drawn among the new sand, in front of it
+ * where it lay higher. Left out, the dunes stand alone. Of the fifteen
+ * levels' hollow rooms this takes those three only: ANDREA2's 124 and
+ * RICHCUT2's 2 to 4 are the stand rule's, JOBY2's 19 and 21 hold no guest
+ * and stand enclosed (TrgProbe -classicart -perface, -vistable). */
+inline bool HDVisHollowRoomGuested(bool hollowDrawn, bool facesCovered,
+	int classicFaces, int guests)
+{
+	return hollowDrawn && !facesCovered && classicFaces > 0 && guests > 0;
 }
 
 /* The window a hollow group's art is drawn in: the union of its room's
@@ -1023,7 +1052,8 @@ inline int HDVisHollowWindow(const int own[4], const int (*hosts)[4],
  * room `room` (hd_level.cpp, VisHidesClassicRoom): its guests and its floor
  * links read from `t`, `drawnHD` as HDVisFloorOnArt asks it; for a room
  * whose hollow art is drawn (`hollowDrawn`) HDVisClassicRoomEnclosed with
- * the enclosure table instead. False for a room the tables do not hold. */
+ * the enclosure table instead, or HDVisHollowRoomGuested with its guests.
+ * False for a room the tables do not hold. */
 template <class DrawnHD>
 inline bool HDVisClassicRoomVerdict(const HDVisTables& t, int room,
 	bool groupEmpty, bool facesCovered, int classicFaces, DrawnHD drawnHD,
@@ -1033,9 +1063,11 @@ inline bool HDVisClassicRoomVerdict(const HDVisTables& t, int room,
 		return false;
 
 	if (hollowDrawn)
-		return (size_t)room < t.enclosedBy.size() &&
+		return ((size_t)room < t.enclosedBy.size() &&
 			HDVisClassicRoomEnclosed(true, facesCovered, classicFaces,
-				t.enclosedBy[(size_t)room]);
+				t.enclosedBy[(size_t)room])) ||
+			HDVisHollowRoomGuested(true, facesCovered, classicFaces,
+				t.guestCount[(size_t)room]);
 
 	bool onArt = false;
 

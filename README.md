@@ -93,6 +93,15 @@ Compare the file's SHA-256 with `SHA256SUMS.txt` of the release
 If it matches, the file is the one built here: please report it to the
 scanner's maker as a false positive.
 
+<table>
+<tr>
+<td width="50%"><img src="docs/scan-pctomb5.jpg" alt="PCTomb5.exe checked"><br>
+PCTomb5.exe, 2026-11-07.</td>
+<td width="50%"><img src="docs/scan-tr5randomizer.jpg" alt="TR5Randomizer.exe checked"><br>
+TR5Randomizer.exe, 2026-11-07.</td>
+</tr>
+</table>
+
 ## What this is
 
 Two programs working together:

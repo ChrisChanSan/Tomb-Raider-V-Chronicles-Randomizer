@@ -5270,6 +5270,9 @@ The screenshots under `docs/` show the game running, so they necessarily show
 Core Design's level geometry and textures, and the ones taken in HD mode show
 art that is read at run time from the player's own *Tomb Raider IV-VI
 Remastered* installation. None of that art is included here.
+`docs/scan-pctomb5.jpg` and `docs/scan-tr5randomizer.jpg` are the author's own
+screenshots of 2026-11-07 of the two programs' check, taken for the README's
+antivirus section.
 
 ## No game data
 

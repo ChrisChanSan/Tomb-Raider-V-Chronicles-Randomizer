@@ -191,6 +191,13 @@ static const std::unordered_map<std::string, const char*>& table()
           "auch ein Wort." },
         { "Roll", "Wuerfeln" },
         { "effective: 0x%016llX", "wirksam: 0x%016llX" },
+        { "2. Seed / share code", "2. Seed / Teilen-Code" },
+        { "Copy", "Kopieren" },
+        { "Paste a code", "Code einfuegen" },
+        { "Apply", "Uebernehmen" },
+        { "Applied - every setting and the seed text are taken over.",
+          "Uebernommen - alle Einstellungen und der Seed-Text sind gesetzt." },
+        { "Not applied: ", "Nicht uebernommen: " },
 
         // --- Balance sliders ---------------------------------------------
         { "Random", "Zufall" },

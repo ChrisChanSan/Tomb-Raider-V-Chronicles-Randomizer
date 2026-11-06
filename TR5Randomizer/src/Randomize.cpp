@@ -20,6 +20,12 @@
 //
 // Usage:
 //   Randomize.exe <zones.json> <ignored> <source.trc> <target.trc> [seed]
+//   Randomize.exe <zones.json> <ignored> <source.trc> <target.trc> code=...
+//
+// A share code (ShareCode.h) in place of the seed, or among the switches,
+// sets the seed text and every switch the way the GUI that made it had
+// them, and the run draws from the GUI's effective value - the same level
+// the GUI writes.
 //
 // The second argument used to be a level_<name>.json. Rooms, items and
 // triggers are now read out of <source.trc> itself, so the argument is
@@ -40,10 +46,12 @@
 #include "core/ScriptDat.h"
 #include "core/SecretList.h"
 #include "core/SecretReward.h"
+#include "core/ShareCode.h"
 #include "core/LevelFix.h"
 #include "core/Tr5Level.h"
 #include "core/Tr3Source.h"
 
+#include <algorithm>
 #include <cstdio>
 #include <set>
 #include <string>
@@ -101,12 +109,40 @@ int main(int argc, char** argv)
         std::printf("            everything (level chains from LevelChains.h are resolved\n");
         std::printf("            via GIVEOBJ). Needs script= and the engine with gfLevelId;\n");
         std::printf("            NOT repeatable.\n");
+        std::printf("  code=C:   a share code of the GUI (TR5-...): sets the seed text\n"
+                "            and every switch above as the GUI had them, before\n"
+                "            the other arguments are read, and draws from the\n"
+                "            GUI's effective value, so the level is the one the\n"
+                "            GUI writes. Switches given as well override the\n"
+                "            code's but leave that value alone; a seed text given\n"
+                "            as well replaces it. Background music and level\n"
+                "            order still need script=; the balance sliders are\n"
+                "            the GUI's alone (Balance.txt).\n");
         return 2;
     }
 
-    const std::string seedText = (argc > 5) ? argv[5] : "Christmas";
+    // A share code may stand in place of the seed text or among the
+    // switches; it is read before everything else.
+    const bool seedGiven = argc > 5 && std::string(argv[5]).rfind("code=", 0) != 0;
+    std::string seedText = seedGiven ? argv[5] : "Christmas";
+    Config shared;
+    bool haveCode = false;
+    for (int i = 5; i < argc; ++i)
+    {
+        const std::string s = argv[i];
+        if (s.rfind("code=", 0) != 0) continue;
+        std::string codeErr;
+        if (!ShareCode::apply(s.substr(5), shared, codeErr))
+        {
+            std::printf("code: %s\n", codeErr.c_str());
+            return 2;
+        }
+        haveCode = true;
+    }
     int enemies = 0, extraItems = 0;
     bool enemiesOnly = false, outfits = false, weapons = false, mix = false, cross = false, allsanity = false;
+    bool keyItems = true, otherPickups = true;
+    int secretKind = 0;                 // from a code: 1 pool, 2/3 a list
     bool outfitsTr3 = false;   // guest outfits from Tomb Raider 3 in the pool
     std::set<std::string> outfitsOff;   // the wardrobe: ids the roll may NOT draw
     bool notes = false;
@@ -131,9 +167,36 @@ int main(int argc, char** argv)
     // Permute the level sections (needs script= and the engine with gfLevelId).
     bool sections = false;
     int  levelOrder = 0;            // 1 within the sections, 2 free across everything
-    for (int i = 6; i < argc; ++i)
+    if (haveCode)
+    {
+        // The GUI's switches in the CLI's words, the same mapping as the
+        // GUI's doLevel. The full weapon set is the GUI's standard.
+        if (!seedGiven) seedText = shared.seedText;
+        otherPickups = shared.optOtherPickups;
+        keyItems     = shared.optKeyItems;
+        enemies      = shared.optEnemies ? shared.enemyCount : 0;
+        mix          = shared.optEnemySwap;
+        cross        = shared.enemyPool == 1;
+        allsanity    = shared.enemyPool == 2;
+        enemiesDisabled = shared.enemiesDisabled;
+        outfits      = shared.optOutfits;
+        outfitsTr3   = shared.optOutfitsTr3;
+        outfitsOff   = shared.outfitsDisabled;
+        weapons      = true;
+        extraItems   = shared.itemAmount == 1 ? 12 : shared.itemAmount == 2 ? 30 : 0;
+        weather      = shared.optWeather;
+        secretKind   = shared.secrets;
+        secretRewards   = shared.secretRewards;
+        musicBackground = shared.optMusicSwitch;
+        musicTriggers   = shared.optMusicTrigger;
+        // The GUI skips the section roll under "free across everything".
+        sections        = shared.optLevelSections && shared.optLevelOrder != 2;
+        levelOrder      = shared.optLevelOrder;
+    }
+    for (int i = seedGiven ? 6 : 5; i < argc; ++i)
     {
         const std::string s = argv[i];
+        if (s.rfind("code=", 0) == 0) continue;   // read above
         if (s == "only")        enemiesOnly = true;
         else if (s == "notes") notes = true;   // print the report notes (diagnosis)
         else if (s == "outfit") outfits = true;
@@ -209,7 +272,26 @@ int main(int argc, char** argv)
         }
         else                    enemies = std::atoi(argv[i]);
     }
-    const uint64_t seed = SeedText::parse(seedText);
+    // From a code without a seed text of its own: the GUI's effective
+    // value. SecretRewards.txt is rolled from the plain seed text in the
+    // GUI, so it is here as well.
+    const uint64_t seed = (haveCode && !seedGiven) ? ShareCode::effectiveSeed(shared)
+                                                   : SeedText::parse(seedText);
+    const uint64_t rewardSeed = SeedText::parse(seedText);
+
+    // The secret list a code names, from data\secrets beside the program
+    // as in the GUI; a secrets= given as well wins.
+    if (secretKind >= 2 && secretList.empty())
+    {
+        const char* cat = (secretKind == 2) ? "Glitchless" : "Glitched";
+        const std::wstring dir = PathUtil::join(
+            PathUtil::join(PathUtil::exeDir(), L"data"), L"secrets");
+        for (const SecretSource& q : findSecretSources(dir))
+            if (q.category == cat && q.author == shared.secretAuthor) secretList = q.path;
+        if (secretList.empty())
+            std::printf("  secrets: no %s list by \"%s\" beside the program - "
+                        "the level keeps its secrets\n", cat, shared.secretAuthor.c_str());
+    }
 
     // --- Treat SCRIPT.DAT along (switch script=) --------------------------
     //
@@ -477,6 +559,19 @@ int main(int argc, char** argv)
             std::printf("  WARNING: %s\n", Tr3Edition::warning());
     }
 
+    // Secrets into the pool (a code's kind 1), as in the GUI: the hand
+    // curation's secret pins are taken out, type 223 rolls as a pickup.
+    if (secretKind == 1)
+    {
+        std::set<int> secretItems;
+        for (const LevelItem& it : in.items)
+            if (it.typeId == 223) secretItems.insert(it.index);
+        in.fixedItems.erase(
+            std::remove_if(in.fixedItems.begin(), in.fixedItems.end(),
+                           [&](int i) { return secretItems.count(i) != 0; }),
+            in.fixedItems.end());
+    }
+
     RandoOptions opt;
     opt.addEnemies = enemies > 0;
     opt.enemiesPerLevel = enemies;
@@ -497,6 +592,8 @@ int main(int argc, char** argv)
     opt.tr3GoldDir = guestsReady ? tr3GoldDir : std::wstring();
     opt.extraPickups = extraItems;
     opt.randomWeather = weather;
+    opt.shuffleKeyItems     = keyItems;
+    opt.shuffleOtherPickups = otherPickups;
     if (enemiesOnly) { opt.shuffleKeyItems = false; opt.shuffleOtherPickups = false; }
 
     JsonValue patch;
@@ -569,7 +666,7 @@ int main(int argc, char** argv)
         const std::wstring gameDir = (cut2 == std::wstring::npos) ? L"." : dataDir.substr(0, cut2);
 
         std::string sum, rerr;
-        if (writeSecretRewards(gameDir, seed, sum, rerr))
+        if (writeSecretRewards(gameDir, rewardSeed, sum, rerr))
             std::printf("  Rewards     %s\n", sum.c_str());
         else
             std::printf("  Rewards     %s\n", rerr.c_str());

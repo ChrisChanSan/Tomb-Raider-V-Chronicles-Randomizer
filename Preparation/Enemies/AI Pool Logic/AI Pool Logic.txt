@@ -3,6 +3,14 @@ TOMB5 (TR5/Chronicles) - enemy AI pool for the randomizer
 Determined from the TOMB5 engine source code
 (TOMB5 Code\TOMB5\game\*.cpp)
 
+Correction (#346)
+------------------
+The bits do not come from the editor: GetAIPickups (game/setup.cpp) hands
+them out at every level start, to the intelligent item within 512 units in
+the same room. The flag `intelligent` is wider than the set of readers; since
+#346 only kinds whose control calls GetAITarget receive bits (the others leave
+the marker), and the randomizer's added enemies avoid marker sectors.
+
 Background
 ----------
 TR5 levels place invisible AI marker objects (AIPatrol1, AIAmbush,

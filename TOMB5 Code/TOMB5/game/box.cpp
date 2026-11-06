@@ -1695,6 +1695,114 @@ void FindAITargetObject(CREATURE_INFO* creature, short obj_num)
 	}
 }
 
+/* AILOG (#346, -log): the marker events of GetAITarget, one line per
+ * event and never one per frame - a goal reached (a PATROL1 goal once
+ * per arrival, not for every frame the creature stands there), a bit
+ * dropped by an alert, a hurt or a hit, and the first time a creature's
+ * search finds no marker. A creature writes at most AILOG_LINES lines a
+ * level and then one `quiet` line: a patrol walks its loop for as long as
+ * nobody alerts it, and a mini sub, which reaches each goal at once, runs
+ * a loop of twenty markers in forty frames. The counters are the log's
+ * own, reset by GetAIPickups at every level start (setup.cpp). */
+#define AILOG_LINES	64
+
+static uchar ailog_lines[MAX_ITEMS];
+static uchar ailog_missed[MAX_ITEMS];
+
+void AILogReset()
+{
+	memset(ailog_lines, 0, sizeof(ailog_lines));
+	memset(ailog_missed, 0, sizeof(ailog_missed));
+}
+
+static const char* AILogBit(long bit)
+{
+	switch (bit)
+	{
+	case GUARD:
+		return "GUARD";
+
+	case AMBUSH:
+		return "AMBUSH";
+
+	case PATROL1:
+		return "PATROL1";
+
+	case MODIFY:
+		return "MODIFY";
+
+	default:
+		return "FOLLOW";
+	}
+}
+
+// Whether the creature may write one more AILOG line this level.
+static bool AILogLine(short item_number)
+{
+	if (ailog_lines[item_number] < AILOG_LINES)
+	{
+		ailog_lines[item_number]++;
+		return 1;
+	}
+
+	if (ailog_lines[item_number] == AILOG_LINES)
+	{
+		ailog_lines[item_number]++;
+		Log("AILOG quiet item=%d lines=%d", item_number, AILOG_LINES);
+	}
+
+	return 0;
+}
+
+static void AILogDrop(CREATURE_INFO* creature, long bit, const char* why)
+{
+	ITEM_INFO* item;
+
+	item = &items[creature->item_num];
+
+	if (gLogEnabled && AILogLine(creature->item_num))
+		Log("AILOG drop item=%d obj=%d bit=%s why=%s modify=%d bits=0x%X "
+			"if3=%d", creature->item_num, item->object_number,
+			AILogBit(bit), why, (item->ai_bits & MODIFY) != 0,
+			(int)item->ai_bits, item->item_flags[3]);
+}
+
+static void AILogGoal(CREATURE_INFO* creature, long bit)
+{
+	ITEM_INFO* item;
+
+	item = &items[creature->item_num];
+
+	if (gLogEnabled && AILogLine(creature->item_num))
+		Log("AILOG goal item=%d obj=%d bit=%s ocb=%d flags=0x%X bits=0x%X "
+			"pos=%d,%d,%d", creature->item_num, item->object_number,
+			AILogBit(bit), creature->ai_target.trigger_flags,
+			(int)creature->ai_target.flags, (int)item->ai_bits,
+			item->pos.x_pos, item->pos.y_pos, item->pos.z_pos);
+}
+
+// After a search: the first one a creature makes in vain is written.
+static void AILogSearch(CREATURE_INFO* creature, short obj_num)
+{
+	ITEM_INFO* item;
+
+	if (!gLogEnabled || ailog_missed[creature->item_num])
+		return;
+
+	if (creature->enemy == &creature->ai_target &&
+		creature->ai_target.object_number == obj_num)
+		return;
+
+	item = &items[creature->item_num];
+	ailog_missed[creature->item_num] = 1;
+
+	if (AILogLine(creature->item_num))
+		Log("AILOG miss item=%d obj=%d bit=%s if3=%d room=%d",
+			creature->item_num, item->object_number,
+			AILogBit(1 << (obj_num - AI_GUARD)), item->item_flags[3],
+			item->room_number);
+}
+
 void GetAITarget(CREATURE_INFO* creature)
 {
 	ITEM_INFO* item;
@@ -1721,6 +1829,8 @@ void GetAITarget(CREATURE_INFO* creature)
 
 			if (ai_bits & AMBUSH)
 				item->ai_bits |= MODIFY;
+
+			AILogDrop(creature, GUARD, "alert");
 		}
 	}
 	else if (ai_bits & PATROL1)
@@ -1734,17 +1844,30 @@ void GetAITarget(CREATURE_INFO* creature)
 				item->ai_bits |= MODIFY;
 				item->item_flags[3] = item->TOSSPAD & 0xFF;
 			}
+
+			AILogDrop(creature, PATROL1, creature->alerted ? "alert" : "hurt");
 		}
 		else if (enemy_object != AI_PATROL1)
+		{
 			FindAITargetObject(creature, AI_PATROL1);
+			AILogSearch(creature, AI_PATROL1);
+		}
 		else if (abs(enemy->pos.x_pos - item->pos.x_pos) < 640 && abs(enemy->pos.y_pos - item->pos.y_pos) < 640 &&
 			abs(enemy->pos.z_pos - item->pos.z_pos) < 640 || objects[item->object_number].water_creature)
+		{
+			if (!creature->reached_goal)
+				AILogGoal(creature, PATROL1);
+
 			creature->reached_goal = 1;
+		}
 	}
 	else if (ai_bits & AMBUSH)
 	{
 		if (enemy_object != AI_AMBUSH)
+		{
 			FindAITargetObject(creature, AI_AMBUSH);
+			AILogSearch(creature, AI_AMBUSH);
+		}
 		else if (abs(enemy->pos.x_pos - item->pos.x_pos) < 640 && abs(enemy->pos.y_pos - item->pos.y_pos) < 640 && abs(enemy->pos.z_pos - item->pos.z_pos) < 640)
 		{
 			floor = GetFloor(enemy->pos.x_pos, enemy->pos.y_pos, enemy->pos.z_pos, &enemy->room_number);
@@ -1759,6 +1882,8 @@ void GetAITarget(CREATURE_INFO* creature)
 				item->ai_bits |= GUARD;
 				creature->alerted = 0;
 			}
+
+			AILogGoal(creature, AMBUSH);
 		}
 	}
 	else if (ai_bits & FOLLOW)
@@ -1768,15 +1893,23 @@ void GetAITarget(CREATURE_INFO* creature)
 			creature->enemy = lara_item;
 			creature->alerted = 1;
 			item->ai_bits &= ~FOLLOW;
+			AILogDrop(creature, FOLLOW, "hurt");
 		}
 		else if (item->hit_status)
+		{
 			item->ai_bits &= ~FOLLOW;
+			AILogDrop(creature, FOLLOW, "hit");
+		}
 		else if (enemy_object != AI_FOLLOW)
+		{
 			FindAITargetObject(creature, AI_FOLLOW);
+			AILogSearch(creature, AI_FOLLOW);
+		}
 		else if (abs(enemy->pos.x_pos - item->pos.x_pos) < 640 && abs(enemy->pos.y_pos - item->pos.y_pos) < 640 && abs(enemy->pos.z_pos - item->pos.z_pos) < 640)
 		{
 			creature->reached_goal = 1;
 			item->ai_bits &= ~FOLLOW;
+			AILogGoal(creature, FOLLOW);
 		}
 	}
 }

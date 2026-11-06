@@ -33,6 +33,7 @@ void AlertNearbyGuards(ITEM_INFO* item);
 short AIGuard(CREATURE_INFO* creature);
 void FindAITargetObject(CREATURE_INFO* creature, short obj_num);
 void GetAITarget(CREATURE_INFO* creature);
+void AILogReset();
 short SameZone(CREATURE_INFO* creature, ITEM_INFO* target_item);
 void CreatureYRot(PHD_3DPOS* srcpos, short angle, short angadd);
 long MoveCreature3DPos(PHD_3DPOS* srcpos, struct PHD_3DPOS* destpos, long velocity, short angdif, long angadd);

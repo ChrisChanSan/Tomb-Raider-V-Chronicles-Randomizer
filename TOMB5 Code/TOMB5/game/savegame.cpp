@@ -31,6 +31,7 @@
 #include "rat.h"
 #include "bat.h"
 #include "spider.h"
+#include "setup.h"		// CreatureReadsAIMarkers - who keeps AI bits
 #include "lara2gun.h"
 #include "save_pointer_rule.h"	// the save's two pointers into the pool
 #include "../specific/drawroom.h"	// mesh_vtxbuf - Lara's meshes by number
@@ -1256,6 +1257,13 @@ void RestoreLevelData(long FullSave)
 				item->poisoned = (flags >> 24) & 1;
 				item->ai_bits = (flags >> 25) & 31;
 				item->really_active = (flags >> 30) & 1;
+
+				// A save from before #346 carries the bits a creature
+				// that never reads markers took at its level start; the
+				// Roman god's GUARD would keep him from striking. Gone.
+				if (objects[item->object_number].intelligent &&
+					!CreatureReadsAIMarkers(item->object_number))
+					item->ai_bits = 0;
 
 				if (flags & 0x80000000)
 				{

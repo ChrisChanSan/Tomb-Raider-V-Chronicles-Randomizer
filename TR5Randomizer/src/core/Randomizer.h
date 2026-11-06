@@ -442,6 +442,17 @@ struct RandoInput
     // Tr5Level::canAppendTrigger.
     std::set<long long>      triggerSafeSectors;
 
+    // The level's AI markers that hand out behaviour (#346): every AI
+    // object of kind AI_GUARD to AI_FOLLOW (slots 378-382), with its index
+    // in the AI block. GetAIPickups (setup.cpp) gives each to the
+    // intelligent item standing within 512 in x and z in the same room at
+    // the level start, and all but AI_GUARD are used up by it - an extra
+    // enemy there would take the twin or chain point a Core enemy needs.
+    // Filled from the level file by markTriggerSafeSectors; empty means no
+    // marker (or no level file read, as in TestRando).
+    struct AiMarker { int index; int kind; int room; int x; int z; int ocb; };
+    std::vector<AiMarker>    aiMarkers;
+
     // Sectors behind a deadstop (NO_KEY_ISLAND in the zone export as
     // keyBarredSectors). No key item may lie there.
     //

@@ -20169,6 +20169,104 @@ here.
 
 **Commits.** see the appendix.
 
+### AI markers reach only the kinds that read them (#346)
+2026-11-06
+
+**What.** `GetAIPickups` (`game/setup.cpp`, run in `SetupGame` at every level load, before
+a save is restored) gave every item whose kind is `intelligent` the AI objects of kind
+AI_GUARD to AI_FOLLOW within 512 units in x and z in the same room: the bit in `ai_bits`,
+the marker's OCB in `item_flags[3]`, the pickup in `TOSSPAD`, and every marker but
+AI_GUARD used up (`room_number = NO_ROOM`). Only `GetAITarget` (`game/box.cpp`) turns
+those bits into a goal, and 35 kinds carry the flag while 8 of them run a control that
+never calls it: the T-Rex (`SAS` slot, `DinoControl`), the compy (`SAILOR`,
+`CompyControl`), `LionControl`, `DogControl`, the vulture (`CROW`, `CrowControl`),
+`DroneControl` and both Roman gods (`RomangodControl`). Such a kind took the bits all the
+same and used up the twin or chain point a reading creature needed; the Roman god's attack
+from state 1 waits behind `!(ai_bits & GUARD)` (`romangod.cpp`), a bit only `GetAITarget`
+clears, so on a guard's spot he stood passive beside Lara.
+
+**The rule.** `game/ai_marker_rule.h`: `ControlReadsAIMarkers(control)` is true for the 18
+controls that call `GetAITarget` - `SasControl` (BLUE_GUARD, SWAT, SWAT_PLUS, MAFIA,
+SCIENTIST, CRANE_GUY, BLUE_GUARD2, SCIENTIST_ARMED), `HitmanControl` (HITMAN, CYBORG),
+`PierreControl` (PIERRE, LARSON), `MafiaControl`, `TwogunControl`, `HuskieControl`,
+`GladiatorControl`, `ImpControl`, `ChefControl` (CHEF, BRAWLER), `HydraControl`,
+`RaptorControl` (REAPER slot), `MazeMonsterControl`, `WillOWispControl`, `SwampyControl`,
+`MinisubControl`, `SniperControl`, `SkeletonControl`, and `JellyControl`, which no slot
+uses. `CreatureReadsAIMarkers(object_number)` (`setup.cpp`) asks the object's control
+pointer, so the rule is said by the control and not by a list of slots: 27 kinds read the
+markers, the 8 above do not. For those 8 the pickup does not run: no bits, no
+`item_flags[3]`, `TOSSPAD` as `InitialiseCreature` left it (the angle in bits 13-15), and
+the marker stays for a creature that reads it. None of the 8 controls reads `ai_bits`,
+`item_flags[3]` or `TOSSPAD` itself except the Roman god's GUARD test, which now never
+holds; `ResetGuards` restores 0 bits for them. `romangod.cpp` is unchanged.
+
+**Vanilla.** #345's census of the 15 vanilla levels (`AiProbe2`, the exact pickup): 38
+pickups, all by readers (BLUE_GUARD 15, TWOGUN 6, ATTACK_SUB, SCIENTIST and SWAT 3 each,
+IMP 2, CHEF, GREEN_TEETH, HUSKIE, MAFIA, MAFIA2 and WILLOWISP 1 each). The non-readers of
+the vanilla levels - 5 dogs, 4 lions, the Roman gods of Andrea2 (room 131; its one marker
+lies in room 116) and Andrea3 (no AI object in the level) - stand within reach of no
+marker. No vanilla pickup changes, no vanilla marker is kept that was used up before, and
+vanilla plays as it did. A marker a non-reader leaves can still be taken by a reader in
+reach at the level start, or found by `FindAITargetObject` (kind, OCB, zone) - the way the
+level made it.
+
+**The save.** Its format stays 3. A save from before the rule restores the bits a
+non-reader took; the restore (`savegame.cpp`) now clears `ai_bits` for an intelligent kind
+that does not read them, so a Roman god from such a save strikes. `TOSSPAD` is not saved;
+`GetAIPickups` builds it again at the load, now without the old pickup, and the marker it
+used up stays in place. No save is refused.
+
+**AILOG**, a release family behind `-log` (not in `specific/log_families.h`). At the level
+start one line per creature and marker within reach, readers and the others: `AILOG start
+item= obj= reads=<0|1> bits= if3= marker=<AI index> kind=<AI slot> ocb= consumed=<0|1>` -
+bits and if3 the creature's after its whole pickup. In `GetAITarget` one line per event:
+`AILOG goal item= obj= bit= ocb= flags= bits= pos=` (a PATROL1 goal once per arrival, an
+AMBUSH or FOLLOW goal when the bit goes), `AILOG drop item= obj= bit= why=<alert|hurt|hit>
+modify=<0|1> bits= if3=` (modify=1 when an ambush turned into MODIFY) and `AILOG miss
+item= obj= bit= if3= room=` for a creature's first search that found no marker. A creature
+writes at most 64 lines a level, then one `AILOG quiet item= lines=64`: a patrol walks its
+loop until it is alerted, and joby4's mini sub 15, which reaches each goal at once, can
+run its loop of 19 markers in 38 frames. The worst case is that level: 3 start lines, sub
+0's 7 goals and a miss, sub 13's miss and sub 15's 64 lines and its quiet line - 77 lines
+(80 with one alert drop each), at most 198 (3 + 3 x 65). The counters are the log's own,
+two arrays of `MAX_ITEMS`, reset by `GetAIPickups`. `xdiff.py` classes `AILOG start` as a
+load line and the events as logic.
+
+**The randomizer.** The additional enemies stand behind the level's own items, so they
+took whatever marker the Core creatures had left. #345 measured three in one run: an added
+huskie on rich2's ai7 ended guard 219's patrol before the marker that opens door 220
+again, and an added vulture and Twogun on Andy2's FOLLOW markers left the will-o'-wisp
+without a path. `markTriggerSafeSectors` (`ApplyPatch.cpp`) now reads the AI block
+(`Tr5Level::aiObjects`) into `RandoInput::aiMarkers` (kinds 378-382, with the AI index),
+and the additional-enemy placement (`Randomizer.cpp`) bars a drawn spot when such a marker
+lies in the spot's room within 512 in x and z of the position it writes (the sector
+centre) - `GetAIPickups`' own test - with the note `enemy spot r,x,z barred: AI marker n
+(kind k, OCB o) is within reach`. The spot is barred as it is drawn, not taken out of the
+list before, so a level whose draws never land on a marker keeps every draw. The swap in
+place, the cross mix, the pools and `fixedItems` are unchanged.
+
+**Regression** (`Preparation/Verification.md` section 1, the build at x64 45df1590 against
+this one, the 13 campaign levels from `data\Backup`, into a scratch folder): sets 380 `mix
+cross allsanity 8 weapons items20 weather`, 1 `mix cross 8 weapons`, 77 `mix cross
+allsanity 8 items20` and 2 to 11 `mix cross allsanity 20` - 169 levels. The old build
+placed 22 added enemies within reach of a marker, in 15 levels (ANDY2 in 4 sets, RICH1 in
+7, RICH2 in 4); those 15 differ, the other 154 are equal in `.trc`, `.hdm` and printout.
+In the 15 no Core item differs: 154 added-enemy records are drawn again from the first
+barred spot on, the item counts stay. `AiProbe2` over the new levels: 0 added enemies
+within reach of a marker.
+
+**Checked.** ModernTest group `ai_marker_rule` (13 checks): the rule against every
+`GetAITarget` call in `game\*.cpp` (18, each in a control of the rule, the rule's no
+more), the 35 intelligent kinds of `setup.cpp` by their control (27 read, 8 do not), the
+predicate's body, `GetAIPickups` taking and using up for readers alone, the `AILOG start`
+line, the restore, the four event lines and the cap, `GetAITarget` writing each event
+once, `romangod.cpp` as it was, and AILOG no test build's family; `log_family_rule` counts
+41 release families. ModernTest 17805 checks (17792 + 13), MenuTest 45043, InterpTest 754,
+LipsTest 272, none failed; no warning line in `be64.bat`, `basan.bat`, `be64.bat test` and
+the randomizer's `b1.bat` and `b2.bat`. Not run in the game here.
+
+**Commits.** see the appendix.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -20651,3 +20749,4 @@ entries above.
 | #342 | ANDY3's flyby island is sky art only for the rooms linked to it |
 | #343 | Trajan Markets' ways belong to its scripted Larson alone |
 | #344 | The title's night backdrop stays in its own scene |
+| #346 | AI markers reach only the kinds that read them |

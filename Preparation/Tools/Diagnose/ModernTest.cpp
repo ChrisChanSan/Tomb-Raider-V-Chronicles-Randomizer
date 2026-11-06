@@ -139,6 +139,9 @@
 // The chef's control on two slots: the hunt no OCB turns off and the
 // brawler's animation anchor (brawler_rule); his reach (brawler_reach).
 #include "../../../TOMB5 Code/TOMB5/game/chef_rule.h"
+// The kinds that read AI markers: the control asks GetAITarget, the level
+// start hands markers to them alone (ai_marker_rule, #346).
+#include "../../../TOMB5 Code/TOMB5/game/ai_marker_rule.h"
 // A room group stored off its height: the count, the pick (yshift_rule).
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_scan.h"
 // The fog bulbs' body: the span, the column, the veil, the breath (fog_body),
@@ -30965,13 +30968,14 @@ static const char* const log_test_words[44] = { "ARMLOG", "ASANLOG",
 	"RNGLOG", "ROPELOG", "SPARKLOG", "SPLASHLOG", "SPRINGLOG", "STATELOG",
 	"SWAPLOG", "TICKLOG", "TURNLOG", "VISLOG", "XRAYLOG", "ZIPLOG",
 	"RNGTRACE", "ROOMLIST", "ROOMWALK", "ROOMFLASH", "ROOMPOP", "ZIPSKIP" };
-static const char* const log_release_words[40] = { "ATANLOG", "CARRYLOG",
+static const char* const log_release_words[41] = { "ATANLOG", "CARRYLOG",
 	"CHEATLOG", "CLIPLOG", "CUTLOG", "DXLOG", "FLYLOG", "FMVLOG", "FPSLOG",
 	"GLOSSLOG", "HDLOG", "HOLDLOG", "ITEMLOG", "LEDGELOG", "LIFELOG",
 	"LOADLOG", "MENULOG", "MESHLOG", "MODLOG", "OBJLOG", "PROFLOG",
 	"SAVELOG", "SFXLOG", "SKINLOG", "SKIPLOG", "SLOTLOG", "WATERLOG",
 	"WINLOG", "ALTERFOV", "FPHEAD", "SKINREACH", "LOADFRAME", "CLIPDETAIL",
-	"SKIPLATCH", "HANG", "LOADBIND", "WARMUP", "FLYEND", "FEET", "CRASH" };
+	"SKIPLATCH", "HANG", "LOADBIND", "WARMUP", "FLYEND", "FEET", "CRASH",
+	"AILOG" };
 
 struct LogFamFile
 {
@@ -31330,7 +31334,7 @@ static void log_family_rule()
 	// No release family is ever a LogFam_.
 	right = 0;
 
-	for (int i = 0; i < 40; i++)
+	for (int i = 0; i < 41; i++)
 	{
 		long w = 0;
 
@@ -31355,10 +31359,10 @@ static void log_family_rule()
 		right += w == 0 && files > 100;
 	}
 
-	ok(right == 40, "log families: no release family is a LogFam_", right,
-		40);
+	ok(right == 41, "log families: no release family is a LogFam_", right,
+		41);
 
-	// Every site of the 44 gated, none of the 40.
+	// Every site of the 44 gated, none of the 41.
 	log_fam_count = 0;
 	log_fam_load("game", "*.cpp");
 	log_fam_load("game", "*.h");
@@ -31386,16 +31390,16 @@ static void log_family_rule()
 
 	right = 0;
 
-	for (int i = 0; i < 40; i++)
+	for (int i = 0; i < 41; i++)
 	{
 		log_fam_sites(log_release_words[i], &sites, &gated, &named);
 		right += sites > 0 && named == 0;
 		families += sites;
 	}
 
-	ok(right == 40 && families > 400,
-		"log families: the 40 release families written as they were",
-		right, 40);
+	ok(right == 41 && families > 400,
+		"log families: the 41 release families written as they were",
+		right, 41);
 
 	for (long i = 0; i < log_fam_count; i++)
 		free(log_fam_files[i].text);
@@ -40201,6 +40205,288 @@ static void larson_trajan_rule()
 	free(src);
 }
 
+/* The kinds that read AI markers (game\ai_marker_rule.h, #346). The
+ * controls the engine binds are stood in for here by functions of their
+ * own name, each with a body of its own so the linker folds none into
+ * another; the group then reads the engine's text: every control in
+ * game\ that calls GetAITarget is the rule's, no other is, and the 35
+ * kinds setup.cpp makes intelligent split by their control into the 27
+ * that read and the 8 that do not. GetAIPickups, the save's restore and
+ * the AILOG lines are held as the engine writes them. */
+static volatile long ai_rule_sink;
+
+#define AI_RULE_STUB(name, n) \
+	void name(short item_number) { ai_rule_sink = (n) * 1000 + item_number; }
+
+AI_RULE_STUB(SasControl, 1)
+AI_RULE_STUB(HitmanControl, 2)
+AI_RULE_STUB(PierreControl, 3)
+AI_RULE_STUB(MafiaControl, 4)
+AI_RULE_STUB(TwogunControl, 5)
+AI_RULE_STUB(HuskieControl, 6)
+AI_RULE_STUB(GladiatorControl, 7)
+AI_RULE_STUB(ImpControl, 8)
+AI_RULE_STUB(ChefControl, 9)
+AI_RULE_STUB(HydraControl, 10)
+AI_RULE_STUB(RaptorControl, 11)
+AI_RULE_STUB(MazeMonsterControl, 12)
+AI_RULE_STUB(WillOWispControl, 13)
+AI_RULE_STUB(SwampyControl, 14)
+AI_RULE_STUB(MinisubControl, 15)
+AI_RULE_STUB(JellyControl, 16)
+AI_RULE_STUB(SniperControl, 17)
+AI_RULE_STUB(SkeletonControl, 18)
+AI_RULE_STUB(DinoControl, 19)
+AI_RULE_STUB(CompyControl, 20)
+AI_RULE_STUB(LionControl, 21)
+AI_RULE_STUB(DogControl, 22)
+AI_RULE_STUB(CrowControl, 23)
+AI_RULE_STUB(DroneControl, 24)
+AI_RULE_STUB(RomangodControl, 25)
+
+struct AiRuleControl
+{
+	const char* name;
+	AIMarkerControl control;
+	bool calls;			// found calling GetAITarget in game\*.cpp
+};
+
+static AiRuleControl ai_rule_controls[25] = {
+	{ "SasControl", SasControl, 0 }, { "HitmanControl", HitmanControl, 0 },
+	{ "PierreControl", PierreControl, 0 }, { "MafiaControl", MafiaControl, 0 },
+	{ "TwogunControl", TwogunControl, 0 },
+	{ "HuskieControl", HuskieControl, 0 },
+	{ "GladiatorControl", GladiatorControl, 0 },
+	{ "ImpControl", ImpControl, 0 }, { "ChefControl", ChefControl, 0 },
+	{ "HydraControl", HydraControl, 0 }, { "RaptorControl", RaptorControl, 0 },
+	{ "MazeMonsterControl", MazeMonsterControl, 0 },
+	{ "WillOWispControl", WillOWispControl, 0 },
+	{ "SwampyControl", SwampyControl, 0 },
+	{ "MinisubControl", MinisubControl, 0 },
+	{ "JellyControl", JellyControl, 0 }, { "SniperControl", SniperControl, 0 },
+	{ "SkeletonControl", SkeletonControl, 0 },
+	{ "DinoControl", DinoControl, 0 }, { "CompyControl", CompyControl, 0 },
+	{ "LionControl", LionControl, 0 }, { "DogControl", DogControl, 0 },
+	{ "CrowControl", CrowControl, 0 }, { "DroneControl", DroneControl, 0 },
+	{ "RomangodControl", RomangodControl, 0 } };
+
+static AiRuleControl* ai_rule_find(const char* name, size_t len)
+{
+	for (int i = 0; i < 25; i++)
+		if (strlen(ai_rule_controls[i].name) == len &&
+			!memcmp(ai_rule_controls[i].name, name, len))
+			return &ai_rule_controls[i];
+
+	return 0;
+}
+
+/* Every "\tGetAITarget(" in game\*.cpp (a call stands on its own line;
+ * the definition and the comments have a blank before the name): the
+ * function it stands in, by the last "\nvoid " before it. Calls in a
+ * function the table does not know count in *unknown. */
+static long ai_rule_callers(long* unknown)
+{
+	char* exe = 0;
+	char dir[1024], pattern[1100], path[1200];
+	long calls = 0;
+
+	*unknown = 0;
+
+	if (_get_pgmptr(&exe) || !exe)
+		return -1;
+
+	const char* cut = strrchr(exe, '\\');
+	const size_t len = cut ? (size_t)(cut - exe) + 1 : 0;
+
+	memcpy(dir, exe, len);
+	snprintf(dir + len, sizeof(dir) - len,
+		"..\\..\\..\\TOMB5 Code\\TOMB5\\game\\");
+	snprintf(pattern, sizeof(pattern), "%s*.cpp", dir);
+
+	struct _finddata_t fd;
+	const intptr_t h = _findfirst(pattern, &fd);
+
+	if (h == -1)
+		return -1;
+
+	do
+	{
+		snprintf(path, sizeof(path), "%s%s", dir, fd.name);
+
+		FILE* f = 0;
+
+		if (fopen_s(&f, path, "rb") || !f)
+			continue;
+
+		fseek(f, 0, SEEK_END);
+		const long size = ftell(f);
+		char* text = (char*)malloc((size_t)size + 1);
+
+		fseek(f, 0, SEEK_SET);
+
+		if (text)
+		{
+			text[fread(text, 1, (size_t)size, f)] = 0;
+
+			for (const char* p = strstr(text, "\tGetAITarget("); p;
+				p = strstr(p + 1, "\tGetAITarget("))
+			{
+				const char* head = 0;
+
+				for (const char* q = text; q < p; q++)
+					if (!memcmp(q, "\nvoid ", 6))
+						head = q + 6;
+
+				const char* open = head ? strchr(head, '(') : 0;
+				AiRuleControl* c = open ?
+					ai_rule_find(head, (size_t)(open - head)) : 0;
+
+				calls++;
+
+				if (c)
+					c->calls = 1;
+				else
+					(*unknown)++;
+			}
+
+			free(text);
+		}
+
+		fclose(f);
+	} while (!_findnext(h, &fd));
+
+	_findclose(h);
+	return calls;
+}
+
+static void ai_marker_rule()
+{
+	printf("AI markers: only the kinds that read them take them\n");
+
+	ok(!ControlReadsAIMarkers(0), "ai marker rule: no control reads nothing",
+		ControlReadsAIMarkers(0), 0);
+
+	// The rule against the calls in the engine's text.
+	long unknown = 0;
+	const long calls = ai_rule_callers(&unknown);
+	long right = 0, readers = 0;
+
+	for (int i = 0; i < 25; i++)
+	{
+		const bool reads = ControlReadsAIMarkers(ai_rule_controls[i].control);
+
+		right += reads == ai_rule_controls[i].calls;
+		readers += reads;
+	}
+
+	ok(calls == 18 && unknown == 0,
+		"ai marker rule: 18 GetAITarget calls, each in a known control",
+		calls, 18);
+	ok(right == 25 && readers == 18,
+		"ai marker rule: the rule's controls are the callers, no more",
+		right, 25);
+
+	// setup.cpp: the intelligent kinds and their controls.
+	char* setup = hd_switch_text("../../game/setup.cpp");
+	long kinds = 0, kindsRead = 0, kindsKnown = 0;
+
+	for (const char* p = setup ? strstr(setup, "obj->intelligent = 1;") : 0;
+		p; p = strstr(p + 1, "obj->intelligent = 1;"))
+	{
+		const char* ctl = 0;
+
+		for (const char* q = setup; q < p; q++)
+			if (!memcmp(q, "obj->control = ", 15))
+				ctl = q + 15;
+
+		const char* end = ctl ? strchr(ctl, ';') : 0;
+		AiRuleControl* c = end ? ai_rule_find(ctl, (size_t)(end - ctl)) : 0;
+
+		kinds++;
+		kindsKnown += c != 0;
+		kindsRead += c && ControlReadsAIMarkers(c->control);
+	}
+
+	ok(kinds == 35 && kindsKnown == 35,
+		"ai marker rule: 35 intelligent kinds, each control known",
+		kindsKnown, 35);
+	ok(kindsRead == 27, "ai marker rule: 27 read the markers, 8 do not",
+		kindsRead, 27);
+
+	// The level start: only a reader's pickup, the log line for all.
+	static char body[16384];
+
+	glass_body(setup, "bool CreatureReadsAIMarkers(short object_number)",
+		body, sizeof(body));
+	ok(!strcmp(body, "returnControlReadsAIMarkers(objects[object_number]"
+		".control);"), "ai marker rule: the kind asks its control", 0, 1);
+
+	glass_body(setup, "void GetAIPickups()", body, sizeof(body));
+	ok(strstr(body, "AILogReset();") &&
+		strstr(body, "reads=CreatureReadsAIMarkers(item->object_number);") &&
+		strstr(body, "if(!reads)continue;item->ai_bits|=1<<(aiObj->"
+		"object_number-AI_GUARD);item->item_flags[3]=aiObj->trigger_flags;"
+		"if(aiObj->object_number!=AI_GUARD)aiObj->room_number=NO_ROOM;") &&
+		strstr(body, "if(reads)item->TOSSPAD|=item->ai_bits<<8|"
+		"(item->item_flags[3]&0xFF);"),
+		"ai marker rule: GetAIPickups takes and consumes for readers only",
+		0, 1);
+	ok(strstr(body, "if(gLogEnabled)for(longn=0;n<n_near;n++)") &&
+		strstr(body, "\"AILOGstartitem="
+		"%dobj=%dreads=%ldbits=0x%Xif3=%d\"\"marker=%dkind=%docb=%d"
+		"consumed=%d\""), "ai marker rule: the AILOG start line", 0, 1);
+
+	// The restore of a save from before the rule.
+	char* save = hd_switch_text("../../game/savegame.cpp");
+
+	ok(hd_switch_count(save, "if (objects[item->object_number].intelligent "
+		"&&\r\n\t\t\t\t\t!CreatureReadsAIMarkers(item->object_number))\r\n"
+		"\t\t\t\t\titem->ai_bits = 0;") == 1,
+		"ai marker rule: a restored non-reader keeps no bits",
+		hd_switch_count(save, "CreatureReadsAIMarkers("), 1);
+
+	// GetAITarget's event lines, and the Roman god as he was.
+	char* box = hd_switch_text("../../game/box.cpp");
+	char* god = hd_switch_text("../../game/romangod.cpp");
+
+	ok(hd_switch_count(box, "\"AILOG goal item=%d obj=%d bit=%s ocb=%d "
+		"flags=0x%X bits=0x%X \"\r\n\t\t\t\"pos=%d,%d,%d\"") == 1 &&
+		hd_switch_count(box, "\"AILOG drop item=%d obj=%d bit=%s why=%s "
+		"modify=%d bits=0x%X \"\r\n\t\t\t\"if3=%d\"") == 1 &&
+		hd_switch_count(box, "\"AILOG miss item=%d obj=%d bit=%s if3=%d "
+		"room=%d\"") == 1 &&
+		hd_switch_count(box, "\"AILOG quiet item=%d lines=%d\"") == 1 &&
+		hd_switch_count(box, "#define AILOG_LINES\t64") == 1,
+		"ai marker rule: the four AILOG event lines and the cap", 0, 1);
+
+	glass_body(box, "void GetAITarget(CREATURE_INFO* creature)", body,
+		sizeof(body));
+	ok(hd_switch_count(body, "AILogGoal(creature,") == 3 &&
+		hd_switch_count(body, "AILogDrop(creature,") == 4 &&
+		hd_switch_count(body, "AILogSearch(creature,") == 3 &&
+		strstr(body, "if(!creature->reached_goal)AILogGoal(creature,"
+		"PATROL1);creature->reached_goal=1;") != 0,
+		"ai marker rule: GetAITarget writes each event once",
+		hd_switch_count(body, "AILog"), 10);
+	ok(hd_switch_count(god, "GetAITarget(") == 0 &&
+		hd_switch_count(god, "if (!(item->ai_bits & GUARD) &&") == 1,
+		"ai marker rule: romangod.cpp as it was", 0, 1);
+
+	// AILOG a release family: never a LogFam_ (log_family_rule holds the
+	// sites); the header names it nowhere.
+	char* fam = hd_switch_text("../log_families.h");
+
+	ok(fam && hd_switch_count(fam, "AILOG") == 0,
+		"ai marker rule: AILOG is no test build's family",
+		hd_switch_count(fam, "AILOG"), 0);
+
+	free(setup);
+	free(save);
+	free(box);
+	free(god);
+	free(fam);
+}
+
 int main()
 {
 	printf("ModernTest - the arithmetic of the modern control\n");
@@ -40485,6 +40771,7 @@ int main()
 	level_camera_rule();
 	larson_death_rule();
 	larson_trajan_rule();
+	ai_marker_rule();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

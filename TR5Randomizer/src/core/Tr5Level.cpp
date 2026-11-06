@@ -397,6 +397,36 @@ bool Tr5Level::setItem(int index, const Tr5Item& in)
     return true;
 }
 
+bool Tr5Level::aiObjects(std::vector<Tr5AiObject>& out) const
+{
+    // The same position addAiObject below computes: right behind the items.
+    out.clear();
+    const size_t aiCountAt = m_itemCountOffset + 4 + static_cast<size_t>(m_itemCount) * 24;
+    if (aiCountAt + 4 > m_bytes.size()) return false;
+
+    int32_t nAi = 0;
+    std::memcpy(&nAi, m_bytes.data() + aiCountAt, 4);
+    if (nAi < 0 || aiCountAt + 4 + static_cast<size_t>(nAi) * 24 > m_bytes.size())
+        return false;
+
+    out.resize(static_cast<size_t>(nAi));
+    for (int32_t i = 0; i < nAi; ++i)
+    {
+        const uint8_t* p = m_bytes.data() + aiCountAt + 4 + static_cast<size_t>(i) * 24;
+        Tr5AiObject& a = out[static_cast<size_t>(i)];
+        std::memcpy(&a.objectNumber, p + 0, 2);
+        std::memcpy(&a.roomNumber, p + 2, 2);
+        std::memcpy(&a.x, p + 4, 4);
+        std::memcpy(&a.y, p + 8, 4);
+        std::memcpy(&a.z, p + 12, 4);
+        std::memcpy(&a.ocb, p + 16, 2);
+        std::memcpy(&a.flags, p + 18, 2);
+        std::memcpy(&a.yRot, p + 20, 2);
+        std::memcpy(&a.boxNumber, p + 22, 2);
+    }
+    return true;
+}
+
 bool Tr5Level::addAiObject(const Tr5AiObject& in, std::string& error)
 {
     // The AI block lies right behind the items: int32 count, then AIOBJECT

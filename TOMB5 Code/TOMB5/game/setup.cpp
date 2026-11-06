@@ -86,6 +86,8 @@
 #include "../specific/hd/hd_bind.h"	// slot names for the diagnostic log
 #include "carrier_rule.h"	// CarrierPass - search objects before enemies
 #include "chef_rule.h"		// BrawlerAnimBase - the brawler's animations
+#include "ai_marker_rule.h"	// ControlReadsAIMarkers - who takes markers
+#include "box.h"			// AILogReset - AILOG's counters at the level start
 
 void InitialiseLara(long restore)
 {
@@ -2462,11 +2464,32 @@ void reset_cutseq_vars()
 	SceneHoldReset();	// a hold of the level before ends, nothing put back
 }
 
+/* Whether the creature's kind reads AI markers (#346): its control is one
+ * that calls GetAITarget (ai_marker_rule.h). */
+bool CreatureReadsAIMarkers(short object_number)
+{
+	return ControlReadsAIMarkers(objects[object_number].control);
+}
+
+/* The markers' pickup at the level start, before a save is restored.
+ *
+ * Since #346 a creature takes markers only when its kind reads them
+ * (CreatureReadsAIMarkers). For any other intelligent kind the pickup
+ * does not run: no bits, no item_flags[3], TOSSPAD as InitialiseCreature
+ * left it, and the marker stays where it is for a creature that reads it.
+ *
+ * AILOG (-log): one line per creature and marker within reach, readers
+ * and the others alike - bits and if3 are the creature's after its whole
+ * pickup, consumed whether this creature took the marker away. */
 void GetAIPickups()
 {
 	ITEM_INFO* item;
 	AIOBJECT* aiObj;
 	short aiObjNum;
+	short nearby[16];
+	long reads, n_near;
+
+	AILogReset();
 
 	for (int i = 0; i < level_items; i++)
 	{
@@ -2476,6 +2499,8 @@ void GetAIPickups()
 			continue;
 
 		item->ai_bits = 0;
+		reads = CreatureReadsAIMarkers(item->object_number);
+		n_near = 0;
 
 		for (aiObjNum = 0; aiObjNum < nAIObjects; aiObjNum++)
 		{
@@ -2484,6 +2509,12 @@ void GetAIPickups()
 			if (abs(aiObj->x - item->pos.x_pos) < 512 && abs(aiObj->z - item->pos.z_pos) < 512 &&
 				aiObj->room_number == item->room_number && aiObj->object_number < AI_PATROL2)
 			{
+				if (n_near < 16)
+					nearby[n_near++] = aiObjNum;
+
+				if (!reads)
+					continue;
+
 				item->ai_bits |= 1 << (aiObj->object_number - AI_GUARD);
 				item->item_flags[3] = aiObj->trigger_flags;
 
@@ -2492,7 +2523,21 @@ void GetAIPickups()
 			}
 		}
 
-		item->TOSSPAD |= item->ai_bits << 8 | (item->item_flags[3] & 0xFF);
+		if (reads)
+			item->TOSSPAD |= item->ai_bits << 8 | (item->item_flags[3] & 0xFF);
+
+		if (gLogEnabled)
+		{
+			for (long n = 0; n < n_near; n++)
+			{
+				aiObj = &AIObjects[nearby[n]];
+				Log("AILOG start item=%d obj=%d reads=%ld bits=0x%X if3=%d "
+					"marker=%d kind=%d ocb=%d consumed=%d", i,
+					item->object_number, reads, (int)item->ai_bits,
+					item->item_flags[3], nearby[n], aiObj->object_number,
+					aiObj->trigger_flags, aiObj->room_number == NO_ROOM);
+			}
+		}
 	}
 }
 

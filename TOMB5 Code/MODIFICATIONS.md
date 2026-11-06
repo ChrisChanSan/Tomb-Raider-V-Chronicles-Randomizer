@@ -17636,7 +17636,7 @@ his, so he takes SWAT's path in each (he alerts, turns, aims, fires the burst of
 follows the meshes: the sidecar's line `donor 473 rich1 69` binds RICH1's `SCIENTIST`
 (`MapProbe -hdm`: HD if the skeleton fits, all 15 nodes covered), whose gloves are empty,
 so the HD picture shows no rifle; without the installation he draws classic, rifle in
-hand. `ModernTest` gains the group `scientist_rule`, 15 checks.
+hand. `ModernTest` gains the group `scientist_rule`.
 
 **Decisions.** He shares SWAT's swap slot 462 instead of a fallback slot of his own: his
 hands are SWAT's and both rows name rich3 as the swap donor, so the slot holds the same
@@ -17912,6 +17912,9 @@ a load deals the slots one creature at a time), `SaveLaraData`, `SaveLevelData`,
 ModernTest's groups `replay_rule` and `collide_lists` hold both;
 `Preparation/Tools/Diagnose/xdiff.py` (new) compares two logs family by family.
 
+`specific/high_pool.h` declares `SwitchWordGiven` beside `HighSwitchGiven`, and its
+comment states the whole-word rule both follow.
+
 **Decisions.** A replay ends at the first record that does not fit instead of going on:
 from there the runs are different games, and the line names the tick. The present's
 count is replaced where the logic takes it, not in `S_DumpScreen`, which more presents
@@ -18087,7 +18090,7 @@ once at the end of each level and of the title (`LaraJointsLevelEnd`,
 `game/gameflow.cpp`). At fps_mode 0 no frame is blended: the pass never runs, `lara.wet`
 is written as before, and the frame's calls are the old ones in the old order.
 `game/deltapak.h` carries the modification notice now. ModernTest's group `lara_joints`
-(13 checks) holds the order and the wiring in the engine's text.
+holds the order and the wiring in the engine's text.
 
 What the frames leave behind besides the joints, six more:
 - The generator's state. `game/interpolate.cpp`: `InterpBeginFrame` saves the state of
@@ -18144,8 +18147,13 @@ follows each `JOINTLOG` line (`InterpRngLevelEnd`): the draws counted as steps o
 generator from the saved state, up to 65,536 (`over=` past it). `DOORLOG moves= frames=
 skipped_tween=` follows it (`ClosedDoorsLevelEnd`, `game/gameflow.cpp`): the doors'
 moves, the frames that walked them and the tween frames that did not. ModernTest's group
-`logic_leftovers` (14 checks) holds the save, the give-back, the rule, the mark and the
+`logic_leftovers` holds the save, the give-back, the rule, the mark and the
 doors' gate, its two callers and the line.
+
+`game/draw.h` declares `LaraJointsBuild`, `LaraJointsLive` and `LaraJointsLevelEnd`;
+`game/interpolate.h` declares `InterpFrameBlended` and `InterpRngLevelEnd`, and its head
+comment adds GetHeight's globals to what a frame gives back; `game/door.h` declares
+`ClosedDoorsLevelEnd`.
 
 **Decisions.** The view set `lara_matrices`, the nodes' ambient and `GLaraShadowframe`,
 which nothing in the logic reads, stay as the frame leaves them. A pass costs the joint
@@ -18173,7 +18181,7 @@ An original fault of the engine.
 
 **How.** `game/sound.cpp`: `if (lut < 0) return;` after the read, without a log line,
 since it runs every tick. Nothing else in the function changes. ModernTest's group
-`sound_stop` (2 checks) holds the test before the index and `SoundEffect`'s own -1/-2.
+`sound_stop` holds the test before the index and `SoundEffect`'s own -1/-2.
 
 **Decisions.** Only the read is guarded. `S_SoundStopSample` on a free slot stops that
 slot's channel, which no running sound uses, since every start goes through `SoundEffect`;
@@ -18218,7 +18226,7 @@ and keeps the binoculars shut (`newinv2.cpp`), both of which the animation alrea
 rules out, and it was 2 or 3 by chance. `game/newinv2.cpp`: the walk keeps the sibling's
 `NUM_INVOBJ` bound (the ring's clears and searches use it too) and skips `invitem < 0`;
 the sibling compares `invitem` itself and stays as it is. ModernTest's groups
-`camera_fixed_none` (2 checks) and `inventory_start_empty` (2) sit beside `sound_stop`.
+`camera_fixed_none` and `inventory_start_empty` sit beside `sound_stop`.
 
 **Decisions.** The other reads of `camera.fixed[camera.number]` ask first or follow the
 assignment (the sniper test, TO_CAMERA, `RefreshCamera`, the Target command's `NO_ITEM`
@@ -18257,9 +18265,12 @@ first.
 its `REPLAY_OFF`/film return and before either branch. The active chain is walked from
 `next_item_active` with a bound of `MAX_ITEMS` steps; the fading bodies are counted over
 all `MAX_ITEMS` slots. `specific/function_stubs.h`: the note on the two seed readers
-names the recorder as their one other reader. ModernTest's `replay_rule` gains 4 checks:
+names the recorder as their one other reader. ModernTest's `replay_rule` gains checks of
 the call's place, the line's fields in their order with `-log` only, the two counts and
 no number drawn, and no other file writing the family.
+
+`specific/replay.h`: the comment on the input call adds the STATELOG line it writes with
+`-log`.
 
 **Commits.** `6233e225`.
 
@@ -18315,13 +18326,14 @@ and `LoadSave.cpp` call the same names.
   and the game goes on.
 - `specific/yuv_rgb.cpp` + `.h` converts a picture: `yuv420p` (and `yuva420p`, alpha
   ignored) in limited range with the BT.601 matrix to X8R8G8B8, in integers: the factors
-  255/219, 1.402*255/224, 0.344136*255/224, 0.714136*255/224 and 1.772*255/224 (about
-  1.164, 1.596, 0.392, 0.813 and 2.017) times 65536 and rounded, one row at a time by each
-  plane's `linesize`, chroma shared by 2x2. Any other picture format refuses the film. The
-  file includes no engine header, so `BinkProbe` and `ModernTest` compile the same file.
+  255/219, 1.402*255/224, 0.344136*255/224, 0.714136*255/224 and 1.772*255/224 (the
+  textbook's 1.164, 1.596, 0.391, 0.813 and 2.018, the form `yuv_rgb.h`'s comment shows)
+  times 65536 and rounded, one row at a time by each plane's `linesize`, chroma shared by
+  2x2. Any other picture format refuses the film. The file includes no engine header, so
+  `BinkProbe` and `ModernTest` compile the same file.
 
 `BinkProbe` gains `-bmp <n> <out.bmp>`, frame n written as a 24-bit BMP through that
-conversion, with its three test pixels printed. ModernTest gains `film_av` (24 checks):
+conversion, with its three test pixels printed. ModernTest gains `film_av`:
 the conversion's factors, black, white, red and the clamps, a padded 3x3 picture; in the
 engine's text the load with its search flags, avutil first, 23 functions, the version
 refusal, every failure logged with films off and no message box, no `av*.lib` in the
@@ -18330,6 +18342,10 @@ routing, the skip rule identical to the Bink path's, `App.fmv` set and cleared, 
 tail on the one way out, the audio clock, and the DLLs copied by `be64.bat` and
 `basan.bat` but not `be.bat`. The 64-bit EXE imports no `av*.dll`; it no longer imports
 `DDRAW.dll` either, which only the Bink path used.
+
+`specific/winmain.cpp`: at the load the x64 build calls `LoadBinkStuff`, unless `-nofmv`
+turned the films off, in place of the line `FMV off: no 64-bit Bink, films skipped`, and
+the comment there names the three optional DLLs and the FMVLOG line.
 
 **Commits.** `058a7ef6`, `d5fdaffc` (the DLLs and `BinkProbe`).
 
@@ -18385,11 +18401,15 @@ preferred base from its PE header, the search path the EXE's folder alone,
 `_NT_SYMBOL_PATH` ignored and cleared, no symbol server; when the PDB the EXE names is
 not beside it, the PDB of the EXE's own name is loaded, and either way its GUID and age
 must match the EXE's CodeView record. `-ret` looks a return address up one byte back,
-inside its call. ModernTest gains `rngtrace_rule` (15 checks): the switch's yes,
+inside its call. ModernTest gains `rngtrace_rule`: the switch's yes,
 refused and no lists, the generator's one test and `noinline`, the draw generator
 untouched, the bounded record and marks, the module base, the window, the line's
 fields and overflow, the place before `STATELOG`, the reading in `WinMain`, and the
 seven marks in their order.
+
+`specific/function_stubs.h` declares `RngTraceArm`, `RngTraceInputSeam` and `RngTraceMark`
+under a comment on the switch, `specific/high_pool.h` declares `RngTraceSwitch`, and
+`specific/replay.cpp` calls `RngTraceInputSeam` at the head of `ReplayInputSeam`.
 
 **Commits.** `a2fd0238`.
 
@@ -18424,6 +18444,10 @@ names its caller; `next_spark` moved from a function static to file scope, with 
 start and writes. `DoRain` writes `rain` before each of its splash and ripple calls;
 `LaraJointsLevelEnd` (`game/draw.cpp`) writes `level` after RNGLOG. With `-log` off each
 site costs one test of `gLogEnabled`, and `GetFreeSpark` is always a call.
+
+`game/effect2.h` declares `SparkLogTakeDrawAllocs`, `game/interpolate.h` declares
+`InterpFrameSeedSaved`, and `specific/specificfx.h` declares `SparkLogFrameNow` and
+`SparkLogLevelEnd`.
 
 **Decisions.** The seams watch and change nothing. The draw's far-plane end of a spark
 stays here, with its `kill` line (#320 removed it). The other particle writers the draw
@@ -18495,6 +18519,8 @@ and stepped fields statement by statement against `TriggerSmallSplash`, `UpdateS
 `SetupRipple` and `UpdateSplashes`. `Preparation/Tools/Diagnose/spark_life.py` pairs two
 logs' SPARKLOG lines.
 
+`specific/specificfx.h` declares `S_DrawOneSpark` and `S_DrawOneRipple`.
+
 **Decisions.** The pool holds 1024 splashes, the spark array's own size and the most the
 original could ever hold of them (a splash lives 22 steps; a rainy level keeps well under
 800 alive), and a full pool gives up the splash with the least life, as `GetFreeSpark`
@@ -18548,7 +18574,7 @@ record past the file's end ends `why=file`; a game left through its own menu wou
 before that, so neither that line nor the record's end line reaches the log - a replay
 that plays the recording to its quit ends after its last `STATELOG` line and `GameClose`,
 with no `REPLAYLOG end` (unchanged here; the order is #321's). ModernTest's
-`replay_rule` (52 checks) holds the live branch of `ReplaySubTick` returning before
+`replay_rule` holds the live branch of `ReplaySubTick` returning before
 `ReplayNext`, `ReplayNext` skipping only under the live clock and only for another
 wanted type, with its end and type checks after it, and the end line's
 `skipped_subticks=`.
@@ -18604,7 +18630,7 @@ its slot and the tick its Life runs out (`GlobalCounter` plus Life, constant whi
 lives); a bubble by its slot, its `dsize` (fixed at birth) and its growth (at most one a
 tick), one line per reason. The `SPARKLOG level` line gains `culls= bubble_culls=
 drip_culls=` at its end, the lines written in the level, reset with the rain's counters.
-ModernTest's group `cull_rule` (14 checks) holds no write of the alive fields of `SPARKS`,
+ModernTest's group `cull_rule` holds no write of the alive fields of `SPARKS`,
 `DRIP_STRUCT` or `BUBBLE_STRUCT` under `specific/` but the weather pool's own step, the
 three places with their cull lines and keys, and the logic's own ends; `spark_life`'s
 far-plane check asserts the cull now.
@@ -18677,6 +18703,9 @@ There is no 32-bit test build, and no script makes one; the comparison of the 32
 the 64-bit build in `Preparation/Verification.md`, section 8, would need it. ModernTest's
 group `test_build_rule` holds the define once in the project and in no source file, the
 four words only inside its blocks and `noinline` only through the macro.
+
+`game/effect2.cpp`: `GetFreeSpark` is declared through `TOMB5_NOINLINE_IN_TEST` instead of
+`__declspec(noinline)`, and SPARKLOG's comment says a shipping build inlines it.
 
 **Commits.** `58f49bc4`.
 
@@ -18758,6 +18787,13 @@ one more. ModernTest's group `pause_rule` holds the six fields in order, the sta
 around exactly the `Clear`, the spin and the `BeginScene`, and `ProfileNoteParked` once,
 in `WinWakeGame`, before `ResumeThread`.
 
+`specific/profile.h` adds the three phases after `PROF_FLIP` and `ProfileNoteParked`, an
+inline that calls `ProfileNoteParkedMs` only with `-log`; `specific/profile.cpp` holds the
+hand-over's counter, the park taken per phase, the test for a phase outside the work and
+the line's end (`OutsideLine`); `specific/function_table.cpp` includes `profile.h` and
+times the spin and the `BeginScene` in `HWBeginScene`, and `specific/output.cpp` the
+`Clear` in `S_InitialisePolyList`.
+
 **Commits.** `4f70fc3d`.
 
 ### A composite's borrowed nodes draw from their donor's HD model (#327)
@@ -18796,6 +18832,8 @@ build: `HDLOG composite slot= name= nodes= from= model= hd=<0|1>
 reason=<ok|not_loaded|actor_classic|source_classic|no_geometry>`. ModelProbe's
 `-borrowown` hangs a borrowed node at the bind of `-slot`'s own node, through the same
 function. ModernTest's group `composite_nodes` holds the table, the order and the line.
+
+`specific/hd/hd_model.h` declares `HDModelBorrowJointsAt`.
 
 **Decisions.** The source is named by slot and not by model, because a model is drawn
 only through a slot that binds it: SWAT's own slot is in no level the scientist goes to,
@@ -18840,6 +18878,16 @@ null case is unchanged. `types.h` guards `DD_OK` and `DD_FALSE` with `#ifndef`, 
 `fmv.cpp` keeps `ddraw.h`'s definitions and every other file ours; `DDENUMRET_OK` is
 gone. The unused locals of `DinoControl` are gone.
 
+The files: `(short)` on an item number taken as a pointer difference in `game/box.cpp`
+(`AddActiveItem`), `game/door.cpp` (`ItemNewRoom`), `game/effects.cpp` (`AddActiveItem`),
+`game/flmtorch.cpp` (`TriggerTorchFlame`, `ObjectCollision`), `game/lara1gun.cpp`
+(`CreatureDie`, `AddActiveItem`), `game/switch.cpp` (`AddActiveItem`) and `game/traps.cpp`
+(`SmashObject`, `KillItem`); `(short)FIRST_PERSON_FOV` for `AlterFOV` in
+`game/camera.cpp`; `(long)` on a pointer difference in `game/gameflow.cpp` (a string's
+length) and `specific/hd/hd_object.cpp` (an item's number); `(ulong)` on the combo box's
+selection in `specific/registry.cpp`; `(long)` on that selection and on `DialogBox`'s
+result in `specific/setupdlg.cpp`. `game/trex.cpp` loses `DinoControl`'s unused locals.
+
 **Decisions.** `TreatSpecificWarningsAsErrors` of all five configurations of
 `tomb5.vcxproj` gains C4005 and C4101 beside the five of #324. C4244 is not in the list:
 as an error it also switches on its level-4 form (an `int` result of arithmetic stored in
@@ -18876,6 +18924,20 @@ and a pulley's pull count. Five are WRAP and say so in one comment line: debris
 the cut, debris `XRot`/`YRot` are 8-bit spin angles (drawn as `XRot << 8`), and the
 trap's `x_rot -=` turns a 16-bit angle through 0x10000. These 91 places cast to the type
 the value was already converted to; no field, variable or parameter changed its type.
+
+The files, by the kind of cast: `(uchar)` on a spark's sprite (`Def`, `DEFAULT_SPRITES` +
+11..17) in `game/andrea.cpp`, `andy.cpp`, `effect2.cpp`, `joby.cpp`, `minisub.cpp`,
+`romangod.cpp`, `subsuit.cpp`, `tomb4fx.cpp` and `tower.cpp`, and on a colour, a shade or
+a spin angle in `game/debris.cpp` (the four WRAP places) and `tomb4fx.cpp`; `(short)` on
+an item, effect, box or cloud number from a loop in `game/draw.cpp` (`DrawEffect`),
+`guardian.cpp`, `init.cpp`, `items.cpp`, `lot.cpp`, `minisub.cpp`, `pickup.cpp`
+(`KillItem`) and `specific/file.cpp` (`InitialiseItem`), on Lara's spasm anim in
+`game/delstuff.cpp` and `hair.cpp`, on an `abs()` or a speed made from one in
+`game/init.cpp`, `joby.cpp`, `lara.cpp`, `larafire.cpp`, `laraswim.cpp`, `rat.cpp`,
+`spider.cpp`, `tower.cpp` and `traps.cpp` (the trap's `x_rot`, the fifth WRAP), on a
+raptor state in `game/raptor.cpp` and on the day count in `specific/LoadSave.cpp`;
+`(char)` on the LaraType in `specific/file.cpp`; `(ushort)` on the blended colour channels
+in `game/text.cpp`; `(CHAR)` on `toupper`'s result in `specific/winmain.cpp`.
 
 **Decisions.** Six are SUSPECT and are left as they were (#331 closed them).
 `laraskin.cpp` stores a vertex number of the mesh above or below a joint in `char
@@ -18945,6 +19007,9 @@ grows from 52 to 56 bytes and `SMOKE_SPARKS` from 44 to 48 (the field's alignmen
 in `game/init.cpp` without the cast. ModernTest's group `spark_item_number` holds the
 two types and the seven writes without a `uchar`.
 
+`game/pickup.h`: the `extern` of `RPickups` is `short[16]` too, and the file carries the
+modification notice from this change on.
+
 **Commits.** `81d4d2c3`.
 
 ### The six suspect narrowings closed, and C4244 an error (#331)
@@ -18985,6 +19050,10 @@ block around those two includes alone, each with a line saying the code is vendo
 ModernTest's `warning_rule` expects the eight numbers; its group `narrowing_closed` holds
 the `uchar` rows, the `short` anim, the mark and the room check.
 
+`game/savegame.cpp`: `SAVE_FORMAT_MARK` with its comment, the anim written and read as a
+`short`, the mark written ahead of the item block, and the check in `sgRestoreGame` with
+the Log line, the message box and `ExitProcess(1)`.
+
 **Decisions.** Saves of Beta_5.0 do not load in this build: a format mark rather than a
 silent reinterpretation of an equal-sized file. No `/wd`, no external include path and no
 per-file setting for the vendored code, and no such pragma around the engine's own code.
@@ -19020,6 +19089,13 @@ Off, `StepAfterDeathFade` refuses the step from 1 to 2: a body that has not begu
 stays, whole on both paths, and is never killed by the count. ModelProbe's `-fade <byte>`
 draws a slot at a point of its fade; ModernTest's group `corpse_fade` holds the curve,
 the wiring and the row.
+
+`specific/hd/hd_object.cpp` takes the byte per item, stores it in the entry's `fade` (255
+for the inventory and for Lara), draws the entries in two rounds in `HDObjectFrameDraw`,
+and leaves a fading entry out of the receive draw and of `HDObjectBlobGivesWay`;
+`specific/hd/hd_model.h` declares `HDModelFade`; `game/menu_frame.cpp` holds the row
+(`MenuValCorpses`, `MenuStepCorpses`); `game/gameflow.cpp`'s `CustomText` table holds the
+word in the five languages.
 
 **Decisions.** The skeleton keeps 255: its control writes `after_death` as a rise timer
 while it lives (`skeleton.cpp`). A card without the blend factor draws the body whole as
@@ -19064,6 +19140,10 @@ writes it under `-record` and under `-replay` sets `tomb5.corpses` from the head
 keeping the player's setting, which `ReplayStop` gives back; a shipping build has an
 empty `ReplaySettings` (`replay.h`). ModernTest's group `body_save` holds the branch, the
 fields and the header byte.
+
+`specific/replay.cpp` holds `ReplaySettings`, writes the header's Corpses byte
+(`ReplayHeaderWrite`'s new argument, read back into `g_corpses_rec`) and gives the
+player's setting back in `ReplayStop`.
 
 **Decisions.** A save of format 2 is refused rather than read without its bodies. Neither
 writer nor reader reads the switch: a body saved while it fades goes on as in play.
@@ -19149,6 +19229,9 @@ the cut latch. With `-log`, `CAMLOG level f= number= type= target= kept= why=` o
 pass the answer changes. ModernTest's group `level_camera_rule` holds the answers and the
 wiring.
 
+`game/modern_state.cpp`: comments only - the three that named the rich2 sniper camera as
+the one level camera Modern keeps name the kept cameras now.
+
 **Decisions.** A camera with no Target stays discarded even where its tile does
 something else (a spoken line, a crumbling floor, a door): a level fix that adds a Target
 is the way to keep one. First person keeps its own rule, all but the sniper camera
@@ -19191,6 +19274,21 @@ switch reader. `phd_atan` is `TOMB5_NOINLINE_IN_TEST` (#321's macro), so in a sh
 EXE `ATANLOG`'s `caller=` names the caller's caller. No line of the 40 release families
 changed. ModernTest's group `log_family_rule` holds the 44 names, every string of the 44
 inside its gate, and the 40 as they were.
+
+The gates by file: `game/camera.cpp` `CAMLOG`; `game/draw.cpp` `CAMLOG`, `JOINTLOG`,
+`POISONLOG`, `ROOMFLASH`, `ROOMLIST`, `ROOMPOP`, `ROOMWALK`, `ROPELOG` and `VISLOG`;
+`game/interpolate.cpp` `ARMLOG`, `BRIDGELOG`, `CAMLOG`, `INTERPLOG`, `KEYFARLOG`,
+`KEYSEAMLOG`, `RNGLOG`, `TICKLOG` and `TURNLOG`; `game/andrea.cpp` `COGLOG`;
+`game/chef.cpp` `BRAWLLOG`; `game/door.cpp` `DOORLOG`; `game/drone.cpp` `DRONELOG`;
+`game/effect2.cpp` and `specific/specificfx.cpp` `SPARKLOG`; `game/hair.cpp` `HAIRLOG`;
+`game/inventory_interp.cpp` `INVLOG`; `game/modern_state.cpp` `MODERNLOG`; `game/rope.cpp`
+`ROPELOG`; `game/twogun.cpp` `ZIPLOG` and `ZIPSKIP`; `specific/3dmath.cpp` `POISONLOG`,
+and `phd_atan` there; `specific/function_stubs.cpp` `HIGHLOG`, its pool pointer null
+outside a test build; `specific/hd/hd_laradraw.cpp` `HIDELOG`, `LARALOG`, `LIPLOG`,
+`SWAPLOG` and `XRAYLOG`; `specific/hd/hd_object.cpp` `LIPLOG`; `specific/hd/hd_level.cpp`
+`SPLASHLOG`; `specific/hd/hd_spring.cpp` `SPRINGLOG`; `specific/input.cpp` `COMBATLOG`,
+`KEYLOG`, `MODELOG`, `MODERNLOG`, `MOUSELOG` and `PADLOG`; `specific/winmain.cpp`
+`MOUSELOG` and the `-high` block.
 
 **Decisions.** A constant gate and not an `#ifdef` at each call site: the expression is
 still parsed, the line stays readable, and a local or helper that serves only the line
@@ -19252,6 +19350,8 @@ non-English blocks of `Preparation/extrastrings.txt`, whose key is the English w
 longest, *Fondu des cadavres* (183 glyph units on the game's font), is shorter than the
 longest label already on the tab (193), so every word clears the value column at every
 resolution.
+
+`game/menu_frame.cpp`: the row's `MENU_VALUE` label reads `Corpse fade`.
 
 **Decisions.** Nothing else moved: the registry key stays `corpses` and `tomb5.corpses`
 keeps its name, its default (on) and its meaning, so a setting saved before reads the
@@ -19419,6 +19519,8 @@ their control. The randomizer's half: `markTriggerSafeSectors` (`ApplyPatch.cpp`
 the AI block and `Randomizer.cpp` bars an added enemy's drawn spot within 512 of a marker
 in its room, `GetAIPickups`' own test.
 
+`game/box.h` declares `AILogReset`, `game/setup.h` declares `CreatureReadsAIMarkers`.
+
 **Decisions.** The rule is said by the control and not by a list of slots. In the 15
 vanilla levels all 38 pickups are by readers, and the non-readers there (dogs, lions, the
 Roman gods of Andrea2 and Andrea3) stand within reach of no marker, so vanilla plays
@@ -19555,6 +19657,8 @@ and `PierreScripted` are unchanged. The Raptor's control (`raptor.cpp`) calls th
 and sets `alerted`. ModernTest's group `marker_wake_rule` holds the two rules at their
 edges, the helper and its callers.
 
+`game/people.h` declares `CreatureSeesLara`.
+
 **Decisions.** The gladiator, imp, chef, brawler, hydra and maze monster take Lara as
 their enemy only when hurt, so the helper alone would change nothing they do; they are
 left here (#351 takes them on). The Sas family, Hitman/Cyborg, Mafia2, Twogun and the
@@ -19623,16 +19727,23 @@ removed. Vanilla carries no Raptor. ModernTest's group `marker_wake_rule` holds 
 the helper's calls before `GetAITarget` in the six controls and the two animals without
 it.
 
-**Decisions.** The Sas family, Hitman/Cyborg, Mafia2 and Twogun (the levels' own marker
-users with their own test against Lara); `PierreCanFlee` and `PierreScripted`; no new AI
-marker, no OCB change, no randomizer change. Nothing changes for a creature without marker
-bits, and nothing wakes earlier than a guard.
+`game/people.h` declares `CreatureWakesOnLara` in place of `CreatureSeesLara`;
+`game/box.cpp` writes the `AILOG drop` line of a wake (`AILogWake`, declared in
+`game/box.h`); `game/gladiatr.cpp`, `game/hydra.cpp`, `game/imp.cpp` and
+`game/willwisp.cpp` (`MazeMonsterControl`) include `people.h` and call the helper;
+`game/pierre.cpp` calls it when the item is not `PierreScripted`, and its comments lose
+the wake test of #350; `game/raptor.cpp` loses its `GetAITarget` call and the `people.h`
+include, `game/huskie.cpp` its `GetAITarget` call and the branches on the bits.
+
+**Decisions.** These stay untouched: the Sas family, Hitman/Cyborg, Mafia2 and Twogun (the
+levels' own marker users with their own test against Lara); `PierreCanFlee` and
+`PierreScripted`. No new AI marker, no OCB change, no randomizer change. Nothing changes
+for a creature without marker bits, and nothing wakes earlier than a guard.
 
 **Commits.** `bff94797`, `99d20811`.
 
 ### The credits screen names TRForge and FFmpeg (#360)
-
-2026-11-06.
+2026-11-06
 
 **What.** The "Tools and Libraries" rows of the credits screen name TRForge beside trview
 and FFmpeg beside stb.
@@ -19879,7 +19990,9 @@ forty-one modified, one moved out into `package/`, one removed.
   rather than skip the check against an already randomized level. zlib stayed in the
   engine alone until #308; no build line of the randomizer or of a diagnostic tool
   compiles it. The build id stays 23: a seed places the same things (`e7fa928e`,
-  `05c0c423`, `5a45193f`, `dd1c3c8e`, `ab00f0c1`, `9379893d`).
+  `05c0c423`, `5a45193f`, `dd1c3c8e`, `ab00f0c1`, `9379893d`). `FixCheck` lost its count
+  of the trigger object replacements, whose table `LevelFix.h` no longer has, and builds
+  again (`e345162f`).
 - **#307 - the background picture through Windows' own decoder.** `gui/Picture.cpp` /
   `.h` new, `gui/Main.cpp`, `build/b2.bat`; `libs/stb/stb_image.h` removed. The
   picture beside the GUI (`docs\Background.jpg`) is read through the Windows Imaging
@@ -19933,14 +20046,14 @@ forty-one modified, one moved out into `package/`, one removed.
   function is tied to another switch) are held by curation instead, in rich1's
   `FIXED_ITEMS` in `ZoneAnalysis.ps1` (`zones_rich1.json` gains them as `fixedItems`).
   `core/BuildId.h`: `RANDO_BUILD_ID` 24 to 25, `0.25`, because #346 and #352 change what a
-  seed writes (`f8ce36ae`, `9addc628`).
+  seed writes (`f8ce36ae`, `9addc628`; the id itself `3cfdbbe4`).
 - **#358 - the share code.** `core/ShareCode.cpp` / `.h` new, `gui/Main.cpp`,
-  `gui/Language.cpp`, `Randomize.cpp`, `SelfTest.cpp`, `build/b1.bat`, `build/b2.bat`:
-  one line (`TR5-`, format letter, build id, Crockford base 32, CRC-10) carries the
-  seed text and every setting of the window but folders, window size and language;
-  section 2 shows it with Copy and takes one with Apply, `code=` does the same in the
-  CLI, and a code of another build is refused. The effective value moved into the
-  core with the same formula, so a run draws as before (`7312e2f8`).
+  `gui/Language.cpp`, `Randomize.cpp`, `SelfTest.cpp`, `build/b1.bat`, `build/b2.bat`: one
+  line (`TR5-`, format letter, build id, Crockford base 32, CRC-10) carries the seed text
+  and every setting of the window but folders, window size and language; the window's
+  section 2 shows it with Copy and takes one with Apply, `code=` does the same in the CLI,
+  and a code of another build is refused. The effective value moved into the core with the
+  same formula, so a run draws as before (`7312e2f8`).
 
 ## 4. Building this yourself
 
@@ -20027,8 +20140,8 @@ own DLL, built from this very source tree's ancestor, and not the `tomb5.dll` of
 the Tomb Raider IV-VI Remaster, which this project never opens, links or reads**
 (the two names are spelled the same and mean different files). The upstream DLL
 carries the game code and does its work from `DllMain`; that is why upstream
-updates can ship as "dll only". This fork builds the Win32 target as an ordinary
-application with its own `WinMain`, so there is no DLL.
+updates can ship as "dll only". This fork builds both targets, Win32 and x64, as an
+ordinary application with its own `WinMain`, so there is no DLL; the 64-bit one ships.
 
 **No game data is included, here or in any release made from this tree.** Tomb
 Raider Chronicles itself remains the property of its rights holders; a copy of
@@ -20227,5 +20340,8 @@ entries above.
 | #350 | Larson and Pierre on an inherited marker see Lara |
 | #351 | A pool creature on a marker attacks as soon as it notices Lara |
 | #352 | section 3 (the randomizer); no engine entry: no file under `TOMB5 Code/TOMB5` changed |
+| #354 | no engine entry: the record, the ledger and the manuals themselves |
+| #355 | no engine entry: comments, the modification notices and the YUV comment - section 1 counts the notices; section 3 (the randomizer) |
+| #356 | no engine entry: `vendor/ffmpeg-min` - `THIRD-PARTY.md` |
 | #358 | section 3 (the randomizer) |
 | #360 | The credits screen names TRForge and FFmpeg |

@@ -185,6 +185,22 @@ foreach ($f in (Get-ChildItem $EngineSrc -Recurse -File)) {
 Say ("Source        : $copied files ({0:N1} MB) - GPLv3 obligation" -f `
     ((Get-ChildItem $srcOut -Recurse -File | Measure-Object Length -Sum).Sum/1MB))
 
+# The FFmpeg headers the engine's films compile against: tomb5.vcxproj
+# looks for them at ..\vendor\ffmpeg-min\include beside the engine folder,
+# so they sit at Source\vendor\ffmpeg-min\ with the build recipe, the
+# README and the licence. bin\ and lib\ stay out: the three DLLs already
+# lie beside the EXEs, and the engine loads them at run time, linking no
+# import library.
+$ffOut = "$OutDir\Source\vendor\ffmpeg-min"
+New-Item -ItemType Directory -Path $ffOut -Force | Out-Null
+$ffIn = "$Root\vendor\ffmpeg-min"
+Copy-Item "$ffIn\include" $ffOut -Recurse -Force
+foreach ($d in @('build-min.sh', 'README.md', 'COPYING.LGPLv2.1')) {
+    Copy-Item (Join-Path $ffIn $d) $ffOut -Force
+}
+$ffCount = (Get-ChildItem $ffOut -Recurse -File).Count
+Say "Source        : FFmpeg headers and recipe ($ffCount files, vendor\ffmpeg-min)"
+
 # The randomizer is a standalone program that reads and writes data files.
 # It is not a fork of the engine, but it is not wholly independent of it
 # either: src\core\Floor.h ports GetHeight and CheckNoColFloorTriangle
@@ -249,6 +265,9 @@ $tp = [IO.File]::ReadAllText("$Root\THIRD-PARTY.md")
 $tp = $tp.Replace('TOMB5 Code/', 'Source/TOMB5 engine/')
 $tp = $tp.Replace('TR5Randomizer/', 'Source/TR5Randomizer/')
 $tp = $tp.Replace('](LICENSE)', '](GPLv3.txt)')
+# FFmpeg: the DLLs lie in the package root, the rest under Source\vendor.
+$tp = $tp.Replace('`vendor/ffmpeg-min/bin` holds', 'the package root holds')
+$tp = $tp.Replace('`vendor/ffmpeg-min/', '`Source/vendor/ffmpeg-min/')
 [IO.File]::WriteAllText("$lic\THIRD-PARTY.md", $tp)
 $n = (Get-ChildItem $lic -File).Count
 Say "Licenses      : $n files (GPLv3, Dear ImGui, discord-rpc, stb, TRForge, FFmpeg LGPL)"

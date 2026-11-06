@@ -430,6 +430,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="resource.h" />
+    <ClInclude Include="TOMB5\game\ai_marker_rule.h" />
     <ClInclude Include="TOMB5\game\andrea.h" />
     <ClInclude Include="TOMB5\game\andy.h" />
     <ClInclude Include="TOMB5\game\autogun.h" />
@@ -498,6 +499,7 @@
     <ClInclude Include="TOMB5\game\lion.h" />
     <ClInclude Include="TOMB5\game\lot.h" />
     <ClInclude Include="TOMB5\game\mafia2.h" />
+    <ClInclude Include="TOMB5\game\marker_wake_rule.h" />
     <ClInclude Include="TOMB5\game\menu_frame.h" />
     <ClInclude Include="TOMB5\game\menu_nav.h" />
     <ClInclude Include="TOMB5\game\minisub.h" />
@@ -611,6 +613,7 @@
     <ClInclude Include="TOMB5\specific\input.h" />
     <ClInclude Include="TOMB5\specific\lighting.h" />
     <ClInclude Include="TOMB5\specific\LoadSave.h" />
+    <ClInclude Include="TOMB5\specific\log_families.h" />
     <ClInclude Include="TOMB5\specific\d3dmatrix.h" />
     <ClInclude Include="TOMB5\specific\output.h" />
     <ClInclude Include="TOMB5\specific\polyinsert.h" />

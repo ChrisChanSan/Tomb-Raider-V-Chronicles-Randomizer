@@ -753,6 +753,9 @@
     <ClInclude Include="TOMB5\specific\LoadSave.h">
       <Filter>TOMB5\specific</Filter>
     </ClInclude>
+    <ClInclude Include="TOMB5\specific\log_families.h">
+      <Filter>TOMB5\specific</Filter>
+    </ClInclude>
     <ClInclude Include="TOMB5\game\minisub.h">
       <Filter>TOMB5\game</Filter>
     </ClInclude>
@@ -801,6 +804,9 @@
     <ClInclude Include="TOMB5\game\twogun.h">
       <Filter>TOMB5\game</Filter>
     </ClInclude>
+    <ClInclude Include="TOMB5\game\ai_marker_rule.h">
+      <Filter>TOMB5\game</Filter>
+    </ClInclude>
     <ClInclude Include="TOMB5\game\andrea.h">
       <Filter>TOMB5\game</Filter>
     </ClInclude>
@@ -835,6 +841,9 @@
       <Filter>TOMB5\specific</Filter>
     </ClInclude>
     <ClInclude Include="TOMB5\game\mafia2.h">
+      <Filter>TOMB5\game</Filter>
+    </ClInclude>
+    <ClInclude Include="TOMB5\game\marker_wake_rule.h">
       <Filter>TOMB5\game</Filter>
     </ClInclude>
     <ClInclude Include="TOMB5\game\lion.h">

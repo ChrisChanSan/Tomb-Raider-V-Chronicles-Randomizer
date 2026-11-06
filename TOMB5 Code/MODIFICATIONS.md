@@ -4,7 +4,7 @@
 
 This is a modified version of **TOMB5**, the PC Tomb Raider Chronicles decompilation
 project by Troye/Trxyebeep and contributors, <https://github.com/Trxyebeep/TOMB5>. It
-was modified between **2026-07-30 and 2026-11-06** (ongoing) for the *TR5 Randomizer*
+was modified between **2026-07-30 and 2026-11-07** (ongoing) for the *TR5 Randomizer*
 project.
 
 The upstream code as received is preserved as the first commit of this repository (no
@@ -14008,7 +14008,7 @@ EXE's own folder (`_get_pgmptr`), then from the working directory.
 
 **Commits.** `402b671`, `e98d954`, `7575bd8`, `df9302b`, `b17c1a8`, `739f60f`
 
-## 2.10 Rounds after the cleanup (2026-10-16 to 2026-11-06)
+## 2.10 Rounds after the cleanup (2026-10-16 to 2026-11-07)
 
 The rounds that followed the cleanup of section 2.9, each one change to the engine with
 its reason, recorded in the same form as the entries above. Every round from #215 on
@@ -20055,6 +20055,11 @@ forty-one modified, one moved out into `package/`, one removed.
   and a code of another build is refused. The effective value moved into the core with the
   same formula, so a run draws as before (`7312e2f8`).
 
+- **#362 - Beta 6.0.** `core/BuildId.h`, `gui/TR5Randomizer.rc`, `Tools.rc`, `README.txt`,
+  `TOMB5 Code/tomb5.rc`, the manuals and the README: the version strings read Beta_6.0 and
+  6,0,0,0; the build id stays 25; the five pictures of the window, the tomb5 options page,
+  the settings files and the credits show 6.0 (`d3b994af`, `3949a920`, `d85b24b0`).
+
 ## 4. Building this yourself
 
 The published binary need not be trusted. Either:
@@ -20346,3 +20351,4 @@ entries above.
 | #358 | section 3 (the randomizer) |
 | #360 | The credits screen names TRForge and FFmpeg |
 | #361 | no engine entry: the record, the manuals and comments - `specific/hd/hd_vis.h`'s skyShared rule credits TROne; `BuildRelease.ps1`'s package copy of `THIRD-PARTY.md` gains the `docs/` rule and a sentence on `Preparation/` |
+| #362 | section 3 (the randomizer); Beta 6.0 - the version strings and the pictures |

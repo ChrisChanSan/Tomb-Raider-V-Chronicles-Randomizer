@@ -19630,6 +19630,23 @@ bits, and nothing wakes earlier than a guard.
 
 **Commits.** `bff94797`, `99d20811`.
 
+### The credits screen names TRForge and FFmpeg (#360)
+
+2026-11-06.
+
+**What.** The "Tools and Libraries" rows of the credits screen name TRForge beside trview
+and FFmpeg beside stb.
+
+**Why.** TRForge's format code is compiled into the engine and FFmpeg's three DLLs play
+the 64-bit engine's films; both were credited in THIRD-PARTY.md and the READMEs but not
+on the screen that names the other libraries. The screen is full, so each joins an
+existing row instead of taking one of its own.
+
+**How.** `tomb5/troyestuff.cpp`: the two rows read "trview by chreden - TRForge by its
+contributors" and "stb by Sean Barrett - FFmpeg by its developers".
+
+**Commits.** `4d611ceb`.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -20211,3 +20228,4 @@ entries above.
 | #351 | A pool creature on a marker attacks as soon as it notices Lara |
 | #352 | section 3 (the randomizer); no engine entry: no file under `TOMB5 Code/TOMB5` changed |
 | #358 | section 3 (the randomizer) |
+| #360 | The credits screen names TRForge and FFmpeg |

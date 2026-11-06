@@ -41,6 +41,7 @@
 #include "core/ScriptDat.h"
 #include "core/SecretList.h"
 #include "core/SecretReward.h"
+#include "core/ShareCode.h"
 #include "core/Tr5Level.h"
 #include "core/Tr3Source.h"
 
@@ -470,57 +471,87 @@ namespace
         bool phOutfitTr2 = false;       // TR2 outfits in the pool
         bool phOutfitTr3 = false;       // TR3 outfits in the pool
 
-        // The selection goes into the seed. Otherwise the same seed with
-        // different checkboxes produces a different game, and a bug report
-        // "seed X is unplayable" would not be reproducible - exactly what
-        // the seed mechanism is supposed to prevent. That is also why the
-        // effective value is shown below, not just the entered text.
+        // The value every draw of a run starts from: the seed text mixed
+        // with the switches that change the game. The formula lives in
+        // ShareCode::effectiveSeed, so the CLI repeats a run of this window
+        // from a share code. Shown below the seed field.
         uint64_t effectiveSeed() const
         {
-            uint64_t flags = 0;
-            if (optOtherPickups) flags |= 1;
-            if (optKeyItems)     flags |= 2;
-            if (optEnemies)          flags |= 4;
-            if (optEnemyPool == 1)   flags |= 8;    // cross mix
-            if (optEnemySwap)        flags |= 16;
-            if (optOutfits)          flags |= 32;
-            if (optOutfitsTr3)       flags |= 128;
-            if (optEnemyPool == 2)   flags |= 64;   // allsanity
-            // Bit 64 was briefly "all weapons everywhere" - since those are
-            // standard, it now carries allsanity.
-            // The count belongs in the seed just like the checkboxes: with 3
-            // and with 12 enemies it is not the same game.
-            flags |= static_cast<uint64_t>(optEnemyCount & 0xFF) << 8;
-            // The same for the item amount.
-            flags |= static_cast<uint64_t>(optItemAmount & 0x3) << 16;
-            // Weather. Bits 0-7 are the checkboxes above, 8-15 the
-            // enemy count, 16-17 the item amount - so 18 is the next free
-            // one. Whoever adds an option next takes bit 19.
-            if (optWeather) flags |= 1ull << 18;
-
-            // FNV-1a over seed text and selection, so both enter equally - a
-            // mere XOR would have produced similar results for neighboring
-            // flags.
-            uint64_t h = SeedText::parse(seedBuf);
-            for (int i = 0; i < 8; ++i)
-            {
-                h ^= (flags >> (i * 8)) & 0xFF;
-                h *= 0x100000001B3ull;
-            }
-
-            // The wardrobe belongs in the seed just as the checkboxes do: the
-            // same seed with only the catsuit left on is not the same game as
-            // with everything. A std::set walks in sorted order, so the hash
-            // does not depend on the order things were clicked.
-            for (std::set<std::string>::const_iterator it = optOutfitsOff.begin();
-                 it != optOutfitsOff.end(); ++it)
-                for (size_t k = 0; k < it->size(); ++k)
-                {
-                    h ^= static_cast<unsigned char>((*it)[k]);
-                    h *= 0x100000001B3ull;
-                }
-            return h;
+            Config c = cfg;
+            toConfig(c);
+            return ShareCode::effectiveSeed(c);
         }
+
+        // The window's settings into c, and back. The two are the only
+        // mapping between the window and Config: the start-up, the settings
+        // file and the share code all go through them. Folders, window size
+        // and language are left alone in both directions.
+        void toConfig(Config& c) const
+        {
+            c.optOtherPickups = optOtherPickups;
+            c.optKeyItems     = optKeyItems;
+            c.optEnemies      = optEnemies;
+            c.enemyCount      = optEnemyCount;
+            c.optEnemySwap    = optEnemySwap;
+            c.enemyPool       = optEnemyPool;
+            c.enemiesDisabled = optEnemiesOff;
+            c.optOutfits      = optOutfits;
+            c.optOutfitsTr3   = optOutfitsTr3;
+            c.outfitsDisabled = optOutfitsOff;
+            c.itemAmount      = optItemAmount;
+            c.secrets         = optSecrets;
+            c.secretRewards   = optSecretRewards;
+            c.secretAuthor    = secretAuthor;
+            c.optMusicSwitch   = phMusicSwitch;
+            c.optMusicTrigger  = phMusicTrigger;
+            c.optLevelSections = phLevelSections;
+            c.optLevelOrder    = optLevelOrder;
+            c.optWeather       = optWeather;
+            c.balWeapons     = static_cast<int>(balWeapons * 100.0f + 0.5f);
+            c.balEnemyHealth = static_cast<int>(balEnemyHealth * 100.0f + 0.5f);
+            c.balEnemyDamage = static_cast<int>(balEnemyDamage * 100.0f + 0.5f);
+            c.balWeaponsRandom     = balWeaponsRandom;
+            c.balEnemyHealthRandom = balEnemyHealthRandom;
+            c.balEnemyDamageRandom = balEnemyDamageRandom;
+            c.seedText = seedBuf;
+        }
+
+        // The slider positions come from c here; the start-up then lets
+        // a Balance.txt in the installation win (see main).
+        void fromConfig(const Config& c)
+        {
+            std::snprintf(seedBuf, sizeof(seedBuf), "%s", c.seedText.c_str());
+            optOtherPickups  = c.optOtherPickups;
+            optKeyItems      = c.optKeyItems;
+            optEnemies       = c.optEnemies;
+            optEnemyCount    = c.enemyCount;
+            optEnemySwap     = c.optEnemySwap;
+            optEnemyPool     = c.enemyPool;
+            optEnemiesOff    = c.enemiesDisabled;
+            optOutfits       = c.optOutfits;
+            optOutfitsTr3    = c.optOutfitsTr3;
+            optOutfitsOff    = c.outfitsDisabled;
+            optItemAmount    = c.itemAmount;
+            optSecrets       = c.secrets;
+            optSecretRewards = c.secretRewards;
+            secretAuthor     = c.secretAuthor;
+            phMusicSwitch    = c.optMusicSwitch;
+            phMusicTrigger   = c.optMusicTrigger;
+            phLevelSections  = c.optLevelSections;
+            optLevelOrder    = c.optLevelOrder;
+            optWeather       = c.optWeather;
+            balWeaponsRandom     = c.balWeaponsRandom;
+            balEnemyHealthRandom = c.balEnemyHealthRandom;
+            balEnemyDamageRandom = c.balEnemyDamageRandom;
+            balWeapons     = c.balWeapons / 100.0f;
+            balEnemyHealth = c.balEnemyHealth / 100.0f;
+            balEnemyDamage = c.balEnemyDamage / 100.0f;
+        }
+
+        // Section 2's share code row: the paste field and the answer to
+        // the last Apply.
+        char        codePaste[256] = {};
+        std::string codeNote;
 
         // --- Debug tool: fill sectors with markers ---
         //
@@ -2200,8 +2231,8 @@ static void drawUi(App& a, HWND hwnd)
 
     closeBlock(&a.heights.install);
 
-    // --- 2. Seed ---
-    openBlock("k_seed", "2. Seed", fSeed, remainingHeight(a.heights.install + gapY));
+    // --- 2. Seed / share code ---
+    openBlock("k_seed", "2. Seed / share code", fSeed, remainingHeight(a.heights.install + gapY));
     ImGui::TextWrapped(T("The same seed always produces the same game. Any input is valid - "
                          "even a word."));
     ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 90.0f);
@@ -2213,6 +2244,48 @@ static void drawUi(App& a, HWND hwnd)
         std::snprintf(a.seedBuf, sizeof(a.seedBuf), "%s", s.c_str());
     }
     ImGui::TextDisabled(T("effective: 0x%016llX"), (unsigned long long)a.effectiveSeed());
+
+    // The share code: the seed text and every setting of the window in one
+    // line (ShareCode.h), made anew each frame from what stands right now.
+    // Apply takes another code over as if every switch had been set by
+    // hand; the folders, the window and the language stay as they are.
+    {
+        Config now = a.cfg;
+        a.toConfig(now);
+        std::string code = ShareCode::make(now);
+        ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 90.0f);
+        ImGui::InputText("##sharecode", code.data(), code.size() + 1,
+                         ImGuiInputTextFlags_ReadOnly);
+        ImGui::SameLine();
+        if (ImGui::Button(T("Copy"))) ImGui::SetClipboardText(code.c_str());
+
+        ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 90.0f);
+        ImGui::InputTextWithHint("##sharepaste", T("Paste a code"),
+                                 a.codePaste, sizeof(a.codePaste));
+        ImGui::SameLine();
+        // Not while a run is going: its levels would draw from two sets of
+        // switches.
+        ImGui::BeginDisabled(a.phase != App::Phase::Idle);
+        if (ImGui::Button(T("Apply")))
+        {
+            std::string why;
+            if (ShareCode::apply(a.codePaste, now, why))
+            {
+                a.fromConfig(now);
+                a.cfg = now;
+                a.cfg.save();
+                // The sliders moved as if dragged: Balance.txt follows,
+                // as it does for a drag.
+                if (!a.gameDir().empty()) writeBalanceOut(a);
+                a.codeNote = T("Applied - every setting and the seed text "
+                               "are taken over.");
+            }
+            else
+                a.codeNote = std::string(T("Not applied: ")) + why;
+        }
+        ImGui::EndDisabled();
+        if (!a.codeNote.empty()) ImGui::TextWrapped("%s", a.codeNote.c_str());
+    }
     closeBlock();
 
     ImGui::EndGroup();
@@ -2889,48 +2962,27 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
     App app;
     app.cfg.load();
     gGermanUi = app.cfg.germanUi;   // language, default English
-    std::snprintf(app.seedBuf, sizeof(app.seedBuf), "%s",
-                  app.cfg.seedText.empty() ? SeedText::format(SeedText::random()).c_str()
-                                           : app.cfg.seedText.c_str());
-
     // Restore the saved selection, so the checkboxes are the same again
-    // on the next start.
-    app.optOtherPickups = app.cfg.optOtherPickups;
-    app.optKeyItems     = app.cfg.optKeyItems;
-    app.optEnemies      = app.cfg.optEnemies;
-    app.optEnemyCount   = app.cfg.enemyCount;
-    app.optEnemySwap    = app.cfg.optEnemySwap;
-    app.optEnemyPool    = app.cfg.enemyPool;
-    app.optEnemiesOff   = app.cfg.enemiesDisabled;
-    app.optOutfits      = app.cfg.optOutfits;
-    app.optOutfitsTr3   = app.cfg.optOutfitsTr3;
-    app.optOutfitsOff   = app.cfg.outfitsDisabled;
-    app.optItemAmount   = app.cfg.itemAmount;
-    app.optSecrets      = app.cfg.secrets;
-    app.optSecretRewards = app.cfg.secretRewards;
-    app.secretAuthor     = app.cfg.secretAuthor;
-    app.phMusicSwitch     = app.cfg.optMusicSwitch;
-    app.phMusicTrigger    = app.cfg.optMusicTrigger;
-    app.phLevelSections = app.cfg.optLevelSections;
-    app.optLevelOrder     = app.cfg.optLevelOrder;
-    app.optWeather        = app.cfg.optWeather;
+    // on the next start. A first start has no seed text yet: it gets one.
+    app.fromConfig(app.cfg);
+    if (app.cfg.seedText.empty())
+        std::snprintf(app.seedBuf, sizeof(app.seedBuf), "%s",
+                      SeedText::format(SeedText::random()).c_str());
 
     // Balance.txt: if it already exists in the installation, IT is right
     // and not our cfg - it may have been hand-edited in Notepad, and then
     // the sliders should show what really applies. Only if nothing stands
     // there does the last remembered slider position apply.
     {
-        app.balWeaponsRandom        = app.cfg.balWeaponsRandom;
-        app.balEnemyHealthRandom   = app.cfg.balEnemyHealthRandom;
-        app.balEnemyDamageRandom = app.cfg.balEnemyDamageRandom;
-
         const BalanceFile::Values vals = BalanceFile::read(app.gameDir());
         const bool present = PathUtil::fileExists(
             PathUtil::join(app.gameDir(), L"Balance.txt"));
-
-        app.balWeapons        = (present ? vals.weaponDamage : app.cfg.balWeapons)        / 100.0f;
-        app.balEnemyHealth   = (present ? vals.enemyHealth   : app.cfg.balEnemyHealth)   / 100.0f;
-        app.balEnemyDamage = (present ? vals.enemyDamage : app.cfg.balEnemyDamage) / 100.0f;
+        if (present)
+        {
+            app.balWeapons     = vals.weaponDamage / 100.0f;
+            app.balEnemyHealth = vals.enemyHealth / 100.0f;
+            app.balEnemyDamage = vals.enemyDamage / 100.0f;
+        }
 
         // Cranked further by hand than the sliders reach? Then the slider
         // clamps onto its track - but nothing is written until the slider
@@ -2955,32 +3007,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
             app.cfg.winW = r.right - r.left;
             app.cfg.winH = r.bottom - r.top;
         }
-        app.cfg.optOtherPickups = app.optOtherPickups;
-        app.cfg.optKeyItems     = app.optKeyItems;
-        app.cfg.optEnemies      = app.optEnemies;
-        app.cfg.enemyCount      = app.optEnemyCount;
-        app.cfg.optEnemySwap    = app.optEnemySwap;
-        app.cfg.enemyPool       = app.optEnemyPool;
-        app.cfg.enemiesDisabled = app.optEnemiesOff;
-        app.cfg.optOutfits      = app.optOutfits;
-        app.cfg.optOutfitsTr3   = app.optOutfitsTr3;
-        app.cfg.outfitsDisabled = app.optOutfitsOff;
-        app.cfg.itemAmount      = app.optItemAmount;
-        app.cfg.secrets         = app.optSecrets;
-        app.cfg.secretRewards   = app.optSecretRewards;
-        app.cfg.secretAuthor     = app.secretAuthor;
-        app.cfg.optMusicSwitch     = app.phMusicSwitch;
-        app.cfg.optMusicTrigger    = app.phMusicTrigger;
-        app.cfg.optLevelSections = app.phLevelSections;
-        app.cfg.optLevelOrder      = app.optLevelOrder;
-        app.cfg.optWeather         = app.optWeather;
-        app.cfg.balWeapons        = static_cast<int>(app.balWeapons * 100.0f + 0.5f);
-        app.cfg.balEnemyHealth   = static_cast<int>(app.balEnemyHealth * 100.0f + 0.5f);
-        app.cfg.balEnemyDamage = static_cast<int>(app.balEnemyDamage * 100.0f + 0.5f);
-        app.cfg.balWeaponsRandom        = app.balWeaponsRandom;
-        app.cfg.balEnemyHealthRandom   = app.balEnemyHealthRandom;
-        app.cfg.balEnemyDamageRandom = app.balEnemyDamageRandom;
-        app.cfg.seedText        = app.seedBuf;
+        app.toConfig(app.cfg);
         app.cfg.save();
     };
 

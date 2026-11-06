@@ -26,17 +26,20 @@
 // the level's texture blocks are unpacked and packed right. Each would
 // otherwise only show once a player reports a broken level.
 //----------------------------------------------------------------------------
+#include "core/BuildId.h"
 #include "core/DataFile.h"
 #include "core/DataFolder.h"
 #include "core/Inflate.h"
 #include "core/Json.h"
 #include "core/Rng.h"
+#include "core/ShareCode.h"
 
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <map>
 #include <string>
+#include <utility>
 #include <vector>
 
 static int g_failed = 0;
@@ -452,6 +455,195 @@ static void testCopyAndRestore(const char* csv, const char* dataDir, const char*
     }
 }
 
+// The share code (ShareCode.h): every travelling field comes back as it
+// went in, and a code that is not exactly what make() wrote is refused.
+static void testShareCode()
+{
+    std::printf("Share code\n");
+
+    Config def;
+    check(def.seedText.empty(), "the default Config has no seed text");
+    std::string err;
+    {
+        Config back;
+        back.optKeyItems = false;   // something apply must overwrite
+        const bool ok = ShareCode::apply(ShareCode::make(def), back, err);
+        check(ok && ShareCode::sameSettings(back, def), "round trip: default Config");
+    }
+
+    // Every switch on, every number at the top of its range.
+    Config all;
+    all.seedText = "MN6T3HSDR2QPF";
+    all.optOtherPickups = all.optKeyItems = all.optEnemies = true;
+    all.optEnemySwap = all.optOutfits = all.optOutfitsTr3 = true;
+    all.secretRewards = all.optMusicSwitch = all.optMusicTrigger = true;
+    all.optLevelSections = all.optWeather = true;
+    all.balWeaponsRandom = all.balEnemyHealthRandom = all.balEnemyDamageRandom = true;
+    all.enemyCount = 20; all.enemyPool = 2; all.itemAmount = 2;
+    all.secrets = 3; all.optLevelOrder = 2;
+    all.balWeapons = 200; all.balEnemyHealth = 200; all.balEnemyDamage = 200;
+    all.secretAuthor = "ChrisChanSan";
+    {
+        Config back;
+        const bool ok = ShareCode::apply(ShareCode::make(all), back, err);
+        check(ok && ShareCode::sameSettings(back, all), "round trip: every switch on");
+    }
+
+    // Sets with several entries, an empty author, the sliders at the
+    // bottom of their range.
+    Config sets;
+    sets.seedText = "Christmas";
+    sets.enemiesDisabled = { 1, 47, 49, 127, 128, 460, 471, 473, 16000 };
+    sets.outfitsDisabled = { "Lara_Andrea", "Lara_Joby", "tr3_catsuit" };
+    sets.balWeapons = 0; sets.balEnemyHealth = 50; sets.balEnemyDamage = 50;
+    sets.enemyCount = 1;
+    {
+        Config back;
+        back.secretAuthor = "someone";
+        const bool ok = ShareCode::apply(ShareCode::make(sets), back, err);
+        check(ok && ShareCode::sameSettings(back, sets) && back.secretAuthor.empty(),
+              "round trip: sets with several entries, empty author");
+    }
+
+    // 40 characters with spaces and umlauts (UTF-8, 44 bytes).
+    Config text;
+    text.seedText = "Gr\xC3\xBC\xC3\x9F" "e aus K\xC3\xB6ln und M\xC3\xBCnchen, Tag 12 von 3";
+    check(text.seedText.size() == 44, "the umlaut text is 44 bytes");
+    {
+        Config back;
+        const bool ok = ShareCode::apply(ShareCode::make(text), back, err);
+        check(ok && back.seedText == text.seedText &&
+              ShareCode::sameSettings(back, text),
+              "round trip: seed text with spaces and umlauts");
+    }
+
+    // The fields that belong to one machine stay as they were.
+    {
+        Config mine;
+        mine.sourceDir = L"D:\\Games\\TRC";
+        mine.tr3Dir = L"D:\\Games\\TR3";
+        mine.winW = 1234; mine.winH = 777; mine.germanUi = true;
+        const bool ok = ShareCode::apply(ShareCode::make(all), mine, err);
+        check(ok && mine.sourceDir == L"D:\\Games\\TRC" && mine.tr3Dir == L"D:\\Games\\TR3" &&
+              mine.winW == 1234 && mine.winH == 777 && mine.germanUi,
+              "folders, window and language are not carried");
+    }
+
+    const std::string code = ShareCode::make(all);
+
+    // Lower case, blanks and missing dashes are read the same.
+    {
+        std::string lower;
+        for (char ch : code)
+            if (ch != '-')
+                lower.push_back((ch >= 'A' && ch <= 'Z') ? static_cast<char>(ch - 'A' + 'a') : ch);
+        Config back;
+        const bool ok = ShareCode::apply("  " + lower + "\r\n", back, err);
+        check(ok && ShareCode::sameSettings(back, all), "lower case without dashes accepted");
+    }
+
+    // A wrong check digit.
+    {
+        std::string bad = code;
+        char& last = bad[bad.size() - 1];
+        last = (last == 'Z') ? 'Y' : 'Z';
+        Config back = def;
+        const bool ok = ShareCode::apply(bad, back, err);
+        check(!ok && ShareCode::sameSettings(back, def) &&
+              err.find("does not check out") != std::string::npos,
+              "wrong check digit refused, nothing applied");
+    }
+
+    // Every digit of the code, replaced by every other digit: refused.
+    {
+        int tried = 0, passed = 0;
+        const char* digits = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+        for (size_t i = 4; i < code.size(); ++i)
+        {
+            if (code[i] == '-') continue;
+            for (const char* d = digits; *d; ++d)
+            {
+                if (*d == code[i]) continue;
+                std::string bad = code;
+                bad[i] = *d;
+                Config back;
+                ++tried;
+                if (ShareCode::apply(bad, back, err)) ++passed;
+            }
+        }
+        std::printf("  %d codes with one digit changed\n", tried);
+        check(tried > 1000 && passed == 0, "every single changed digit refused");
+    }
+
+    // Two neighbouring digits swapped.
+    {
+        int tried = 0, passed = 0;
+        std::string flat;
+        for (char ch : code) if (ch != '-') flat.push_back(ch);
+        for (size_t i = 3; i + 1 < flat.size(); ++i)
+        {
+            if (flat[i] == flat[i + 1]) continue;
+            std::string bad = flat;
+            std::swap(bad[i], bad[i + 1]);
+            Config back;
+            ++tried;
+            if (ShareCode::apply(bad, back, err)) ++passed;
+        }
+        check(tried > 20 && passed == 0, "every swap of two neighbours refused");
+    }
+
+    // A code of another build: refused whole, with both build numbers.
+    {
+        const std::string other = ShareCode::makeForBuild(all, RANDO_BUILD_ID + 1);
+        Config back = def;
+        const bool ok = ShareCode::apply(other, back, err);
+        char want[64];
+        std::snprintf(want, sizeof(want), "from build 0.%d; this is 0.%d",
+                      RANDO_BUILD_ID + 1, RANDO_BUILD_ID);
+        check(!ok && ShareCode::sameSettings(back, def) &&
+              err.find(want) != std::string::npos,
+              "code of another build refused");
+        std::printf("  %s\n", err.c_str());
+    }
+
+    // Truncated: the last group, or the last digit, missing.
+    {
+        const std::string cut1 = code.substr(0, code.rfind('-'));
+        const std::string cut2 = code.substr(0, code.size() - 1);
+        Config back;
+        check(!ShareCode::apply(cut1, back, err) && !ShareCode::apply(cut2, back, err) &&
+              !ShareCode::apply("TR5-A", back, err) && !ShareCode::apply("", back, err),
+              "truncated code refused");
+    }
+
+    // Not a code at all.
+    {
+        Config back;
+        check(!ShareCode::apply("MN6T3HSDR2QPF", back, err) &&
+              !ShareCode::apply(code + "U", back, err),
+              "seed text or a foreign character refused");
+    }
+
+    // The effective value is the GUI's formula, pinned: a change to it
+    // changes every game, so it must show here.
+    {
+        Config pin;
+        pin.seedText = "Christmas";
+        pin.optEnemies = true; pin.enemyPool = 1; pin.optEnemySwap = true;
+        pin.optOutfits = true; pin.itemAmount = 2; pin.optWeather = true;
+        pin.outfitsDisabled = { "Lara_Joby" };
+        const uint64_t v = ShareCode::effectiveSeed(pin);
+        std::printf("  effective value of the pinned settings: 0x%016llX\n",
+                    static_cast<unsigned long long>(v));
+        check(v == 0xB2AA237E267BD99Dull, "effective value unchanged");
+        check(ShareCode::effectiveSeed(def) != SeedText::parse(def.seedText),
+              "the switches enter the effective value");
+    }
+
+    std::printf("  default Config: %s\n", ShareCode::make(def).c_str());
+    std::printf("  every switch on: %s\n", code.c_str());
+}
+
 int main(int argc, char** argv)
 {
     std::printf("TR5Randomizer - core self-test\n\n");
@@ -460,6 +652,8 @@ int main(int argc, char** argv)
     testJson();
     std::printf("\n");
     testInflate();
+    std::printf("\n");
+    testShareCode();
     std::printf("\n");
     testDataRule(argc > 1 ? argv[1] : nullptr);
     if (argc > 1)

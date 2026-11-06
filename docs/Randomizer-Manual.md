@@ -23,7 +23,7 @@ up when you need it.
 - [Your first run](#your-first-run)
 - [The seed](#the-seed)
 - [1. Your installation](#1-your-installation)
-- [2. Seed](#2-seed)
+- [2. Seed / share code](#2-seed--share-code)
 - [3. Items](#3-items)
 - [4. Outfits](#4-outfits)
 - [5. Enemies](#5-enemies)
@@ -166,9 +166,52 @@ Tomb Raider 3, and The Lost Artifact. See
 
 ---
 
-## 2. Seed
+## 2. Seed / share code
 
-Covered above: [The seed](#the-seed).
+The seed field, "Roll" and the `effective:` line are covered above:
+[The seed](#the-seed).
+
+Under them stands the **share code**: one line that carries the seed text
+**and every setting of the window** — the boxes of sections 3 to 8, the
+enemy count, the deselected enemy kinds, the wardrobe, the item amount, the
+secret kind and list author, music, level sections and order, weather, the
+three balance sliders and their "Random" boxes. It is everything the table
+above calls "not in the effective seed" as well, so two people with the same
+code get the same game, not just the same seed.
+
+- The **top field** shows the code of the settings as they stand right now;
+  it changes as you tick a box. **"Copy"** puts it on the clipboard — paste
+  it into a message, a bug report, a forum post.
+- The **lower field** takes someone else's code. **"Apply"** sets every
+  switch, slider and the seed text from it, as if you had set them by hand,
+  and remembers them like any other change; the balance sliders write
+  `Balance.txt` as a drag would. The line below says "Applied" or why the
+  code was refused. Apply is greyed out while a run is going.
+
+What a code does **not** carry: your folders (Chronicles, Tomb Raider 3,
+The Lost Artifact), the window size and the language — those belong to your
+machine. Nor which levels you unticked in the level list.
+
+A code is tied to the **build** it was made with (`Build 0.24` at the top of
+the window). A code from another build is refused as a whole — "this code is
+from build 0.23; this is 0.24 - settings may differ" — because the same
+settings may draw another game there. Ask for a code from your build, or use
+the build it names.
+
+The code ends in two check characters. A mistyped or missing character is
+refused ("does not check out"), never half applied. Case, spaces and the
+dashes do not matter; `O` reads as `0`, `I` and `L` as `1`.
+
+The code of the default settings, with an empty seed field, on build 0.24:
+
+```
+TR5-A0R-0C00C-00000-068S3-40000-000-1R
+```
+
+The command line takes the same code: `Randomize.exe <zones.json> x
+<source.trc> <target.trc> code=TR5-...` sets the seed text and every switch
+from it and writes the level the window would write. Switches given after it
+override the code's.
 
 ---
 

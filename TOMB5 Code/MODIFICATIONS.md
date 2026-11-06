@@ -20839,6 +20839,13 @@ modified, one moved out into `package/`, one removed.
   `core/SecretList.cpp`, `gui/Main.cpp`: what showed, cleared with no change to what
   the programs do - checked on the output of thirteen levels in five switch sets
   against the build before #324, the same bytes everywhere (`7a959d63`).
+- **#358 - the share code.** `core/ShareCode.cpp` / `.h` new, `gui/Main.cpp`,
+  `gui/Language.cpp`, `Randomize.cpp`, `SelfTest.cpp`, `build/b1.bat`, `build/b2.bat`:
+  one line (`TR5-`, format letter, build id, Crockford base 32, CRC-10) carries the
+  seed text and every setting of the window but folders, window size and language;
+  section 2 shows it with Copy and takes one with Apply, `code=` does the same in the
+  CLI, and a code of another build is refused. The effective value moved into the
+  core with the same formula, so a run draws as before (`7312e2f8`).
 
 ## 4. Building this yourself
 
@@ -21070,3 +21077,4 @@ entries above.
 | #350 | Larson and Pierre on an inherited marker see Lara |
 | #351 | A pool creature on a marker attacks as soon as it notices Lara |
 | #352 | The swap spares a fixture only for a replacement that cannot move |
+| #358 | section 3 (the randomizer) |

@@ -16,14 +16,16 @@
 #        call "C:\Program Files\Microsoft Visual Studio\18\Community\VC\
 #              Auxiliary\Build\vcvars64.bat"
 #        set MSYS2_PATH_TYPE=inherit
-#        C:\msys64\usr\bin\bash.exe -lc "sh /c/CLOUDE~1/.../build-min.sh"
+#        C:\msys64\usr\bin\bash.exe -lc "sh build-min.sh SRC BUILD PREFIX"
 #      so that cl, link, lib and dumpbin of that VS are on PATH inside
 #      bash. MSYS2 has its own /usr/bin/link.exe; configure's
 #      compat/windows/mslink finds the MSVC one next to cl.exe.
-#   2. This script, from that bash. It needs the paths below WITHOUT
-#      blanks: configure refuses an out-of-tree build whose source path
-#      contains whitespace, so "C:\Cloude AI" is reached by its 8.3 name
-#      CLOUDE~1 (check with "dir /x C:\").
+#   2. This script, from that bash, with three MSYS paths, for example
+#        sh build-min.sh /c/src/ffmpeg/src /c/src/ffmpeg/build /c/src/ffmpeg/out
+#      SRC is the extracted snapshot (SRC/configure exists), BUILD the
+#      build folder, PREFIX the install folder. The paths must carry no
+#      blank: configure refuses an out-of-tree build whose source path
+#      contains whitespace.
 #
 # The source tree stays untouched: configure runs in BUILD, make install
 # writes PREFIX/bin (DLLs), PREFIX/lib (import libs) and PREFIX/include.
@@ -32,12 +34,19 @@
 # is "bink" there (its codec name is "binkvideo"). No --enable-parser: the
 # Bink demuxer needs none, and --disable-everything leaves them all off.
 # --disable-x86asm because there is no nasm; the Bink decoders are C.
+# -d1trimfile cuts the source folder off __FILE__ (the av_assert strings),
+# so the DLLs do not carry the folder the build ran in.
 
 set -e
 
-SRC=/c/CLOUDE~1/FFmpeg/FFmpeg-master
-BUILD=/c/CLOUDE~1/FFmpeg/build-min
-PREFIX=/c/CLOUDE~1/FFmpeg/out-min
+if [ $# -ne 3 ]; then
+    echo "usage: sh build-min.sh <src> <build> <prefix>" >&2
+    exit 2
+fi
+SRC=$1
+BUILD=$2
+PREFIX=$3
+TRIM=$(cygpath -m "$SRC")/
 
 mkdir -p "$BUILD"
 cd "$BUILD"
@@ -50,7 +59,8 @@ cd "$BUILD"
     --disable-x86asm --disable-debug \
     --enable-demuxer=bink \
     --enable-decoder=bink,binkaudio_dct,binkaudio_rdft \
-    --enable-protocol=file
+    --enable-protocol=file \
+    --extra-cflags="-d1trimfile:$TRIM"
 
 make -j8
 make install

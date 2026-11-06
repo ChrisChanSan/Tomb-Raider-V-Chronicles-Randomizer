@@ -1,4 +1,4 @@
-TR5 Randomizer  Beta_5.0
+TR5 Randomizer  Beta_6.0
 ========================
 
 What is in here

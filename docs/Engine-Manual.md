@@ -4,7 +4,7 @@
 
 # The engine — the manual
 
-**PCTomb5.exe, Beta_5.0**
+**PCTomb5.exe, Beta_6.0**
 
 A native 64-bit Windows build of Tomb Raider Chronicles: Direct3D 9 and XAudio2,
 no wrappers, one 64-bit executable and the six DLLs that lie beside it. This

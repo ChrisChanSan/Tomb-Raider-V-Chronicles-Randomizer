@@ -42,8 +42,8 @@ CREATEPROCESS_MANIFEST_RESOURCE_ID RT_MANIFEST "..\\Program.manifest"
 // strings; keep both in step with RANDO_VERSION_STRING in BuildId.h, and
 // with src\Tools.rc, which carries the same block for the CLI programs.
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION 5,0,0,0
- PRODUCTVERSION 5,0,0,0
+ FILEVERSION 6,0,0,0
+ PRODUCTVERSION 6,0,0,0
  FILEFLAGSMASK 0x3fL
  FILEFLAGS 0x0L
  FILEOS 0x40004L
@@ -56,12 +56,12 @@ BEGIN
         BEGIN
             VALUE "CompanyName", "ChrisChanSan"
             VALUE "FileDescription", "Tomb5 Port Randomizer"
-            VALUE "FileVersion", "Beta_5.0"
+            VALUE "FileVersion", "Beta_6.0"
             VALUE "InternalName", "TR5Randomizer.exe"
             VALUE "LegalCopyright", "GPLv3. Copyright 2026 ChrisChanSan."
             VALUE "OriginalFilename", "TR5Randomizer.exe"
             VALUE "ProductName", "TR5 Randomizer"
-            VALUE "ProductVersion", "Beta_5.0"
+            VALUE "ProductVersion", "Beta_6.0"
         END
     END
     BLOCK "VarFileInfo"

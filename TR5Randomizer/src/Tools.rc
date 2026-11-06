@@ -29,8 +29,8 @@ CREATEPROCESS_MANIFEST_RESOURCE_ID RT_MANIFEST "Program.manifest"
 
 // What Windows shows in the file properties.
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION 5,0,0,0
- PRODUCTVERSION 5,0,0,0
+ FILEVERSION 6,0,0,0
+ PRODUCTVERSION 6,0,0,0
  FILEFLAGSMASK 0x3fL
  FILEFLAGS 0x0L
  FILEOS 0x40004L
@@ -43,12 +43,12 @@ BEGIN
         BEGIN
             VALUE "CompanyName", "ChrisChanSan"
             VALUE "FileDescription", TOOL_DESCRIPTION
-            VALUE "FileVersion", "Beta_5.0"
+            VALUE "FileVersion", "Beta_6.0"
             VALUE "InternalName", TOOL_FILE
             VALUE "LegalCopyright", "GPLv3. Copyright 2026 ChrisChanSan."
             VALUE "OriginalFilename", TOOL_FILE
             VALUE "ProductName", "TR5 Randomizer"
-            VALUE "ProductVersion", "Beta_5.0"
+            VALUE "ProductVersion", "Beta_6.0"
         END
     END
     BLOCK "VarFileInfo"

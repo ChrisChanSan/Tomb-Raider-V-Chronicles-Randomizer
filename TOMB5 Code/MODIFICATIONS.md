@@ -20317,10 +20317,10 @@ marker wakes as one without. A Raptor without a marker hunts Lara from its first
 
 **Vanilla.** #345's probe of the 15 levels in `data/Backup` lists three Larsons (Andrea1
 34 and 35, Trajan Markets 76; OCB 1, 2, 1), no Pierre, no Raptor, and no AI object within
-512 of a Larson, so none takes a marker: `TOSSPAD & 0x1F00` is 0, `item_flags[3]` is his OCB, and
-`PierreScripted` equals `item_flags[3] != 0` - the idle reads the same as before. The new
-wake branch needs `!PierreScripted`: Trajan's scripted Larson, whose AMBUSH start makes
-the marker his enemy, and the 40-HP flight keep the old test word for word.
+512 of a Larson, so none takes a marker: `TOSSPAD & 0x1F00` is 0, `item_flags[3]` is his
+OCB, and `PierreScripted` equals `item_flags[3] != 0` - the idle reads the same as before.
+The new wake branch needs `!PierreScripted`: Trajan's scripted Larson, whose AMBUSH start
+makes the marker his enemy, and the 40-HP flight keep the old test word for word.
 
 **Checked.** ModernTest group `marker_wake_rule` (9 checks): the distance and the noise
 rule at their edges, the helper's body, Pierre's wake branch after `CreatureAIInfo` with

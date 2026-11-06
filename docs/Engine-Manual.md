@@ -5212,14 +5212,19 @@ In Trajan's Markets only the level's own Larson stands for his cutscene; a
 Larson the randomizer put there dies lying down like anywhere else.
 Larson and Pierre only flee where the level itself placed them and actually
 contains the marker they run to — fleeing without one makes them immortal.
-A Larson, Pierre or Raptor the randomizer put on a guard's patrol spot walks
-the patrol and notices Lara the way that guard would, instead of standing
-there until she shoots.
+A Larson, Pierre, gladiator, imp, chef, brawler, hydra or maze monster the
+randomizer put on a guard's spot walks that guard's patrol or stands his
+watch until it notices Lara - she comes into sight, runs close by, a shot
+rings out nearby, or she hurts it - and then attacks her at once: no detour
+to an ambush point first, no standing and turning on the spot. With `-log`
+each such moment writes an `AILOG drop ... why=sight`, `why=noise` or
+`why=hurt` line. The chef in the kitchen of the Submarine level keeps his
+vegetables and the stealth kill behind him exactly as before.
 Only the enemies whose behaviour follows the level's AI markers take one at
-the level start: a dog, a lion, a vulture, a compy, the T-Rex, the drone or a
-Roman god standing on a guard's or a patrol's spot leaves the marker to
-whoever reads it and fights as anywhere else, and a Roman god on a guard's
-spot strikes.
+the level start: a dog, a lion, a vulture, a compy, the T-Rex, the Raptor, a
+husky, the drone or a Roman god standing on a guard's or a patrol's spot
+leaves the marker to whoever reads it and fights as anywhere else - an animal
+goes for Lara at once - and a Roman god on a guard's spot strikes.
 Enemies do not switch to a low-detail distance model at range, because the
 engine takes whatever sits in the next model slot, which in a foreign level is
 something else entirely. And a mesh swap a cutscene performs on Lara is undone
@@ -5327,7 +5332,7 @@ wrote it, and each seam answers a different question:
 | …and something moved it later | `ITEMWATCH` — who wrote which room number, and when |
 | the game crashes in the first moment after a savegame is loaded, or an enemy loses its target with the load | `SAVELOG` — at a load one line per enemy: `item=`, the four bytes the save holds (`stored=`), how they were read (`how=null`, by number `tag_item` and `tag_ai`, by distance for a save from an earlier build `legacy_ok` and `legacy_null`) and what its target is now (`enemy=item n`, `ai n` or `null`); a `SAVELOG general` line for the thing Lara is busy with (`side=`, `general=`, and `how=tag_num` for an item's number); `SAVELOG save pool` and `load pool` with the memory pool's start and where its items and AI slots lie, and `POOL base=` once at the start of the game - two logs show whether it moved |
 | an enemy carries an item off, or does not | `CARRYLOG` — at the level start, one line per pickup within a carrier's reach: the carrier, the item, its OCB and offset, whether it was carried or left on its wall, and the carrier's pass: `pass=search` for a search object, `pass=enemy` for an enemy - the search objects take what is in their reach first, so an enemy gets only what no search object holds |
-| an enemy stands passive, walks no patrol, or another enemy's patrol or ambush breaks off | `AILOG` — at the level start one `AILOG start` line per enemy within reach of an AI marker: `item=`, `obj=`, `reads=` (1 when its kind follows markers), the `bits=` and `if3=` it took, the `marker=` with its `kind=` and `ocb=`, and `consumed=`; in play one line per event of a marker-reading enemy: `AILOG goal` (a marker reached), `AILOG drop` (a bit given up on an alert, a hurt or a hit, `modify=1` when an ambush turned into MODIFY), `AILOG miss` (the first search that found no marker) and, after 64 lines of one enemy, `AILOG quiet` |
+| an enemy stands passive, walks no patrol, or another enemy's patrol or ambush breaks off | `AILOG` — at the level start one `AILOG start` line per enemy within reach of an AI marker: `item=`, `obj=`, `reads=` (1 when its kind follows markers), the `bits=` and `if3=` it took, the `marker=` with its `kind=` and `ocb=`, and `consumed=`; in play one line per event of a marker-reading enemy: `AILOG goal` (a marker reached), `AILOG drop` (a bit given up on an alert, a hurt or a hit, `modify=1` when an ambush turned into MODIFY; or, with `why=sight`, `why=noise` or `why=hurt` and `enemy=lara`, every bit an enemy carried dropped at once because it noticed Lara), `AILOG miss` (the first search that found no marker) and, after 64 lines of one enemy, `AILOG quiet` |
 | the outfit looks wrong, a limb is misplaced | `SKINLOG` — the skin's bone stack; `OBJLOG skinning done` ends in the seam pieces sewn and, by joint number, those left out (`joints_used=`, `left_out=`) |
 | the first person view sits wrong | `FPHEAD`, `ALTERFOV` — the head bone per frame, and the field of view |
 | a cutscene actor or Lara holds nothing where the classic game shows a thing in the hand | `swap=` at the end of `HDLOG cutseq actor` — every node carrying a mesh of another slot, that slot and mesh, and what drew it: a model, `own` or `classic`; `HDLOG cutswap` on every change later in the cutscene; `shows=` at the end of `SWAPLOG` for Lara |

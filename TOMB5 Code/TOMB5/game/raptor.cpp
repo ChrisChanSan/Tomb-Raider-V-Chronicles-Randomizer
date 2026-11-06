@@ -62,6 +62,7 @@
 #include "control.h"
 #include "lara.h"
 #include "lot.h"
+#include "people.h"
 #include "items.h"
 #include "../specific/function_stubs.h"
 
@@ -130,6 +131,14 @@ void RaptorControl(short item_number)
 			raptor->enemy = lara_item;
 
 		CreatureAIInfo(item, &info);
+
+		// On a marker's errand the marker is its enemy, and it has no wake
+		// test of its own: it stood there until hurt or shot at. It looks at
+		// Lara as a guard does (#350); the alert drops the PATROL1 or GUARD
+		// bit in GetAITarget as for a guard on that spot. No TR5 level gives
+		// a Raptor a marker: only a randomized one has it.
+		if (raptor->enemy != lara_item && CreatureSeesLara(item))
+			raptor->alerted = 1;
 
 		if (info.ahead)
 			head = info.angle;

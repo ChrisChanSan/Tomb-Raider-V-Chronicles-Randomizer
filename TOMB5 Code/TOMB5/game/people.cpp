@@ -26,6 +26,7 @@
 #include "../specific/3dmath.h"
 #include "gameflow.h"
 #include "lara.h"
+#include "marker_wake_rule.h"
 
 long TargetVisible(ITEM_INFO* item, AI_INFO* info)
 {
@@ -51,6 +52,33 @@ long TargetVisible(ITEM_INFO* item, AI_INFO* info)
 	target.y = enemy->pos.y_pos + ((bounds[3] + 3 * bounds[2]) >> 2);
 	target.z = enemy->pos.z_pos;
 	return LOS(&start, &target);
+}
+
+// Whether a creature whose enemy is an AI marker notices Lara (#350): the
+// guard's wake test (sas.cpp, mafia2.cpp) made against her, not against
+// the marker - near and running, a hit, or in sight. TargetVisible reads
+// the creature's enemy, so Lara stands in for the marker for that call.
+long CreatureSeesLara(ITEM_INFO* item)
+{
+	CREATURE_INFO* creature;
+	ITEM_INFO* enemy;
+	AI_INFO lara_info;
+	long dx, dz, seen;
+
+	creature = (CREATURE_INFO*)item->data;
+	dx = lara_item->pos.x_pos - item->pos.x_pos;
+	dz = lara_item->pos.z_pos - item->pos.z_pos;
+	lara_info.distance = MarkerWakeDistance(dx, dz);
+
+	if (MarkerWakeByNoise(lara_info.distance, lara_item->speed, item->hit_status))
+		return 1;
+
+	lara_info.angle = (short)(phd_atan(dz, dx) - item->pos.y_rot);
+	enemy = creature->enemy;
+	creature->enemy = lara_item;
+	seen = TargetVisible(item, &lara_info);
+	creature->enemy = enemy;
+	return seen;
 }
 
 long Targetable(ITEM_INFO* item, AI_INFO* info)

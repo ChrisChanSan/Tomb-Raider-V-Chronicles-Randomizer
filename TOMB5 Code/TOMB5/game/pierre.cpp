@@ -41,6 +41,11 @@ static BITE_INFO pierre_gun2 = { -57, 200, 0, 14 };
 // leaves them 0, bits 13-15 hold the angle) and SetupGame rebuilds it on
 // every load. No marked specimen stands on an AI object, so a mark next to
 // a pickup is the marker's, not the level's.
+//
+// Everything a mark changes asks this, never item_flags[3] alone: the
+// stand-and-turn idle, the flight, the stop at a goal, the death. An
+// unmarked one with a pickup walks to its marker, and while the marker is
+// his enemy he looks at Lara for his wake test (CreatureSeesLara, #350).
 static long PierreScripted(ITEM_INFO* item)
 {
 	return item->item_flags[3] && !(item->TOSSPAD & 0x1F00);
@@ -166,7 +171,7 @@ void PierreControl(short item_number)
 	ROOM_INFO* r;
 	AI_INFO info;
 	PHD_VECTOR pos;
-	long x, y, z;
+	long x, y, z, awake;
 	short angle, tilt, head, torso_x, torso_y, room_number;
 
 	if (!CreatureActive(item_number))
@@ -315,7 +320,18 @@ void PierreControl(short item_number)
 		GetCreatureMood(item, &info, 1);
 		CreatureMood(item, &info, 1);
 
-		if (info.distance < 0x400000 && lara_item->speed > 20 || item->hit_status || TargetVisible(item, &info))
+		// A marker he picked up at level start is his enemy while its bit
+		// sends him there, and info measures the marker: he woke only when
+		// hurt. One the level did not mark looks at Lara then, as a guard
+		// does (#350); the bits fall in GetAITarget's alert path. The
+		// marked ones (all vanilla) keep their own test.
+		if (pierre->enemy != lara_item && !PierreScripted(item))
+			awake = CreatureSeesLara(item);
+		else
+			awake = info.distance < 0x400000 && lara_item->speed > 20 ||
+				item->hit_status || TargetVisible(item, &info);
+
+		if (awake)
 		{
 			item->ai_bits &= ~GUARD;
 			pierre->alerted = 1;
@@ -338,11 +354,13 @@ void PierreControl(short item_number)
 				item->goal_anim_state = 3;
 			else if (Targetable(item, &info))
 				item->goal_anim_state = 4;
-			else if (item->ai_bits & GUARD || item->item_flags[3])
+			else if (item->ai_bits & GUARD || PierreScripted(item))
 			{
 				// Stand and turn toward Lara. Trajan Markets once sent every
 				// Larson here; its scripted one carries item_flags[3] 1 from
 				// his first tick, a pool one walks as in every other level.
+				// A marker's OCB in item_flags[3] is no mark (#350): it kept
+				// him turning toward the marker instead of walking there.
 				pierre->maximum_turn = 0;
 				item->goal_anim_state = 1;
 

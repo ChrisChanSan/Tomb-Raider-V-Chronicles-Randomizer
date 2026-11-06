@@ -2,6 +2,7 @@
 #include "../global/types.h"
 
 long TargetVisible(ITEM_INFO* item, AI_INFO* info);
+long CreatureSeesLara(ITEM_INFO* item);
 long Targetable(ITEM_INFO* item, AI_INFO* info);
 short GunShot(long x, long y, long z, short speed, short yrot, short room_number);
 short GunHit(long x, long y, long z, short speed, short yrot, short room_number);

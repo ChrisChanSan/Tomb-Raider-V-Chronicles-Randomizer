@@ -10,6 +10,7 @@ void GetCarriedItems();
 void InitialiseGameFlags();
 void ClearFootPrints();
 void reset_cutseq_vars();
+bool CreatureReadsAIMarkers(short object_number);
 void GetAIPickups();
 void BuildOutsideTable();
 void SetupGame();

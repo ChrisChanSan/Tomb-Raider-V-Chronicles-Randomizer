@@ -33,8 +33,8 @@
 // the two halves actually match. The id is still bumped and written into
 // spoiler.txt, which keeps a bug report traceable.
 //----------------------------------------------------------------------------
-#define RANDO_BUILD_ID      24
-#define RANDO_BUILD_STRING  "0.24"
+#define RANDO_BUILD_ID      25
+#define RANDO_BUILD_STRING  "0.25"
 
 // The published version, and a different thing from the build id above.
 // That one counts revisions of the curation data and decides whether two

@@ -235,6 +235,19 @@ void Patch::markTriggerSafeSectors(const Tr5Level& level, RandoInput& in)
     in.weatherRooms = level.weatherRooms();
     in.vanillaWeather = level.weatherType();
 
+    // The AI markers the level start hands out (#346, RandoInput::
+    // aiMarkers): AI_GUARD 378 to AI_FOLLOW 382. AI_PATROL2 and the kinds
+    // behind it give no bits and stay out.
+    {
+        std::vector<Tr5AiObject> ai;
+        in.aiMarkers.clear();
+        if (level.aiObjects(ai))
+            for (size_t i = 0; i < ai.size(); ++i)
+                if (ai[i].objectNumber >= 378 && ai[i].objectNumber <= 382)
+                    in.aiMarkers.push_back({ static_cast<int>(i), ai[i].objectNumber,
+                                             ai[i].roomNumber, ai[i].x, ai[i].z, ai[i].ocb });
+    }
+
     // Collect the slope entries of all placement sectors - ALWAYS, even if
     // no trigger pass is needed below: every item placement needs them for
     // height and walkability (RandoInput::slopes).

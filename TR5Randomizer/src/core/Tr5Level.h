@@ -236,6 +236,11 @@ public:
     // and consumes them afterwards (room_number = NO_ROOM).
     bool    addAiObject(const Tr5AiObject& in, std::string& error);
 
+    // Reads the AI block as LoadAIInfo (specific/file.cpp) does: every AI
+    // object in file order, its index in `out` the engine's AIObjects
+    // index. false (and `out` empty) when the block does not fit the file.
+    bool    aiObjects(std::vector<Tr5AiObject>& out) const;
+
     // Appends an item at the end. That is the only way to add items:
     // appending shifts no existing indices, so the triggers' "Object N"
     // references stay valid. There is deliberately NO removal here - it

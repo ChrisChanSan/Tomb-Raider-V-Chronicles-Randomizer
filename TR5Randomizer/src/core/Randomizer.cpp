@@ -2957,6 +2957,39 @@ bool Rando::run(const RandoInput& in,
             const Spot p = spots[pick];
             spots.erase(spots.begin() + static_cast<ptrdiff_t>(pick));
 
+            // No new enemy within reach of an AI marker (#346).
+            //
+            // GetAIPickups (setup.cpp) hands every marker of kind AI_GUARD
+            // to AI_FOLLOW within 512 in x and z in the same room to the
+            // intelligent item standing there at the level start and uses
+            // up all but AI_GUARD: an extra enemy, which comes behind the
+            // Core items, takes what they left - the twin an ambush runs
+            // to, the next point of a patrol. Measured in #345: an added
+            // huskie on rich2's ai7 ended guard 219's patrol before the
+            // marker that opens door 220 again, and two added enemies on
+            // Andy2's FOLLOW markers left the will-o'-wisp without a path.
+            // The test is the engine's, on the position written below
+            // (the sector centre, in this sector's room). It bars the spot
+            // as it is drawn, not in the list above: a level whose draw
+            // never lands on a marker keeps every draw it had.
+            {
+                const RoomOrigin& roA = origin[p.s->room];
+                const int ax = roA.originX + p.s->sectorX * 1024 + 512;
+                const int az = roA.originZ + p.s->sectorZ * 1024 + 512;
+                const RandoInput::AiMarker* hit = nullptr;
+                for (const RandoInput::AiMarker& m : in.aiMarkers)
+                    if (m.room == p.s->room && std::abs(m.x - ax) < 512 &&
+                        std::abs(m.z - az) < 512) { hit = &m; break; }
+                if (hit)
+                {
+                    report.notes.push_back(fmt("enemy spot %d,%d,%d barred: AI marker %d (kind %d, OCB %d) "
+                                               "is within reach, the level start would hand it over.",
+                                               p.s->room, p.s->sectorX, p.s->sectorZ,
+                                               hit->index, hit->kind, hit->ocb));
+                    continue;
+                }
+            }
+
             // Only here does the trigger get decided: up to the selection,
             // other enemies may have occupied sectors.
             long long trigger = -1;

@@ -2,7 +2,7 @@
 #
 # GitHub guesses a project's languages by counting file extensions, and it
 # counts everything - including the vendored libraries. zlib, which the
-# engine carried until #308, shipped example bindings in Ada, C#, Pascal and
+# engine carried until it got its own inflater, shipped example bindings in Ada, C#, Pascal and
 # Java under contrib, so the language bar announced this project as partly
 # Ada. That is not a small cosmetic point: the bar is the first thing a
 # visitor reads about what the code IS.

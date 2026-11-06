@@ -69,7 +69,7 @@
  *   skyReach 1024  a sector, the width of a room's wall ring: the skyline
  *                  past the east wall of ANDREA2's courtyard (room 223)
  *                  stands 889 units off its floor plan
- *   skyNear 0      the box of #286. At 1, a triangle - the reach read
+ *   skyNear 0      the box alone. At 1, a triangle - the reach read
  *                  literally, of the art and not of its box -, 64 of the
  *                  501 pairs of the fifteen levels have no triangle
  *                  within the reach: ANDREA3's shaft over the cave (room

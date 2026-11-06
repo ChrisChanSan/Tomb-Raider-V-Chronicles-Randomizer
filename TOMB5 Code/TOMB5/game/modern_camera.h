@@ -39,12 +39,12 @@
  * engine wants is derived from the world yaw on every tick, and the return is
  * the only thing that brings the camera home.
  *
- * TROne (GPLv3) held its orbit as a world angle too in TROne-main (copy of
- * 2026-09-13), and that was the only thing in common: TROne's orbit there
+ * TROne (GPLv3) held its orbit as a world angle too in an earlier
+ * TROne-main, and that was the only thing in common: TROne's orbit there
  * never returned behind the player, this one falls home at
  * MODERN_CAMERA_RETURN whenever she moves and the stick is at rest. No code
  * of TROne is copied here; TROne runs this camera itself
- * (TROne-main, copy of 2026-10-06, commit 75c4c843, docs\CONTROLS.md 4.8).
+ * (TROne-main, commit 75c4c843, docs\CONTROLS.md 4.8).
  * The shared idea is that a camera angle is a state and not a derivation.
  *
  * No engine header is included, like game\modern_move.h:
@@ -607,7 +607,7 @@ inline long ModernCameraZoomLerp(long from, long to, float alpha)
 	return from + (long)((float)(to - from) * alpha);
 }
 
-/* Which level camera the orbit keeps (#335), the pure part of
+/* Which level camera the orbit keeps, the pure part of
  * CalculateCamera's decision in game\camera.cpp.
  *
  * A trigger's Camera command makes the camera FIXED, or HEAVY when an item

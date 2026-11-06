@@ -430,6 +430,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="resource.h" />
+    <ClInclude Include="TOMB5\game\ai_marker_rule.h" />
     <ClInclude Include="TOMB5\game\andrea.h" />
     <ClInclude Include="TOMB5\game\andy.h" />
     <ClInclude Include="TOMB5\game\autogun.h" />
@@ -498,6 +499,7 @@
     <ClInclude Include="TOMB5\game\lion.h" />
     <ClInclude Include="TOMB5\game\lot.h" />
     <ClInclude Include="TOMB5\game\mafia2.h" />
+    <ClInclude Include="TOMB5\game\marker_wake_rule.h" />
     <ClInclude Include="TOMB5\game\menu_frame.h" />
     <ClInclude Include="TOMB5\game\menu_nav.h" />
     <ClInclude Include="TOMB5\game\minisub.h" />
@@ -611,6 +613,7 @@
     <ClInclude Include="TOMB5\specific\input.h" />
     <ClInclude Include="TOMB5\specific\lighting.h" />
     <ClInclude Include="TOMB5\specific\LoadSave.h" />
+    <ClInclude Include="TOMB5\specific\log_families.h" />
     <ClInclude Include="TOMB5\specific\d3dmatrix.h" />
     <ClInclude Include="TOMB5\specific\output.h" />
     <ClInclude Include="TOMB5\specific\polyinsert.h" />
@@ -724,7 +727,7 @@
   </PropertyGroup>
   <!-- Asan|x64: the 64-bit engine under AddressSanitizer, for test runs
        only (basan.bat, releaseasan\PCtomb5_asan.exe). v145 as the other
-       four since #326; it was first here because the older toolset's
+       four; it was first here because the older toolset's
        sanitizer runtime stops at its own start on this Windows ("ASan init calls
        itself"). No whole-program optimisation, /O1, no incremental
        link, no run-time checks; the gate as in the other four. -->

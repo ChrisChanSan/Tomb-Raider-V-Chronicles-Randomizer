@@ -282,14 +282,14 @@ struct HDVisLevelRow
 
 static const HDVisLevelRow kHDVisLevelRows[] =
 {
-	// #334: the colosseum's tiers through the caves, the gallery box over
-	// the arena (hd_vis.cpp, the sky groups). #344: and linked, the tiers
-	// stay out of the rooms below the lids of 122 and 125.
+	// The colosseum's tiers show through the caves, the gallery box over
+	// the arena (hd_vis.cpp, the sky groups); linked, the tiers stay out
+	// of the rooms below the lids of 122 and 125.
 	{ "ANDREA3", 1, 1, 1 },
-	// #342: the flyby's island over the valley, seen from the mill.
+	// The flyby's island over the valley, seen from the mill.
 	{ "ANDY3", 0, 0, 1 },
-	// #344: the title's night backdrop wall stays in its own scene. #348:
-	// and out of the Irish hill, room 54, as a guest (hd_vis.cpp).
+	// The title's night backdrop wall stays in its own scene and out of
+	// the Irish hill, room 54, as a guest (hd_vis.cpp).
 	{ "TITLE", 0, 0, 1 },
 };
 

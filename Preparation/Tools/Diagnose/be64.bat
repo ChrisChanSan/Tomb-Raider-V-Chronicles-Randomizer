@@ -2,8 +2,8 @@
 rem be64 - build the engine as a 64-bit program.
 rem
 rem The same engine as be.bat, compiled for x64: release64\PCtomb5.exe,
-rem the shipping name itself (#339; the package writes it PCTomb5.exe).
-rem Since #324 this is the build that ships. The 32-bit one of be.bat is
+rem the shipping name itself (the package writes it PCTomb5.exe). This is
+rem the build that ships. The 32-bit one of be.bat is
 rem release\PCtomb5_x86.exe, built on request to compare against - its own
 rem folder and its own name, so neither build overwrites the other.
 rem
@@ -57,7 +57,7 @@ if errorlevel 1 (
 )
 echo   FFmpeg DLLs copied to %OUT%\
 
-rem The C++ runtime (#324): the engine links it as DLLs (/MD), and the
+rem The C++ runtime: the engine links it as DLLs (/MD), and the
 rem three it imports - vcruntime140.dll, vcruntime140_1.dll, msvcp140.dll -
 rem go beside the EXE from the compiler's own redist folder, the one
 rem vcvars64 names in VCToolsRedistDir. The folder's version is read, not

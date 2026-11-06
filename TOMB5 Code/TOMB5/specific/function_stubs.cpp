@@ -45,7 +45,7 @@ static long rand_2 = 0xD371F947;
 
 void init_game_malloc()
 {
-	// -high is a test build's (winmain.cpp, #338): a shipping one takes the
+	// -high is a test build's (winmain.cpp): a shipping one takes the
 	// pool from the heap, always.
 #ifdef TOMB5_TEST_BUILD
 	const HighReserve* high = HighReserveDone();
@@ -396,9 +396,9 @@ void Log(const char* s, ...)
 #endif
 }
 
-/* The log's end, once (WinMain, after WinClose). It used to close in
- * GameClose, before WinClose and its ReplayClose had written: the
- * recorder's end line and every later line went into a closed FILE*.
+/* The log's end, once (WinMain, after WinClose). Not in GameClose, which
+ * runs before WinClose and its ReplayClose have written: the recorder's
+ * end line and every later line would go into a closed FILE*.
  * gLogEnabled goes first, so a Log() after this is the no-op of its first
  * test - and never LogText's reopening, which would empty log.txt. */
 void LogClose()

@@ -24,15 +24,15 @@
  *
  * DoRain simulates on the frame that carries the tick, around that frame's
  * camera and with the draw's generator, so how many drops land - and where
- * - hangs on the frame timing. What they left used to go into the logic's
- * own arrays: each splash took a slot of the spark array through the
- * logic's search for a free spark and moved its cursor, each ripple a slot
- * of ripples[], and both drew from the logic's generator. The draws were
- * given back at the end of the frame at the display's rate; the
- * slots and the cursor were not, so the next spark the logic made - a link
- * of a chained explosion - landed in another slot from one run to the next,
- * and whether it aged in the same pass of UpdateSparks moved its fire by a
- * tick. At thirty, one exact frame per tick, it never varied.
+ * - hangs on the frame timing. In the logic's own arrays each splash
+ * would take a slot of the spark array through the logic's search for a
+ * free spark and move its cursor, each ripple a slot of ripples[], and
+ * both would draw from the logic's generator. The draws are given back
+ * at the end of the frame at the display's rate; the slots and the cursor
+ * are not, so the next spark the logic made - a link of a chained
+ * explosion - would land in another slot from one run to the next, and
+ * whether it aged in the same pass of UpdateSparks would move its fire by
+ * a tick. Only at thirty, one exact frame per tick, would it not vary.
  *
  * Here they are the weather's: arrays of the same structs, so the same
  * lines draw them (S_DrawOneSpark, S_DrawOneRipple), made with the draw's
@@ -305,7 +305,7 @@ void WeatherRipplesStep()
  * step and forward again on every tick.
  *
  * A splash is drawn as a line (no SF_DEF), so the sprite's far-plane cull
- * in S_DrawDrawSparksNEW (#320: it no longer ends a spark) is never reached
+ * in S_DrawDrawSparksNEW (it ends no spark) is never reached
  * for one; it would not matter if it were - nothing in the logic reads
  * these. */
 long WeatherSparksDraw()

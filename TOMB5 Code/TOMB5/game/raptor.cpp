@@ -121,10 +121,10 @@ void RaptorControl(short item_number)
 		// the Raptor would maul its own reinforcements instead of hunting
 		// Lara.
 		//
-		// An animal follows no AI marker (#351): the port took over the
-		// human enemies' `if (ai_bits) GetAITarget` line, and a Raptor on a
-		// guard's spot walked to the marker or stood there until hurt or
-		// shot at. Its control left the readers (ai_marker_rule.h), so
+		// An animal follows no AI marker: a Raptor under the human enemies'
+		// `if (ai_bits) GetAITarget` line would walk to a guard's marker or
+		// stand there until hurt or shot at. Its control is not one of the
+		// readers (ai_marker_rule.h), so
 		// GetAIPickups hands it no bits and the marker stays for others -
 		// as with the T-Rex, compy, dog, lion and vulture. No TR5 level
 		// carries a Raptor. The bite effect on a non-Lara enemy further

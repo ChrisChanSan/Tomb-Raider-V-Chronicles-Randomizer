@@ -1057,12 +1057,12 @@ $FIXED_ITEMS = @{
         85 = 'scientist (room 34) - aim-at cutscene, stays vanilla'
         180 = 'Twogun (room 130) - stealth-kill sequence, stays vanilla'
         # The guard with OCB 4 in room 67 carries several scripted functions
-        # only he can; the swap's fixture test no longer holds him (it spares
-        # a fixture only for a stationary kind), so he is held here (#352).
-        110 = 'guard (room 67) - scripted functions, #353'
+        # only he can; the swap's fixture test does not hold him (it spares
+        # a fixture only for a stationary kind), so he is held here.
+        110 = 'guard (room 67) - scripted functions'
         # The Twogun in room 69 carries a function tied to another switch of
-        # the randomized level; held for the same reason as 110 (#352).
-        120 = 'Twogun (room 69) - scripted function tied to a switch (2026-11-06)'
+        # the randomized level; held for the same reason as 110.
+        120 = 'Twogun (room 69) - scripted function tied to a switch'
     }
     # rich2's guards (USSR) stay vanilla.
     'rich2'   = @{

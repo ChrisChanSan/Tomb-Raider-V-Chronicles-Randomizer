@@ -352,8 +352,8 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 	 * ModernCameraActive(), which reads the option, lara_item, the title, the
 	 * spotcam, the cutscene and first person, not the running camera. The
 	 * rich2 sniper camera, a camera whose trigger names a Target item and a
-	 * heavy trigger's camera are kept (game\camera.cpp's ModernLevelCamera,
-	 * #335), so FixedCamera runs, the orbit does not tick, and
+	 * heavy trigger's camera are kept (game\camera.cpp's ModernLevelCamera),
+	 * so FixedCamera runs, the orbit does not tick, and
 	 * ModernCameraActive() stays true. game\camera.cpp's stamp answers it:
 	 * ModernCameraWorldYaw declines unless the orbit ran on the tick before,
 	 * so the measured vector - the camera the player sees - is the reference
@@ -655,7 +655,7 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 	 * a level camera takes the view. cam_speed is 10 after every
 	 * CalculateCamera pass, a heavy camera the orbit discards included; a
 	 * heavy camera the orbit does not discard (in first person, or one the
-	 * orbit keeps: a heavy trigger's, #335) keeps the trigger's speed while
+	 * orbit keeps: a heavy trigger's) keeps the trigger's speed while
 	 * its timer runs, and a flyby writes its own 1 (game\spotcam.cpp).
 	 *
 	 * `cut` is sit.cam_cut, 1 on the tick the reference changed cameras (the

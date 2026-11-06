@@ -982,7 +982,7 @@ static void AtanSeam(long x, long y, void* caller)
 		(unsigned int)((uintptr_t)caller - (uintptr_t)GetModuleHandle(0)));
 }
 
-/* Not inlined in a test build (TOMB5_NOINLINE_IN_TEST, #338), so that
+/* Not inlined in a test build (TOMB5_NOINLINE_IN_TEST), so that
  * _ReturnAddress names the caller there; a shipping build inlines it, and
  * ATANLOG's caller= then names the caller's caller. */
 TOMB5_NOINLINE_IN_TEST long phd_atan(long x, long y)

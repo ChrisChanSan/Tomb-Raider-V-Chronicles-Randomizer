@@ -1630,7 +1630,7 @@ int __stdcall WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 
 #ifdef TOMB5_TEST_BUILD
 	/* -high (high_pool.h): every free region below 4 GB reserved before the
-	 * pool and the first level are allocated. A test build's only (#338),
+	 * pool and the first level are allocated. A test build's only,
 	 * with its HIGHLOG lines: a shipping EXE does not know the word. */
 	if (HighSwitchGiven(lpCmdLine))
 	{

@@ -7,7 +7,7 @@ rem runs only - it never goes into a package (Preparation\Verification.md,
 rem section 9, says how to run it and how to read its report).
 rem
 rem The configuration is built with the v145 toolset, as the other four
-rem are since #326; it took v145 first because the v142 sanitizer runtime
+rem are; it took v145 first because the v142 sanitizer runtime
 rem stops at its own start on Windows 11 ("ASan init calls itself!") before
 rem a line of the engine runs. v145 links the runtime as a DLL,
 rem clang_rt.asan_dynamic-x86_64.dll, which the EXE needs beside it; this
@@ -42,7 +42,7 @@ if errorlevel 1 (
 )
 echo   FFmpeg DLLs copied to releaseasan\
 
-rem The C++ runtime (#324): the engine links it as DLLs (/MD), and the
+rem The C++ runtime: the engine links it as DLLs (/MD), and the
 rem three it imports - vcruntime140.dll, vcruntime140_1.dll, msvcp140.dll -
 rem go beside the EXE from the compiler's own redist folder, the one
 rem vcvars64 names in VCToolsRedistDir. The folder's version is read, not

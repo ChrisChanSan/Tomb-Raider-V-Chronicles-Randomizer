@@ -14,7 +14,7 @@
 
 #include "chef_rule.h"
 
-/* A creature on an AI marker's errand attacks once it notices Lara (#351).
+/* A creature on an AI marker's errand attacks once it notices Lara.
  *
  * GetAITarget (box.cpp) makes the marker the creature's enemy while a
  * PATROL1, AMBUSH or FOLLOW bit sends it somewhere, and CreatureAIInfo

@@ -24,20 +24,23 @@
  *   G = 1.164 (Y - 16) - 0.391 (U - 128) - 0.813 (V - 128)
  *   B = 1.164 (Y - 16) + 2.018 (U - 128)
  *
- * in integers, each factor times 65536 and rounded, the sum shifted back
- * by 16 with rounding and clamped to 0..255. Row by row with each plane's
- * own linesize (the decoder may pad a row), so no frame is copied whole.
+ * with the factors in their textbook three-place form. In integers each
+ * is the exact one - 255/219 for Y, and 255/224 times BT.601's 1.402,
+ * 0.344136, 0.714136 and 1.772 for U and V - times 65536 and rounded,
+ * the sum shifted back by 16 with rounding and clamped to 0..255. Row by
+ * row with each plane's own linesize (the decoder may pad a row), so no
+ * frame is copied whole.
  *
  * No engine header: the engine (specific\fmv_av.cpp), BinkProbe's picture
  * file and ModernTest's three pixels compile this same file. */
 
 #include <stdint.h>
 
-#define YUV_RGB_Y	76309	// 1.164 * 65536
-#define YUV_RGB_RV	104597	// 1.596 * 65536
-#define YUV_RGB_GU	25675	// 0.391 * 65536
-#define YUV_RGB_GV	53279	// 0.813 * 65536
-#define YUV_RGB_BU	132201	// 2.018 * 65536
+#define YUV_RGB_Y	76309	// 255/219 * 65536 = 76309.04
+#define YUV_RGB_RV	104597	// 1.402 * 255/224 * 65536 = 104597.21
+#define YUV_RGB_GU	25675	// 0.344136 * 255/224 * 65536 = 25674.51
+#define YUV_RGB_GV	53279	// 0.714136 * 255/224 * 65536 = 53278.63
+#define YUV_RGB_BU	132201	// 1.772 * 255/224 * 65536 = 132201.33
 
 // One pixel: Y, U, V in, R, G, B out.
 void YuvRgbPixel(int y, int u, int v, uint8_t* r, uint8_t* g, uint8_t* b);

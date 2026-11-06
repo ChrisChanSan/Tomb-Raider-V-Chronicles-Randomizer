@@ -1695,7 +1695,7 @@ void FindAITargetObject(CREATURE_INFO* creature, short obj_num)
 	}
 }
 
-/* AILOG (#346, -log): the marker events of GetAITarget, one line per
+/* AILOG (-log): the marker events of GetAITarget, one line per
  * event and never one per frame - a goal reached (a PATROL1 goal once
  * per arrival, not for every frame the creature stands there), a bit
  * dropped by an alert, a hurt or a hit, and the first time a creature's
@@ -1768,7 +1768,7 @@ static void AILogDrop(CREATURE_INFO* creature, long bit, const char* why)
 }
 
 // A creature on a marker's errand woke on Lara (CreatureWakesOnLara,
-// people.cpp, #351): every bit it carried fell at once, Lara is its enemy.
+// people.cpp): every bit it carried fell at once, Lara is its enemy.
 // `bit` names them all, NONE when only a marker it had reached was left.
 void AILogWake(CREATURE_INFO* creature, long bits, const char* why)
 {

@@ -2125,12 +2125,12 @@ void DrawBinoculars()
 
 /* SPARKLOG (-log): one line where the draw culls a particle the logic
  * walks - a spark past the far plane (one carrying a chain), a drip or a
- * bubble out of reach. The draw used to end these there (`kill`), and what
- * the frame's camera decided the logic read on the next tick: a spark's
- * chained explosion (UpdateSparks, game\effect2.cpp), a drip's splash
- * (UpdateDrips, game\tomb4fx.cpp), a bubble's ripple (UpdateBubbles) - each
- * with draws from the logic generator. Now the draw only leaves them
- * undrawn and the logic ends them (#320). `frame` counts the frames drawn
+ * bubble out of reach. The draw only leaves them undrawn and the logic
+ * ends them, so what the frame's camera decides never reaches what the
+ * logic reads on the next tick: a spark's chained explosion (UpdateSparks,
+ * game\effect2.cpp), a drip's splash (UpdateDrips, game\tomb4fx.cpp), a
+ * bubble's ripple (UpdateBubbles) - each with draws from the logic
+ * generator. `frame` counts the frames drawn
  * since GlobalCounter last changed, 1 being the first; S_DrawSparks counts
  * them and runs before the drips and the bubbles in DrawPhaseGame
  * (game\draw.cpp). One line per particle (per reason for a bubble), on the
@@ -2606,10 +2606,9 @@ void S_DrawDrawSparksNEW(SPARKS* sptr, long smallest_size, float* xyz)
 	{
 		/* Not drawn, and nothing more: the spark lives on and ends in
 		 * UpdateSparks (game\effect2.cpp) by its Life, which also frees its
-		 * light. The draw used to end a spark past the far plane here, by
-		 * the frame's camera - blended on each of a tick's frames - so a
-		 * chained explosion (extras & 7) and its draws of the logic
-		 * generator went off or not by where the frames fell (#317, #320).
+		 * light. Ended here by the frame's camera - blended on each of a
+		 * tick's frames - a chained explosion (extras & 7) and its draws of the
+		 * logic generator would go off or not by where the frames fell.
 		 * A spark carrying a chain gets one SPARKLOG line. */
 		if (xyz[2] >= f_mzfar && LogFam_SPARKLOG && gLogEnabled &&
 			sptr->extras & 7 && SparkCullFirst(sptr))
@@ -3507,9 +3506,9 @@ void DrawDrips()
 			continue;
 
 		/* Too far in view to draw. The drip lives on and ends in UpdateDrips
-		 * (game\tomb4fx.cpp) by its Life, the floor or the water - the draw
-		 * used to end it here by the frame's camera, and with it a splash
-		 * and its draws of the logic generator (#320). */
+		 * (game\tomb4fx.cpp) by its Life, the floor or the water; ended here by
+		 * the frame's camera, it would take a splash and its draws of the logic
+		 * generator with it. */
 		if (Z[0] > 0x5000)
 		{
 			if (LogFam_SPARKLOG && gLogEnabled && DripCullFirst(i, drip))
@@ -3798,9 +3797,9 @@ void DrawBubbles()
 		/* Out of the frame's reach (the box, too far in view, too near the
 		 * eye): not drawn, and nothing more. The bubble lives on and ends in
 		 * UpdateBubbles (game\tomb4fx.cpp) at the floor, the ceiling or the
-		 * surface with its ripple. The draw used to set its size to 0 here,
-		 * by the frame's camera, and the logic skipped it - one ripple and
-		 * its draw of the logic generator less (#320). */
+		 * surface with its ripple. Its size is not set to 0 here: the logic
+		 * would skip it by the frame's camera, one ripple and its draw of the
+		 * logic generator less. */
 		if (dx < -0x5000 || dx > 0x5000 || dy < -0x5000 || dy > 0x5000 || dz < -0x5000 || dz > 0x5000)
 		{
 			if (LogFam_SPARKLOG && gLogEnabled &&

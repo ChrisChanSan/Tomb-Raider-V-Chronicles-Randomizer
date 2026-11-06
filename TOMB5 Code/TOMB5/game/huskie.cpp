@@ -73,12 +73,11 @@ void HuskieControl(short item_number)
 	}
 	else
 	{
-		// An animal follows no AI marker (#351): its control left the
+		// An animal follows no AI marker: its control is not one of the
 		// readers (ai_marker_rule.h), GetAIPickups hands it no bits and the
-		// marker stays where it lies. joby2's huskies sat on their GUARD
-		// marker (states 1 and 9, AIGuard) until Lara came within 3072 or
-		// hurt one; they attack at once now. With ai_bits always 0 the
-		// GUARD sit, the PATROL1 walk and the MODIFY rest below are gone.
+		// marker stays where it lies. A huskie on a GUARD marker attacks at
+		// once. With ai_bits always 0 there is no GUARD sit, PATROL1 walk or
+		// MODIFY rest here.
 		huskie->enemy = lara_item;
 
 		CreatureAIInfo(item, &info);

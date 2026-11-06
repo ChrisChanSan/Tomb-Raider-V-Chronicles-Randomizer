@@ -18896,8 +18896,8 @@ static void SpringBlocks(const char* stem, std::vector<HDSpringBlock>& out,
  *                     every room under the sky
  *   -visskynear <n>   how many of a sky group's triangles must stand near
  *                     the room for it to take the group (skyNear); 0 asks
- *                     the box alone. Unset, the level's row (#334,
- *                     HDVisLevelParams: 1 for ANDREA3, 0 elsewhere)
+ *                     the box alone. Unset, the level's row
+ *                     (HDVisLevelParams: 1 for ANDREA3, 0 elsewhere)
  *   -visskyshared 0|1 1 refuses the group of a room sharing the room's
  *                     inside with no link (skyShared); unset, the row's
  *   -visskylinked 0|1 1 refuses the group of a room in another part of

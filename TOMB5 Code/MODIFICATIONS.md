@@ -19636,7 +19636,7 @@ The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
 `TR5Randomizer.exe` - is this project's own work from the first line, so it owes
 nobody a GPLv3 section 5(a) notice and has no record of the kind above. What
 changed in it since the public Beta 1.0 is listed here by task number.
-Fifty-one files under `TR5Randomizer/src` changed in that span: eight of them new,
+Fifty-three files under `TR5Randomizer/src` changed in that span: ten of them new,
 forty-one modified, one moved out into `package/`, one removed.
 
 - **#123 - the HD markers.** `Tr5Level.cpp` / `.h`, `ApplyPatch.cpp` / `.h`,

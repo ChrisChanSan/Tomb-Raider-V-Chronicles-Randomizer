@@ -263,8 +263,8 @@ Special cases - own rules
 	  cry, and stands in SWAT's BASIC_ZONE. HP_ScientistArmed 35 (SWAT's);
 	  his shots are the soldiers' DMG_Soldier lines. Eight of rich1's pages
 	  and five of rich3's, about 2.2 MB in a level that holds none of them.
-	  With the Remaster installed he wears RICH1's SCIENTIST, whose gloves
-	  are empty: the HD picture shows no rifle.
+	  With the Remaster installed he wears RICH1's SCIENTIST; his hands hold
+	  SWAT's HD rifle, as a composite's borrowed nodes draw from their donor.
 
 
 ================================================================

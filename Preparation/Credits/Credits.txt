@@ -9,7 +9,7 @@ tomb3 Decompile: https://github.com/Trxyebeep/tomb3 (Trxyebeep) - the TR3 enemie
 
 TROne (GPLv3): https://github.com/todesengel1931 (Todesengel1931) - the
   HD-at-run-time path carries his code, and the modern control scheme
-  carries his design and his test expectations. Twenty-seven source files
+  carries his design and his test expectations. Twenty-three source files
   here name his copyright beside ours; THIRD-PARTY.md lists what was taken,
   file by file. He is in the contributors list below as well, because he
   played and reported too.

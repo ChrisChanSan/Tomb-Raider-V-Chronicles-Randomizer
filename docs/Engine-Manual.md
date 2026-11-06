@@ -6,7 +6,7 @@
 
 **PCTomb5.exe, Beta_5.0**
 
-A native Windows 11 build of Tomb Raider Chronicles: Direct3D 9 and XAudio2,
+A native 64-bit Windows build of Tomb Raider Chronicles: Direct3D 9 and XAudio2,
 no wrappers, one 64-bit executable and the six DLLs that lie beside it. This
 page covers everything it
 does that the original did not, and everything you can set.

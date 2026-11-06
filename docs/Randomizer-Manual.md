@@ -205,7 +205,7 @@ dashes do not matter; `O` reads as `0`, `I` and `L` as `1`.
 The code of the default settings, with an empty seed field, on build 0.24:
 
 ```
-TR5-A0R-0C00C-00000-068S3-40000-000-1R
+TR5-A0S-0C00C-00000-068S3-40000-000-JC
 ```
 
 The command line takes the same code: `Randomize.exe <zones.json> x

@@ -270,7 +270,7 @@ decoder, the two Bink audio decoders and the file protocol - configure with
 `--enable-nonfree`, so the summary reads "LGPL version 2.1 or later". They
 are linked dynamically: loaded at run time, not compiled into any EXE. The
 exact configure line and the recipe are `vendor/ffmpeg-min/build-min.sh`,
-the headers and import libraries sit beside the DLLs, and
+the headers sit beside the DLLs, and
 `vendor/ffmpeg-min/README.md` names the snapshot's SHA-256. The source tree
 was not modified; that snapshot lies beside the release as
 `FFmpeg-master.zip` (24,050,402 bytes, SHA-256

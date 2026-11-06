@@ -340,7 +340,7 @@ is never stopped on the card's account.
 **Why the address space, on a machine with 16 GiB of video memory?** Because
 the engine was a 32 bit program until Beta_5.0: four gigabytes of address
 space and no more, whatever the card and the RAM held. Since 6.0
-`PCTomb5.exe` is a 64-bit program and that ceiling is gone; the budget
+the engine is a 64-bit build and that ceiling is gone; the budget
 below still decides. Measured with `PoolProbe`, the
 pages themselves live on the CARD and cost the program almost nothing of it —
 0.04 MiB for a page of 85.25 — so in practice it is the texture budget that
@@ -959,7 +959,7 @@ compiler's redist folder (`VCToolsRedistDir` of `vcvars64.bat`) beside them.
   suite's expectations taken across verbatim and credited by name in
   `Preparation/Tools/Diagnose/ModernTest.cpp`'s own header. The
   HD-at-run-time path is different: it **carries TROne's own code
-  over**. Twenty-six source files in this tree name Todesengel's copyright in
+  over**. Twenty-three source files in this tree name Todesengel's copyright in
   their own headers, and [THIRD-PARTY.md](THIRD-PARTY.md) lists what came
   from where, file by file, with an origin ledger of every HD rule that came
   by way of TROne or TRForge and the count on the player's own files that

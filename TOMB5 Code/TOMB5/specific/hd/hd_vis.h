@@ -210,7 +210,8 @@ struct HDVisStatic
  *              crossing - with no link between them: that room is a
  *              second space in its air, drawn whole with the group, not
  *              its sky (ANDREA3's gallery room 92 inside room 115); 0,
- *              the default, takes it
+ *              the default, takes it. After TROne's inner worlds
+ *              (GPLv3, Todesengel1931) - the idea only
  *   skyLinked  1: a room under the sky takes only the group of a room in
  *              its own part of the portal graph - reachable through
  *              portals and floor links, a flipmap pair one room

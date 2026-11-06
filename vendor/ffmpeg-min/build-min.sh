@@ -1,5 +1,5 @@
 #!/bin/sh
-# build-min.sh - the minimal FFmpeg of the 64-bit engine's films (#315).
+# build-min.sh - the minimal FFmpeg of the 64-bit engine's films.
 #
 # Three DLLs (avutil, avcodec, avformat), LGPL v2.1 or later, shared only,
 # with nothing in them but the Bink demuxer, the Bink video decoder, the two

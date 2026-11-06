@@ -87,9 +87,9 @@ void CreditsScreen(long textY, long& menu, ulong& selection, ulong selection_bak
 
 	PrintString(phd_centerx, textY + y++ * font_height, 6,
 		CustomText("Tools and Libraries"), FF_CENTER);
-	PrintString(phd_centerx, textY + y++ * font_height, 2, "trview by chreden", FF_CENTER);
+	PrintString(phd_centerx, textY + y++ * font_height, 2, "trview by chreden - TRForge by its contributors", FF_CENTER);
 	PrintString(phd_centerx, textY + y++ * font_height, 2, "Dear ImGui by Omar Cornut", FF_CENTER);
-	PrintString(phd_centerx, textY + y++ * font_height, 2, "stb by Sean Barrett", FF_CENTER);
+	PrintString(phd_centerx, textY + y++ * font_height, 2, "stb by Sean Barrett - FFmpeg by its developers", FF_CENTER);
 
 	// Back to the options menu, with the row the player came from restored.
 	// Confirm counts as back as well - there is nothing here to confirm,

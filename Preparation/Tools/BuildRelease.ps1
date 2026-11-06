@@ -174,9 +174,12 @@ $skipDirs = '\\(Build|Release|Debug|x64|\.vs|ipch)\\'
 $skipExt  = @('.obj','.pdb','.exe','.dll','.ipdb','.iobj','.tlog','.log','.user','.aps')
 $copied = 0
 foreach ($f in (Get-ChildItem $EngineSrc -Recurse -File)) {
-    if ($f.FullName -match $skipDirs) { continue }
-    if ($skipExt -contains $f.Extension.ToLower()) { continue }
+    # The skip list is matched against the path INSIDE the engine folder,
+    # never against the clone's own location: a checkout under a folder
+    # called x64, Release or Debug would otherwise ship no source at all.
     $rel = $f.FullName.Substring($EngineSrc.Length).TrimStart('\')
+    if (('\' + $rel) -match $skipDirs) { continue }
+    if ($skipExt -contains $f.Extension.ToLower()) { continue }
     $dst = Join-Path $srcOut $rel
     New-Item -ItemType Directory -Path (Split-Path $dst -Parent) -Force | Out-Null
     Copy-Item $f.FullName $dst -Force

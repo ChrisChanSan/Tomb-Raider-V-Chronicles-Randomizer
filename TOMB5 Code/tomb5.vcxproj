@@ -727,7 +727,7 @@
   </PropertyGroup>
   <!-- Asan|x64: the 64-bit engine under AddressSanitizer, for test runs
        only (basan.bat, releaseasan\PCtomb5_asan.exe). v145 as the other
-       four since #326; it was first here because the older toolset's
+       four; it was first here because the older toolset's
        sanitizer runtime stops at its own start on this Windows ("ASan init calls
        itself"). No whole-program optimisation, /O1, no incremental
        link, no run-time checks; the gate as in the other four. -->

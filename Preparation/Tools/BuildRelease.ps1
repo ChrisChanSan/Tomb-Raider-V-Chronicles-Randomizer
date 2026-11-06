@@ -1,7 +1,7 @@
 # Assembles the shippable folder: randomizer, engine, bundled source code
 # and the licenses.
 #
-# Since #324 the package is 64-bit only. The engine is be64.bat's
+# The package is 64-bit only. The engine is be64.bat's
 # release64\PCtomb5.exe, shipped as PCTomb5.exe - the name the game and
 # Steam start; the 32-bit release\PCtomb5_x86.exe of be.bat is built on
 # request, to compare, and never goes in. Beside the two EXEs: the films'
@@ -39,7 +39,7 @@ $EngineSrc = "$Root\TOMB5 Code"
 $EngineExe = "$Root\release64\PCtomb5.exe"
 $FfmpegBin = "$Root\vendor\ffmpeg-min\bin"
 $FfmpegDlls = @('avutil-61.dll', 'avcodec-63.dll', 'avformat-63.dll')
-# The runtime set, as the import tables of the three EXEs name it (#324).
+# The runtime set, as the import tables of the three EXEs name it.
 $CrtDlls   = @('vcruntime140.dll', 'vcruntime140_1.dll', 'msvcp140.dll')
 if ($RedistDir -eq "") { $RedistDir = "$env:VCToolsRedistDir" }
 $RandoRoot = "$Root\TR5Randomizer"
@@ -248,9 +248,9 @@ Copy-Item "$Root\vendor\ffmpeg-min\COPYING.LGPLv2.1" "$lic\COPYING.LGPLv2.1" -Fo
 # stb_vorbis keeps its notice inside its own source. It is lifted from there
 # rather than copied into a second file, so the package cannot end up
 # shipping a stale version of someone else's licence.
-# stb_vorbis.c is the one stb file left, compiled into the engine; the
+# stb_vorbis.c is the one stb file, compiled into the engine; the
 # randomizer reads its background picture through Windows' own image
-# decoder (#307) and carries no stb code any more.
+# decoder and carries no stb code.
 $sv = Get-Content "$EngineSrc\TOMB5\tomb5\libs\stb\stb_vorbis.c"
 $sStart = ($sv | Select-String -Pattern 'available under 2 licenses' | Select-Object -First 1)
 if ($sStart) {
@@ -317,10 +317,10 @@ if (Test-Path (Split-Path $RandoExe -Parent)) {
 }
 
 # --- 8. Checksums ------------------------------------------------------------
-# SHA256SUMS.txt in the package root: the SHA-256 of every EXE and, since
-# #324, every DLL in the package (the six beside the EXEs are binaries a
-# player runs as well), so a player can check that a downloaded file is the
-# one built here, by eye
+# SHA256SUMS.txt in the package root: the SHA-256 of every EXE and every
+# DLL in the package (the six beside the EXEs are binaries a player runs
+# as well), so a player can check that a downloaded file is the one built
+# here, by eye
 # or with "sha256sum -c SHA256SUMS.txt" in the unpacked folder. The lines have
 # the form "<hash> *<name>" (the star marks binary mode), lower-case hex,
 # forward slashes and LF line ends, exactly as sha256sum writes them itself.

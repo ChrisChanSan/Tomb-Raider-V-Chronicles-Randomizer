@@ -12,7 +12,7 @@
 
     python spark_life.py <log A> <log B> [--tick N] [--near K] [--allocs]
 
-Pairs the SPARKLOG life lines of two logs (#317): born, fire, end, light,
+Pairs the SPARKLOG life lines of two logs: born, fire, end, light,
 light_index, and the draw's kill line (why=kill). A spark is keyed by
 (slot, born tick, n), n counting the births in that slot and tick of one
 log, so the same spark in both runs has the same key while the two runs
@@ -26,7 +26,7 @@ whichever comes first. Then the fire lines within K ticks of N (default 3)
 that one log has and the other does not, and the light/light_index lines
 in that window.
 
---allocs (#317c) prints instead, for each log, the SPARKLOG draw_alloc lines
+--allocs prints instead, for each log, the SPARKLOG draw_alloc lines
 (spark slots GetFreeSpark handed out inside a frame that gives its draws
 back) up to tick N with their running count, then per tick the two counts
 and the running difference A - B, then the first born line at tick N or

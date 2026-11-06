@@ -22,9 +22,9 @@
  * out, and POOL_REDZONE poisoned bytes stay behind every block. Then
  *
  * - a write or read through a pointer kept from the level before, into
- *   pool memory the new level has not been given yet (the joby3 load crash
- *   of 2026-08-25: ShutThatDoor writing through baddie_slots while the
- *   next level loaded), and
+ *   pool memory the new level has not been given yet (the joby3 load
+ *   crash: ShutThatDoor writing through baddie_slots while the next
+ *   level loaded), and
  * - a block's overrun into the next one (mesh_vtxbuf did so on the first
  *   64-bit builds, sized 4 bytes an entry for 8)
  *

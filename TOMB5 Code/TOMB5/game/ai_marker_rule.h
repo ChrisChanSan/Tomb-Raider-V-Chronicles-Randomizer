@@ -12,7 +12,7 @@
  */
 #pragma once
 
-/* Which creatures read the AI markers (#346).
+/* Which creatures read the AI markers.
  *
  * GetAIPickups (setup.cpp) runs at every level start over the items whose
  * kind is `intelligent` and hands each the AI objects (AI_GUARD to
@@ -22,12 +22,12 @@
  * a control that calls it reads them. `intelligent` is wider: 35 kinds
  * carry it, and 10 of them run a control that never calls GetAITarget -
  * the T-Rex (SAS slot), the compy (SAILOR slot), the lion, the dog, the
- * vulture (CROW slot), the drone, both Roman gods, and since #351 the
- * Raptor (REAPER slot) and the huskie: an animal follows no marker, it
- * attacks at once. Those took the bits anyway, consumed the marker
- * another creature's chain or twin needed, and the Roman god's attack
- * waits behind a GUARD bit he can never clear (romangod.cpp, the
- * `!(ai_bits & GUARD)` before every strike).
+ * vulture (CROW slot), the drone, both Roman gods, the Raptor (REAPER
+ * slot) and the huskie: an animal follows no marker, it attacks at once.
+ * Given the bits, those would consume the marker another creature's chain
+ * or twin needs, and the Roman god's attack would wait behind a GUARD bit
+ * he can never clear (romangod.cpp, the `!(ai_bits & GUARD)` before every
+ * strike).
  *
  * The rule is said by the control itself, not by a list of slots: a
  * creature reads the markers when its control is one of the functions

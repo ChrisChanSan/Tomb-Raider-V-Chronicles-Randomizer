@@ -1865,9 +1865,9 @@ bool Rando::run(const RandoInput& in,
         // OCB 0, and items with OCB != 0 are never swapped anyway.
         //
         // joby2's own three huskies (items 4, 86, 153, all OCB 0) stand in
-        // its curated list and join the swap: 86 and 153 were swapped all
-        // along, item 4 - on the sector of the room-1 keyhole - since the
-        // fixture test spares only stationary kinds (#352).
+        // its curated list and join the swap, item 4 on the sector of the
+        // room-1 keyhole as well: the fixture test spares only stationary
+        // kinds.
         { 85, "joby2",   {},                                    {-1,-1},  nullptr,   -1 },  // Huskie
         // The chef: a pure melee fighter (knife), model only in joby3. His
         // set carries only +0..+11 real anims (the rest are dead heirs his
@@ -2963,14 +2963,14 @@ bool Rando::run(const RandoInput& in,
             const Spot p = spots[pick];
             spots.erase(spots.begin() + static_cast<ptrdiff_t>(pick));
 
-            // No new enemy within reach of an AI marker (#346).
+            // No new enemy within reach of an AI marker.
             //
             // GetAIPickups (setup.cpp) hands every marker of kind AI_GUARD
             // to AI_FOLLOW within 512 in x and z in the same room to the
             // intelligent item standing there at the level start and uses
             // up all but AI_GUARD: an extra enemy, which comes behind the
             // Core items, takes what they left - the twin an ambush runs
-            // to, the next point of a patrol. Measured in #345: an added
+            // to, the next point of a patrol. Measured: an added
             // huskie on rich2's ai7 ended guard 219's patrol before the
             // marker that opens door 220 again, and two added enemies on
             // Andy2's FOLLOW markers left the will-o'-wisp without a path.

@@ -235,7 +235,7 @@ void Patch::markTriggerSafeSectors(const Tr5Level& level, RandoInput& in)
     in.weatherRooms = level.weatherRooms();
     in.vanillaWeather = level.weatherType();
 
-    // The AI markers the level start hands out (#346, RandoInput::
+    // The AI markers the level start hands out (RandoInput::
     // aiMarkers): AI_GUARD 378 to AI_FOLLOW 382. AI_PATROL2 and the kinds
     // behind it give no bits and stay out.
     {
@@ -502,7 +502,7 @@ bool Patch::apply(Tr5Level& level, const JsonValue& patch, PatchReport& report, 
         // trigger is taken out of the source sector only, even when that
         // room has a partner.
         //
-        // Measured over all fifteen vanilla levels (FlipProbe, 2026-09-04):
+        // Measured over all fifteen vanilla levels (FlipProbe):
         // not one PICKUP trigger that lies in a room with a flipmap partner
         // has a word-identical twin on the partner's same sector. The only
         // pickup that exists in both variants at all is Andy2's item 29

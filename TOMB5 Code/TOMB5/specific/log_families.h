@@ -12,7 +12,7 @@
  */
 #pragma once
 
-/* The -log families a test build alone carries (#338).
+/* The -log families a test build alone carries.
  *
  * Each name below is true in a test build (TOMB5_TEST_BUILD, tomb5.vcxproj:
  * Asan|x64 and be64.bat test) and false in a shipping one. A site of such a
@@ -26,7 +26,7 @@
  * them with -log as before. A family not named here writes in every build,
  * with -log (docs/Engine-Manual.md, the table of the families).
  *
- * REPLAYLOG, STATELOG and RNGTRACE stand inside the define already (#321),
+ * REPLAYLOG, STATELOG and RNGTRACE stand inside the define already,
  * ASANLOG inside the sanitizer's own (__SANITIZE_ADDRESS__); they are named
  * here so that the list is the whole one. */
 #ifdef TOMB5_TEST_BUILD

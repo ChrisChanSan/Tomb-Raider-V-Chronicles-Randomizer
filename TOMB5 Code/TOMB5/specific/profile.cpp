@@ -46,8 +46,8 @@ namespace
 
 	/* The phases the per-second line and the frame lines list, in order.
 	 * CLEAR, BEGIN_WAIT and BEGIN lie outside the work and are printed only
-	 * at the end of the pause and late lines (#322), so the other lines
-	 * read as they always did. */
+	 * at the end of the pause and late lines, so the other lines list the
+	 * work's phases alone. */
 	const int kListed = PROF_CLEAR;
 
 	__int64 g_freq = 0;		// 0 = not read yet, -1 = no clock on this machine
@@ -82,7 +82,7 @@ namespace
 	double g_fog_gpu_sum = 0, g_fog_gpu_max = 0;
 	int g_fog_gpu_n = 0;
 
-	/* The park's hand-over (ProfileNoteParked, #322): the milliseconds the
+	/* The park's hand-over (ProfileNoteParked): the milliseconds the
 	 * game thread was parked, added up since the process began. Written by
 	 * the window thread while the game thread is suspended, read by the
 	 * game thread; Interlocked on both sides. */
@@ -142,7 +142,7 @@ namespace
 		return phase == PROF_LOGIC || phase >= PROF_CLEAR;
 	}
 
-	/* The end of the pause and late lines (#322): the interval outside the
+	/* The end of the pause and late lines: the interval outside the
 	 * work, split. Each phase is taken net of the park inside it, so the
 	 * six are disjoint; `rest` is what none of them covers, and it is left
 	 * signed - a few milliseconds below zero is the tick clock's grain of
@@ -301,7 +301,7 @@ void ProfileBeginPhase(int phase)
 
 	/* CLEAR, BEGIN_WAIT and BEGIN count only outside the work and outside
 	 * ControlPhase: a modal loop's scene inside the logic is its logic's,
-	 * and the six fields of the pause line stay disjoint (#322). */
+	 * and the six fields of the pause line stay disjoint. */
 	if (phase >= PROF_CLEAR && (g_in_work || g_start[PROF_LOGIC]))
 		return;
 
@@ -427,7 +427,7 @@ void ProfileFrameBegin()
 	 * profile.h. ProfileFrameEnd clears it once it has reported it;
 	 * clearing it in neither place would let `logic` grow without bound.
 	 * CLEAR, BEGIN_WAIT and BEGIN are kept the same way and for the same
-	 * reason: they ran outside the work, before this call (#322).
+	 * reason: they ran outside the work, before this call.
 	 * Everything else is this frame's own and starts at nothing. */
 	for (int i = 0; i < PROF_COUNT; i++)
 	{

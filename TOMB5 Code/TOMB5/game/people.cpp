@@ -58,7 +58,7 @@ long TargetVisible(ITEM_INFO* item, AI_INFO* info)
 }
 
 // Whether a creature on an AI marker's errand notices Lara, and its wake
-// (#351; marker_wake_rule.h). The test is the guard's (sas.cpp,
+// (marker_wake_rule.h). The test is the guard's (sas.cpp,
 // mafia2.cpp) made against Lara, not against the marker: a hit or Lara's
 // hurt, a noise - an alert (a shot nearby, AlertNearbyGuards) or Lara near
 // and running - or Lara in its sight. TargetVisible reads the creature's

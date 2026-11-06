@@ -2464,7 +2464,7 @@ void reset_cutseq_vars()
 	SceneHoldReset();	// a hold of the level before ends, nothing put back
 }
 
-/* Whether the creature's kind reads AI markers (#346): its control is one
+/* Whether the creature's kind reads AI markers: its control is one
  * that calls GetAITarget (ai_marker_rule.h). */
 bool CreatureReadsAIMarkers(short object_number)
 {
@@ -2473,7 +2473,7 @@ bool CreatureReadsAIMarkers(short object_number)
 
 /* The markers' pickup at the level start, before a save is restored.
  *
- * Since #346 a creature takes markers only when its kind reads them
+ * A creature takes markers only when its kind reads them
  * (CreatureReadsAIMarkers). For any other intelligent kind the pickup
  * does not run: no bits, no item_flags[3], TOSSPAD as InitialiseCreature
  * left it, and the marker stays where it is for a creature that reads it.

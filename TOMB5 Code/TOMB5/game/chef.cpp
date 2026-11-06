@@ -191,9 +191,9 @@ void ChefControl(short item_number)
 		return;
 	}
 
-	// On a marker's errand he wakes on Lara (#351; he took her only when
-	// she hurt him). The kitchen chef is no errand: the rule's gate keeps
-	// him by his OCB (MarkerWakeLevelKeeps, marker_wake_rule.h).
+	// On a marker's errand he wakes on Lara, not only when she hurts him.
+	// The kitchen chef is no errand: the rule's gate keeps him by his OCB
+	// (MarkerWakeLevelKeeps, marker_wake_rule.h).
 	CreatureWakesOnLara(item);
 
 	if (item->ai_bits)
@@ -253,8 +253,8 @@ void ChefControl(short item_number)
 		// The brawler hunts whatever his OCB says - he has no kitchen
 		// (ChefHunts, chef_rule.h).
 		//
-		// A hunter on a marker's errand hunts once he wakes on Lara
-		// (#351): on a guard's spot he stays at his work until then, on
+		// A hunter on a marker's errand hunts once he wakes on Lara: on a
+		// guard's spot he stays at his work until then, on
 		// a patrol, ambush or follow marker he leaves it and walks there.
 		hunts = ChefHunts(item->object_number, item->trigger_flags);
 

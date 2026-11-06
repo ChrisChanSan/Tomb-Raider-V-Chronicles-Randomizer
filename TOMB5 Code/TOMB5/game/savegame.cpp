@@ -47,12 +47,12 @@ ulong savegame_bytes_read;
 bool  savegame_checksum_ok;	// built in S_LoadGame, see there
 
 /* The first four bytes of savegame.buffer: the format of the item block
- * behind them. The file's size did not change when the animation went from
- * a byte to a short, so the size check cannot tell an older save; the mark
- * can. An older save holds FmvSceneTriggered there, which nothing sets any
- * more (fmv.cpp), so it reads 0. A new mark for every change of the block.
- * Format 2: the animation as a short (#331). Format 3: a body that lies
- * there is written whole (SAVE_PACKED_BODY below, #333). */
+ * behind them. Every format has the same file size, so the size check
+ * cannot tell an older save; the mark can. An older save holds
+ * FmvSceneTriggered there, which nothing sets (fmv.cpp), so it reads 0.
+ * A new mark for every change of the block. Format 2: the animation as a
+ * short. Format 3: a body that lies there is written whole
+ * (SAVE_PACKED_BODY below). */
 #define SAVE_FORMAT_MARK	0x03355653	// "SV5" and format 3
 
 /* The item block's word for a body that lies there: both the "killed" bit
@@ -369,7 +369,7 @@ void RestoreLaraData(long FullSave)
 	load_tomb5_data();
 }
 
-/* A dead enemy that lies there (#333). CreatureDie (box.cpp) sets
+/* A dead enemy that lies there. CreatureDie (box.cpp) sets
  * IFL_CLEARBODY on it, takes it off the active chain, frees its AI slot and
  * drops what it carried, but leaves it in its room's item list, where the
  * room draws it while `after_death` counts 1..127 (draw.cpp's
@@ -1258,9 +1258,9 @@ void RestoreLevelData(long FullSave)
 				item->ai_bits = (flags >> 25) & 31;
 				item->really_active = (flags >> 30) & 1;
 
-				// A save from before #346 carries the bits a creature
-				// that never reads markers took at its level start; the
-				// Roman god's GUARD would keep him from striking. Gone.
+				// A save can carry bits that a creature which never reads
+				// markers took at its level start; the Roman god's GUARD
+				// would keep him from striking. They are cleared.
 				if (objects[item->object_number].intelligent &&
 					!CreatureReadsAIMarkers(item->object_number))
 					item->ai_bits = 0;

@@ -99,9 +99,9 @@
  *               driver does inside it.
  *
  *   CLEAR, BEGIN_WAIT, BEGIN lie outside the work, at the next frame's
- *   start (#322, ProfileNoteParked below). They are printed only at the
+ *   start (ProfileNoteParked below). They are printed only at the
  *   end of the pause and late lines, never in the phase lists, so the
- *   per-second and first_frame lines read as they always did.
+ *   per-second and first_frame lines list the work's phases alone.
  *
  * The three numbers that are not phases, on the first_frame and late
  * lines:
@@ -220,7 +220,7 @@ inline void ProfPresent()
 		ProfileNotePresent();
 }
 
-/* Where a stalled interval went (#322). `work` is ProfileFrameBegin to
+/* Where a stalled interval went. `work` is ProfileFrameBegin to
  * ProfileFrameEnd, and the present - SPIN and FLIP - lies inside it. The
  * interval outside it, from one ProfileFrameEnd to the next
  * ProfileFrameBegin, is DoLevel's tail and head: handle_cutseq_triggering,

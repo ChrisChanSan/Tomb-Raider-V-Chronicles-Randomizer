@@ -211,7 +211,7 @@ static char CameraSnaps = 0;
  * The level cameras that only frame Lara are discarded, as first person
  * discards them; the ones that show something are kept - the sniper camera,
  * a camera whose trigger names a Target item, a camera a heavy trigger set
- * (ModernLevelCamera, CalculateCamera, #335). First person still discards
+ * (ModernLevelCamera, CalculateCamera). First person still discards
  * all but the sniper. Flybys and cutscenes are untouched in every mode -
  * CalculateCamera is not called during a flyby.
  *
@@ -1057,7 +1057,7 @@ static void DiscardedFixedCameraTimer(long wouldFix)
 	}
 }
 
-// The modern camera's answer for this pass's level camera (#335): the pure
+// The modern camera's answer for this pass's level camera: the pure
 // rule is ModernLevelCameraWhy in game\modern_camera.h, and this is the one
 // place that reads the engine for it, so the target build, the shot's
 // branch and the head turn all go by the same answer. Kept: a sniper
@@ -1524,7 +1524,7 @@ void CalculateCamera()
 	}
 
 	// The modern camera's answer for the level camera is decided here, before
-	// the target is built (#335). A trigger that carries a Camera and a Target
+	// the target is built. A trigger that carries a Camera and a Target
 	// command makes control.cpp set camera.item, and the lines below then
 	// build the whole shot around that item: its bounds, its height, its
 	// heading, and no ConfirmCameraTargetPos because it is not Lara.
@@ -1538,7 +1538,7 @@ void CalculateCamera()
 	// triggers in the campaign carry both commands - Andrea1 4, Andrea2 1,
 	// joby2 1, rich1 4, rich2 3, rich3 7: twelve floor tiles, four switches,
 	// one keyhole and rich2's three heavy triggers (CamTriggers over the
-	// vanilla .trc files, #335). No heavy trigger there names a camera
+	// vanilla .trc files). No heavy trigger there names a camera
 	// without a Target.
 	//
 	// Discarded, every other one - a camera that only frames Lara - is built
@@ -1796,7 +1796,7 @@ void CalculateCamera()
 			// Lara: such a Camera command would take the orbit out of the
 			// player's hands mid-stride. The ones that show something - the
 			// sniper camera, a Target item, a heavy trigger - are kept and
-			// take the FixedCamera branch below (ModernLevelCamera, #335).
+			// take the FixedCamera branch below (ModernLevelCamera).
 			//
 			// The chase camera runs instead, which is the orbit: ChaseCamera
 			// reads camera.target_angle and target_elevation, which

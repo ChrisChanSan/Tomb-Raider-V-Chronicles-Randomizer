@@ -45,7 +45,7 @@ static BITE_INFO pierre_gun2 = { -57, 200, 0, 14 };
 // Everything a mark changes asks this, never item_flags[3] alone: the
 // stand-and-turn idle, the flight, the stop at a goal, the death. An
 // unmarked one with a pickup walks to its marker, and while a marker
-// steers him he wakes on Lara (CreatureWakesOnLara, #351): every bit
+// steers him he wakes on Lara (CreatureWakesOnLara): every bit
 // falls and he fights at once.
 static long PierreScripted(ITEM_INFO* item)
 {
@@ -285,8 +285,8 @@ void PierreControl(short item_number)
 			// falls on frame 78 to 84 and lies from there; he never used
 			// it in vanilla, where he dies by cutscene (Colosseum). The
 			// latch one frame before the end was set against a jump back
-			// into a living animation and an endless loop; the files
-			// measured for #340 (vanilla Andrea3, a pool copy) show the
+			// into a living animation and an endless loop; the files (vanilla
+			// Andrea3, a pool copy) show the
 			// animation continuing with itself on its last frame and a
 			// command 4 at its end. The latch stays: the frame before the
 			// end lies as low as the last (176 high).
@@ -302,7 +302,7 @@ void PierreControl(short item_number)
 	else
 	{
 		// One the level did not mark wakes on Lara while he walks or stands
-		// on a marker's errand (#351): all bits fall, Lara is his enemy, he
+		// on a marker's errand: all bits fall, Lara is his enemy, he
 		// fights at once - no run to an ambush point, no stand-and-turn.
 		if (!PierreScripted(item))
 			CreatureWakesOnLara(item);
@@ -331,7 +331,7 @@ void PierreControl(short item_number)
 		// level did not mark, CreatureWakesOnLara above is the test while
 		// a marker steers him: info measures the marker then, and an
 		// alert of his own would send an AMBUSH one on its ambush run
-		// (GetAITarget's alert path, #350). Without bits he tests as ever.
+		// (GetAITarget's alert path). Without bits he tests as ever.
 		if (PierreScripted(item) || !item->ai_bits && pierre->enemy == lara_item)
 			awake = info.distance < 0x400000 && lara_item->speed > 20 ||
 				item->hit_status || TargetVisible(item, &info);
@@ -363,11 +363,11 @@ void PierreControl(short item_number)
 				item->goal_anim_state = 4;
 			else if (item->ai_bits & GUARD || PierreScripted(item))
 			{
-				// Stand and turn toward Lara. Trajan Markets once sent every
-				// Larson here; its scripted one carries item_flags[3] 1 from
-				// his first tick, a pool one walks as in every other level.
-				// A marker's OCB in item_flags[3] is no mark (#350): it kept
-				// him turning toward the marker instead of walking there.
+				// Stand and turn toward Lara. Trajan Markets' scripted
+				// Larson carries item_flags[3] 1 from his first tick; a pool
+				// one walks as in every other level. A marker's OCB in
+				// item_flags[3] is no mark: it would keep him turning toward
+				// the marker instead of walking there.
 				pierre->maximum_turn = 0;
 				item->goal_anim_state = 1;
 

@@ -28,9 +28,8 @@
 // folder it was looked for in; the command line prints it, the GUI shows it
 // in its status line or beside the level it stopped.
 //
-// The command line, the GUI and the checksum check each used to look these
-// files up their own way; one reader keeps the rule and the message in one
-// place.
+// One reader serves the command line, the GUI and the checksum check, so
+// the rule and the message stand in one place.
 //----------------------------------------------------------------------------
 namespace DataFile
 {

@@ -455,7 +455,7 @@ struct RandoInput
     // Tr5Level::canAppendTrigger.
     std::set<long long>      triggerSafeSectors;
 
-    // The level's AI markers that hand out behaviour (#346): every AI
+    // The level's AI markers that hand out behaviour: every AI
     // object of kind AI_GUARD to AI_FOLLOW (slots 378-382), with its index
     // in the AI block. GetAIPickups (setup.cpp) gives each to the
     // intelligent item standing within 512 in x and z in the same room at

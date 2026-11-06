@@ -154,8 +154,8 @@ void ImpControl(short item_number)
 	}
 	else
 	{
-		// On a marker's errand it wakes on Lara (#351; it took her only
-		// when she hurt it, and an alert left it on the stale marker).
+		// On a marker's errand it wakes on Lara, not only when she hurts it,
+		// and an alert does not leave it on a stale marker.
 		CreatureWakesOnLara(item);
 
 		if (item->ai_bits)

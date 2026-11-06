@@ -140,11 +140,10 @@
 // brawler's animation anchor (brawler_rule); his reach (brawler_reach).
 #include "../../../TOMB5 Code/TOMB5/game/chef_rule.h"
 // The kinds that read AI markers: the control asks GetAITarget, the level
-// start hands markers to them alone (ai_marker_rule, #346).
+// start hands markers to them alone (ai_marker_rule).
 #include "../../../TOMB5 Code/TOMB5/game/ai_marker_rule.h"
 // A creature whose enemy is a marker looks at Lara for its wake test: the
-// distance, the noise, the cause and the gate (marker_wake_rule, #350,
-// #351).
+// distance, the noise, the cause and the gate (marker_wake_rule).
 #include "../../../TOMB5 Code/TOMB5/game/marker_wake_rule.h"
 // A room group stored off its height: the count, the pick (yshift_rule).
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_scan.h"
@@ -1704,8 +1703,8 @@ static void jumping()
 	/* TROne: modern.standing_jump_is_a_side_flip_with_and_without_a_drawn_gun.
 	 *
 	 * TROne's own line that disarms aiming on a jump is in
-	 * trone_modern_glue.h, trone_modern_glue_situation (TROne-main, copy of
-	 * 2026-10-05), outside a profile block of TROne's that
+	 * trone_modern_glue.h, trone_modern_glue_situation (TROne-main),
+	 * outside a profile block of TROne's that
 	 * forces aim_strafe off, and their own test builds a plain
 	 * modern_test_glue() that never sets that profile - so their
 	 * expectation is unconditional. This project's choice: armed, the side
@@ -7265,7 +7264,7 @@ static void camera_cut_reaim()
  * nobody can re-measure is a number nobody can change.
  *
  * None of the expectations below comes from TROne, whose orbit (TROne-main,
- * copy of 2026-10-06, commit 75c4c843) is a design of its own. Ours holds a
+ * commit 75c4c843) is a design of its own. Ours holds a
  * world angle and lets it fall back behind her (game\modern_camera.h). The
  * numbers here come from two places and the comments say which: the
  * design's four governing sentences,
@@ -15981,7 +15980,7 @@ static void vis_sky_art()
 		HDVisInOpenAir(&rooms[0], 5, 2, over, 128.0) ? 1 : 0, 1);
 }
 
-/* #334: the sky table asks the art, not its box. vis_sky_art's rooms, and
+/* The sky table asks the art, not its box. vis_sky_art's rooms, and
  * group 2's art put as clusters of eight small triangles each at world
  * points, group 2's room at origin (gx, gz). */
 static void ghost_scene(trf::remaster::Trg& trg, float gx, float gz,
@@ -16037,7 +16036,7 @@ static void ghost_rule()
 	const HDVisParams off = HDVisDefaults();
 	HDVisParams p = HDVisLevelParams("ANDREA3");
 
-	// #344: ANDREA3 is linked now; these hand-built rooms stand apart, so the
+	// ANDREA3 is linked; these hand-built rooms stand apart, so the
 	// rule is left off here and checked in flyby_room_rule.
 	p.skyLinked = 0;
 	const HDVisParams other = HDVisLevelParams("ANDY3");
@@ -16045,7 +16044,7 @@ static void ghost_rule()
 	const HDVisParams none = HDVisLevelParams(0);
 
 	ok(off.skyNear == 0 && off.skyShared == 0,
-		"ghost: off by default, the box of #286", off.skyNear, 0);
+		"ghost: off by default, the box alone", off.skyNear, 0);
 	ok(p.skyNear == 1 && p.skyShared == 1 && lower.skyNear == 1 &&
 		lower.skyShared == 1,
 		"ghost: ANDREA3's row, in any case, one triangle near, no shared",
@@ -16056,7 +16055,7 @@ static void ghost_rule()
 		"ghost: ANDY3, no stem and a near name keep the default",
 		other.skyNear, 0);
 
-	// The default answers as #286 did: the box takes the shaft's pair.
+	// The default answers by the box alone: the box takes the shaft's pair.
 	const float far2[2][3] = { { -14000.0f, -3000.0f, 3000.0f },
 		{ 26000.0f, -3000.0f, 3000.0f } };
 
@@ -16167,7 +16166,7 @@ static void ghost_rule()
 		t.skyRefusedShared, 0);
 }
 
-/* #342: a sky group is taken only by the rooms in its own room's part of
+/* A sky group is taken only by the rooms in its own room's part of
  * the portal graph. ghost_rule's rooms, group 2's art as one cluster over
  * S's floor plan - near and not shared, so the box, skyNear and skyShared
  * all take it; the links alone decide. */
@@ -16214,7 +16213,7 @@ static void flyby_room_rule()
 		"flyby room: off by default, on by the rows of ANDY3, TITLE, ANDREA3",
 		HDVisLevelParams("ANDY3").skyLinked, 1);
 
-	// #344: TITLE has a row of its own: linked on, no near, no shared.
+	// TITLE has a row of its own: linked on, no near, no shared.
 	ok(HDVisLevelParams("TITLE").skyLinked == 1 &&
 		HDVisLevelParams("TITLE").skyNear == 0 &&
 		HDVisLevelParams("TITLE").skyShared == 0,
@@ -16268,7 +16267,7 @@ static void flyby_room_rule()
 	HDVisBuild(trg, &rooms[0], 5, 0, 0, 0, 0, chain, 2, p, &t);
 	ok(t.skyCount[0] == 0 && pair(0, 2) == 3 && t.part[4] == 2,
 		"flyby room: the twin's link alone, no twin: refused", pair(0, 2), 3);
-	/* #348: and a guest. G's art put in S's inside, under the sky - the
+	/* And a guest. G's art put in S's inside, under the sky - the
 	 * title's night backdrop in the Irish hill, room 54: with the row
 	 * linked S does not take it while no link leads from S to G, takes it
 	 * once one does, and takes it unlinked with the row off. */
@@ -28522,7 +28521,7 @@ static void pool_guard_rule()
 		hd_switch_count(guard, "#ifdef __SANITIZE_ADDRESS__") == 1,
 		"pool guard: 32 bytes of red zone, in the Asan build only", 0, 1);
 
-	// Less the test build's conditions (#321, test_build_rule): its own
+	// Less the test build's conditions (test_build_rule): its own
 	// folder on Release|x64 and the define on both.
 	const long rel = hd_switch_count(proj,
 		"'$(Configuration)|$(Platform)'=='Release|x64'") -
@@ -29562,8 +29561,8 @@ static void rngtrace_rule()
  * the fade or by GetFreeSpark's eviction, a light not found, a light index
  * below -1. Each is a Log call behind gLogEnabled and nothing else: the
  * engine's own statements stand as they were; the draw's far-plane branch
- * (specific\specificfx.cpp) only culls since #320 (cull_rule). Then the
- * spark slots the draw takes (#317c): GetFreeSpark's draw_alloc line inside
+ * (specific\specificfx.cpp) only culls (cull_rule). Then the
+ * spark slots the draw takes: GetFreeSpark's draw_alloc line inside
  * a frame that gives its draws back (InterpFrameSeedSaved), the rain's line
  * before its splash and its ripple (DoRain), and the level's line after
  * RNGLOG (LaraJointsLevelEnd). This group only reads the text. */
@@ -29704,7 +29703,7 @@ static void spark_life()
 		"spark life: InterpFrameSeedSaved reads g_seedSaved", 0, 1);
 
 	// The rain: a line before each of DoRain's two calls, the calls into
-	// the weather's own pools (#318, weather_rule) with the places as they
+	// the weather's own pools (weather_rule) with the places as they
 	// were; the frame as S_DrawSparks counted it.
 	glass_body(sfx, "void DoRain()", body, sizeof(body));
 	ok(strstr(body, "if(room[room_number].flags&ROOM_UNDERWATER&&(i&7)==7)"
@@ -29724,8 +29723,8 @@ static void spark_life()
 		"0;"), "spark life: the frame of the tick, 0 before its first", 0, 1);
 
 	// The level line after RNGLOG, its counters reset there; the weather
-	// pools' peaks at its end (#318), reset by their own clear; the draw's
-	// culls at its very end (#320), reset with the rain's counters, the
+	// pools' peaks at its end, reset by their own clear; the draw's
+	// culls at its very end, reset with the rain's counters, the
 	// once-per-particle tables with them.
 	glass_body(sfx, "void SparkLogLevelEnd()", body, sizeof(body));
 	ok(!strcmp(body, "constlongallocs=SparkLogTakeDrawAllocs();if("
@@ -29744,7 +29743,7 @@ static void spark_life()
 		"SparkLogLevelEnd();") != 0,
 		"spark life: the level line right after RNGLOG", 0, 1);
 
-	// The far-plane branch culls and ends nothing (#320, cull_rule).
+	// The far-plane branch culls and ends nothing (cull_rule).
 	glass_body(sfx, "void S_DrawDrawSparksNEW(SPARKS* sptr, long "
 		"smallest_size, float* xyz)", body, sizeof(body));
 	ok(strstr(body, "if(xyz[2]>=f_mzfar&&LogFam_SPARKLOG&&gLogEnabled&&sptr->extras&7&&"
@@ -29759,7 +29758,7 @@ static void spark_life()
 	free(draw);
 }
 
-/* The weather owns its splashes (#318). DoRain runs on the frame, and what
+/* The weather owns its splashes. DoRain runs on the frame, and what
  * a landing drop left - a spark of the logic's spark[] through
  * TriggerSmallSplash, a slot of ripples[] through SetupRipple, and their
  * draws of the logic's generator - moved the logic's next allocation by
@@ -30016,7 +30015,7 @@ static long cull_rule_scan(const char* sub, const char* mask,
 }
 
 /* The draw decides only whether it draws a particle, never whether it
- * lives (#320). A spark past the far plane (S_DrawDrawSparksNEW), a drip
+ * lives. A spark past the far plane (S_DrawDrawSparksNEW), a drip
  * too far in view (DrawDrips) and a bubble out of the frame's reach
  * (DrawBubbles: the box, too far, too near) are left undrawn and live on
  * until the logic ends them: UpdateSparks by Life (freeing the light),
@@ -30047,7 +30046,7 @@ static void cull_rule()
 		"cull rule: SPARKS, DRIP_STRUCT, BUBBLE_STRUCT in types.h", 0, 1);
 
 	// Under specific\: the alive fields written only by the weather pool's
-	// own step (its splashes, a pool the logic never reads, #318).
+	// own step (its splashes, a pool the logic never reads).
 	all = 0;
 	files = 0;
 	hd_files = 0;
@@ -30237,7 +30236,7 @@ static void film_av()
 
 	ok(YUV_RGB_Y == 76309 && YUV_RGB_RV == 104597 && YUV_RGB_GU == 25675 &&
 		YUV_RGB_GV == 53279 && YUV_RGB_BU == 132201,
-		"film_av: 1.164 1.596 0.391 0.813 2.018 times 65536", YUV_RGB_Y,
+		"film_av: the exact BT.601 factors times 65536", YUV_RGB_Y,
 		76309);
 	ok(fabs(YUV_RGB_Y / 65536.0 - 255.0 / 219.0) < 0.00001 &&
 		fabs(YUV_RGB_RV / 65536.0 - 1.402 * 255.0 / 224.0) < 0.00001 &&
@@ -30500,14 +30499,14 @@ static char* test_build_block(const char* text, const char* from,
 	return out;
 }
 
-/* The C++ runtime as DLLs, beside the 64-bit programs (#324). Every
+/* The C++ runtime as DLLs, beside the 64-bit programs. Every
  * configuration of tomb5.vcxproj links the runtime dynamically, the
  * randomizer's two build scripts pass /MD, and the three DLLs the EXEs
  * import come from the compiler's redist folder (VCToolsRedistDir) beside
  * them - in be64.bat, basan.bat, b1.bat and b2.bat, not in be.bat, whose
- * 32-bit EXE no longer ships. BuildRelease.ps1 packs release64's engine
+ * 32-bit EXE does not ship. BuildRelease.ps1 packs release64's engine
  * with the set and never the 32-bit one; the ledger names the DLLs and
- * README.md no longer calls the engine a 32-bit program. Text only. */
+ * README.md does not call the engine a 32-bit program. Text only. */
 static void runtime_rule()
 {
 	static const char* const crt_dir =
@@ -30570,7 +30569,7 @@ static void runtime_rule()
 		hd_switch_count(pack, "COPYING.LGPLv2.1") >= 1,
 		"runtime rule: BuildRelease.ps1 packs release64 and the set", 0, 1);
 
-	// The names (#339): the 64-bit engine is PCtomb5.exe itself, the
+	// The names: the 64-bit engine is PCtomb5.exe itself, the
 	// 32-bit comparison build PCtomb5_x86.exe in its own folder.
 	ok(hd_switch_count(proj, "'Debug|Win32'\">\r\n"
 		"    <LinkIncremental>true</LinkIncremental>\r\n"
@@ -30649,15 +30648,15 @@ static char* toolset_group(const char* proj, const char* config)
 	return out;
 }
 
-/* The toolset and the build settings (#326): v145 in every configuration
+/* The toolset and the build settings: v145 in every configuration
  * of tomb5.vcxproj, where four had the v142 of the upstream project; one
  * C++17 for the whole project, in each configuration's ClCompile, and none
  * per file; the upstream DLL project's TR4M_EXPORTS and _USRDLL gone;
  * whole-program optimisation in both Release configurations and not in
  * Asan; /CETCOMPAT in the three release-type link options. The
  * randomizer's two build scripts compile at /W4 /sdl /permissive- with no
- * /w left on the line, and neither README.md nor the engine manual names
- * v142 any more. Text only. */
+ * /w on the line, and neither README.md nor the engine manual names
+ * v142. Text only. */
 static void toolset_rule()
 {
 	static const char* const configs[5] = { "Debug|Win32", "Release|Win32",
@@ -30743,11 +30742,11 @@ static void toolset_rule()
 	free(manual);
 }
 
-/* The engine builds without a warning (#328): the macro and unused-local
- * warnings of tomb5.vcxproj are errors in each of the five configurations'
- * own ClCompile, beside the five of #324, and global\types.h
- * keeps ddraw.h's DD_OK and DD_FALSE where fmv.cpp includes it first. The
- * narrowings (C4244) joined them with #331. Read from the tree. */
+/* The engine builds without a warning: eight warnings of tomb5.vcxproj
+ * are errors in each of the five configurations' own ClCompile - 4311,
+ * 4312, 4302, 4267, 4477, the macro and unused-local ones 4005 and 4101,
+ * and the narrowing 4244 - and global\types.h keeps ddraw.h's DD_OK and
+ * DD_FALSE where fmv.cpp includes it first. Read from the tree. */
 static void warning_rule()
 {
 	static const char* const configs[5] = { "Debug|Win32", "Release|Win32",
@@ -30790,7 +30789,7 @@ static void warning_rule()
 	free(types);
 }
 
-/* The recorder is a test build's (#321). TOMB5_TEST_BUILD, defined in one
+/* The recorder is a test build's. TOMB5_TEST_BUILD, defined in one
  * place - tomb5.vcxproj, for Asan|x64 and for Release|x64 under be64.bat
  * test (Tomb5Test=true, releasetest\PCtomb5_x64t.exe) - compiles in
  * -record, -replay, -liveclock and -rngtrace, the recorder's file and
@@ -30998,7 +30997,7 @@ static void test_build_rule()
 	free(control);
 }
 
-/* The -log families a test build alone carries (#338). log_families.h names
+/* The -log families a test build alone carries. log_families.h names
  * the 44: each LogFam_ is kLogTestBuild, true with TOMB5_TEST_BUILD and
  * false without it, and every site tests it. The engine's files under
  * game\, specific\ and specific\hd\ are read and every "WORD  string of a
@@ -31487,7 +31486,7 @@ static void log_family_rule()
 	free(math);
 }
 
-/* A stalled frame says where its time went (#322). The PROFLOG pause line
+/* A stalled frame says where its time went. The PROFLOG pause line
  * ends with the interval outside the work split six ways - logic, clear,
  * begin_wait, begin, parked, rest - and the late line with the five after
  * logic, which it lists already. The stamps bracket exactly the device's
@@ -39667,7 +39666,7 @@ static void composite_nodes()
 	free(model);
 }
 
-/* A spark follows its item above number 255 (#330): FxObj, the item or
+/* A spark follows its item above number 255: FxObj, the item or
  * effect number a spark of SPARKS or SMOKE_SPARKS follows, is a short, the
  * seven places that write it cast to no uchar, and RPickups, the item
  * numbers of the regenerating pickups, is a short array too. MAX_ITEMS is
@@ -39731,8 +39730,9 @@ static void spark_item_number()
 	free(init);
 }
 
-/* The six narrowings #329 left (#331). Lara's seam rows are uchar and end
- * on 0xFF, so a vertex 128..254 no longer reads as the end; the save keeps
+/* The six narrowings of the item, room and vertex numbers. Lara's seam
+ * rows are uchar and end on 0xFF, so a vertex 128..254 does not read as
+ * the end; the save keeps
  * an item's animation as a short behind a format mark the load checks; a
  * level over 255 rooms is refused where OutsideRoomTable is built. The 4244
  * in each configuration stands in warning_rule. Read from the tree. */
@@ -39795,7 +39795,7 @@ static void narrowing_closed()
 	free(setup);
 }
 
-/* A lying body survives the savegame (#333): format 3. The writer sends a
+/* A lying body survives the savegame: format 3. The writer sends a
  * body that lies there (IFL_CLEARBODY, after_death 1..127, still in its
  * room's list) down a branch of its own and the reader puts it back off
  * the active chain, with no AI slot; the recorder's header carries the
@@ -39904,7 +39904,7 @@ static void body_save()
 	free(gm);
 }
 
-/* The corpse fade in HD and the Corpses switch (#332). The byte the HD path
+/* The corpse fade in HD and the Corpses switch. The byte the HD path
  * weighs a dead body with is the classic's GlobalAlpha byte, 256 - 2 *
  * after_death, and 255 for whatever is no body on its way out; the object
  * path takes it per item into the draw and the blob; the switch lives in
@@ -40010,7 +40010,7 @@ static void corpse_fade()
 	free(flow);
 }
 
-/* Under Modern a level camera that shows something is kept (#335). The pure
+/* Under Modern a level camera that shows something is kept. The pure
  * rule is game\modern_camera.h's ModernLevelCameraWhy; game\camera.cpp's
  * ModernLevelCamera feeds it from the engine and CalculateCamera reads the
  * one answer for the target build, the shot's branch, the head turn and the
@@ -40123,7 +40123,7 @@ static void level_camera_rule()
 	free(cam);
 }
 
-/* Larson dies lying down outside Trajan Markets (#340). His death animation
+/* Larson dies lying down outside Trajan Markets. His death animation
  * (+15) is a fall and a rise and ends standing; outside Trajan Markets the
  * control holds it on its lowest frame and makes him a corpse the way
  * CreatureDie does, and the heavy trigger test at the animation's end runs
@@ -40178,7 +40178,7 @@ static void larson_death_rule()
 	free(src);
 }
 
-/* Trajan Markets' ways belong to its scripted Larson alone (#343). The mark
+/* Trajan Markets' ways belong to its scripted Larson alone. The mark
  * is the level's OCB in item_flags[3] without an AI pickup in TOSSPAD bits
  * 8-12; the stand-and-heavy-test death and the stop at a reached goal take
  * it, the idle reads item_flags[3] alone, and the flight needs it: an
@@ -40256,7 +40256,7 @@ static void larson_trajan_rule()
 }
 
 /* A creature on an AI marker's errand wakes on Lara and attacks at once
- * (game\marker_wake_rule.h; #350, #351): the pure distance, noise, cause
+ * (game\marker_wake_rule.h): the pure distance, noise, cause
  * and gate rules, the helper's body in people.cpp, its six callers, the
  * kitchen chef's gate and the kinds that keep their own way or follow no
  * marker at all. Read from the tree. */
@@ -40406,7 +40406,7 @@ static void marker_wake_rule()
 		0, 1);
 
 	// The levels' own marker users and the animals do not call it, and
-	// #350's helper is gone.
+	// no CreatureSeesLara helper exists.
 	for (size_t i = 0; i < sizeof(keep) / sizeof(keep[0]); i++)
 	{
 		char* t;
@@ -40445,14 +40445,14 @@ static void marker_wake_rule()
 	free(src);
 }
 
-/* The kinds that read AI markers (game\ai_marker_rule.h, #346). The
+/* The kinds that read AI markers (game\ai_marker_rule.h). The
  * controls the engine binds are stood in for here by functions of their
  * own name, each with a body of its own so the linker folds none into
  * another; the group then reads the engine's text: every control in
  * game\ that calls GetAITarget is the rule's, no other is, and the 35
  * kinds setup.cpp makes intelligent split by their control into the 25
- * that read and the 10 that do not (the Raptor and the huskie left with
- * #351). GetAIPickups, the save's restore and
+ * that read and the 10 that do not (the Raptor and the huskie among
+ * them). GetAIPickups, the save's restore and
  * the AILOG lines are held as the engine writes them. */
 static volatile long ai_rule_sink;
 
@@ -40728,12 +40728,12 @@ static void ai_marker_rule()
 	free(fam);
 }
 
-/* The grappling gun's ammunition (#349). TR5 keeps it in the crossbow's
+/* The grappling gun's ammunition. TR5 keeps it in the crossbow's
  * old slot CROSSBOW_AMMO1_ITEM with the grapple's hook for a mesh; the HD
  * hand table binds it to that hook, EXTRA5_CROSSBOW_BOLT, in every level,
  * and not, by the EXTRA4_ prefix, to Tomb Raider IV's quiver. The line
  * sits inside the table, CROSSBOW_AMMO2_ITEM keeps none, and hd_bind.h's
- * rule comment no longer calls the slot one TR5 never renamed. */
+ * rule comment does not call the slot one TR5 never renamed. */
 static void grapple_ammo_rule()
 {
 	printf("the grappling gun's ammunition: the hook, not the quiver\n");

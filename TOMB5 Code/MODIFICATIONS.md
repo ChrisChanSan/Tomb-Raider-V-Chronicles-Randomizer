@@ -20267,6 +20267,95 @@ the randomizer's `b1.bat` and `b2.bat`. Not run in the game here.
 
 **Commits.** see the appendix.
 
+### The title's second backdrop wall stays in its scene (#348)
+2026-11-06
+
+**What.** A room under the sky no longer takes, as its guest, the art of a room in
+another part of the portal graph where the level's row asks the sky table the same
+(`skyLinked`, `kHDVisLevelRows` in `specific/hd/hd_vis.h`: ANDY3, ANDREA3 and TITLE).
+The guest loop of `HDVisBuild` (`specific/hd/hd_vis.cpp`) refuses such a pair and counts
+it in `guestsUnlinked`; the rows themselves are unchanged. With `-log` the `HDLOG level=
+vis=1` line ends in a new `guests_unlinked=` field.
+
+**Why.** The second dark blue wall of the title's Irish scene, behind the trees of the
+hill, was not a sky pair. Group 33 is the night scene's city backdrop (graph part 33, the
+rooms 33, 52, 53 and 109), and 12 of its triangles reach down into the inside of the
+Irish hill, room 54 (part 16), under the sky. Guest rule 2 takes art of any room into a
+room under the sky, so 54 listed group 33 as a guest (`33g` in every `VISLOG` line with
+the eye in room 54, 35, 41 or 57 of a recorded flyby log) and drew the whole backdrop, a
+cylinder 16,000 units across, through 54's window; the walk went on through 33 to 52.
+The sky pairs the task first suspected are not it: group 35 is the Irish scene's own (its
+rooms 34, 35, 43, 44 and 45 share part 16 with 54 and take it rightly), and RoomProbe
+with 54's pair 54/35 refused (`-visskynear 78`) drew the same wall; `{ "TITLE", 1, 1, 1 }`
+would not refuse it either (near=77, shared=0).
+
+**Proof.** TrgProbe `-vistable -visroom all` over the fifteen levels before and after: the
+only difference is TITLE's room 54 losing `guest=33 tris=12`, `guests` 25 -> 24,
+`guests_unlinked` 0 -> 1; the other fourteen tables are equal line for line (ms aside). Of
+the 429 guest pairs of the game this was the only one across two parts, so a general rule
+would have cost nothing either; the row's switch was the smaller change. RoomProbe at the
+Irish flyby's cameras (13, 15 to 18 in room 54, 19 in 35, 21 in 43, 23 in 57), eight yaws
+each: 53 of the 64 walks listed `33g` before and none after (the lists lose 33 and 52,
+nothing else); 34 frames are apart, by 773 to 481,897 pixels of 960 x 540, nearly all of
+them the backdrop's dark blue in the old frame and the sky or the hill's own top in the
+new one (the backdrop stood in front of the ridge); 30 frames, the backdrop out of view,
+are 0 apart. The garden's cameras 3 and 9 (room 6), 30 (room 19) and the desert's 42
+(room 87), eight yaws each: same lists, 0 pixels apart.
+
+**Checked.** ModernTest `flyby_room_rule` adds 3 checks on its hand-built rooms: art of an
+unlinked room in a sky room's inside is no guest with the row linked, is one with it off,
+and is one once a link joins the two. Suites under the next entry. Not run in the game
+here.
+
+**Commits.** see the appendix.
+
+### A hollow room gives way to the guest that models its place (#348)
+2026-11-06
+
+**What.** A room drawn classic whose own group is hollow (all its art outside its box,
+`hollow_group`) and whose hollow art the visibility path draws now leaves its classic
+faces out as well when its inside holds a guest - the art of a room linked with it - and
+the stand rule covers none of its faces (`HDVisHollowRoomGuested`, `specific/hd/hd_vis.h`,
+asked by `HDVisClassicRoomVerdict` beside the enclosed rule of the JOBY2 sniper rooms).
+It is the guest clause the empty groups have had since ANDY3's tree bands: inside its own
+box a hollow group draws as little as an empty one. The `HDLOG room=` line keeps its form
+(`hd=0 reason=hollow_group`); the level's `hollow_hidden=` counts the rooms.
+
+**Why.** The title's desert rooms 70, 101 and 103 are hollow, one stray triangle each, and
+the dunes in their place are the art of their neighbours: group 71's 1,400 triangles in
+room 101, 695 in room 70, groups 68, 71, 104 and 108 in room 103. The Remaster reshaped
+the dunes: group 71 lies within 128 units of only 7 of room 101's 96 faces, within 256 of
+31, within 512 of 77 and within 1,024 of 92 (TrgProbe `-classicart -arttol`). So the stand
+rule's carrier test fails by its half share (`HDCoverRoomState`, `HD_COVER_PART_SHARE`: 7
+of 96), which it must - drawn in part, room 103 showed cracks of nothing, as measured
+when the rule was made - and every flat old floor of the three rooms was drawn among the
+new sand, in front of it where it lay higher: the sand patches of the desert flyby.
+Room 102 beside them is an empty group with no classic face and draws nothing; its
+floor is the art's already.
+
+**The fifteen levels.** Every classic room with classic faces (TrgProbe `-classicart
+-perface`): of the hollow ones ANDREA2's 124 is covered and RICHCUT2's 2, 3 and 4 drawn in
+part by the stand rule, JOBY2's 19 and 21 hold no guest and stand enclosed; the empty ones
+with guests (ANDY1 212, ANDY3 88, 118 and 122) were left out before. RoomProbe
+`-hollowlist` over the fifteen levels before and after: only TITLE changes, rooms 70, 101
+and 103 `hidden=0` -> `hidden=1`, the level 0 -> 3. No room anywhere changes which group
+draws its floor.
+
+**Proof.** RoomProbe at the desert flyby's cameras 41 to 45, eight yaws each at a pitch
+of -20, the three rooms' classic faces drawn red in their windows before (`-classicmark
+-classicclip`) against the new picture: the walk lists are the same; 30 of the 40 frames
+showed old floor, 343 to 74,407 red pixels (606,710 in all), every one of them now the
+dunes' art but 16,980 that are now the sky - all of those over the dunes' silhouette,
+where an old floor stood higher than the new sand, but 38 pixels at the art's edges.
+
+**Checked.** ModernTest group `vis_hollow_guested` (8 checks): the three title rooms go,
+ANDREA2 124 and RICHCUT2 2 stay the stand rule's, JOBY2 21 without a guest stays, nothing
+without the art drawn or without a face. ModernTest 17816 checks (17805 + 11), MenuTest
+45043, InterpTest 754, LipsTest 272, none failed; no warning line in `be64.bat`,
+`basan.bat`, `be64.bat test`, `btrg.bat` and `broom.bat`. Not run in the game here.
+
+**Commits.** see the appendix.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -20750,3 +20839,4 @@ entries above.
 | #343 | Trajan Markets' ways belong to its scripted Larson alone |
 | #344 | The title's night backdrop stays in its own scene |
 | #346 | AI markers reach only the kinds that read them |
+| #348 | The title's backdrop wall and hollow dunes give way |

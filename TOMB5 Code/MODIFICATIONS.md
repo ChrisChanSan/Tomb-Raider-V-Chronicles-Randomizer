@@ -20267,6 +20267,45 @@ the randomizer's `b1.bat` and `b2.bat`. Not run in the game here.
 
 **Commits.** see the appendix.
 
+### The grappling gun's ammo wears its own HD model (#349)
+2026-11-06
+
+**What.** TR5 keeps the grappling gun in the crossbow's old slots: `CROSSBOW_ITEM` the
+gun, `CROSSBOW_BOLT` the hook it fires, `CROSSBOW_AMMO1_ITEM` the ammunition pickup. The
+pickup rule of the HD binding (rule 3, `specific/hd/hd_bind.h`) found no `EXTRA5_` or
+`EXTRA_` file for slot 342 and took `4/ITEM/EXTRA4_CROSSBOW_AMMO1_ITEM.TRM`, Tomb Raider
+IV's bamboo quiver of crossbow bolts; the classic draw shows a small grappling hook. A
+hand-table line in `hd_bind.cpp`, for every level, now binds the slot to
+`5/ITEM/EXTRA5_CROSSBOW_BOLT.TRM`, the hook. The classic draw is untouched.
+
+**Measurement.** 5/ITEM ships no file of its own for the ammunition (no
+`CROSSBOW_AMMO*`, no grapple ammo under any name), and the `.MAP` files of RICH1, RICH2,
+RICH3 and RICHCUT2 name no crossbow slot. In RICH3 the box of slot 342's classic mesh,
+-44..43 -51..27 -81..68, is slot 344's to the unit (`ModelProbe -slot 342 -bones`, `-slot
+344 -bones`): the pickup is the hook's mesh. `EXTRA5_CROSSBOW_BOLT` (407 vertices) lies 2
+units off it, the quiver (1264 vertices) 66. The slot exists in RICH3 alone (items in
+rooms 2, 79 and 188); the randomizer scatters it only where the slot stands and imports
+no grapple, so RICH3 is the one level it can lie in.
+
+**The two other `EXTRA4_` slots.** `CROSSBOW_AMMO2_ITEM` is in none of the fifteen levels
+and gets no line. `COMPASS_ITEM` still takes `EXTRA4_COMPASS_ITEM`, whose second bone its
+one-mesh slot lacks: the skeleton check refuses it and the slot draws classic, as before.
+`hd_bind.h`'s rules comment no longer counts slot 342 among the TR4 names TR5 never
+renamed.
+
+**Proof.** `ModelProbe -all` over the fifteen levels, classic trees from the vanilla
+files, before and after: one row of 1791 changed, RICH3 342 `prefix4
+EXTRA4_CROSSBOW_AMMO1_ITEM` -> `hand EXTRA5_CROSSBOW_BOLT`; the scene hashes of the other
+fourteen levels are unchanged. With `-log` the line is `HDLOG bind slot=342
+name=CROSSBOW_AMMO1_ITEM via=hand model=EXTRA5_CROSSBOW_BOLT`.
+
+**Checked.** ModernTest group `grapple_ammo_rule` (3 checks): the line inside the hand
+table, no line for `CROSSBOW_AMMO2_ITEM`, the rules comment. ModernTest 17808 checks
+(17805 + 3), MenuTest 45043, InterpTest 754, LipsTest 272, none failed; no warning line
+in `be64.bat`, `basan.bat`, `be64.bat test` and `bmodel.bat`. Not run in the game here.
+
+**Commits.** see the appendix.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -20750,3 +20789,4 @@ entries above.
 | #343 | Trajan Markets' ways belong to its scripted Larson alone |
 | #344 | The title's night backdrop stays in its own scene |
 | #346 | AI markers reach only the kinds that read them |
+| #349 | The grappling gun's ammo wears its own HD model |

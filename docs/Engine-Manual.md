@@ -3344,8 +3344,10 @@ level's own name table beside it in the remaster's `DATA` folder, which lists
 only the deviations; a small hand table of our own for the slots this project
 added past the original 460, for the one vanilla slot the remaster leaves
 unnamed — `ROMAN_GOD`, for which it ships a sword version and a hammer version
-and only two of the fifteen levels say which — and for the Desert Eagle, which
-the third rule below cannot reach on its own; a third rule for **pickups**
+and only two of the fifteen levels say which — for the Desert Eagle, which
+the third rule below cannot reach on its own, and for the grappling gun's
+ammunition, a pickup shaped like the grapple's hook that the third rule would
+dress as Tomb Raider IV's quiver of crossbow bolts; a third rule for **pickups**
 (next paragraph); and otherwise the slot's own name. A randomized level adds a
 fifth: a slot the run filled from a donor is asked of the **donor's** table
 instead, because that is where the model came from.

@@ -4,7 +4,7 @@
 
 This is a modified version of **TOMB5**, the PC Tomb Raider Chronicles decompilation
 project by Troye/Trxyebeep and contributors, <https://github.com/Trxyebeep/TOMB5>. It
-was modified between **2026-07-30 and 2026-11-02** (ongoing) for the *TR5 Randomizer*
+was modified between **2026-07-30 and 2026-11-06** (ongoing) for the *TR5 Randomizer*
 project.
 
 The upstream code as received is preserved as the first commit of this repository (no
@@ -15,8 +15,8 @@ commit made after this copy was taken (`setup.cpp`: Two Gun gains `undead = 1`) 
 small local fixes that predate this repository and are documented in the files themselves
 (`dxsound.cpp` LOCSOFTWARE, `function_stubs.cpp` DO_LOG).
 
-Measured on **2026-11-02** by comparing every file under `TOMB5/` against that first
-commit: **136 files changed, 199 entirely new - 335 in all**, **285** of them carrying
+Measured on **2026-11-06** by comparing every file under `TOMB5/` against that first
+commit: **148 files changed, 218 entirely new - 366 in all**, **316** of them carrying
 the modification notice at the top, which `grep -rl "Modified 2026 by ChrisChanSan"
 TOMB5/` lists. The project file `tomb5.vcxproj` and its filters file carry the same
 notice as an XML comment, and `resource.h` and `tomb5.rc` beside them as comment lines.
@@ -24,7 +24,7 @@ notice as an XML comment, and `resource.h` and `tomb5.rc` beside them as comment
 234 are deleted: upstream's zlib, `tomb5/libs/zlib/`, since the engine reads deflate
 with the project's own reader (#308).
 
-50 of the 335 do not carry the notice, and none of them should:
+50 of the 366 do not carry the notice, and none of them should:
 
 - the 40 `specific/hd/hd_shader/*.inc` (9 vertex and 31 pixel shaders) are compiler
   output (`fxc` bytecode as a C array), regenerated from the eleven `.hlsl` files beside
@@ -64,12 +64,13 @@ second, 2.6 modern controls and the options menu, 2.7 the first person view, the
 and the `-log` seams, 2.8 and 2.9 the corrections and the cleanup before the first public
 push, 2.10 the rounds from #215 on in task order, but for #220 to #222, #224 to #226, #230
 and #232, which stand in the area they extend, as #205 and #209 do); section 3 lists the
-randomizer's own changes since Beta 1.0 as short rows; section 4 says how to build; the
-appendix maps the task numbers that the commit subjects since Beta 1.0 carry to the
-entries. Every entry has one form: What was changed, Why, How, the Decisions where a
-choice was made, and the Commits that made it - and nothing else. Where a number in the
-code carries a rule, the entry gives the number and its reason; the measurements behind it
-are not part of this record.
+randomizer's own changes since Beta 1.0 as short rows; section 4 says how to build and
+with which settings; the appendix maps the task numbers that the commit subjects since
+Beta 1.0 carry to the entries. A task that changed the build and no engine source (#304,
+#324, #326, #339) stands in section 4. Every entry has one form: What was changed, Why,
+How, the Decisions where a choice was made, and the Commits that made it - and nothing
+else. Where a number in the code carries a rule, the entry gives the number and its
+reason; the measurements behind it are not part of this record.
 
 ## 2.1 Native Windows 11 port
 
@@ -14007,7 +14008,7 @@ EXE's own folder (`_get_pgmptr`), then from the working directory.
 
 **Commits.** `402b671`, `e98d954`, `7575bd8`, `df9302b`, `b17c1a8`, `739f60f`
 
-## 2.10 Rounds after the cleanup (2026-10-16 to 2026-11-01)
+## 2.10 Rounds after the cleanup (2026-10-16 to 2026-11-06)
 
 The rounds that followed the cleanup of section 2.9, each one change to the engine with
 its reason, recorded in the same form as the entries above. Every round from #215 on
@@ -18759,112 +18760,6 @@ in `WinWakeGame`, before `ResumeThread`.
 
 **Commits.** `4f70fc3d`.
 
-### The dynamic runtime, its DLLs beside the programs, and a 64-bit-only package (#324)
-2026-11-04
-
-**Found.** Beta_5.0 compiled the C++ runtime statically into every EXE (`/MT`,
-`<RuntimeLibrary>MultiThreaded</RuntimeLibrary>` in Release|Win32, Release|x64 and
-Asan|x64; the randomizer's `cl` lines without `/MD`). The import tables named Windows
-DLLs only. The package shipped the 32-bit engine as `PCTomb5.exe`.
-
-**Changed.** Every configuration of `tomb5.vcxproj` links the runtime as DLLs: Release
-and Asan `MultiThreadedDLL`, the two Debug configurations `MultiThreadedDebugDLL` (they
-named none and took that default; now it is written down). `b1.bat` and `b2.bat` carry
-`/MD`; `/guard:cf`, `/CETCOMPAT` and the libraries stay. Measured after the build, the
-64-bit engine, `Randomize.exe` and `TR5Randomizer.exe` each import `vcruntime140.dll`,
-`vcruntime140_1.dll` and `msvcp140.dll` of the Visual C++ runtime and nothing else of
-it; the `api-ms-win-crt-*` names beside them are Windows' Universal C runtime. Those
-three DLLs are the set: `be64.bat` (and its `test` way) and `basan.bat` copy them into
-`release64\`, `releasetest\` and `releaseasan\`, `b1.bat` and `b2.bat` into
-`TR5Randomizer\build\`, each from `%VCToolsRedistDir%x64\Microsoft.VC14?.CRT\` - the
-redist folder of the toolset `vcvars64.bat` sets up, its version read, not written -
-and each stops with the path when a DLL is missing. The engine's v142 objects run on
-that newer runtime, which is the order Microsoft's binary compatibility allows. The
-Asan build keeps its `clang_rt.asan_dynamic-x86_64.dll`. The DLLs stay out of git
-(`release64/`, `releasetest/`, `releaseasan/` and `TR5Randomizer/build/` are ignored).
-
-The package is 64-bit only: `Preparation/Tools/BuildRelease.ps1` packs `be64.bat`'s
-`PCtomb5_x64.exe` as `PCTomb5.exe`, the name the game and Steam start, beside it the
-three FFmpeg DLLs and the three runtime DLLs (from `VCToolsRedistDir`, or `-RedistDir`
-outside a vcvars64 shell), adds FFmpeg's `COPYING.LGPLv2.1` to `Licenses\`, and hashes
-the DLLs into `SHA256SUMS.txt` with the EXEs. `be.bat` still builds the 32-bit engine,
-with `/MD` like the rest, as the build to compare against (Verification.md section 8);
-its EXE no longer ships. `THIRD-PARTY.md` names the runtime DLLs, their version
-(14.51.36247.0 on the build machine), their source and the GPL's system-library
-reading.
-
-**Checked.** ModernTest's group `runtime_rule` (7 checks): every `<RuntimeLibrary>` of
-the project ends in `DLL`, the Release ones `MultiThreadedDLL`; `b1.bat` and `b2.bat`
-carry `/MD`; `be64.bat`, `basan.bat`, `b1.bat` and `b2.bat` copy the three DLLs from
-`VCToolsRedistDir`, and `be.bat` copies none; `BuildRelease.ps1` packs `release64`'s
-engine and the set, never the 32-bit EXE; the ledger has the entry; README.md no
-longer calls the engine a 32-bit program. The import tables before and after were read
-with a PE reader, not by running anything.
-
-**Commits.** `2075cf64`, `f08f8245`.
-
-### The current toolset, one language standard, and the warnings the randomizer never saw (#326)
-2026-11-04
-
-**Found.** `tomb5.vcxproj` built four of its five configurations with the v142 toolset
-(Visual Studio 2019's), the pin of the TOMB5 upstream project the engine comes from;
-only Asan|x64 had moved to v145, because the v142 sanitizer runtime stops at its own
-start on Windows 11. The project had no language standard of its own: 23 source files
-carried `<LanguageStandard>stdcpp17</LanguageStandard>` once per configuration (115
-entries), the other files of the project compiled as C++14, the compiler's default.
-Every `PreprocessorDefinitions` carried `TR4M_EXPORTS` and `_USRDLL`, the defines of
-the upstream DLL project, which no source file reads. The engine's link had
-`/guard:cf` but not `/CETCOMPAT`, which the randomizer's EXEs carry. Whole-program
-optimisation was already on for both Release configurations.
-
-The randomizer's `b1.bat` and `b2.bat` had no warning level, no `/sdl` and no
-`/permissive-` - and a `/w` in the middle of both `cl` lines, left from the zlib
-sources they compiled before #306. `cl` takes an option for the whole line wherever it
-stands, so that `/w` silenced every warning of every file: the randomizer was built
-without one warning ever shown.
-
-**Changed.** The project: `PlatformToolset` v145 in all five configurations; one
-`<LanguageStandard>stdcpp17</LanguageStandard>` beside `ConformanceMode` in each
-configuration's ClCompile settings and the 115 per-file entries removed, so every file
-of the engine is C++17; `TR4M_EXPORTS` and `_USRDLL` out of every
-`PreprocessorDefinitions` (`WIN32`, `_WINDOWS`, `NDEBUG`/`_DEBUG` and
-`_CRT_SECURE_NO_WARNINGS` stay); `/CETCOMPAT` in the link options of Release|Win32,
-Release|x64 and Asan|x64, which all three link with. The engine compiled under v145
-and C++17 without a change to a source file and with the same warnings as before: 47
-places at Level3 in the 64-bit build (43 C4244, the 64-bit pointer differences and
-results narrowed to `short` or `long`; 3 C4005 in `global/types.h`; 1 C4101), none new;
-the five warnings that are errors stay errors.
-
-The randomizer: `/W4 /sdl /permissive-` on both `cl` lines and the `/w` gone. What
-showed, each cleared without changing what the program does: the level reader's `goto`
-jumped over the initialisation of the lambda `mark()` (C2362 under `/permissive-`; it
-is declared before the first step now), an unused constant and an unused reference
-(C4189, `Tr5Level.cpp`); `sscanf` for three `"%d,%d,%d"` reads (C4996 under `/sdl`,
-now `sscanf_s`, which reads numbers alike); `_wfopen` in `BalanceFile.cpp` (C4996, now
-`_wfsopen` with `_SH_DENYNO`, the call `_wfopen` makes - not `_wfopen_s`, which would
-lock the file); a signed/unsigned compare and a 32-bit shift handed to a 64-bit
-parameter (C4018, C4334, `SecretList.cpp`); a loop counter shadowing another (C4456,
-`Randomize.cpp`); an unused wrapper function in the GUI (C4505, `Main.cpp`). Dear
-ImGui compiles without a warning at that level. Both EXEs build with none.
-
-README.md and the engine manual name v145, which any current Visual Studio 2026 with
-the C++ workload brings along, in place of the v142 component of the installer.
-
-**Checked.** The randomizer's output, Verification.md section 1: the CLI built from the
-commit before #324 (static runtime, the old flags) and from this one, each run from the
-same folder beside the same `data\`, over the thirteen campaign levels with the four
-measured switch sets and a fifth with the glitched secret list and a wardrobe
-(`outfit outfits-off=`), the paths the warning fixes touched: all 65 levels, their
-`.hdm` and the printouts the same bytes. The sets name no Tomb Raider III folder
-(`tr3=`), so no guest was drawn in either build. The engine's own proof is a replay: the
-newer compiler and C++17 change its machine code, so a recording played on the test
-build must keep its course with `-liveclock`; a drift there would point to a float
-path that the code generation computes differently. ModernTest's group
-`toolset_rule` (8 checks) holds the project's settings, the two build lines and the two
-documents.
-
-**Commits.** `4717877c`, `7a959d63`, `bef0454d`.
-
 ### A composite's borrowed nodes draw from their donor's HD model (#327)
 2026-11-05
 
@@ -19306,50 +19201,6 @@ lines than it saves (the chase camera's pick for `ROPELOG`, the chain spark's pa
 
 **Commits.** `6cbcb331`, `8d3a9344`.
 
-### The 64-bit engine is PCtomb5.exe, the 32-bit one PCtomb5_x86.exe (#339)
-
-Since #324 the 64-bit build ships, but its file was still called `PCtomb5_x64.exe`
-and only the package script renamed it, while the 32-bit comparison build held the
-game's own name. A copy of `release64\` into the game folder therefore did not replace
-the EXE the game and the players' batch files start, and a 32-bit `PCtomb5.exe` could
-pass for the real one. Now the build writes the shipping name itself, and the 32-bit
-file says what it is.
-
-**The four names** (`tomb5.vcxproj`, `<TargetName>` only; folders unchanged):
-`Release|x64` and `Debug|x64` build `release64\PCtomb5.exe` (+ `.pdb`),
-`Release|Win32` and `Debug|Win32` build `release\PCtomb5_x86.exe` (+ `.pdb`). The test
-build `releasetest\PCtomb5_x64t.exe` and the Asan build `releaseasan\PCtomb5_asan.exe`
-keep their names. The only build step that reads the target name is the Release|Win32
-post-build copy into `TR5_GAME_DIR` (`$(TargetPath)`): with that variable set it now
-copies `PCtomb5_x86.exe` beside the game, no longer over its `PCtomb5.exe`.
-`be64.bat` copies its DLLs by folder, not by EXE name.
-
-**The package.** `BuildRelease.ps1` reads `release64\PCtomb5.exe` and still writes it
-as `PCTomb5.exe` - the casing the game folder, Steam and the players' batch files use
-(`Log.bat`). The 32-bit build is built on request (`be.bat`) to compare against and
-never goes in.
-
-**Changed text.** The heads of `be64.bat` and `be.bat` (`basan.bat` names only its own
-EXE), the header of `BuildRelease.ps1`, README's build section, the Engine-Manual's
-build paragraph, the names in `Preparation/Verification.md` sections 8 and 11 (the
-replay steps take `PCtomb5_x86.exe` and the test build `PCtomb5_x64t.exe`, the only
-64-bit EXE that records), `Preparation/Tools/README.md` on `be64.bat`, and section 4
-of this record. The entries above keep the names of their day. The engine's own
-strings - "PCtomb5 built", the launcher's "PCtomb5 build", the crash seam's
-`module=PCtomb5.exe` - are the game's name, not the file's, and are untouched; no
-engine source changed.
-
-**Checked.** ModernTest's package rule now reads `$EngineExe = "$Root\release64\
-PCtomb5.exe"` and no `PCtomb5_x64.exe`, and a new check (`exe name rule`) pins the four
-`<TargetName>` elements to their configurations: ModernTest 17763 checks (17762 + 1),
-MenuTest 45043, InterpTest 754, LipsTest 272, none failed; no warning line in the logs
-of `be64.bat`, `basan.bat`, `be64.bat test` and `be.bat`; `b1.bat` and `b2.bat` link
-unchanged (the randomizer names the game folder's `PCtomb5.exe`, never a build path).
-After the builds `release64\` holds `PCtomb5.exe` and no `PCtomb5_x64.*`, `release\`
-holds `PCtomb5_x86.exe`.
-
-**Commits.** see the appendix.
-
 ### Larson dies lying down outside Trajan Markets (#340)
 2026-11-05
 
@@ -19779,75 +19630,14 @@ bits, and nothing wakes earlier than a guard.
 
 **Commits.** `bff94797`, `99d20811`.
 
-### The swap spares a fixture only for a replacement that cannot move (#352)
-
-The enemy swap (`Randomizer.cpp`, the swap loop after the draw) kept every vanilla enemy
-within reach of an operable fixture (`isOperableFixture`: puzzle holes, keyholes,
-switches, sequence switches; |dx|, |dz| <= 1536 and |dy| <= 512) at his own type, whatever
-kind the draw gave him. The test came from the bar for ADDED enemies, where a new body
-takes a new place; at a swap the place was occupied in vanilla already. Measured over five
-draws of all 13 levels it held 13 vanilla enemies:
-
-| level | item | vanilla kind, room | fixture |
-|---|---|---|---|
-| Andrea3 | 85 | GLADIATOR, 95 | SWITCH_TYPE1 87 |
-| joby2 | 4 | HUSKIE, 1 (the kennel husky) | KEY_HOLE8 1, same sector |
-| joby2 | 60 | BLUE_GUARD, 52 | PUZZLE_HOLE1 58, same sector |
-| joby3 | 188, 189 | MAFIA, MAFIA2, 123 | AIRLOCK_SWITCH 195 |
-| joby5 | 16 | MAFIA2, 15 | KEY_HOLE8 14 |
-| joby5 | 43 | MAFIA, 29 | AIRLOCK_SWITCH 200 |
-| rich1 | 44 | BLUE_GUARD, 23 | PUZZLE_HOLE1 43, same sector |
-| rich1 | 110 | BLUE_GUARD, 67, OCB 4 | KEY_HOLE8 55 |
-| rich1 | 120 | TWOGUN, 69 | KEY_HOLE8 124 |
-| rich3 | 70 | SWAT, 76 | SWITCH_TYPE4 69, same sector |
-| rich3 | 163 | SWAT, 130 | SWITCH_TYPE5 159 |
-| rich3 | 214 | SWAT_PLUS, 199 | PUZZLE_HOLE1 144 |
-
-joby2's three huskies (4, 86, 153) all have OCB 0 and stand in joby2's curated kinds; 86
-and 153 were swapped all along, 4 was the fixture test's.
-
-**The rule now.** A moving replacement walks or flies toward Lara and is dead before she
-operates the fixture, and a corpse has no collision - as the vanilla enemy there. Only a
-kind that never moves can block a fixture for good, and the test now applies to that kind
-alone: `isStationaryEnemy` (`Randomizer.h`) names it. Read from the controls of every
-swap-pool kind in `TOMB5/game`: all call `CreatureTurn` (SasControl, Twogun, Dog, Pierre,
-Mafia2, Lion, Gladiator, Roman god, Hitman/Cyborg, maze monster, Huskie, Chef/Brawler,
-Imp, the TR3 guests), the drone steers its own flight (`drone.cpp`); only `HydraControl`
-never does - it aims the head from where `InitialiseHydra` put her, and she is undead. The
-list is HYDRA (63). The note "enemy item %d stands at an operable fixture" stays for that
-case; the bar for added enemies is unchanged.
-
-**Held by curation instead.** rich1 110 (the OCB-4 guard with several scripted functions,
-#353) and rich1 120 (the Twogun whose function is tied to another switch) stand in rich1's
-`FIXED_ITEMS` in `ZoneAnalysis.ps1`. Of the 15 regenerated zone exports only
-`zones_rich1.json` differs (`fixedItems` +110, +120; the curation stamp aside).
-
-**Checked.** Regression per `Preparation/Verification.md` section 1, the 13 sets of #346
-(draws 1-11, 77, 380; 169 level runs), old `Randomize_x64m19_3d0ecb43.exe`, new this
-build: the seven levels without one of the spots identical in every set (91 of 91), and
-Andrea3 in 3 sets where the gladiator drew his own kind; in Andrea3, joby2, joby3, joby5
-and rich3 only the spot records differ (1-3 per level), no added enemy. In rich1 the two
-held items leave the swap list, so the draws after them shift: the Core records that
-differ are enemies at their places (kind and the kind's spawn OCB), plus the added
-enemies' draws. rich1 110 stays BLUE_GUARD and 120 TWOGUN in 13 of 13. A spot keeps its
-vanilla kind by chance: Andrea3 85 3, joby2 4 1, joby2 60 1, joby3 188 1, 189 2, joby5 16
-2, 43 0, rich1 44 1, rich3 70 3, 163 3, 214 0 (of 13). No Hydra stands at a fixture in
-any new level but Andrea2's own chain (items 91-93, fixed, in vanilla too); over twenty
-draws of the six levels the stationary test held a drawn Hydra eight times. No warning
-line in `b1.bat` and `b2.bat`; no engine file changed, the engine suites ran unchanged
-(ModernTest 17817, MenuTest 45043, InterpTest 754, LipsTest 272, none failed). TestRando
-does not reach the swap rule. Not run in the game here.
-
-**Commits.** see the appendix.
-
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
 `TR5Randomizer.exe` - is this project's own work from the first line, so it owes
 nobody a GPLv3 section 5(a) notice and has no record of the kind above. What
 changed in it since the public Beta 1.0 is listed here by task number.
-Fifty files under `TR5Randomizer/src` changed in that span: eight of them new, forty
-modified, one moved out into `package/`, one removed.
+Fifty-one files under `TR5Randomizer/src` changed in that span: eight of them new,
+forty-one modified, one moved out into `package/`, one removed.
 
 - **#123 - the HD markers.** `Tr5Level.cpp` / `.h`, `ApplyPatch.cpp` / `.h`,
   `Randomize.cpp` and `gui/Main.cpp`: the randomizer writes the HD room markers
@@ -20037,41 +19827,42 @@ modified, one moved out into `package/`, one removed.
   and the release copies the two manuals with the nine pictures they show beside it, so
   the package reads like the repository's docs folder (`9ce96228`).
 - **#302 - the armed scientist, a composite with the anim donor's hands.**
-  `core/Tr5Transfer.cpp`, `core/Tr5Level.h`: a composite may take single meshes out of
-  its anim donor's slot - the table `kMeshesFromAnims`, keyed by the target slot and the
-  anim donor's slot - each with its texinfos and pages out of its own level; the mesh,
-  texinfo and page steps run per mesh source, and with no such mesh only the mesh donor
-  is read. `core/ApplyPatch.cpp` / `.h` say so beside the composite. `core/Randomizer.cpp`
-  / `.h`, `gui/Language.cpp`: the armed scientist's row - slot 473, meshes rich1:69,
-  animations rich3:33, SWAT's hands 10 and 13 (the rifle in 13), the swap halves of
-  SWAT's row into 462, no base type - measured by SWAT's rest pose (809), "Scientist" in
-  the enemy list ("Wissenschaftler" in German), 473 a carrier; `IMPORT composite
-  slot=473 meshes=rich1:69 anims=rich3:33 nodes=15 animations=64 sounds=5 pages=13
-  texinfos=198` into a vanilla ANDREA1. A build with only his row removed writes the
-  bytes of the build before it, so the transfer's change moves no other import; with the
-  row every cross draw after his first changes, a run without the cross mix is unchanged
-  (`ea71da57`). `Preparation/Item Infos/types.json` names the slot "Scientist (pool)".
-  `core/BuildId.h`: `RANDO_BUILD_ID` 23 to 24, `0.24`, because the pool changes what a
-  seed writes.
-- **#306 - deflate of its own, and the data as files only.** `core/Inflate.cpp` / `.h`
-  and `core/DataFile.h` new, `core/Tr5Transfer.cpp`, `core/DataFile.cpp`,
-  `core/DataFolder.h`, `Randomize.cpp`, `gui/Main.cpp`, `SelfTest.cpp`, `build/b1.bat`,
-  `build/b2.bat`; `core/EmbeddedData.cpp` / `.h` and `Preparation/Tools/EmbedData.ps1`
-  removed. The randomizer reads the levels' texture blocks with a deflate reader of its
-  own, written from RFC 1950 and RFC 1951 (stored, fixed and dynamic blocks, the window
-  from the header, the Adler-32 trailer; every read and write bounds-checked, a corrupt
-  stream refused with a message), and writes the two blocks a run grows as stored
-  deflate blocks, which the engine's zlib reads like any other stream. A level that
-  takes pages from another level therefore carries those two blocks unpacked, about
-  twice its packed size; their content and every other byte stay as before, and
-  `LevelDiff -content` (Verification.md section 1) is the comparison across the change.
-  The fifteen zone exports and the two checksum lists are no longer baked into the
-  EXEs (about 140 KB of each): `DataFile::read` takes the file in `data\` or fails with
-  its name and folder, and the CLI now stops without the checksum list rather than skip
-  the check against an already randomized level. zlib stays in the engine alone; no
-  build line of the randomizer or of a diagnostic tool compiles it.
-  The build id stays 23: a seed places the same things (`e7fa928e`, `05c0c423`,
-  `5a45193f`, `dd1c3c8e`, `ab00f0c1`, `9379893d`).
+  `core/Tr5Transfer.cpp`, `core/Tr5Level.h`: a composite may take single meshes out of its
+  anim donor's slot - the table `kMeshesFromAnims`, keyed by the target slot and the anim
+  donor's slot - each with its texinfos and pages out of its own level; the mesh, texinfo
+  and page steps run per mesh source, and with no such mesh only the mesh donor is read.
+  `core/ApplyPatch.cpp` / `.h` say so beside the composite. `core/Randomizer.cpp` / `.h`,
+  `gui/Language.cpp`: the armed scientist's row - slot 473, meshes rich1:69, animations
+  rich3:33, SWAT's hands 10 and 13 (the rifle in 13), the swap halves of SWAT's row into
+  462, no base type - measured by SWAT's rest pose (809), "Scientist" in the enemy list
+  ("Wissenschaftler" in German), 473 a carrier. With the row every cross draw after his
+  first changes; a run without the cross mix is unchanged (`ea71da57`). `Preparation/Item
+  Infos/types.json` names the slot "Scientist (pool)". `core/BuildId.h`: `RANDO_BUILD_ID`
+  23 to 24, `0.24`, because the pool changes what a seed writes (`bce112d3`).
+- **#304 - the file descriptions.** `Tools.rc`, `gui/TR5Randomizer.rc`: the version
+  blocks' FileDescription reads "Tomb5 Port Randomizer, command line" for
+  `Randomize.exe` and "Tomb5 Port Randomizer" for `TR5Randomizer.exe`, where both read
+  "Randomizer for Tomb Raider Chronicles"; the engine's reads "Tomb5 Port" (section 4).
+  The version numbers stay (`ef0f3611`).
+- **#306 - deflate of its own, and the data as files only.** `core/Inflate.cpp` / `.h` and
+  `core/DataFile.h` new, `core/Tr5Transfer.cpp`, `core/DataFile.cpp`, `core/DataFolder.h`,
+  `Randomize.cpp`, `gui/Main.cpp`, `SelfTest.cpp`, `build/b1.bat`, `build/b2.bat`;
+  `core/EmbeddedData.cpp` / `.h` and `Preparation/Tools/EmbedData.ps1` removed. The
+  randomizer reads the levels' texture blocks with a deflate reader of its own, written
+  from RFC 1950 and RFC 1951 (stored, fixed and dynamic blocks, the window from the
+  header, the Adler-32 trailer; every read and write bounds-checked, a corrupt stream
+  refused with a message), and writes the two blocks a run grows as stored deflate blocks,
+  which the engine then read with zlib like any other stream (with the project's own
+  reader since #308). A level that takes pages from another level therefore carries those
+  two blocks unpacked, about twice its packed size; their content and every other byte
+  stay as before, and `LevelDiff -content` (Verification.md section 1) is the comparison
+  across the change. The fifteen zone exports and the two checksum lists are no longer
+  baked into the EXEs (about 140 KB of each): `DataFile::read` takes the file in `data\`
+  or fails with its name and folder, and the CLI now stops without the checksum list
+  rather than skip the check against an already randomized level. zlib stayed in the
+  engine alone until #308; no build line of the randomizer or of a diagnostic tool
+  compiles it. The build id stays 23: a seed places the same things (`e7fa928e`,
+  `05c0c423`, `5a45193f`, `dd1c3c8e`, `ab00f0c1`, `9379893d`).
 - **#307 - the background picture through Windows' own decoder.** `gui/Picture.cpp` /
   `.h` new, `gui/Main.cpp`, `build/b2.bat`; `libs/stb/stb_image.h` removed. The
   picture beside the GUI (`docs\Background.jpg`) is read through the Windows Imaging
@@ -20095,8 +19886,37 @@ modified, one moved out into `package/`, one removed.
   and the leftover `/w` gone, which had silenced every warning; `Randomize.cpp`,
   `core/Tr5Level.cpp`, `core/Randomizer.cpp`, `core/BalanceFile.cpp`,
   `core/SecretList.cpp`, `gui/Main.cpp`: what showed, cleared with no change to what
-  the programs do - checked on the output of thirteen levels in five switch sets
-  against the build before #324, the same bytes everywhere (`7a959d63`).
+  the programs do (`7a959d63`).
+- **#346 - added enemies kept off AI-marker sectors.** `core/ApplyPatch.cpp`,
+  `core/Randomizer.cpp` / `.h`, `core/Tr5Level.cpp` / `.h`: the additional enemies
+  stand behind the level's own items, so `GetAIPickups` gave them whatever AI marker
+  the level's own creatures had left - an added huskie on a guard's patrol marker could
+  end that patrol before the marker that opens a door again, and added enemies on
+  FOLLOW markers left a will-o'-wisp without a path. `markTriggerSafeSectors` now reads
+  the AI block (`Tr5Level::aiObjects`) into `RandoInput::aiMarkers` (kinds 378-382, with
+  the AI index), and the additional-enemy placement bars a drawn spot when such a marker
+  lies in the spot's room within 512 in x and z of the position it writes (the sector
+  centre) - the engine's own test - with the note `enemy spot r,x,z barred: AI marker n
+  (kind k, OCB o) is within reach`. The spot is barred as it is drawn, so a level whose
+  draws never land on a marker keeps every draw; the swap in place, the cross mix, the
+  pools and `fixedItems` are unchanged. The engine's half is the entry "AI markers reach
+  only the kinds that read them" (`79cd7b86`).
+- **#352 - the swap spares a fixture only for a stationary replacement.**
+  `core/Randomizer.cpp` / `.h`, `Preparation/Tools/ZoneAnalysis.ps1`: the enemy swap kept
+  every vanilla enemy within reach of an operable fixture (`isOperableFixture`: puzzle
+  holes, keyholes, switches, sequence switches; |dx|, |dz| <= 1536 and |dy| <= 512) at his
+  own type, a test taken over from the bar for ADDED enemies, where a new body takes a new
+  place; at a swap the place was occupied in vanilla already, and a moving replacement
+  walks toward Lara and is dead before she operates the fixture. The test now applies only
+  to a kind that never moves, `isStationaryEnemy`: read from the controls of every
+  swap-pool kind, all turn (`CreatureTurn`) or steer (the drone, `drone.cpp`) but
+  `HydraControl`, so the list is HYDRA (63); the note "enemy item %d stands at an operable
+  fixture" stays for that case, and the bar for added enemies is unchanged. rich1's item
+  110 (the OCB-4 guard with several scripted functions) and item 120 (the Twogun whose
+  function is tied to another switch) are held by curation instead, in rich1's
+  `FIXED_ITEMS` in `ZoneAnalysis.ps1` (`zones_rich1.json` gains them as `fixedItems`).
+  `core/BuildId.h`: `RANDO_BUILD_ID` 24 to 25, `0.25`, because #346 and #352 change what a
+  seed writes (`f8ce36ae`, `9addc628`).
 
 ## 4. Building this yourself
 
@@ -20120,6 +19940,60 @@ The published binary need not be trusted. Either:
   the unmodified decompilation - rather than naming a hash, deliberately: this
   history has been rewritten before, and a written-down hash does not survive
   that.
+
+**The version block.** `tomb5.rc`'s FileDescription reads "Tomb5 Port" (#304,
+`3dd966b4`), where it read "TOMB5 native Windows 11 port, for the TR5 Randomizer".
+
+**The dynamic runtime, its DLLs beside the programs, and a 64-bit-only package (#324).**
+Every configuration of `tomb5.vcxproj` links the C++ runtime as DLLs - Release and Asan
+`MultiThreadedDLL`, the two Debug configurations `MultiThreadedDebugDLL` - where Beta_5.0
+compiled it statically into every EXE (`/MT`). The 64-bit engine imports
+`vcruntime140.dll`, `vcruntime140_1.dll` and `msvcp140.dll` of the Visual C++ runtime and
+nothing else of it (the `api-ms-win-crt-*` names beside them are Windows' Universal C
+runtime). `be64.bat` (and `be64.bat test`) and `basan.bat` copy those three into
+`release64\`, `releasetest\` and `releaseasan\` from `%VCToolsRedistDir%x64\
+Microsoft.VC14?.CRT\`, the redist folder of the toolset `vcvars64.bat` sets up, and stop
+with the path when one is missing; the DLLs stay out of git. The sanitizer build keeps
+its `clang_rt.asan_dynamic-x86_64.dll`. `Preparation/Tools/BuildRelease.ps1` packs the
+64-bit engine as `PCTomb5.exe` with the three FFmpeg and the three runtime DLLs beside
+it (from `VCToolsRedistDir`, or `-RedistDir` outside a vcvars64 shell), FFmpeg's
+`COPYING.LGPLv2.1` in `Licenses\`, and the DLLs' hashes in `SHA256SUMS.txt`. `be.bat`
+still builds the 32-bit engine, also with the DLL runtime, as the comparison build of
+`Preparation/Verification.md` section 8; it no longer ships. `THIRD-PARTY.md` names the
+runtime DLLs, their source and the GPL's system-library reading, README.md and the
+package's README.txt the six DLLs (`2075cf64`, `f08f8245`, `71de1cf4`).
+
+**The current toolset, one language standard, and the warnings the randomizer never saw
+(#326).** `tomb5.vcxproj` builds all five configurations with the v145 toolset, which any
+current Visual Studio 2026 with the C++ workload brings along; upstream pinned v142, and
+the v142 sanitizer runtime stops at its own start on Windows 11. One
+`<LanguageStandard>stdcpp17</LanguageStandard>` stands in each configuration's ClCompile
+settings in place of 115 per-file entries, so every file of the engine is C++17 (the
+others compiled as C++14 before). `TR4M_EXPORTS` and `_USRDLL`, the defines of the
+upstream DLL project that no source file reads, are gone from every
+`PreprocessorDefinitions`. `/CETCOMPAT` joins `/guard:cf` in the links of Release|Win32,
+Release|x64 and Asan|x64. The engine compiled under v145 and C++17 without a change to a
+source file. `basan.bat`, README.md and the engine manual name v145; the randomizer's half
+is its row in section 3 (`4717877c`, `bef0454d`, `278b12c2`).
+
+**The 64-bit engine is PCtomb5.exe, the 32-bit one PCtomb5_x86.exe (#339).**
+`tomb5.vcxproj`'s `<TargetName>`: Release|x64 and Debug|x64 build
+`release64\PCtomb5.exe`, Release|Win32 and Debug|Win32 `release\PCtomb5_x86.exe`; the
+test build `releasetest\PCtomb5_x64t.exe` and the sanitizer build
+`releaseasan\PCtomb5_asan.exe` keep their names. A copy of `release64\` into the game
+folder so replaces the EXE the game and the players' batch files (`Log.bat`) start, and
+the 32-bit file cannot pass for it; the Release|Win32 post-build copy into `TR5_GAME_DIR`
+copies `PCtomb5_x86.exe` beside the game. `BuildRelease.ps1` reads
+`release64\PCtomb5.exe` and writes it as `PCTomb5.exe`, the casing the game folder and
+Steam use. The heads of `be64.bat` and `be.bat`, README.md, the engine manual and
+`Preparation/Verification.md` carry the new names; the engine's own strings ("PCtomb5
+built", the crash seam's `module=PCtomb5.exe`) are the game's name and unchanged
+(`d26815d7`, `d4856dc9`).
+
+**The warnings that are errors.** `TreatSpecificWarningsAsErrors` holds, in all five
+configurations, C4311, C4302, C4312, C4267 and C4477 (the pointer cuts and formats of
+#303), C4005 and C4101 (#328) and C4244 (#331), the last switched off only around the
+vendored stb_vorbis and FFmpeg includes.
 
 Unlike upstream, this build produces a **single executable** with no DLL of the
 game's own; what lies beside it since #324 is Microsoft's C++ runtime and the
@@ -20287,6 +20161,7 @@ entries above.
 | #301 | The missing-file message, the X-ray tone's comment and the engine icon's origin |
 | #302 | RICH1's scientist as a pool enemy on SWAT's control, slot 473; section 3 (the randomizer) |
 | #303 | The engine builds as a 64-bit program; level file and save unchanged |
+| #304 | section 3 (the randomizer); section 4 (the build); no engine entry: no file under `TOMB5 Code/TOMB5` changed |
 | #305 | -record and -replay; the collision lists kept inside tsv_buffer |
 | #306 | section 3 (the randomizer); no engine entry: no file under `TOMB5 Code/TOMB5` changed |
 | #307 | section 3 (the randomizer); no engine entry: no file under `TOMB5 Code/TOMB5` changed |
@@ -20304,8 +20179,8 @@ entries above.
 | #320 | The draw ends no particle: bubbles, drips and far sparks live on in the logic |
 | #321 | The recorder is a test build's; The log closes after the recorder |
 | #322 | A stalled frame says where its time went |
-| #324 | The dynamic runtime, its DLLs beside the programs, a 64-bit-only package |
-| #326 | The current toolset, one language standard, and the warnings the randomizer never saw |
+| #324 | The dynamic runtime, its DLLs beside the programs, and a 64-bit-only package (section 4, the build); section 3 (the randomizer) |
+| #326 | The current toolset, one language standard, and the warnings the randomizer never saw (section 4, the build); section 3 (the randomizer) |
 | #327 | A composite's borrowed nodes draw from their donor's HD model |
 | #328 | The engine builds without a warning |
 | #329 | The hidden narrowings, and C4244 still a warning |
@@ -20316,15 +20191,15 @@ entries above.
 | #334 | ANDREA3's sky table asks the art near a room, not its box |
 | #335 | Under Modern a level camera that shows something is kept |
 | #338 | The log families a test build alone carries |
-| #339 | The 64-bit engine is PCtomb5.exe, the 32-bit one PCtomb5_x86.exe |
+| #339 | The 64-bit engine is PCtomb5.exe, the 32-bit one PCtomb5_x86.exe (section 4, the build) |
 | #340 | Larson dies lying down outside Trajan Markets |
 | #341 | The Corpses row is called Corpse fade |
 | #342 | ANDY3's flyby island is sky art only for the rooms linked to it |
 | #343 | Trajan Markets' ways belong to its scripted Larson alone |
 | #344 | The title's night backdrop stays in its own scene |
-| #346 | AI markers reach only the kinds that read them |
-| #348 | The title's backdrop wall and hollow dunes give way |
+| #346 | AI markers reach only the kinds that read them; section 3 (the randomizer) |
+| #348 | The title's second backdrop wall stays in its scene; A hollow room gives way to the guest that models its place |
 | #349 | The grappling gun's ammo wears its own HD model |
 | #350 | Larson and Pierre on an inherited marker see Lara |
 | #351 | A pool creature on a marker attacks as soon as it notices Lara |
-| #352 | The swap spares a fixture only for a replacement that cannot move |
+| #352 | section 3 (the randomizer); no engine entry: no file under `TOMB5 Code/TOMB5` changed |

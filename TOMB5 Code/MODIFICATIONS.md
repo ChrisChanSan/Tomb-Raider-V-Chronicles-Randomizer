@@ -20368,6 +20368,67 @@ game here.
 
 **Commits.** see the appendix.
 
+### The swap spares a fixture only for a replacement that cannot move (#352)
+
+The enemy swap (`Randomizer.cpp`, the swap loop after the draw) kept every vanilla enemy
+within reach of an operable fixture (`isOperableFixture`: puzzle holes, keyholes,
+switches, sequence switches; |dx|, |dz| <= 1536 and |dy| <= 512) at his own type, whatever
+kind the draw gave him. The test came from the bar for ADDED enemies, where a new body
+takes a new place; at a swap the place was occupied in vanilla already. Measured over five
+draws of all 13 levels it held 13 vanilla enemies:
+
+| level | item | vanilla kind, room | fixture |
+|---|---|---|---|
+| Andrea3 | 85 | GLADIATOR, 95 | SWITCH_TYPE1 87 |
+| joby2 | 4 | HUSKIE, 1 (the kennel husky) | KEY_HOLE8 1, same sector |
+| joby2 | 60 | BLUE_GUARD, 52 | PUZZLE_HOLE1 58, same sector |
+| joby3 | 188, 189 | MAFIA, MAFIA2, 123 | AIRLOCK_SWITCH 195 |
+| joby5 | 16 | MAFIA2, 15 | KEY_HOLE8 14 |
+| joby5 | 43 | MAFIA, 29 | AIRLOCK_SWITCH 200 |
+| rich1 | 44 | BLUE_GUARD, 23 | PUZZLE_HOLE1 43, same sector |
+| rich1 | 110 | BLUE_GUARD, 67, OCB 4 | KEY_HOLE8 55 |
+| rich1 | 120 | TWOGUN, 69 | KEY_HOLE8 124 |
+| rich3 | 70 | SWAT, 76 | SWITCH_TYPE4 69, same sector |
+| rich3 | 163 | SWAT, 130 | SWITCH_TYPE5 159 |
+| rich3 | 214 | SWAT_PLUS, 199 | PUZZLE_HOLE1 144 |
+
+joby2's three huskies (4, 86, 153) all have OCB 0 and stand in joby2's curated kinds; 86
+and 153 were swapped all along, 4 was the fixture test's.
+
+**The rule now.** A moving replacement walks or flies toward Lara and is dead before she
+operates the fixture, and a corpse has no collision - as the vanilla enemy there. Only a
+kind that never moves can block a fixture for good, and the test now applies to that kind
+alone: `isStationaryEnemy` (`Randomizer.h`) names it. Read from the controls of every
+swap-pool kind in `TOMB5/game`: all call `CreatureTurn` (SasControl, Twogun, Dog, Pierre,
+Mafia2, Lion, Gladiator, Roman god, Hitman/Cyborg, maze monster, Huskie, Chef/Brawler,
+Imp, the TR3 guests), the drone steers its own flight (`drone.cpp`); only `HydraControl`
+never does - it aims the head from where `InitialiseHydra` put her, and she is undead. The
+list is HYDRA (63). The note "enemy item %d stands at an operable fixture" stays for that
+case; the bar for added enemies is unchanged.
+
+**Held by curation instead.** rich1 110 (the OCB-4 guard with several scripted functions,
+#353) and rich1 120 (the Twogun whose function is tied to another switch) stand in rich1's
+`FIXED_ITEMS` in `ZoneAnalysis.ps1`. Of the 15 regenerated zone exports only
+`zones_rich1.json` differs (`fixedItems` +110, +120; the curation stamp aside).
+
+**Checked.** Regression per `Preparation/Verification.md` section 1, the 13 sets of #346
+(draws 1-11, 77, 380; 169 level runs), old `Randomize_x64m19_3d0ecb43.exe`, new this
+build: the seven levels without one of the spots identical in every set (91 of 91), and
+Andrea3 in 3 sets where the gladiator drew his own kind; in Andrea3, joby2, joby3, joby5
+and rich3 only the spot records differ (1-3 per level), no added enemy. In rich1 the two
+held items leave the swap list, so the draws after them shift: the Core records that
+differ are enemies at their places (kind and the kind's spawn OCB), plus the added
+enemies' draws. rich1 110 stays BLUE_GUARD and 120 TWOGUN in 13 of 13. A spot keeps its
+vanilla kind by chance: Andrea3 85 3, joby2 4 1, joby2 60 1, joby3 188 1, 189 2, joby5 16
+2, 43 0, rich1 44 1, rich3 70 3, 163 3, 214 0 (of 13). No Hydra stands at a fixture in
+any new level but Andrea2's own chain (items 91-93, fixed, in vanilla too); over twenty
+draws of the six levels the stationary test held a drawn Hydra eight times. No warning
+line in `b1.bat` and `b2.bat`; no engine file changed, the engine suites ran unchanged
+(ModernTest 17817, MenuTest 45043, InterpTest 754, LipsTest 272, none failed). TestRando
+does not reach the swap rule. Not run in the game here.
+
+**Commits.** see the appendix.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -20853,3 +20914,4 @@ entries above.
 | #346 | AI markers reach only the kinds that read them |
 | #349 | The grappling gun's ammo wears its own HD model |
 | #350 | Larson and Pierre on an inherited marker see Lara |
+| #352 | The swap spares a fixture only for a replacement that cannot move |

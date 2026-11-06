@@ -75,6 +75,13 @@ report should carry - the game itself shows neither.
 
 Any input is a valid seed. "Christmas" works.
 
+The share code under the seed field carries the seed text and every
+setting of the window in one line. "Copy" puts it on the clipboard;
+someone who pastes it into the field below and presses "Apply" gets
+your exact settings, and with them your game. Folders, window size
+and language stay on each machine. A code only works on the build
+that made it.
+
 Tuning the difficulty yourself
 ------------------------------
 IF YOU LOOK FOR Balance.txt AND SecretRewards.txt AND THEY ARE NOT
